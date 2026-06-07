@@ -171,9 +171,12 @@ function renderGrid(){
   });
   var html='';
   var colorMap={'her-':'#fce4ec','us-':'#e8f5e9','sys-':'#e3f2fd','tech-':'#fff3e0'};
-  var color='#f3e5f5';
-  var prefixes=Object.keys(colorMap);
-  for(var p=0;p<prefixes.length;p++){if(k.startsWith(prefixes[p])){color=colorMap[prefixes[p]];break}}
+  for(var i=0;i<filtered.length;i++){
+    var k=filtered[i],d=allData[k],ac=0,arc=0,chars=0;
+    d.entries.forEach(function(e){if(e.meta.archived)arc++;else{ac++;chars+=e.content.length}});
+    var color='#f3e5f5';
+    var prefixes=Object.keys(colorMap);
+    for(var p=0;p<prefixes.length;p++){if(k.startsWith(prefixes[p])){color=colorMap[prefixes[p]];break}}
     var cn=getCnName(k);html+='<div class="cat-card" onclick="openDetail(\''+k+'\')" style="background-color:'+color+'"><div class="cat-card-body"><div><div class="cat-card-name">'+k+'</div>'+(cn?'<div style="font-size:10px;color:#b0b7c0;margin-top:2px">'+cn+'</div>':'')+'</div><div class="cat-card-right"><div class="cat-card-num">'+ac+'</div><div class="cat-card-detail">'+chars+'字'+(arc>0?' · 归档'+arc:'')+'</div></div></div></div>';
   }
   document.getElementById('cat-grid').innerHTML=filtered.length?html:'<div class="empty-state">无结果</div>';
