@@ -88,15 +88,15 @@ body{font-family:-apple-system,'PingFang SC',sans-serif;background:#f1f8e9;color
 .tag-btn{padding:6px 12px;border-radius:16px;font-size:11px;border:1px solid #e4e8ed;background:#fff;color:#8c939e;cursor:pointer;white-space:nowrap}
 .tag-btn.active{background:#43a047;color:#fff;border-color:#43a047}
 .section-label{font-size:10px;font-weight:700;color:#8c939e;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
-.cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px;box-sizing:border-box;width:100%;overflow:hidden}
-.cat-card{background:#fff;border:none;border-radius:16px;padding:18px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,0.05);box-sizing:border-box;width:100%;overflow:hidden}
+.cat-grid{display:grid;grid-template-columns:1fr;gap:10px;padding:0 12px;box-sizing:border-box;width:100%;overflow:hidden}
+.cat-card{background:#fff;border:none;border-radius:16px;padding:18px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,0.05);box-sizing:border-box;width:100%;overflow:hidden;display:flex;align-items:center}
 .cat-card:active{transform:scale(0.98)}
-.cat-card-body{flex:1;align-items:center;padding:16px 18px}
-.cat-card-name{font-size:14px;font-weight:700;color:#1c2028;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cat-card-body{flex:1;display:flex;justify-content:space-between;align-items:center;padding:0}
+.cat-card-name{font-size:15px;font-weight:700;color:#1c2028;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .cat-card-right{text-align:right}
 .cat-card-num{font-size:18px;font-weight:800;color:#1c2028}
 .cat-card-detail{font-size:9px;color:#b0b7c0;margin-top:2px}
-.back-btn{display:inline-flex;align-items:center;gap:2px;color:-grada047,#6osition:fift:1der-radius:20px;padding:6px 14px;box-shadow:0 2px 8px rgba(0,0,0,0.1);cursor:pointer;border:none}
+.back-btn{display:inline-flex;align-items:center;gap:2px;background:#fff;color:#43a047;font-size:12px;font-weight:600;position:fixed;top:16px;left:16px;z-index:10;border-radius:20px;padding:6px 14px;box-shadow:0 2px 8px rgba(0,0,0,0.1);cursor:pointer;border:none}
 .back-btn:active{transform:scale(0.94)}
 #page-detail{padding-top:50px}
 .detail-top{background:linear-gradient(135deg,#1c2028,#2d3545);border-radius:16px;padding:18px 20px;margin-bottom:14px;color:#fff;display:flex;justify-content:space-between;align-items:center}
@@ -150,9 +150,8 @@ body{font-family:-apple-system,'PingFang SC',sans-serif;background:#f1f8e9;color
 .modal-row>*{flex:1}
 .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .confirm-bg{display:none;position:fixed;inset:0;background:rgba(28,32,40,0.4);backdrop-filter:blur(4px);z-index:110;align-items:center;justify-content:center}
-.co:flex}
-.cborder-radius:16width:nter;box-shadow:0 20px 5)}
-.confirm#1c2028;margin-bottom:18px;font-weight:500}
+.confirm-box{background:#fff;border-radius:16px;padding:20px;width:260px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.15)}
+.confirm-box p{color:#1c2028;margin-bottom:18px;font-weight:500}
 .confirm-box-btns{display:flex;gap:10px;justify-content:center}
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1c2028;color:#fff;padding:11px 24px;border-radius:20px;font-size:12px;display:none;z-index:200}
 .toast.show{display:block;animation:slideup .3s}
@@ -166,7 +165,7 @@ body{font-family:-apple-system,'PingFang SC',sans-serif;background:#f1f8e9;color
 .search-result-text{font-size:12px;color:#2a3040;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 @media (min-width: 768px) {
   .page { max-width: 900px; padding: 30px 40px; }
-  .cat-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .cat-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .stats-row { grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .day-card h2 { font-size: 48px; }
   .entry-item { padding: 18px 22px; }
