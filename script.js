@@ -228,6 +228,7 @@ function renderEntries(){
   return 0;
 });
   var html='',count=0;
+  sortedIdxs.reverse();
   for(var si=0;si<sortedIdxs.length;si++){var i=sortedIdxs[si];
     var e=entries[i];
     if(currentView==='active'&&e.meta.archived)continue;
