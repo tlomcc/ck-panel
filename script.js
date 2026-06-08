@@ -293,3 +293,9 @@ function renderEntries(){
   
   document.getElementById('entry-list').innerHTML=html;
 }
+function flipCard(wrap) {
+  var item = wrap.querySelector('.entry-item');
+  if (item) {
+    item.classList.toggle('flipped');
+  }
+}
