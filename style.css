@@ -495,3 +495,31 @@ body.dark .confirm-bg {
 body.dark .cat-stats {
   color: #8c939e;
 }
+/* 卡片翻转效果 */
+.entry-wrap {
+  perspective: 1000px;
+}
+
+.entry-item {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.6s;
+  cursor: pointer;
+  min-height: 100px;
+}
+
+.entry-item.flipped {
+  transform: rotateY(180deg);
+}
+
+.entry-front, .entry-back {
+  backface-visibility: hidden;
+  width: 100%;
+}
+
+.entry-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: rotateY(180deg);
+}
