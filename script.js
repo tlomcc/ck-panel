@@ -1,9 +1,11 @@
 var API='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run';
 var ENTITY_GRAPH_URL=localStorage.getItem('entityGraphUrl')||API+'/entity-graph';
+var PANEL_CACHE_KEY='ckPanelCacheV2';
 function rpc(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''}).catch(function(){return ''})}
+function rpcStrict(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
-var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',editIdx=null,filterTag='',currentPanelTab='overview',graphLoaded=false;
+var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',editIdx=null,filterTag='',currentPanelTab='overview',graphLoaded=false,renderQueued=false;
 var currentSort='time';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -41,25 +43,92 @@ function init(){
   setupEntityLinks();
   loadAll();
 }
-function loadAll(){
-  var wrap=document.getElementById('loading-wrap');
+function setLoading(pct,msg){
   var inner=document.getElementById('loading-inner');
   var text=document.getElementById('loading-text');
-  rpc('list_memories').then(function(t){
-    if(!t||t==='Empty'){document.getElementById('cat-grid').innerHTML='<div class="empty-state">暂无记忆</div>';allData={};updateStats();renderHomeInsights();if(wrap)wrap.classList.add('done');return}
+  if(inner)inner.style.width=Math.max(0,Math.min(100,pct))+'%';
+  if(text)text.textContent=msg;
+}
+function hideLoadingSoon(delay){
+  var wrap=document.getElementById('loading-wrap');
+  if(wrap)setTimeout(function(){wrap.classList.add('done')},delay||120);
+}
+function setSyncStatus(msg){
+  var el=document.getElementById('console-sub');
+  if(el)el.textContent=msg;
+}
+function rebuildTags(){
+  allTags=new Set();
+  Object.keys(allData).forEach(function(cat){
+    (allData[cat].entries||[]).forEach(function(e){
+      if(e.meta&&e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)allTags.add(tag)});
+    });
+  });
+}
+function renderAll(){
+  updateStats();renderGrid();renderTags();renderHomeInsights();
+}
+function scheduleRender(){
+  if(renderQueued)return;
+  renderQueued=true;
+  setTimeout(function(){renderQueued=false;renderAll()},80);
+}
+function loadPanelCache(){
+  try{
+    var raw=localStorage.getItem(PANEL_CACHE_KEY);
+    if(!raw)return false;
+    var cached=JSON.parse(raw);
+    if(!cached||cached.version!==2||!cached.data)return false;
+    allData=cached.data;
+    rebuildTags();
+    renderAll();
+    setSyncStatus('已先显示本地缓存，后台更新中');
+    setLoading(18,'已显示缓存，正在更新...');
+    hideLoadingSoon(120);
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+function savePanelCache(){
+  try{
+    localStorage.setItem(PANEL_CACHE_KEY,JSON.stringify({version:2,ts:Date.now(),data:allData}));
+  }catch(e){
+    try{localStorage.removeItem(PANEL_CACHE_KEY)}catch(_e){}
+  }
+}
+function loadAll(){
+  var hadCache=loadPanelCache();
+  if(!hadCache)setLoading(4,'正在读取分类...');
+  rpcStrict('list_memories').then(function(t){
+    if(!t||t==='Empty'){allData={};allTags=new Set();renderAll();savePanelCache();setSyncStatus('暂无记忆');setLoading(100,'已更新');hideLoadingSoon(160);return}
     var cats=t.split('\n').filter(Boolean);
-    allData={};allTags=new Set();var loaded=0;var total=cats.length;
+    var previous=allData||{},next={};
+    cats.forEach(function(c){next[c]=previous[c]||{entries:[]}});
+    allData=next;rebuildTags();renderAll();
+    setSyncStatus('正在后台更新 '+cats.length+' 个分类');
+    if(!hadCache)hideLoadingSoon(180);
+    var loaded=0,total=cats.length,failed=0;
     cats.forEach(function(c){
-      rpc('read_memory',{category:c}).then(function(raw){
+      rpcStrict('read_memory',{category:c}).then(function(raw){
         var entries=parseEntries(raw);
         entries.forEach(function(e){if(e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)allTags.add(tag)})});
         allData[c]={entries:entries};loaded++;
-        var pct=Math.round(loaded/total*100);
-        if(inner)inner.style.width=pct+'%';
-        if(text)text.textContent='加载中 '+loaded+'/'+total;
-        if(loaded===total){updateStats();renderGrid();renderTags();renderHomeInsights();if(wrap)setTimeout(function(){wrap.classList.add('done')},300)}
+        setLoading(Math.round(loaded/total*100),'后台更新 '+loaded+'/'+total);
+        if(current===c&&document.getElementById('page-detail').classList.contains('active')){updateSwitchCounts();renderEntries()}
+        if(loaded===total){rebuildTags();renderAll();savePanelCache();setSyncStatus(failed?'已更新，少数分类读取失败':'已更新到最新');setLoading(100,'已更新');hideLoadingSoon(120)}
+        else if(loaded===1||loaded%3===0)scheduleRender();
+      }).catch(function(){
+        loaded++;failed++;
+        setLoading(Math.round(loaded/total*100),'后台更新 '+loaded+'/'+total);
+        if(loaded===total){rebuildTags();renderAll();savePanelCache();setSyncStatus('已更新，少数分类读取失败');hideLoadingSoon(120)}
+        else if(loaded%3===0)scheduleRender();
       });
     });
+  }).catch(function(){
+    setSyncStatus(hadCache?'服务器暂时没连上，当前显示缓存':'服务器暂时没连上');
+    if(!hadCache){allData={};allTags=new Set();renderAll();document.getElementById('cat-grid').innerHTML='<div class="empty-state">加载失败，请稍后刷新</div>'}
+    hideLoadingSoon(200);
   });
 }
 function updateStats(){
@@ -481,7 +550,7 @@ function doSelectAction(){
     toast('已删除 '+idxs.length+' 条');
     setTimeout(function(){saveCurrentCategory()},50);
   }
-  selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');renderEntries();
+  selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');renderEntries();updateStats();renderHomeInsights();savePanelCache();
 }
 function showRename(){document.getElementById('menu-popup').classList.remove('show');document.getElementById('rename-input').value=current;document.getElementById('renameModal').classList.add('show')}
 function hideRename(){document.getElementById('renameModal').classList.remove('show')}
@@ -492,14 +561,14 @@ function doRename(){
   rpc('write_memory',{category:nn,content:content}).then(function(){
     rpc('write_memory',{category:current,content:''});
     allData[nn]={entries:allData[current].entries};delete allData[current];current=nn;
-    hideRename();document.getElementById('d-title').textContent=nn;document.getElementById('d-sub').textContent=countInfo();toast('已重命名');
+    hideRename();document.getElementById('d-title').textContent=nn;document.getElementById('d-sub').textContent=countInfo();renderAll();savePanelCache();toast('已重命名');
   });
 }
 function delCategory(){
   document.getElementById('menu-popup').classList.remove('show');
   if(!confirm('确定删除分类「'+current+'」？'))return;
   rpc('delete_repo',{repo:'memory-server',path:'memories/'+current+'.md'}).then(function(){
-    delete allData[current];toast('已删除');goMemory();
+    delete allData[current];savePanelCache();toast('已删除');goMemory();
   });
 }
 function addEntry(){
@@ -508,13 +577,13 @@ function addEntry(){
   var today=new Date().toISOString().slice(0,10);
   allData[current].entries.push({meta:{imp:imp,time:today,last:today,tags:tags,pin:false,resolved:false,archived:false},content:text});
   input.value='';document.getElementById('add-tags').value='';document.getElementById('char-count').textContent='0 字';
-  renderEntries();updateStats();renderHomeInsights();
+  renderEntries();updateStats();renderHomeInsights();savePanelCache();
   var wraps=document.querySelectorAll('.entry-wrap');if(wraps.length)wraps[wraps.length-1].classList.add('new-entry');
   toast('已添加');
   rpc('append_memory',{category:current,content:text,importance:imp,tags:tags});
 }
 function updateCount(){document.getElementById('char-count').textContent=document.getElementById('add-input').value.length+' 字'}
-function saveCurrentCategory(){rpc('write_memory',{category:current,content:serializeEntries(allData[current].entries)})}
+function saveCurrentCategory(){savePanelCache();rpc('write_memory',{category:current,content:serializeEntries(allData[current].entries)})}
 function serializeEntries(entries){
   return entries.map(function(e){
     var m=e.meta,p=[];
@@ -528,7 +597,7 @@ function hideModal(){document.getElementById('newModal').classList.remove('show'
 function createCat(){
   var name=document.getElementById('new-name').value.trim();if(!name)return;
   rpc('write_memory',{category:name,content:''});
-  allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();renderHomeInsights();openDetail(name);
+  allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();renderHomeInsights();savePanelCache();openDetail(name);
 }
 function goMemory(){
   selectMode=null;selected.clear();filterTag='';activeTag='';
