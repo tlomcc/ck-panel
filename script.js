@@ -153,27 +153,13 @@ function flattenEntries(){
   });
   return list;
 }
-function daysFromDate(dateStr){
-  if(!dateStr)return 9999;
-  var t=new Date(dateStr).getTime();
-  if(isNaN(t))return 9999;
-  return Math.floor((Date.now()-t)/864e5);
-}
-function needsCleanup(e){
-  return !e.meta.tags||!e.meta.time||!e.meta.last||e.content.length>900;
-}
 function passesSearchFilter(item){
   var e=item.entry;
-  if(searchFilter==='important')return e.meta.imp>=8||e.meta.pin;
   if(searchFilter==='pinned')return !!e.meta.pin;
-  if(searchFilter==='recent')return daysFromDate(item.date)<=30;
-  if(searchFilter==='cleanup')return needsCleanup(e);
   return true;
 }
 function sortSearchItems(items){
   return items.sort(function(a,b){
-    if(searchFilter==='important')return b.score-a.score||b.date.localeCompare(a.date);
-    if(searchFilter==='cleanup')return (b.entry.content.length-a.entry.content.length)||b.date.localeCompare(a.date);
     return b.date.localeCompare(a.date)||b.score-a.score;
   });
 }
@@ -199,21 +185,6 @@ function renderMiniList(elId,items,emptyText,reasonFn){
   el.innerHTML=html;
 }
 function renderHomeInsights(){
-  var list=flattenEntries();
-  var recent=list.filter(function(x){return x.date}).sort(function(a,b){return b.date.localeCompare(a.date)}).slice(0,5);
-  var important=list.filter(function(x){return !x.entry.meta.archived&&(x.entry.meta.imp>=8||x.entry.meta.pin)}).sort(function(a,b){return b.score-a.score||b.date.localeCompare(a.date)}).slice(0,5);
-  var cleanup=list.filter(function(x){
-    return needsCleanup(x.entry);
-  }).slice(0,5);
-  renderMiniList('recent-list',recent,'暂无更新',function(x){return x.date?timeAgo(x.date):''});
-  renderMiniList('important-list',important,'暂无重点',function(x){return x.entry.meta.pin?'置顶':'高重要性'});
-  renderMiniList('cleanup-list',cleanup,'暂无待整理',function(x){
-    var e=x.entry,reasons=[];
-    if(!e.meta.tags)reasons.push('缺标签');
-    if(!e.meta.time||!e.meta.last)reasons.push('缺日期');
-    if(e.content.length>900)reasons.push('较长');
-    return reasons.join(' · ');
-  });
 }
 function openEntry(cat,idx){
   if(!allData[cat]||!allData[cat].entries[idx])return;
@@ -361,25 +332,14 @@ function getSearchItems(query){
   return sortSearchItems(items);
 }
 function searchFilterName(){
-  if(searchFilter==='important')return'高重要性';
   if(searchFilter==='pinned')return'置顶';
-  if(searchFilter==='recent')return'最近更新';
-  if(searchFilter==='cleanup')return'待整理';
   return'全部';
 }
 function renderSearchLanding(){
   var list=flattenEntries();
-  var recent=list.filter(function(x){return x.date}).sort(function(a,b){return b.date.localeCompare(a.date)}).slice(0,6);
-  var important=list.filter(function(x){return x.entry.meta.imp>=8||x.entry.meta.pin}).sort(function(a,b){return b.score-a.score||b.date.localeCompare(a.date)}).slice(0,6);
-  var cleanup=list.filter(function(x){return needsCleanup(x.entry)}).sort(function(a,b){return b.date.localeCompare(a.date)}).slice(0,6);
-  var html='<div class="search-empty-grid">';
-  html+=renderSearchSuggestionBlock('最近更新',recent,'暂无更新');
-  html+=renderSearchSuggestionBlock('高重要性',important,'暂无重点');
-  html+=renderSearchSuggestionBlock('待整理',cleanup,'暂无待整理');
-  html+='</div>';
-  document.getElementById('search-results').innerHTML=html;
+  document.getElementById('search-results').innerHTML='<div class="search-empty-card"><div class="search-empty-title">输入关键词开始搜索</div><div class="search-empty-sub">也可以点上方标签缩小范围</div></div>';
   var count=document.getElementById('search-count');
-  if(count)count.textContent='可搜索 '+list.length+' 条记忆';
+  if(count)count.textContent='共 '+list.length+' 条记忆';
 }
 function renderSearchSuggestionBlock(title,items,emptyText){
   var html='<section class="search-suggest"><div class="search-suggest-title">'+esc(title)+'</div>';

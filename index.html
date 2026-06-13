@@ -26,11 +26,11 @@
 <div class="stats-row"><div class="stat-box"><div class="val" id="st-total">-</div><div class="lbl">总数</div></div><div class="stat-box"><div class="val" id="st-active">-</div><div class="lbl">活跃</div></div><div class="stat-box"><div class="val" id="st-archived">-</div><div class="lbl">归档</div></div></div>
 </div>
 <div class="home-console">
-<div class="console-head"><div><span>控制台</span><small id="console-sub">需要看的东西先放这里</small></div><button class="btn btn-outline btn-sm" onclick="switchPanelTab('graph')">去信息网</button></div>
-<div class="console-grid">
-<div class="console-card"><div class="console-card-title">最近更新</div><div id="recent-list" class="mini-list"><div class="empty-state small">加载中...</div></div></div>
-<div class="console-card"><div class="console-card-title">重点记忆</div><div id="important-list" class="mini-list"><div class="empty-state small">加载中...</div></div></div>
-<div class="console-card"><div class="console-card-title">待整理</div><div id="cleanup-list" class="mini-list"><div class="empty-state small">加载中...</div></div></div>
+<div class="console-head"><div><span>控制台</span><small id="console-sub">正在读取</small></div></div>
+<div class="console-actions">
+<button class="console-action" onclick="switchPanelTab('categories')"><b>分类</b><span>按板块看</span></button>
+<button class="console-action" onclick="switchPanelTab('search')"><b>搜索</b><span>查正文</span></button>
+<button class="console-action" onclick="switchPanelTab('graph')"><b>信息网</b><span>看关系</span></button>
 </div>
 </div>
 </section>
@@ -42,14 +42,11 @@
 
 <section class="panel-tab" id="tab-search">
 <div class="search-panel">
-<div class="tab-head search-head"><div><h2>搜索中心</h2><p id="search-count">输入关键词，或从下面筛选</p></div><div class="search-actions"><button class="tag-expand-btn" onclick="toggleTagsExpand()">更多标签</button><button class="tag-clear-btn" id="tag-clear" onclick="filterByTag('')">清除标签</button><button class="btn btn-outline btn-sm" onclick="clearSearch()">清空</button></div></div>
+<div class="tab-head search-head"><div><h2>搜索</h2><p id="search-count">输入关键词，或从下面筛选</p></div><div class="search-actions"><button class="tag-expand-btn" onclick="toggleTagsExpand()">更多标签</button><button class="tag-clear-btn" id="tag-clear" onclick="filterByTag('')">清除标签</button><button class="btn btn-outline btn-sm" onclick="clearSearch()">清空</button></div></div>
 <div class="search-wrap"><input id="search-input" placeholder="搜索内容、分类、标签..." oninput="onSearch()" /><button class="search-clear" id="search-clear" onclick="clearSearch()">✕</button></div>
 <div class="search-filter-bar">
 <button class="search-filter active" data-filter="all" onclick="switchSearchFilter('all')">全部</button>
-<button class="search-filter" data-filter="important" onclick="switchSearchFilter('important')">高重要性</button>
 <button class="search-filter" data-filter="pinned" onclick="switchSearchFilter('pinned')">置顶</button>
-<button class="search-filter" data-filter="recent" onclick="switchSearchFilter('recent')">最近更新</button>
-<button class="search-filter" data-filter="cleanup" onclick="switchSearchFilter('cleanup')">待整理</button>
 </div>
 <div class="tag-panel"><div class="tag-panel-head"><span>常用标签</span><small id="tag-summary">加载中...</small></div><div class="tags-bar" id="tags-bar"></div></div>
 </div>
