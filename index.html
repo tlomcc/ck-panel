@@ -41,9 +41,18 @@
 </section>
 
 <section class="panel-tab" id="tab-search">
-<div class="tab-head search-head"><div><h2>搜索</h2><p>按关键词或标签快速定位</p></div><div class="search-actions"><button class="tag-expand-btn" onclick="toggleTagsExpand()">展开标签</button><button class="tag-clear-btn" id="tag-clear" onclick="filterByTag('')">清除标签</button><button class="btn btn-outline btn-sm" onclick="clearSearch()">清空</button></div></div>
-<div class="search-wrap"><input id="search-input" placeholder="搜索记忆、分类、关键词..." oninput="onSearch()" /><button class="search-clear" id="search-clear" onclick="clearSearch()">✕</button></div>
-<div class="tags-bar" id="tags-bar"></div>
+<div class="search-panel">
+<div class="tab-head search-head"><div><h2>搜索中心</h2><p id="search-count">输入关键词，或从下面筛选</p></div><div class="search-actions"><button class="tag-expand-btn" onclick="toggleTagsExpand()">更多标签</button><button class="tag-clear-btn" id="tag-clear" onclick="filterByTag('')">清除标签</button><button class="btn btn-outline btn-sm" onclick="clearSearch()">清空</button></div></div>
+<div class="search-wrap"><input id="search-input" placeholder="搜索内容、分类、标签..." oninput="onSearch()" /><button class="search-clear" id="search-clear" onclick="clearSearch()">✕</button></div>
+<div class="search-filter-bar">
+<button class="search-filter active" data-filter="all" onclick="switchSearchFilter('all')">全部</button>
+<button class="search-filter" data-filter="important" onclick="switchSearchFilter('important')">高重要性</button>
+<button class="search-filter" data-filter="pinned" onclick="switchSearchFilter('pinned')">置顶</button>
+<button class="search-filter" data-filter="recent" onclick="switchSearchFilter('recent')">最近更新</button>
+<button class="search-filter" data-filter="cleanup" onclick="switchSearchFilter('cleanup')">待整理</button>
+</div>
+<div class="tag-panel"><div class="tag-panel-head"><span>常用标签</span><small id="tag-summary">加载中...</small></div><div class="tags-bar" id="tags-bar"></div></div>
+</div>
 <div id="search-results" class="search-results"><div class="empty-state">输入关键词，或点上面的标签</div></div>
 </section>
 
