@@ -719,3 +719,23 @@ body.dark .entity-head small{color:#9aa2ad}
 body.dark .entity-status{background:#1d202b;border-color:#343846}
 body.dark .btn-outline,
 body.dark .entity-open{background:#222532;border-color:#3d5542;color:#7fd18a}
+
+.search-head{position:sticky;top:54px;z-index:35;background:#f6f7f2;padding:8px 0;margin:-8px 0 10px}
+.search-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.search-actions .btn,
+.search-actions .tag-expand-btn,
+.search-actions .tag-clear-btn{height:30px;padding:0 10px;border-radius:8px}
+.tags-bar{max-height:74px;overflow:hidden;margin-bottom:12px;padding:1px 0 2px}
+.tags-bar.expanded{max-height:210px;overflow-y:auto;align-content:flex-start;padding-right:4px}
+.tags-bar.expanded::-webkit-scrollbar{width:5px}
+.tags-bar.expanded::-webkit-scrollbar-thumb{background:#c8d0c8;border-radius:999px}
+.tags-bar-actions{display:none}
+
+@media (max-width:520px){
+  .search-head{top:48px;align-items:flex-start}
+  .search-actions{width:100%;justify-content:flex-start;margin-top:8px}
+  .tags-bar.expanded{max-height:180px}
+}
+
+body.dark .search-head{background:#171923}
+body.dark .tags-bar.expanded::-webkit-scrollbar-thumb{background:#4a5160}

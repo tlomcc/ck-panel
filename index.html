@@ -41,10 +41,9 @@
 </section>
 
 <section class="panel-tab" id="tab-search">
-<div class="tab-head"><div><h2>搜索</h2><p>按关键词或标签快速定位</p></div><button class="btn btn-outline btn-sm" onclick="clearSearch()">清空</button></div>
+<div class="tab-head search-head"><div><h2>搜索</h2><p>按关键词或标签快速定位</p></div><div class="search-actions"><button class="tag-expand-btn" onclick="toggleTagsExpand()">展开标签</button><button class="tag-clear-btn" id="tag-clear" onclick="filterByTag('')">清除标签</button><button class="btn btn-outline btn-sm" onclick="clearSearch()">清空</button></div></div>
 <div class="search-wrap"><input id="search-input" placeholder="搜索记忆、分类、关键词..." oninput="onSearch()" /><button class="search-clear" id="search-clear" onclick="clearSearch()">✕</button></div>
 <div class="tags-bar" id="tags-bar"></div>
-<div class="tags-bar-actions" id="tags-actions"><button class="tag-expand-btn" onclick="toggleTagsExpand()">展开标签</button><button class="tag-clear-btn" id="tag-clear" onclick="filterByTag('')">清除标签</button></div>
 <div id="search-results" class="search-results"><div class="empty-state">输入关键词，或点上面的标签</div></div>
 </section>
 

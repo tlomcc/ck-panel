@@ -260,11 +260,8 @@ function renderTags(){
   var html='<div class="tag-btn'+(activeTag===''?' active':'')+'" data-tag="" onclick="filterByTag(this.dataset.tag)">全部</div>';
   sorted.forEach(function(t){html+='<div class="tag-btn'+(activeTag===t?' active':'')+'" data-tag="'+escAttr(t)+'" onclick="filterByTag(this.dataset.tag)">'+esc(t)+' ('+tagCounts[t]+')</div>'});
   bar.innerHTML=html;
-  var actionsEl=document.getElementById('tags-actions');
-  if(actionsEl){
-    var clearBtn=document.getElementById('tag-clear');
-    if(clearBtn){if(activeTag)clearBtn.classList.add('show');else clearBtn.classList.remove('show')}
-  }
+  var clearBtn=document.getElementById('tag-clear');
+  if(clearBtn){if(activeTag)clearBtn.classList.add('show');else clearBtn.classList.remove('show')}
 }
 
 function toggleTagsExpand(){
@@ -281,6 +278,9 @@ function toggleTagsExpand(){
 function filterByTag(t){
   activeTag=t;filterTag=t;
   if(currentPanelTab!=='search')switchPanelTab('search');
+  var tagBar=document.getElementById('tags-bar');
+  var tagBtn=document.querySelector('.tag-expand-btn');
+  if(t&&tagBar&&tagBar.classList.contains('expanded')){tagBar.classList.remove('expanded');if(tagBtn)tagBtn.textContent='展开标签'}
   document.getElementById('search-input').value='';
   renderTags();
   if(!t){
