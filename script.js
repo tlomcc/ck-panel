@@ -1,4 +1,5 @@
 var API='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run';
+var ENTITY_GRAPH_URL=localStorage.getItem('entityGraphUrl')||API+'/entity-graph';
 function rpc(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''}).catch(function(){return ''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
@@ -44,7 +45,7 @@ function loadAll(){
   var inner=document.getElementById('loading-inner');
   var text=document.getElementById('loading-text');
   rpc('list_memories').then(function(t){
-    if(!t||t==='Empty'){document.getElementById('cat-grid').innerHTML='<div class="empty-state">暂无记忆</div>';allData={};updateStats();if(wrap)wrap.classList.add('done');return}
+    if(!t||t==='Empty'){document.getElementById('cat-grid').innerHTML='<div class="empty-state">暂无记忆</div>';allData={};updateStats();renderHomeInsights();if(wrap)wrap.classList.add('done');return}
     var cats=t.split('\n').filter(Boolean);
     allData={};allTags=new Set();var loaded=0;var total=cats.length;
     cats.forEach(function(c){
@@ -55,7 +56,7 @@ function loadAll(){
         var pct=Math.round(loaded/total*100);
         if(inner)inner.style.width=pct+'%';
         if(text)text.textContent='加载中 '+loaded+'/'+total;
-        if(loaded===total){updateStats();renderGrid();renderTags();if(wrap)setTimeout(function(){wrap.classList.add('done')},300)}
+        if(loaded===total){updateStats();renderGrid();renderTags();renderHomeInsights();if(wrap)setTimeout(function(){wrap.classList.add('done')},300)}
       });
     });
   });
@@ -66,6 +67,105 @@ function updateStats(){
   document.getElementById('st-total').textContent=total;
   document.getElementById('st-active').textContent=active;
   document.getElementById('st-archived').textContent=archived;
+}
+function flattenEntries(){
+  var list=[];
+  Object.keys(allData).forEach(function(cat){
+    allData[cat].entries.forEach(function(e,idx){
+      var date=e.meta.last||e.meta.time||'';
+      list.push({cat:cat,idx:idx,entry:e,date:date,score:e.meta.imp+(e.meta.pin?2:0)});
+    });
+  });
+  return list;
+}
+function shortText(s,n){
+  s=(s||'').replace(/\s+/g,' ').trim();
+  return s.length>n?s.slice(0,n)+'...':s;
+}
+function entityGraphFullUrl(){
+  return ENTITY_GRAPH_URL+(ENTITY_GRAPH_URL.indexOf('?')>=0?'&':'?')+'full=1';
+}
+function renderMiniList(elId,items,emptyText,reasonFn){
+  var el=document.getElementById(elId);if(!el)return;
+  if(!items.length){el.innerHTML='<div class="empty-state small">'+emptyText+'</div>';return}
+  var html='';
+  items.forEach(function(item){
+    var e=item.entry,reason=reasonFn?reasonFn(item):'';
+    var title=getCnName(item.cat)||item.cat;
+    html+='<div class="mini-item" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'" onclick="openEntry(this.dataset.cat,parseInt(this.dataset.idx,10))"><div class="mini-top"><span>'+esc(title)+'</span><b>'+e.meta.imp+'/10</b></div><div class="mini-text">'+esc(shortText(e.content,80))+'</div>'+(reason?'<div class="mini-reason">'+esc(reason)+'</div>':'')+'</div>';
+  });
+  el.innerHTML=html;
+}
+function renderHomeInsights(){
+  var list=flattenEntries();
+  var recent=list.filter(function(x){return x.date}).sort(function(a,b){return b.date.localeCompare(a.date)}).slice(0,5);
+  var important=list.filter(function(x){return !x.entry.meta.archived&&(x.entry.meta.imp>=8||x.entry.meta.pin)}).sort(function(a,b){return b.score-a.score||b.date.localeCompare(a.date)}).slice(0,5);
+  var cleanup=list.filter(function(x){
+    var e=x.entry;
+    return !e.meta.tags||!e.meta.time||!e.meta.last||e.content.length>900;
+  }).slice(0,5);
+  renderMiniList('recent-list',recent,'暂无更新',function(x){return x.date?timeAgo(x.date):''});
+  renderMiniList('important-list',important,'暂无重点',function(x){return x.entry.meta.pin?'置顶':'高重要性'});
+  renderMiniList('cleanup-list',cleanup,'暂无待整理',function(x){
+    var e=x.entry,reasons=[];
+    if(!e.meta.tags)reasons.push('缺标签');
+    if(!e.meta.time||!e.meta.last)reasons.push('缺日期');
+    if(e.content.length>900)reasons.push('较长');
+    return reasons.join(' · ');
+  });
+}
+function openEntry(cat,idx){
+  openDetail(cat);
+  setTimeout(function(){
+    var el=document.getElementById('entry-'+idx);
+    if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('focus-entry');setTimeout(function(){el.classList.remove('focus-entry')},1600)}
+  },80);
+}
+function hideEntityGraph(){
+  var box=document.getElementById('entity-console');
+  if(box)box.style.display='none';
+}
+function loadEntityGraph(showPanel){
+  var box=document.getElementById('entity-console');
+  var nodes=document.getElementById('entity-nodes');
+  var rels=document.getElementById('entity-relations');
+  var open=document.getElementById('entity-open');
+  if(open)open.href=entityGraphFullUrl();
+  if(showPanel&&box)box.style.display='block';
+  if(nodes)nodes.innerHTML='<div class="empty-state small">加载中...</div>';
+  if(rels)rels.innerHTML='';
+  fetch(ENTITY_GRAPH_URL).then(function(r){return r.json()}).then(function(data){
+    renderEntityGraph(data);
+  }).catch(function(){
+    var link=entityGraphFullUrl();
+    if(nodes)nodes.innerHTML='<div class="entity-error">信息网暂时无法嵌入读取。<br><a href="'+escAttr(link)+'" target="_blank" rel="noopener">直接打开信息网</a></div>';
+    if(rels)rels.innerHTML='';
+    var stats=document.getElementById('entity-stats');
+    if(stats)stats.innerHTML='';
+  });
+}
+function renderEntityGraph(data){
+  var stats=document.getElementById('entity-stats');
+  var nodes=document.getElementById('entity-nodes');
+  var rels=document.getElementById('entity-relations');
+  var updated=document.getElementById('entity-updated');
+  var counts=data.counts||{};
+  if(updated)updated.textContent=data.updated?'更新 '+data.updated:'';
+  if(stats)stats.innerHTML='<div><b>'+(counts.nodes||0)+'</b><span>节点</span></div><div><b>'+(counts.relations||0)+'</b><span>关系</span></div><div><b>'+(counts.orphan_nodes||0)+'</b><span>孤立</span></div>';
+  var nodeList=(data.top_nodes||[]).slice(0,8);
+  if(nodes){
+    if(!nodeList.length)nodes.innerHTML='<div class="empty-state small">暂无节点</div>';
+    else nodes.innerHTML=nodeList.map(function(n){
+      return '<div class="mini-item"><div class="mini-top"><span>'+esc(n.name||n.key||'')+'</span><b>'+esc(n.type||'')+'</b></div><div class="mini-text">'+esc(shortText(n.summary||'',90))+'</div><div class="mini-reason">重要性 '+(n.importance||5)+' · 提及 '+(n.mentions||0)+'</div></div>';
+    }).join('');
+  }
+  var relList=(data.recent_relations||[]).slice(0,8);
+  if(rels){
+    if(!relList.length)rels.innerHTML='<div class="empty-state small">暂无关系</div>';
+    else rels.innerHTML=relList.map(function(r){
+      return '<div class="mini-item"><div class="mini-top"><span>'+esc(r.source||'')+' → '+esc(r.target||'')+'</span><b>'+esc(r.relation||'')+'</b></div><div class="mini-text">'+esc(shortText(r.detail||'',90))+'</div><div class="mini-reason">'+esc(r.last_seen||'')+'</div></div>';
+    }).join('');
+  }
 }
 function renderTags(){
   var bar=document.getElementById('tags-bar');
@@ -260,7 +360,7 @@ metaHtml+='<span class="entry-badge score-badge" style="color:#e67e22;position:r
 }
 function quickPin(i){
   var e=allData[current].entries[i];e.meta.pin=!e.meta.pin;
-  renderEntries();toast(e.meta.pin?'已置顶':'已取消置顶');
+  renderEntries();renderHomeInsights();toast(e.meta.pin?'已置顶':'已取消置顶');
   setTimeout(function(){saveCurrentCategory()},50);
 }
 function toggleExpand(i){
@@ -314,7 +414,7 @@ function saveEdit(){
   e.meta.pin=document.getElementById('edit-pin').value==='1';
   e.meta.tags=document.getElementById('edit-tags').value.trim();
   e.meta.archived=document.getElementById('edit-archived').value==='1';
-  hideEdit();renderEntries();toast('已保存');
+  hideEdit();renderEntries();renderHomeInsights();toast('已保存');
   setTimeout(function(){saveCurrentCategory()},50);
 }
 function showDelConfirm(i){delIdx=i;document.getElementById('confirmDel').classList.add('show')}
@@ -322,7 +422,7 @@ function cancelDel(){document.getElementById('confirmDel').classList.remove('sho
 function confirmDel(){
   allData[current].entries.splice(delIdx,1);
   document.getElementById('confirmDel').classList.remove('show');delIdx=null;
-  renderEntries();toast('已删除');
+  renderEntries();renderHomeInsights();toast('已删除');
   setTimeout(function(){saveCurrentCategory()},50);
 }
 function resetSwipes(){document.querySelectorAll('.entry-item').forEach(function(el){el.style.transition='transform 0.2s ease';el.style.transform='translateX(0)'})}
@@ -334,7 +434,7 @@ function startSelect(mode){
   var btn=document.getElementById('select-action-btn');
   btn.textContent=mode==='export'?'导出 (0)':'删除 (0)';
   btn.className=mode==='export'?'btn btn-blue btn-sm':'btn btn-red btn-sm';
-  renderEntries();
+  renderEntries();renderHomeInsights();
 }
 function cancelSelect(){selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');renderEntries()}
 function toggleSelect(i){
@@ -389,7 +489,7 @@ function addEntry(){
   var today=new Date().toISOString().slice(0,10);
   allData[current].entries.push({meta:{imp:imp,time:today,last:today,tags:tags,pin:false,resolved:false,archived:false},content:text});
   input.value='';document.getElementById('add-tags').value='';document.getElementById('char-count').textContent='0 字';
-  renderEntries();
+  renderEntries();updateStats();renderHomeInsights();
   var wraps=document.querySelectorAll('.entry-wrap');if(wraps.length)wraps[wraps.length-1].classList.add('new-entry');
   toast('已添加');
   rpc('append_memory',{category:current,content:text,importance:imp,tags:tags});
@@ -409,7 +509,7 @@ function hideModal(){document.getElementById('newModal').classList.remove('show'
 function createCat(){
   var name=document.getElementById('new-name').value.trim();if(!name)return;
   rpc('write_memory',{category:name,content:''});
-  allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();openDetail(name);
+  allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();renderHomeInsights();openDetail(name);
 }
 function goMemory(){
   selectMode=null;selected.clear();filterTag='';activeTag='';
@@ -419,11 +519,12 @@ function goMemory(){
   document.getElementById('cat-grid').style.display='grid';
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
   document.getElementById('page-memory').classList.add('active');
-  updateStats();renderGrid();renderTags();
+  updateStats();renderGrid();renderTags();renderHomeInsights();
   window.scrollTo(0,0);
 }
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show';setTimeout(function(){t.className='toast'},2000)}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 document.addEventListener('click',function(e){var m=document.getElementById('menu-popup');if(m&&m.classList.contains('show')&&!e.target.closest('.menu-btn')&&!e.target.closest('.menu-popup'))m.classList.remove('show')});
 function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(function(el) {

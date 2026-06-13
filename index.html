@@ -13,6 +13,19 @@
 <div class="mem-header"><div class="mem-title">Memory<span class="cn">记忆</span></div><div class="mem-date" id="mem-date"></div></div>
 <div class="day-card"><h2>Day <span id="day-num">0</span></h2><p>Since 2026.3.26</p></div>
 <div class="stats-row"><div class="stat-box"><div class="val" id="st-total">-</div><div class="lbl">总数</div></div><div class="stat-box"><div class="val" id="st-active">-</div><div class="lbl">活跃</div></div><div class="stat-box"><div class="val" id="st-archived">-</div><div class="lbl">归档</div></div></div>
+<div class="home-console">
+<div class="console-head"><div><span>控制台</span><small id="console-sub">Memory Console</small></div><button class="btn btn-outline btn-sm" onclick="loadEntityGraph(true)">信息网</button></div>
+<div class="console-grid">
+<div class="console-card"><div class="console-card-title">最近更新</div><div id="recent-list" class="mini-list"><div class="empty-state small">加载中...</div></div></div>
+<div class="console-card"><div class="console-card-title">重点记忆</div><div id="important-list" class="mini-list"><div class="empty-state small">加载中...</div></div></div>
+<div class="console-card"><div class="console-card-title">待整理</div><div id="cleanup-list" class="mini-list"><div class="empty-state small">加载中...</div></div></div>
+</div>
+<div class="entity-console" id="entity-console" style="display:none">
+<div class="entity-head"><div><strong>信息网</strong><small id="entity-updated"></small></div><div class="entity-actions"><a class="entity-open" id="entity-open" target="_blank" rel="noopener">打开完整</a><button class="entity-close" onclick="hideEntityGraph()">收起</button></div></div>
+<div class="entity-stats" id="entity-stats"></div>
+<div class="entity-columns"><div><div class="console-card-title">重要节点</div><div id="entity-nodes" class="mini-list"></div></div><div><div class="console-card-title">最近关系</div><div id="entity-relations" class="mini-list"></div></div></div>
+</div>
+</div>
 <div class="search-wrap"><input id="search-input" placeholder="搜索记忆..." oninput="onSearch()" /><button class="search-clear" id="search-clear" onclick="clearSearch()">✕</button></div>
 <div id="search-results" class="search-results" style="display:none"></div>
 <div class="tags-bar" id="tags-bar"></div>
