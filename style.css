@@ -2727,3 +2727,135 @@ body.dark .pinned-card{
     max-height:98px!important;
   }
 }
+
+/* Home shelves tuned to match pinned window */
+.home-insight-grid{
+  gap:12px;
+}
+
+.home-insight-block{
+  min-width:0;
+  overflow:hidden;
+}
+
+.today-roll-list,
+.insight-mini-list{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:8px!important;
+  max-height:244px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding:0!important;
+  mask-image:none!important;
+  -webkit-mask-image:none!important;
+}
+
+.today-roll-item,
+.insight-mini-list .mini-item{
+  flex:0 0 auto;
+  min-height:112px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  gap:8px;
+  padding:12px!important;
+  border-radius:9px!important;
+}
+
+.today-roll-top,
+.mini-top{
+  width:100%;
+  min-width:0;
+  gap:8px;
+}
+
+.today-roll-top b,
+.mini-top span{
+  min-width:0;
+  flex:1;
+}
+
+.today-roll-top small,
+.mini-top b{
+  flex:0 1 auto;
+  max-width:42%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.today-roll-text,
+.insight-mini-list .mini-text{
+  color:var(--ck-text-soft);
+  font-size:12.5px;
+  line-height:1.58;
+  display:-webkit-box!important;
+  -webkit-line-clamp:3!important;
+  -webkit-box-orient:vertical;
+  overflow:hidden!important;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  max-height:none!important;
+  opacity:1!important;
+  filter:none!important;
+}
+
+.today-roll-tags{
+  max-height:24px;
+  overflow:hidden;
+  margin-top:0;
+}
+
+.mini-reason{
+  color:var(--ck-muted);
+  line-height:1.45;
+  display:block;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.entry-item{
+  cursor:pointer;
+}
+
+#page-detail .entry-text{
+  cursor:inherit;
+}
+
+body.dark .today-roll-text,
+body.dark .insight-mini-list .mini-text{
+  color:var(--ck-text-soft);
+}
+
+@media (min-width:768px){
+  .home-insight-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+
+  .today-roll-list,
+  .insight-mini-list{
+    max-height:252px!important;
+  }
+
+  .today-roll-item,
+  .insight-mini-list .mini-item{
+    min-height:116px;
+  }
+}
+
+@media (max-width:520px){
+  .today-roll-list,
+  .insight-mini-list{
+    max-height:236px!important;
+  }
+
+  .today-roll-item,
+  .insight-mini-list .mini-item{
+    min-height:110px;
+  }
+}

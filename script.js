@@ -37,7 +37,7 @@ function rpc(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'
 function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
-var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null;
+var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0;
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -636,11 +636,11 @@ function renderEntryCard(i,e,isLong,compact){
   if(compact)actionHtml+='<div class="entry-action-btn open" onclick="event.stopPropagation();openEntry(current,'+i+')">打开</div>';
   actionHtml+='</div>';
   var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+'"><div class="entry-del-bg" onclick="showDelConfirm('+i+')">删除</div>';
-  var itemAttrs=compact?' onclick="if(!selectMode)openEntry(current,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"';
-  var textClick=compact?'':' onclick="if(!selectMode)toggleExpand('+i+')"';
+  var itemAttrs=compact?' onclick="if(!selectMode)openEntry(current,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"'+(singleEntryIdx===null?' onclick="if(!selectMode&&!touchState.moved)openEntry(current,'+i+')"':'');
+  var textClick='';
   html+='<div class="entry-item" id="entry-'+i+'"'+itemAttrs+'>';
   html+=circle+'<div style="flex:1;min-width:0"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'"'+textClick+'>'+esc(e.content)+'</div>';
-  if(isLong)html+='<div class="entry-expand" onclick="if(!selectMode)toggleExpand('+i+')">展开</div>';
+  if(isLong)html+='<div class="entry-expand" onclick="event.stopPropagation();if(!selectMode)openEntry(current,'+i+')">阅读全文</div>';
   html+=metaHtml+actionHtml+'</div></div></div>';
   return html;
 }
@@ -876,6 +876,29 @@ function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.c
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 document.addEventListener('click',function(e){var m=document.getElementById('menu-popup');if(m&&m.classList.contains('show')&&!e.target.closest('.menu-btn')&&!e.target.closest('.menu-popup'))m.classList.remove('show')});
+function isSingleDetailBackTarget(target){
+  if(singleEntryIdx===null)return false;
+  if(!document.getElementById('page-detail').classList.contains('active'))return false;
+  if(!target.closest('#d-entries'))return false;
+  if(target.closest('button,.back-btn,.entry-action-btn,.entry-expand,.menu-btn,.menu-popup,.switch-bar,.sort-bar,.select-bar,.add-area,.modal-bg,.confirm-bg,.score-badge'))return false;
+  return true;
+}
+function goBackFromSingleDetail(target){
+  if(isSingleDetailBackTarget(target))goMemory();
+}
+document.addEventListener('dblclick',function(e){
+  goBackFromSingleDetail(e.target);
+});
+document.addEventListener('touchend',function(e){
+  if(!isSingleDetailBackTarget(e.target))return;
+  var now=Date.now();
+  if(now-lastSingleTapAt<320){
+    lastSingleTapAt=0;
+    goMemory();
+  }else{
+    lastSingleTapAt=now;
+  }
+},{passive:true});
 function switchPanelTab(tab,opts) {
   opts=opts||{};
   currentPanelTab=tab;
