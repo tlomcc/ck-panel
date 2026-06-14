@@ -70,7 +70,7 @@ function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-T
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
-var entityGraphData=null,entityGraphView='nodes',entityGraphSelectedType='',entityGraphSelectedKey='';
+var entityGraphData=null,entityGraphView='nodes',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false;
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -423,18 +423,59 @@ function setEntityGraphView(view){
   entityGraphSelectedKey='';
   if(entityGraphData)renderEntityGraph(entityGraphData);
 }
-function openEntityGraphItem(type,key){
+function openEntityGraphItem(type,key,evt){
   entityGraphSelectedType=type||'';
   entityGraphSelectedKey=key||'';
   renderEntityBrowser(entityGraphData);
   renderEntityMap(entityGraphData);
+  if(entityGraphFullOpen){
+    renderEntityMap(entityGraphData,'entity-graph-stage',true);
+    showEntityPopover(evt);
+  }
 }
-function renderEntityMap(data){
-  var map=document.getElementById('entity-map');
+function openEntityGraphPage(){
+  if(!entityGraphData){
+    loadEntityGraph(false);
+    return;
+  }
+  entityGraphFullOpen=true;
+  var page=document.getElementById('entity-graph-page');
+  if(page)page.classList.add('show');
+  document.body.classList.add('entity-graph-open');
+  renderEntityMap(entityGraphData,'entity-graph-stage',true);
+  showEntityPopover(null);
+}
+function closeEntityGraphPage(){
+  entityGraphFullOpen=false;
+  var page=document.getElementById('entity-graph-page');
+  var pop=document.getElementById('entity-popover');
+  if(page)page.classList.remove('show');
+  if(pop)pop.classList.remove('show');
+  document.body.classList.remove('entity-graph-open');
+}
+function showEntityPopover(evt){
+  var pop=document.getElementById('entity-popover');
+  var page=document.getElementById('entity-graph-page');
+  if(!pop||!page||!entityGraphSelectedType||!entityGraphSelectedKey)return;
+  pop.innerHTML=renderEntityDetail(entityGraphData,entityGraphSelectedType,entityGraphSelectedKey);
+  pop.classList.add('show');
+  var rect=page.getBoundingClientRect();
+  var x=evt&&evt.clientX?evt.clientX-rect.left:rect.width-360;
+  var y=evt&&evt.clientY?evt.clientY-rect.top:92;
+  var w=Math.min(360,rect.width-28),h=Math.min(430,rect.height-110);
+  x=Math.max(14,Math.min(x+14,rect.width-w-14));
+  y=Math.max(76,Math.min(y+14,rect.height-h-14));
+  pop.style.width=w+'px';
+  pop.style.maxHeight=h+'px';
+  pop.style.left=x+'px';
+  pop.style.top=y+'px';
+}
+function renderEntityMap(data,targetId,full){
+  var map=document.getElementById(targetId||'entity-map');
   if(!map)return;
-  var nodes=(data.top_nodes||[]).slice(0,16);
+  var nodes=(data.top_nodes||[]).slice(0,full?28:16);
   if(!nodes.length){map.innerHTML='<div class="empty-state small">暂无示意图</div>';return}
-  var w=720,h=360,cx=360,cy=178,rx=268,ry=116,coords={},parts=[];
+  var w=full?1120:720,h=full?720:360,cx=w/2,cy=h/2,rx=full?420:268,ry=full?250:116,coords={},parts=[];
   for(var i=0;i<nodes.length;i++){
     var a=nodes.length===1?0:(Math.PI*2*i/nodes.length-Math.PI/2);
     var x=nodes.length===1?cx:cx+Math.cos(a)*rx;
@@ -442,7 +483,7 @@ function renderEntityMap(data){
     coords[graphTerm(nodes[i].key)]=coords[graphTerm(nodes[i].name)]={x:x,y:y,n:nodes[i]};
   }
   var rels=(data.recent_relations||[]).slice(0,80);
-  parts.push('<svg class="entity-svg" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="信息网关系示意图"><defs><marker id="entity-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"></path></marker></defs>');
+  parts.push('<svg class="entity-svg '+(full?'entity-svg-full':'')+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="信息网关系示意图"><defs><marker id="entity-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"></path></marker></defs>');
   rels.forEach(function(r){
     var s=coords[graphTerm(r.source)],t=coords[graphTerm(r.target)];
     if(!s||!t)return;
@@ -452,7 +493,7 @@ function renderEntityMap(data){
   nodes.forEach(function(n){
     var k=graphNodeKey(n),c=coords[graphTerm(k)],r=Math.max(16,Math.min(28,14+(n.importance||5)));
     var active=entityGraphSelectedType==='node'&&entityGraphSelectedKey===k?' active':'';
-    parts.push('<g class="entity-node'+active+'" onclick="openEntityGraphItem(\'node\',\''+escAttr(k)+'\')" tabindex="0">');
+    parts.push('<g class="entity-node'+active+'" onclick="event.stopPropagation();openEntityGraphItem(\'node\',\''+escAttr(k)+'\',event)" tabindex="0">');
     parts.push('<circle cx="'+c.x.toFixed(1)+'" cy="'+c.y.toFixed(1)+'" r="'+r+'"></circle>');
     parts.push('<text x="'+c.x.toFixed(1)+'" y="'+(c.y+r+15).toFixed(1)+'">'+esc(shortText(graphNodeName(n),12))+'</text>');
     parts.push('</g>');
@@ -466,12 +507,12 @@ function renderEntityBrowser(data){
   var detail=document.getElementById('entity-detail');
   var meta=document.getElementById('entity-detail-meta');
   if(!data||!list)return;
-  var rows=[],label='节点明细';
+  var rows=[],label='节点预览';
   if(entityGraphView==='relations'){
-    label='关系明细';
+    label='关系预览';
     rows=(data.recent_relations||[]).map(function(r,i){return {type:'relation',key:String(i),raw:r}});
   }else if(entityGraphView==='orphans'){
-    label='孤立节点';
+    label='孤立预览';
     rows=(data.orphan_nodes||[]).map(function(name){
       return {type:'node',key:graphNodeKey(findGraphNode(data,name)||{key:name,name:name}),raw:findGraphNode(data,name)||{key:name,name:name,summary:'暂时没有关系线。'}};
     });
