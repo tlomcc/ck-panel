@@ -37,7 +37,7 @@ function rpc(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'
 function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
-var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false;
+var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null;
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -256,6 +256,7 @@ function renderMiniList(elId,items,emptyText,reasonFn){
 function renderHomeInsights(){
   var listEl=document.getElementById('today-roll-list');
   var countEl=document.getElementById('today-roll-count');
+  var focusCountEl=document.getElementById('recent-focus-count');
   if(!listEl)return;
   var today=dateKey(new Date()),items=[],seq=0;
   Object.keys(allData).forEach(function(cat){
@@ -272,18 +273,30 @@ function renderHomeInsights(){
   if(countEl)countEl.textContent=items.length+' 条';
   if(!items.length){
     listEl.innerHTML='<div class="empty-state small">今天还没有新增记忆</div>';
-    return;
+  }else{
+    listEl.innerHTML=items.map(function(item){
+      var e=item.entry,title=getCnName(item.cat)||item.cat;
+      var tags=entryTags(e).slice(0,3).map(function(t){return'<span>#'+esc(t)+'</span>'}).join('');
+      return '<div class="today-roll-item" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'" onclick="openEntry(this.dataset.cat,parseInt(this.dataset.idx,10))"><div class="today-roll-top"><b>'+esc(title)+'</b><small>'+esc(item.date)+'</small></div><div class="today-roll-text">'+esc(shortText(e.content,120))+'</div>'+(tags?'<div class="today-roll-tags">'+tags+'</div>':'')+'</div>';
+    }).join('');
   }
-  listEl.innerHTML=items.map(function(item){
-    var e=item.entry,title=getCnName(item.cat)||item.cat;
-    var tags=entryTags(e).slice(0,3).map(function(t){return'<span>#'+esc(t)+'</span>'}).join('');
-    return '<div class="today-roll-item" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'" onclick="openEntry(this.dataset.cat,parseInt(this.dataset.idx,10))"><div class="today-roll-top"><b>'+esc(title)+'</b><small>'+esc(item.date)+'</small></div><div class="today-roll-text">'+esc(shortText(e.content,120))+'</div>'+(tags?'<div class="today-roll-tags">'+tags+'</div>':'')+'</div>';
-  }).join('');
+  var focus=flattenEntries().filter(function(item){
+    return !item.entry.meta.archived&&item.entry.meta.imp>=8;
+  }).sort(function(a,b){
+    var d=(b.date||'').localeCompare(a.date||'');
+    return d!==0?d:b.score-a.score;
+  }).slice(0,5);
+  if(focusCountEl)focusCountEl.textContent=focus.length+' 条';
+  renderMiniList('recent-focus-list',focus,'暂无高权重更新',function(item){
+    return (item.date?timeAgo(item.date)+' · ':'')+(item.entry.meta.pin?'置顶 · ':'')+'重要性 '+item.entry.meta.imp+'/10';
+  });
 }
 function openEntry(cat,idx){
   if(!allData[cat]||!allData[cat].entries[idx])return;
   var entry=allData[cat].entries[idx];
-  openDetail(cat,{view:entry.meta.archived?'archived':'active',singleIdx:idx});
+  var fromDetail=document.getElementById('page-detail').classList.contains('active')&&cat===current&&singleEntryIdx===null;
+  detailReturnState=fromDetail?{cat:current,view:currentView,scrollY:window.scrollY||0,filterTag:filterTag,sort:currentSort,sortDir:currentSortDir}:null;
+  openDetail(cat,{view:entry.meta.archived?'archived':'active',singleIdx:idx,fromDetail:fromDetail});
 }
 function focusEntry(idx){
   setTimeout(function(){
@@ -368,7 +381,7 @@ function renderTags(){
   });
   var sorted=Object.keys(tagCounts).sort(function(a,b){return tagCounts[b]-tagCounts[a]});
   var selected=new Set(activeTags);
-  var tagLimit=8;
+  var tagLimit=6;
   var visible=tagsExpanded?sorted:sorted.slice(0,tagLimit);
   activeTags.forEach(function(t){if(visible.indexOf(t)<0&&sorted.indexOf(t)>=0)visible.push(t)});
   if(bar)bar.classList.toggle('expanded',tagsExpanded);
@@ -376,7 +389,7 @@ function renderTags(){
   visible.forEach(function(t){html+='<div class="tag-btn'+(selected.has(t)?' active':'')+'" data-tag="'+escAttr(t)+'" onclick="toggleTag(this.dataset.tag)">'+esc(t)+' ('+tagCounts[t]+')</div>'});
   bar.innerHTML=html||'<div class="empty-state small">暂无标签</div>';
   var summary=document.getElementById('tag-summary');
-  if(summary)summary.textContent=sorted.length?(activeTags.length?'已选 '+activeTags.length+' 个 · 按出现次数排序':(tagsExpanded?'全部 '+sorted.length+' 个':'常用前 '+Math.min(tagLimit,sorted.length)+' / '+sorted.length+' 个')):'暂无标签';
+  if(summary)summary.textContent=sorted.length?(activeTags.length?'已选 '+activeTags.length+' 个':(tagsExpanded?'全部 '+sorted.length+' 个':'常用 '+Math.min(tagLimit,sorted.length)+' / '+sorted.length)):'暂无标签';
   var expandBtn=document.querySelector('.tag-expand-btn');
   if(expandBtn)expandBtn.textContent=tagsExpanded?'收起标签':'更多标签';
   var clearBtn=document.getElementById('tag-clear');
@@ -559,6 +572,7 @@ function renderCategoryCard(k){
 }
 function openDetail(k,opts){
   opts=opts||{};
+  if(!opts.fromDetail)detailReturnState=null;
   if(document.getElementById('page-memory').classList.contains('active')){
     returnPanelTab=opts.fromTab||currentPanelTab||'overview';
     returnScrollY=window.scrollY||0;
@@ -608,10 +622,14 @@ function renderEntryCard(i,e,isLong,compact){
     metaHtml+='<span class="entry-badge score-badge" style="color:#e67e22;position:relative;cursor:pointer" data-score="'+scoreDetail+'">⚡'+score+'</span>';
   }
   metaHtml+='</div>';
-  var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div></div>';
+  var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div>';
+  if(compact)actionHtml+='<div class="entry-action-btn open" onclick="event.stopPropagation();openEntry(current,'+i+')">打开</div>';
+  actionHtml+='</div>';
   var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+'"><div class="entry-del-bg" onclick="showDelConfirm('+i+')">删除</div>';
-  html+='<div class="entry-item" id="entry-'+i+'" ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')">';
-  html+=circle+'<div style="flex:1"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'" onclick="if(!selectMode)toggleExpand('+i+')">'+esc(e.content)+'</div>';
+  var itemAttrs=compact?' onclick="if(!selectMode)openEntry(current,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"';
+  var textClick=compact?'':' onclick="if(!selectMode)toggleExpand('+i+')"';
+  html+='<div class="entry-item" id="entry-'+i+'"'+itemAttrs+'>';
+  html+=circle+'<div style="flex:1;min-width:0"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'"'+textClick+'>'+esc(e.content)+'</div>';
   if(isLong)html+='<div class="entry-expand" onclick="if(!selectMode)toggleExpand('+i+')">展开</div>';
   html+=metaHtml+actionHtml+'</div></div></div>';
   return html;
@@ -811,6 +829,25 @@ function createCat(){
   allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();renderHomeInsights();savePanelCache();openDetail(name);
 }
 function goMemory(){
+  if(singleEntryIdx!==null&&detailReturnState&&detailReturnState.cat===current){
+    var state=detailReturnState;
+    detailReturnState=null;
+    singleEntryIdx=null;
+    currentView=state.view||'active';
+    filterTag=state.filterTag||'';
+    activeTags=filterTag?[filterTag]:[];
+    syncActiveTag();
+    currentSort=state.sort||currentSort;
+    currentSortDir=state.sortDir||currentSortDir;
+    selectMode=null;selected.clear();
+    document.getElementById('select-bar').classList.remove('show');
+    document.getElementById('menu-popup').classList.remove('show');
+    document.getElementById('d-sub').textContent=countInfo();
+    updateSwitchCounts();updateSortButtons();renderEntries();
+    document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(currentView==='active'&&i===0)||(currentView==='archived'&&i===1))});
+    setTimeout(function(){window.scrollTo(0,state.scrollY||0)},0);
+    return;
+  }
   var target=returnPanelTab||currentPanelTab||'overview';
   selectMode=null;selected.clear();singleEntryIdx=null;
   if(target!=='search'){

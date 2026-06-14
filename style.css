@@ -2017,3 +2017,148 @@ body.dark .pinned-entry-wrap .entry-item{
     padding-top:4px;
   }
 }
+
+/* Compact usability pass */
+.home-insight-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+
+.home-insight-block{
+  min-width:0;
+}
+
+.insight-mini-list{
+  max-height:286px;
+  overflow-y:auto;
+  padding-right:3px;
+}
+
+.insight-mini-list::-webkit-scrollbar,
+.tags-bar::-webkit-scrollbar{
+  height:5px;
+  width:5px;
+}
+
+.insight-mini-list::-webkit-scrollbar-thumb,
+.tags-bar::-webkit-scrollbar-thumb{
+  background:rgba(var(--ck-accent-rgb),.28);
+  border-radius:999px;
+}
+
+.search-panel{
+  gap:10px;
+}
+
+.search-filter-bar{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  overflow-x:auto;
+}
+
+.search-filter{
+  height:30px;
+  padding:0 11px;
+}
+
+.tag-panel{
+  padding:10px;
+}
+
+.tag-panel-head{
+  margin-bottom:8px;
+}
+
+.tags-bar:not(.expanded){
+  display:flex!important;
+  grid-template-columns:none!important;
+  flex-wrap:nowrap;
+  gap:7px;
+  max-height:38px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding-bottom:3px;
+}
+
+.tags-bar:not(.expanded) .tag-btn{
+  flex:0 0 auto;
+  max-width:152px;
+}
+
+.tags-bar.expanded{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(106px,1fr));
+  gap:7px;
+  max-height:178px;
+}
+
+.tag-btn{
+  min-height:28px;
+  justify-content:flex-start;
+  font-size:11px;
+}
+
+.active-filter-bar{
+  padding:0 2px;
+}
+
+.entry-text{
+  line-height:1.72;
+}
+
+.entry-actions{
+  gap:7px;
+}
+
+.entry-action-btn{
+  min-height:24px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.pinned-box{
+  padding:7px;
+}
+
+.pinned-box-list{
+  max-height:190px;
+  gap:7px;
+}
+
+.pinned-entry-wrap .entry-item{
+  cursor:pointer;
+  padding:9px 10px;
+}
+
+.pinned-entry-wrap .entry-text{
+  -webkit-line-clamp:2;
+}
+
+.pinned-entry-wrap .entry-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  margin-top:7px;
+}
+
+.pinned-entry-wrap .entry-action-btn.open{
+  color:var(--ck-accent);
+  background:var(--ck-accent-soft);
+  border-color:rgba(var(--ck-accent-rgb),.22);
+}
+
+@media (min-width:768px){
+  .home-insight-grid{
+    grid-template-columns:minmax(0,1.15fr) minmax(240px,.85fr);
+  }
+
+  .today-roll-list,
+  .insight-mini-list{
+    max-height:360px;
+    overflow-y:auto;
+    padding-right:3px;
+  }
+}
