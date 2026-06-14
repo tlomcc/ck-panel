@@ -607,6 +607,16 @@ function switchView(v){
   document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(v==='active'&&i===0)||(v==='archived'&&i===1))});
   renderEntries();
 }
+function renderPinnedCard(i,e){
+  var tags=entryTags(e).slice(0,2);
+  var meta=['重要性 '+e.meta.imp+'/10'];
+  if(e.meta.time)meta.push(timeAgo(e.meta.time));
+  tags.forEach(function(t){meta.push('#'+t)});
+  var click=selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')';
+  var checked=selectMode&&selected.has(i);
+  var select=selectMode?'<div class="select-circle'+(checked?' checked':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
+  return '<article class="pinned-card" onclick="'+click+'">'+select+'<div class="pinned-card-main"><div class="pinned-card-text">'+esc(e.content)+'</div><div class="pinned-card-meta">'+meta.map(function(m){return'<span>'+esc(m)+'</span>'}).join('')+'</div></div><button class="pinned-card-pin" onclick="event.stopPropagation();quickPin('+i+')" aria-label="取消置顶">★</button></article>';
+}
 function renderEntryCard(i,e,isLong,compact){
   var circle=selectMode?'<div class="select-circle'+(selected.has(i)?' checked':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
   var metaHtml='<div class="entry-meta">';
@@ -665,8 +675,8 @@ function renderEntries(){
   normal=sortEntryIndexes(normal,entries);
   var html='',count=pinned.length+normal.length;
   if(pinned.length){
-    html+='<section class="pinned-box"><div class="pinned-box-head"><span>置顶</span><small>'+pinned.length+' 条</small></div><div class="pinned-box-list">';
-    pinned.forEach(function(i){html+=renderEntryCard(i,entries[i],false,true)});
+    html+='<section class="pinned-window"><div class="pinned-window-head"><div><span>置顶</span><small>当前分类</small></div><b>'+pinned.length+' 条</b></div><div class="pinned-window-track">';
+    pinned.forEach(function(i){html+=renderPinnedCard(i,entries[i])});
     html+='</div></section>';
   }
   if(pinned.length&&normal.length)html+='<div class="entry-section-head"><span>普通记忆</span><small>'+normal.length+' 条</small></div>';
