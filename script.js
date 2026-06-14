@@ -560,14 +560,37 @@ function switchView(v){
   document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(v==='active'&&i===0)||(v==='archived'&&i===1))});
   renderEntries();
 }
-function renderEntries(){
-  var entries=allData[current].entries;
-  var sortedIdxs=[];for(var si=0;si<entries.length;si++)sortedIdxs.push(si);
-  sortedIdxs.sort(function(a,b){
+function renderEntryCard(i,e,isLong,compact){
+  var circle=selectMode?'<div class="select-circle'+(selected.has(i)?' checked':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
+  var metaHtml='<div class="entry-meta">';
+  if(e.meta.pin)metaHtml+='<span class="entry-badge pin">★ 置顶</span>';
+  if(e.meta.imp>=7)metaHtml+='<span class="entry-badge imp-high">'+e.meta.imp+'/10</span>';
+  else metaHtml+='<span class="entry-badge">'+e.meta.imp+'/10</span>';
+  if(e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)metaHtml+='<span class="entry-badge">#'+tag+'</span>'});
+  if(e.meta.time)metaHtml+='<span class="entry-badge">'+timeAgo(e.meta.time)+'</span>';
+  var days=e.meta.last?Math.floor((new Date()-new Date(e.meta.last))/864e5):0;var score;if(e.meta.pin&&e.meta.imp>=10){score='∞'}else if(e.meta.pin&&e.meta.imp>=9){score=Math.max(e.meta.imp*Math.pow(0.99,days),4).toFixed(2)}else{score=(e.meta.imp*Math.pow(0.99,days)).toFixed(2)}var scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' = '+score;
+  if(e.meta.pin&&e.meta.imp>=10)scoreDetail='imp:10 [pin] \u4e0d\u8870\u51cf';
+  else if(e.meta.pin&&e.meta.imp>=9)scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' (\u4fdd\u5e954)';
+  metaHtml+='<span class="entry-badge score-badge" style="color:#e67e22;position:relative;cursor:pointer" data-score="'+scoreDetail+'">⚡'+score+'</span>';
+  metaHtml+='</div>';
+  var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div></div>';
+  var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+'"><div class="entry-del-bg" onclick="showDelConfirm('+i+')">删除</div>';
+  html+='<div class="entry-item" id="entry-'+i+'" ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')">';
+  html+=circle+'<div style="flex:1"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'" onclick="if(!selectMode)toggleExpand('+i+')">'+esc(e.content)+'</div>';
+  if(isLong)html+='<div class="entry-expand" onclick="if(!selectMode)toggleExpand('+i+')">展开</div>';
+  html+=metaHtml+actionHtml+'</div></div></div>';
+  return html;
+}
+function entryVisibleInDetail(e,i){
+  if(singleEntryIdx!==null&&i!==singleEntryIdx)return false;
+  if(currentView==='active'&&e.meta.archived)return false;
+  if(currentView==='archived'&&!e.meta.archived)return false;
+  if(singleEntryIdx===null&&filterTag&&!(e.meta.tags&&e.meta.tags.indexOf(filterTag)>=0))return false;
+  return true;
+}
+function sortEntryIndexes(idxs,entries){
+  return idxs.sort(function(a,b){
     var ea=entries[a],eb=entries[b],cmp=0;
-    if(ea.meta.pin&&!eb.meta.pin)return -1;
-    if(!ea.meta.pin&&eb.meta.pin)return 1;
-    if(ea.meta.pin&&eb.meta.pin)return a-b;
     if(currentSort==='time'){
       return compareEntryTime(ea,eb,a,b,currentSortDir);
     }else if(currentSort==='weight'){
@@ -577,34 +600,24 @@ function renderEntries(){
     }
     return currentSortDir==='asc'?cmp:-cmp;
   });
-  var html='',count=0;
-  for(var si=0;si<sortedIdxs.length;si++){var i=sortedIdxs[si];
+}
+function renderEntries(){
+  var entries=allData[current].entries,pinned=[],normal=[];
+  for(var i=0;i<entries.length;i++){
     var e=entries[i];
-    if(singleEntryIdx!==null&&i!==singleEntryIdx)continue;
-    if(currentView==='active'&&e.meta.archived)continue;
-    if(currentView==='archived'&&!e.meta.archived)continue;
-    if(singleEntryIdx===null&&filterTag&&!(e.meta.tags&&e.meta.tags.indexOf(filterTag)>=0))continue;
-    count++;
-    var isLong=singleEntryIdx===null&&e.content.length>100;
-    var circle=selectMode?'<div class="select-circle'+(selected.has(i)?' checked':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
-    var metaHtml='<div class="entry-meta">';
-    if(e.meta.pin)metaHtml+='<span class="entry-badge pin">★ 置顶</span>';
-    if(e.meta.imp>=7)metaHtml+='<span class="entry-badge imp-high">'+e.meta.imp+'/10</span>';
-    else metaHtml+='<span class="entry-badge">'+e.meta.imp+'/10</span>';
-    if(e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)metaHtml+='<span class="entry-badge">#'+tag+'</span>'});
-    if(e.meta.time)metaHtml+='<span class="entry-badge">'+timeAgo(e.meta.time)+'</span>';
-    var days=e.meta.last?Math.floor((new Date()-new Date(e.meta.last))/864e5):0;var score;if(e.meta.pin&&e.meta.imp>=10){score='∞'}else if(e.meta.pin&&e.meta.imp>=9){score=Math.max(e.meta.imp*Math.pow(0.99,days),4).toFixed(2)}else{score=(e.meta.imp*Math.pow(0.99,days)).toFixed(2)}var scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' = '+score;
-if(e.meta.pin&&e.meta.imp>=10)scoreDetail='imp:10 [pin] \u4e0d\u8870\u51cf';
-else if(e.meta.pin&&e.meta.imp>=9)scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' (\u4fdd\u5e954)';
-metaHtml+='<span class="entry-badge score-badge" style="color:#e67e22;position:relative;cursor:pointer" data-score="'+scoreDetail+'">⚡'+score+'</span>';
-    metaHtml+='</div>';
-    var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div></div>';
-    html+='<div class="entry-wrap"><div class="entry-del-bg" onclick="showDelConfirm('+i+')">删除</div>';
-    html+='<div class="entry-item" id="entry-'+i+'" ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')">';
-    html+=circle+'<div style="flex:1"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'" onclick="if(!selectMode)toggleExpand('+i+')">'+esc(e.content)+'</div>';
-    if(isLong)html+='<div class="entry-expand" onclick="if(!selectMode)toggleExpand('+i+')">展开</div>';
-    html+=metaHtml+actionHtml+'</div></div></div>';
+    if(!entryVisibleInDetail(e,i))continue;
+    if(singleEntryIdx===null&&e.meta.pin)pinned.push(i);
+    else normal.push(i);
   }
+  normal=sortEntryIndexes(normal,entries);
+  var html='',count=pinned.length+normal.length;
+  if(pinned.length){
+    html+='<section class="pinned-box"><div class="pinned-box-head"><span>置顶</span><small>'+pinned.length+' 条</small></div><div class="pinned-box-list">';
+    pinned.forEach(function(i){html+=renderEntryCard(i,entries[i],false,true)});
+    html+='</div></section>';
+  }
+  if(pinned.length&&normal.length)html+='<div class="entry-section-head"><span>普通记忆</span><small>'+normal.length+' 条</small></div>';
+  normal.forEach(function(i){html+=renderEntryCard(i,entries[i],singleEntryIdx===null&&entries[i].content.length>100,false)});
   document.getElementById('d-entries').innerHTML=count?html:'<div class="empty-state">暂无条目</div>';
   updateSwitchCounts();
 }
