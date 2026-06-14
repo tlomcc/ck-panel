@@ -1866,8 +1866,8 @@ button.filter-chip{
   border:1px solid rgba(var(--ck-accent-rgb),.24);
   background:linear-gradient(180deg,rgba(var(--ck-accent-rgb),.08),rgba(var(--ck-accent-rgb),.03));
   border-radius:8px;
-  padding:10px;
-  margin-bottom:12px;
+  padding:8px;
+  margin-bottom:10px;
 }
 
 .pinned-box-head,
@@ -1896,22 +1896,54 @@ button.filter-chip{
 .pinned-box-list{
   display:flex;
   flex-direction:column;
-  gap:7px;
+  gap:6px;
+  max-height:154px;
+  overflow-y:auto;
+  padding-right:3px;
+}
+
+.pinned-box-list::-webkit-scrollbar{
+  width:5px;
+}
+
+.pinned-box-list::-webkit-scrollbar-thumb{
+  background:rgba(var(--ck-accent-rgb),.28);
+  border-radius:999px;
 }
 
 .pinned-entry-wrap .entry-item{
   min-height:0;
+  padding:8px 10px;
   background:var(--ck-surface);
   box-shadow:none;
 }
 
 .pinned-entry-wrap .entry-text{
   font-size:12px;
-  line-height:1.6;
+  line-height:1.45;
   display:-webkit-box;
-  -webkit-line-clamp:2;
+  -webkit-line-clamp:1;
   -webkit-box-orient:vertical;
   overflow:hidden;
+}
+
+.pinned-entry-wrap .entry-meta{
+  margin-top:5px;
+  gap:4px;
+}
+
+.pinned-entry-wrap .entry-badge{
+  font-size:9px;
+  padding:1px 6px;
+}
+
+.pinned-entry-wrap .entry-actions{
+  margin-top:6px;
+}
+
+.pinned-entry-wrap .entry-action-btn{
+  padding:2px 7px;
+  font-size:9px;
 }
 
 .entry-section-head{
