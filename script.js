@@ -1,7 +1,16 @@
 var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run';
+var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
-var ENTITY_GRAPH_URL=localStorage.getItem('entityGraphUrl')||API_BASE+'/entity-graph';
+var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
+try{
+  var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
+  if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
+    ENTITY_GRAPH_URL=storedEntityGraphUrl;
+  }else if(storedEntityGraphUrl){
+    localStorage.removeItem('entityGraphUrl');
+  }
+}catch(e){}
 var PANEL_CACHE_KEY='ckPanelCacheV2';
 function initApiKeyFromUrl(){
   try{
