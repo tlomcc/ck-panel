@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ck-panel-shell-v13';
+const CACHE_NAME = 'ck-panel-shell-v14';
 const SHELL_ASSETS = [
   './',
   './index.html',
