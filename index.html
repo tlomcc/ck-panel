@@ -69,23 +69,17 @@
 
 <section class="panel-tab" id="tab-graph">
 <div class="graph-hero">
-<div><h2>信息网</h2><p>节点和关系会直接在面板里预览。完整图页面未接入前，不再保留重复跳转入口。</p></div>
+<div><h2>信息网</h2><p>先按节点、关系、孤立进入分类，再查看对应明细。</p></div>
 <div class="graph-actions"><button class="btn btn-outline btn-sm" onclick="loadEntityGraph(true)">刷新读取</button></div>
 </div>
 <div class="entity-console" id="entity-console">
-<div class="entity-head"><div><strong>面板预览</strong><small id="entity-updated"></small></div></div>
+<div class="entity-head"><div><strong>关系网分类</strong><small id="entity-updated"></small></div></div>
 <div class="entity-status" id="graph-status">进入本页后会自动读取。</div>
 <div class="entity-stats" id="entity-stats"></div>
 <div class="entity-browser">
 <div class="entity-list-panel"><div class="entity-section-head"><div class="console-card-title" id="entity-list-title">面板预览</div><small>点击一条查看完整内容</small></div><div id="entity-list" class="mini-list entity-list"></div></div>
 <div class="entity-detail-panel"><div class="entity-section-head"><div class="console-card-title">完整明细</div><small id="entity-detail-meta"></small></div><div id="entity-detail" class="entity-detail"><div class="empty-state small">先点一个节点或关系</div></div></div>
 </div>
-<div class="entity-map-wrap"><div class="entity-map-title"><span>关系示意图</span><small>点击进入全图</small><button class="entity-map-open" onclick="openEntityGraphPage()">打开全图</button></div><div id="entity-map" class="entity-map" onclick="openEntityGraphPage()"></div></div>
-</div>
-<div class="entity-graph-page" id="entity-graph-page" onclick="hideEntityPopover()">
-<div class="entity-graph-page-head"><div><strong>关系示意图</strong><small>点击节点查看附近明细，空白处关闭明细</small></div><div class="entity-zoom-controls" onclick="event.stopPropagation()"><button onclick="setEntityGraphZoom(-0.15)">-</button><span id="entity-zoom-label">100%</span><button onclick="setEntityGraphZoom(0.15)">+</button><button onclick="resetEntityGraphZoom()">重置</button></div><button class="entity-map-close" onclick="closeEntityGraphPage()">返回</button></div>
-<div class="entity-graph-stage" id="entity-graph-stage" onclick="hideEntityPopover()"></div>
-<div class="entity-popover" id="entity-popover" onclick="event.stopPropagation()"></div>
 </div>
 </section>
 </div>

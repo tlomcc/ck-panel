@@ -72,7 +72,7 @@ function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
 var entityGraphData=null,entityGraphView='nodes',entityGraphMode='home',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false,entityGraphZoom=1;
 var currentSort='time',currentSortDir='desc';
-var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1,offset:0,startOffset:0,openIdx:-1};
+var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1,offset:0,startOffset:0,openIdx:-1,pointerId:null};
 var entityPinchState={active:false,startDist:0,startZoom:1};
 function parseEntries(raw){
   if(!raw||!raw.trim())return[];
@@ -356,7 +356,6 @@ function loadEntityGraph(showPanel){
   var box=document.getElementById('entity-console');
   var list=document.getElementById('entity-list');
   var detail=document.getElementById('entity-detail');
-  var map=document.getElementById('entity-map');
   var status=document.getElementById('graph-status');
   if(showPanel&&currentPanelTab!=='graph'){switchPanelTab('graph');return}
   entityGraphMode='home';
@@ -364,7 +363,6 @@ function loadEntityGraph(showPanel){
   if(status)status.textContent='正在读取信息网...';
   if(list)list.innerHTML='<div class="empty-state small">加载中...</div>';
   if(detail)detail.innerHTML='<div class="empty-state small">等待数据...</div>';
-  if(map)map.innerHTML='<div class="empty-state small">正在生成示意图...</div>';
   entityGraphFetch(true).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
     if(!data||typeof data!=='object'||Array.isArray(data)||(!data.counts&&!data.top_nodes&&!data.recent_relations))throw new Error('Invalid graph data');
     graphLoaded=true;
@@ -377,7 +375,6 @@ function loadEntityGraph(showPanel){
     if(status)status.textContent='没有读到可用的信息网数据。';
     if(list)list.innerHTML='<div class="entity-error">暂时读不到。接口当前没有返回可用的节点/关系数据。</div>';
     if(detail)detail.innerHTML='';
-    if(map)map.innerHTML='';
     var stats=document.getElementById('entity-stats');
     if(stats)stats.innerHTML='';
   });
@@ -397,7 +394,6 @@ function renderEntityGraph(data){
     entityStatHtml('relations',counts.relations||0,'关系'),
     entityStatHtml('orphans',counts.orphan_nodes||0,'孤立')
   ].join('');
-  renderEntityMap(data);
   renderEntityBrowser(data);
 }
 function entityStatHtml(view,count,label){
@@ -446,7 +442,6 @@ function openEntityGraphItem(type,key,evt){
   entityGraphSelectedKey=key||'';
   if(!entityGraphFullOpen)entityGraphMode='detail';
   renderEntityBrowser(entityGraphData);
-  renderEntityMap(entityGraphData);
   if(entityGraphFullOpen){
     renderEntityMap(entityGraphData,'entity-graph-stage',true);
     showEntityPopover(evt);
@@ -1073,7 +1068,8 @@ function renderEntryCard(i,e,isLong,compact){
   if(compact)actionHtml+='<div class="entry-action-btn open" onclick="event.stopPropagation();openEntry(current,'+i+')">打开</div>';
   actionHtml+='</div>';
   var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+(selectMode&&selected.has(i)?' selected':'')+'"><div class="entry-del-bg" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
-  var itemAttrs=compact?' onclick="'+(selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')')+'"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')" onclick="if(selectMode){toggleSelect('+i+')}else if(singleEntryIdx===null&&!touchState.moved){openEntry(current,'+i+')}"';
+  var swipeAttrs=window.PointerEvent?' onpointerdown="ps(event,'+i+')" onpointermove="pm(event,'+i+')" onpointerup="pe(event,'+i+')" onpointercancel="pe(event,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"';
+  var itemAttrs=compact?' onclick="'+(selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')')+'"':swipeAttrs+' onclick="onEntryCardClick('+i+')"';
   var textClick='';
   var contentHtml=(singleEntryIdx!==null&&detailHighlightQuery)?highlightText(e.content,detailHighlightQuery):esc(e.content);
   html+='<div class="entry-item" id="entry-'+i+'"'+itemAttrs+'>';
@@ -1133,21 +1129,18 @@ function toggleExpand(i){
   if(el.classList.contains('collapsed')){el.classList.remove('collapsed');var b=el.nextElementSibling;if(b&&b.classList.contains('entry-expand'))b.textContent='收起'}
   else if(allData[current].entries[i].content.length>100){el.classList.add('collapsed');var b=el.nextElementSibling;if(b&&b.classList.contains('entry-expand'))b.textContent='展开'}
 }
-function ts(e,i){
-  if(selectMode)return;
-  if(e.touches.length!==1)return;
+function startSwipeAt(x,y,i){
   if(touchState.openIdx!==-1&&touchState.openIdx!==i)closeSwipe(touchState.openIdx);
-  touchState.startX=e.touches[0].clientX;touchState.startY=e.touches[0].clientY;
+  touchState.startX=x;touchState.startY=y;
   touchState.swiping=false;touchState.moved=false;touchState.idx=i;touchState.offset=touchState.openIdx===i?86:0;touchState.startOffset=touchState.offset;
 }
-function tm(e,i){
-  if(selectMode)return;
-  if(e.touches.length!==1)return;
-  var dx=touchState.startX-e.touches[0].clientX;
-  var dy=Math.abs(e.touches[0].clientY-touchState.startY);
+function moveSwipeAt(x,y,i,e){
+  var dx=touchState.startX-x;
+  var dy=Math.abs(y-touchState.startY);
   if(!touchState.swiping&&dy>Math.abs(dx))return;
   if(!touchState.swiping&&Math.abs(dx)<15)return;
-  touchState.swiping=true;touchState.moved=true;e.preventDefault();
+  touchState.swiping=true;touchState.moved=true;
+  if(e&&e.preventDefault)e.preventDefault();
   var el=document.getElementById('entry-'+i);
   if(!el)return;
   var wrap=el.closest('.entry-wrap');
@@ -1157,7 +1150,7 @@ function tm(e,i){
   el.style.transform='translate3d(-'+offset+'px,0,0)';
   el.style.transition='none';
 }
-function te(e,i){
+function endSwipe(i){
   if(selectMode||!touchState.moved)return;
   var el=document.getElementById('entry-'+i);
   var wrap=el?el.closest('.entry-wrap'):null;
@@ -1174,6 +1167,37 @@ function te(e,i){
   touchState.swiping=false;
   suppressClickUntil=Date.now()+280;
   setTimeout(function(){touchState.moved=false},300);
+}
+function ts(e,i){
+  if(selectMode||e.touches.length!==1)return;
+  startSwipeAt(e.touches[0].clientX,e.touches[0].clientY,i);
+}
+function tm(e,i){
+  if(selectMode||e.touches.length!==1)return;
+  moveSwipeAt(e.touches[0].clientX,e.touches[0].clientY,i,e);
+}
+function te(e,i){endSwipe(i)}
+function ps(e,i){
+  if(selectMode||(e.pointerType==='mouse'&&e.button!==0))return;
+  touchState.pointerId=e.pointerId;
+  if(e.currentTarget&&e.currentTarget.setPointerCapture){
+    try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_e){}
+  }
+  startSwipeAt(e.clientX,e.clientY,i);
+}
+function pm(e,i){
+  if(selectMode||touchState.pointerId!==e.pointerId)return;
+  moveSwipeAt(e.clientX,e.clientY,i,e);
+}
+function pe(e,i){
+  if(touchState.pointerId!==null&&touchState.pointerId!==e.pointerId)return;
+  endSwipe(i);
+  touchState.pointerId=null;
+}
+function onEntryCardClick(i){
+  if(selectMode){toggleSelect(i);return}
+  if(touchState.openIdx===i){closeSwipe(i);return}
+  if(singleEntryIdx===null&&!touchState.moved)openEntry(current,i);
 }
 function showEdit(i){
   editIdx=i;var e=allData[current].entries[i];
@@ -1322,7 +1346,14 @@ function addEntry(){
 }
 function updateCount(){document.getElementById('char-count').textContent=document.getElementById('add-input').value.length+' 字'}
 function writeCategoryEntries(category,entries){
-  return rpcStrict('write_memory',{category:category,content:serializeEntries(entries)});
+  var content=serializeEntries(entries);
+  return rpcStrict('write_memory',{category:category,content:content}).then(function(){
+    return rpcStrict('read_memory',{category:category});
+  }).then(function(raw){
+    var actual=(!raw||raw==='Empty')?'':serializeEntries(parseEntries(raw));
+    if(actual.trim()!==content.trim())throw new Error('write verification failed');
+    return raw;
+  });
 }
 function saveCurrentCategory(){
   savePanelCache();

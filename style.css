@@ -4262,3 +4262,73 @@ button:disabled,
     height:270px;
   }
 }
+
+/* Entity graph is category-first: no inline detail or map preview on the outer panel. */
+.entity-map-wrap,
+.entity-graph-page{
+  display:none!important;
+}
+.entity-browser,
+.entity-browser.entity-browser-home{
+  display:none!important;
+}
+.entity-browser.entity-browser-list,
+.entity-browser.entity-browser-detail{
+  display:block!important;
+  position:fixed;
+  inset:0;
+  z-index:180;
+  overflow:auto;
+  padding:calc(18px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,var(--ck-bg-soft),var(--ck-bg));
+}
+.entity-browser.entity-browser-list .entity-list-panel,
+.entity-browser.entity-browser-detail .entity-detail-panel{
+  max-width:720px;
+  margin:0 auto;
+  background:var(--ck-surface);
+  border:1px solid var(--ck-border);
+  border-radius:12px;
+  box-shadow:var(--ck-shadow);
+  padding:14px;
+}
+.entity-browser.entity-browser-list .entity-section-head,
+.entity-browser.entity-browser-detail .entity-section-head{
+  position:sticky;
+  top:0;
+  z-index:2;
+  align-items:center;
+  margin:-14px -14px 12px;
+  padding:12px 14px;
+  background:var(--ck-surface);
+  border-bottom:1px solid var(--ck-border);
+  border-radius:12px 12px 0 0;
+}
+.entity-browser.entity-browser-list .entity-list,
+.entity-browser.entity-browser-detail .entity-detail{
+  max-height:none;
+}
+.entity-browser.entity-browser-detail .entity-detail{
+  border:0;
+  padding:0;
+  box-shadow:none;
+}
+.entity-browser.entity-browser-list .entity-row{
+  min-height:108px;
+}
+
+@media (max-width:520px){
+  .entity-browser.entity-browser-list,
+  .entity-browser.entity-browser-detail{
+    padding:calc(12px + env(safe-area-inset-top)) 10px calc(18px + env(safe-area-inset-bottom));
+  }
+  .entity-browser.entity-browser-list .entity-list-panel,
+  .entity-browser.entity-browser-detail .entity-detail-panel{
+    padding:12px;
+  }
+  .entity-browser.entity-browser-list .entity-section-head,
+  .entity-browser.entity-browser-detail .entity-section-head{
+    margin:-12px -12px 10px;
+    padding:11px 12px;
+  }
+}
