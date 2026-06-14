@@ -54,14 +54,20 @@ function apiFetch(init){
     return r;
   });
 }
-function entityGraphUrl(full){
+function addEntityGraphParam(url,key,value){
+  return url+(url.indexOf('?')>=0?'&':'?')+key+'='+encodeURIComponent(value);
+}
+function entityGraphUrl(full,force){
   var url=ENTITY_GRAPH_URL;
-  if(full&&url.indexOf('full=')<0)url+=(url.indexOf('?')>=0?'&':'?')+'full=1';
+  if(full&&url.indexOf('full=')<0)url=addEntityGraphParam(url,'full','1');
+  if(force&&url.indexOf('refresh=')<0)url=addEntityGraphParam(url,'refresh','1');
+  if(force)url=addEntityGraphParam(url,'_t',Date.now());
   return url;
 }
-function entityGraphFetch(full){
-  return fetch(addStoredKey(entityGraphUrl(full))).then(function(r){
-    if(r.status===403&&requestApiKey())return fetch(addStoredKey(entityGraphUrl(full)));
+function entityGraphFetch(full,force){
+  var init=force?{cache:'no-store'}:undefined;
+  return fetch(addStoredKey(entityGraphUrl(full,force)),init).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(addStoredKey(entityGraphUrl(full,force)),init);
     return r;
   });
 }
@@ -71,6 +77,7 @@ var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',pr
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
 var entityGraphData=null,entityGraphView='nodes',entityGraphMode='home',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false,entityGraphZoom=1;
+var entityGraphRefreshTimer=null,entityGraphLoading=false;
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1,offset:0,startOffset:0,openIdx:-1,pointerId:null};
 var entityPinchState={active:false,startDist:0,startZoom:1};
@@ -356,18 +363,35 @@ function focusEntry(idx){
 function hideEntityGraph(){
   switchPanelTab('overview');
 }
-function loadEntityGraph(showPanel){
+function startEntityGraphRealtime(){
+  stopEntityGraphRealtime();
+  entityGraphRefreshTimer=setInterval(function(){
+    if(currentPanelTab==='graph')loadEntityGraph(false,true,{silent:true,preserveView:true});
+  },30000);
+}
+function stopEntityGraphRealtime(){
+  if(entityGraphRefreshTimer){
+    clearInterval(entityGraphRefreshTimer);
+    entityGraphRefreshTimer=null;
+  }
+}
+function loadEntityGraph(showPanel,force,opts){
+  opts=opts||{};
   var box=document.getElementById('entity-console');
   var list=document.getElementById('entity-list');
   var detail=document.getElementById('entity-detail');
   var status=document.getElementById('graph-status');
-  if(showPanel&&currentPanelTab!=='graph'){switchPanelTab('graph');return}
-  entityGraphMode='home';
+  if(showPanel&&currentPanelTab!=='graph'){switchPanelTab('graph',{forceGraphRefresh:!!force});return}
+  if(entityGraphLoading)return;
+  entityGraphLoading=true;
+  if(!opts.preserveView)entityGraphMode='home';
   if(box)box.classList.add('loading');
-  if(status)status.textContent='正在读取信息网...';
-  if(list)list.innerHTML='<div class="empty-state small">加载中...</div>';
-  if(detail)detail.innerHTML='<div class="empty-state small">等待数据...</div>';
-  entityGraphFetch(true).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
+  if(!opts.silent||!entityGraphData){
+    if(status)status.textContent=force?'正在读取最新信息网...':'正在读取信息网...';
+    if(list)list.innerHTML='<div class="empty-state small">加载中...</div>';
+    if(detail)detail.innerHTML='<div class="empty-state small">等待数据...</div>';
+  }
+  entityGraphFetch(true,!!force).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
     if(!data||typeof data!=='object'||Array.isArray(data)||(!data.counts&&!data.top_nodes&&!data.recent_relations))throw new Error('Invalid graph data');
     graphLoaded=true;
     entityGraphData=data;
@@ -376,11 +400,17 @@ function loadEntityGraph(showPanel){
     renderEntityGraph(data);
   }).catch(function(){
     if(box)box.classList.remove('loading');
+    if(opts.silent&&entityGraphData){
+      if(status)status.textContent='自动更新失败，继续显示上次读取的数据。';
+      return;
+    }
     if(status)status.textContent='没有读到可用的信息网数据。';
     if(list)list.innerHTML='<div class="entity-error">暂时读不到。接口当前没有返回可用的节点/关系数据。</div>';
     if(detail)detail.innerHTML='';
     var stats=document.getElementById('entity-stats');
     if(stats)stats.innerHTML='';
+  }).then(function(){
+    entityGraphLoading=false;
   });
 }
 function renderEntityGraph(data){
@@ -1558,8 +1588,11 @@ function switchPanelTab(tab,opts) {
     if(!document.getElementById('search-input').value.trim()&&!hasActiveTags()&&searchFilter==='all')renderSearchLanding();
     else onSearch();
   }
-  if(tab==='graph'&&!graphLoaded){
-    loadEntityGraph(false);
+  if(tab==='graph'){
+    loadEntityGraph(false,true,{preserveView:graphLoaded&&!opts.forceGraphRefresh});
+    startEntityGraphRealtime();
+  }else{
+    stopEntityGraphRealtime();
   }
   if(typeof opts.restoreScroll==='number'){
     setTimeout(function(){window.scrollTo(0,opts.restoreScroll)},0);
