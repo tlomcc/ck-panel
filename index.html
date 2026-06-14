@@ -26,12 +26,8 @@
 <div class="stats-row"><div class="stat-box"><div class="val" id="st-total">-</div><div class="lbl">总数</div></div><div class="stat-box"><div class="val" id="st-active">-</div><div class="lbl">活跃</div></div><div class="stat-box"><div class="val" id="st-archived">-</div><div class="lbl">归档</div></div></div>
 </div>
 <div class="home-console">
-<div class="console-head"><div><span>控制台</span><small id="console-sub">正在读取</small></div></div>
-<div class="console-actions">
-<button class="console-action" onclick="switchPanelTab('categories')"><b>分类</b><span>按板块看</span></button>
-<button class="console-action" onclick="switchPanelTab('search')"><b>搜索</b><span>查正文</span></button>
-<button class="console-action" onclick="switchPanelTab('graph')"><b>信息网</b><span>看关系</span></button>
-</div>
+<div class="console-head"><div><span>今日 Rolling</span><small id="console-sub">正在读取</small></div><small class="roll-count" id="today-roll-count">0 条</small></div>
+<div class="today-roll-list" id="today-roll-list"><div class="empty-state small">加载中...</div></div>
 </div>
 </section>
 
@@ -49,18 +45,19 @@
 <button class="search-filter" data-filter="pinned" onclick="switchSearchFilter('pinned')">置顶</button>
 </div>
 <div class="tag-panel"><div class="tag-panel-head"><span>常用标签</span><small id="tag-summary">加载中...</small></div><div class="tags-bar" id="tags-bar"></div></div>
+<div class="active-filter-bar" id="active-filter-bar"></div>
 </div>
 <div id="search-results" class="search-results"><div class="empty-state">输入关键词，或点上面的标签</div></div>
 </section>
 
 <section class="panel-tab" id="tab-graph">
 <div class="graph-hero">
-<div><h2>信息网</h2><p>人物、地点、项目和关系会集中在这里。按钮打不开的问题，这里改成了真正的链接。</p></div>
-<div class="graph-actions"><a class="btn btn-blue btn-sm" data-entity-link target="_blank" rel="noopener" href="https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/entity-graph?full=1">打开完整信息网</a><button class="btn btn-outline btn-sm" onclick="loadEntityGraph(true)">刷新读取</button></div>
+<div><h2>信息网</h2><p>节点和关系会直接在面板里预览。完整图页面未接入前，不再保留重复跳转入口。</p></div>
+<div class="graph-actions"><button class="btn btn-outline btn-sm" onclick="loadEntityGraph(true)">刷新读取</button></div>
 </div>
 <div class="entity-console" id="entity-console">
-<div class="entity-head"><div><strong>面板预览</strong><small id="entity-updated"></small></div><div class="entity-actions"><a class="entity-open" data-entity-link target="_blank" rel="noopener" href="https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/entity-graph?full=1">打开完整</a></div></div>
-<div class="entity-status" id="graph-status">进入本页后会自动读取。读取失败也可以直接打开完整信息网。</div>
+<div class="entity-head"><div><strong>面板预览</strong><small id="entity-updated"></small></div></div>
+<div class="entity-status" id="graph-status">进入本页后会自动读取。</div>
 <div class="entity-stats" id="entity-stats"></div>
 <div class="entity-columns"><div><div class="console-card-title">重要节点</div><div id="entity-nodes" class="mini-list"></div></div><div><div class="console-card-title">最近关系</div><div id="entity-relations" class="mini-list"></div></div></div>
 </div>

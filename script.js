@@ -5,8 +5,8 @@ function rpc(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':
 function rpcStrict(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
-var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',editIdx=null,filterTag='',currentPanelTab='overview',graphLoaded=false,renderQueued=false,searchFilter='all';
-var currentSort='time';
+var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null;
+var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
   if(!raw||!raw.trim())return[];
@@ -36,11 +36,26 @@ function parseEntries(raw){
 }
 function timeAgo(dateStr){if(!dateStr)return'';var d=new Date(dateStr),now=new Date(),diff=Math.floor((now-d)/864e5);if(diff<=0)return'今天';if(diff===1)return'昨天';if(diff<30)return diff+'天前';if(diff<365)return Math.floor(diff/30)+'个月前';return Math.floor(diff/365)+'年前'}
 function daysSince(){return Math.floor((new Date()-new Date(2026,2,26))/864e5)}
+function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function entryDate(e){return (e.meta&&(e.meta.time||e.meta.last))||''}
+function entryTags(e){return (e.meta&&e.meta.tags?e.meta.tags:'').split(',').map(function(t){return t.trim()}).filter(Boolean)}
+function syncActiveTag(){activeTag=activeTags.length===1?activeTags[0]:'';filterTag=activeTag}
+function hasActiveTags(){return activeTags.length>0}
+function entryMatchesTags(e,tags){
+  if(!tags||!tags.length)return true;
+  var set=new Set(entryTags(e));
+  return tags.every(function(t){return set.has(t)});
+}
+function decayedScore(e){
+  var days=e.meta.last?Math.floor((new Date()-new Date(e.meta.last))/864e5):0;
+  if(e.meta.pin&&e.meta.imp>=10)return Number.POSITIVE_INFINITY;
+  if(e.meta.pin&&e.meta.imp>=9)return Math.max(e.meta.imp*Math.pow(0.99,days),4);
+  return e.meta.imp*Math.pow(0.99,days);
+}
 function init(){
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
-  setupEntityLinks();
   loadAll();
 }
 function setLoading(pct,msg){
@@ -69,7 +84,7 @@ function renderAll(){
   updateStats();renderGrid();renderTags();renderHomeInsights();
   if(currentPanelTab==='search'){
     var q=document.getElementById('search-input').value.trim();
-    if(!q&&!activeTag&&searchFilter==='all')renderSearchLanding();
+    if(!q&&!hasActiveTags()&&searchFilter==='all')renderSearchLanding();
     else onSearch();
   }
 }
@@ -167,12 +182,6 @@ function shortText(s,n){
   s=(s||'').replace(/\s+/g,' ').trim();
   return s.length>n?s.slice(0,n)+'...':s;
 }
-function entityGraphFullUrl(){
-  return ENTITY_GRAPH_URL+(ENTITY_GRAPH_URL.indexOf('?')>=0?'&':'?')+'full=1';
-}
-function setupEntityLinks(){
-  document.querySelectorAll('[data-entity-link]').forEach(function(a){a.href=entityGraphFullUrl()});
-}
 function renderMiniList(elId,items,emptyText,reasonFn){
   var el=document.getElementById(elId);if(!el)return;
   if(!items.length){el.innerHTML='<div class="empty-state small">'+emptyText+'</div>';return}
@@ -185,16 +194,41 @@ function renderMiniList(elId,items,emptyText,reasonFn){
   el.innerHTML=html;
 }
 function renderHomeInsights(){
+  var listEl=document.getElementById('today-roll-list');
+  var countEl=document.getElementById('today-roll-count');
+  if(!listEl)return;
+  var today=dateKey(new Date()),items=[],seq=0;
+  Object.keys(allData).forEach(function(cat){
+    (allData[cat].entries||[]).forEach(function(e,idx){
+      var d=entryDate(e);
+      if(!e.meta.archived&&d&&d.slice(0,10)===today)items.push({cat:cat,idx:idx,entry:e,date:d,order:seq});
+      seq++;
+    });
+  });
+  items.sort(function(a,b){
+    var d=a.date.localeCompare(b.date);
+    return d!==0?d:a.order-b.order;
+  });
+  if(countEl)countEl.textContent=items.length+' 条';
+  if(!items.length){
+    listEl.innerHTML='<div class="empty-state small">今天还没有新增记忆</div>';
+    return;
+  }
+  listEl.innerHTML=items.map(function(item){
+    var e=item.entry,title=getCnName(item.cat)||item.cat;
+    var tags=entryTags(e).slice(0,3).map(function(t){return'<span>#'+esc(t)+'</span>'}).join('');
+    return '<div class="today-roll-item" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'" onclick="openEntry(this.dataset.cat,parseInt(this.dataset.idx,10))"><div class="today-roll-top"><b>'+esc(title)+'</b><small>'+esc(item.date)+'</small></div><div class="today-roll-text">'+esc(shortText(e.content,120))+'</div>'+(tags?'<div class="today-roll-tags">'+tags+'</div>':'')+'</div>';
+  }).join('');
 }
 function openEntry(cat,idx){
   if(!allData[cat]||!allData[cat].entries[idx])return;
   var entry=allData[cat].entries[idx];
-  activeTag='';filterTag='';selectMode=null;selected.clear();
+  activeTags=[];syncActiveTag();selectMode=null;selected.clear();
   var input=document.getElementById('search-input');
   if(input)input.value='';
   var clear=document.getElementById('search-clear');
   if(clear)clear.classList.remove('show');
-  openDetail(cat,{view:entry.meta.archived?'archived':'active',focusIdx:idx});
+  openDetail(cat,{view:entry.meta.archived?'archived':'active',singleIdx:idx});
 }
 function focusEntry(idx){
   setTimeout(function(){
@@ -219,22 +253,21 @@ function loadEntityGraph(showPanel){
   var nodes=document.getElementById('entity-nodes');
   var rels=document.getElementById('entity-relations');
   var status=document.getElementById('graph-status');
-  setupEntityLinks();
   if(showPanel&&currentPanelTab!=='graph'){switchPanelTab('graph');return}
   if(box)box.classList.add('loading');
   if(status)status.textContent='正在读取信息网...';
   if(nodes)nodes.innerHTML='<div class="empty-state small">加载中...</div>';
   if(rels)rels.innerHTML='';
   fetch(ENTITY_GRAPH_URL).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
+    if(!data||typeof data!=='object'||Array.isArray(data)||(!data.counts&&!data.top_nodes&&!data.recent_relations))throw new Error('Invalid graph data');
     graphLoaded=true;
     if(box)box.classList.remove('loading');
-    if(status)status.textContent='已读取。需要完整内容可以点“打开完整信息网”。';
+    if(status)status.textContent='已读取面板预览数据。';
     renderEntityGraph(data);
   }).catch(function(){
-    var link=entityGraphFullUrl();
     if(box)box.classList.remove('loading');
-    if(status)status.textContent='浏览器没有读到预览，但完整信息网仍然可以打开。';
-    if(nodes)nodes.innerHTML='<div class="entity-error">预览暂时读不到。<br><a href="'+escAttr(link)+'" target="_blank" rel="noopener">直接打开完整信息网</a></div>';
+    if(status)status.textContent='没有读到可用的信息网数据。';
+    if(nodes)nodes.innerHTML='<div class="entity-error">预览暂时读不到。接口当前没有返回可用的节点/关系数据。</div>';
     if(rels)rels.innerHTML='';
     var stats=document.getElementById('entity-stats');
     if(stats)stats.innerHTML='';
@@ -279,13 +312,15 @@ function renderTags(){
     })
   });
   var sorted=Object.keys(tagCounts).sort(function(a,b){return tagCounts[b]-tagCounts[a]});
-  var html='<div class="tag-btn'+(activeTag===''?' active':'')+'" data-tag="" onclick="filterByTag(this.dataset.tag)">全部</div>';
-  sorted.forEach(function(t){html+='<div class="tag-btn'+(activeTag===t?' active':'')+'" data-tag="'+escAttr(t)+'" onclick="filterByTag(this.dataset.tag)">'+esc(t)+' ('+tagCounts[t]+')</div>'});
+  var selected=new Set(activeTags);
+  var html='<div class="tag-btn'+(!activeTags.length?' active':'')+'" data-tag="" onclick="toggleTag(this.dataset.tag)">全部</div>';
+  sorted.forEach(function(t){html+='<div class="tag-btn'+(selected.has(t)?' active':'')+'" data-tag="'+escAttr(t)+'" onclick="toggleTag(this.dataset.tag)">'+esc(t)+' ('+tagCounts[t]+')</div>'});
   bar.innerHTML=html;
   var summary=document.getElementById('tag-summary');
-  if(summary)summary.textContent=sorted.length?sorted.length+' 个标签':'暂无标签';
+  if(summary)summary.textContent=sorted.length?(activeTags.length?'已选 '+activeTags.length+' 个 · 按出现次数排序':sorted.length+' 个 · 按出现次数排序'):'暂无标签';
   var clearBtn=document.getElementById('tag-clear');
-  if(clearBtn){if(activeTag)clearBtn.classList.add('show');else clearBtn.classList.remove('show')}
+  if(clearBtn){if(activeTags.length)clearBtn.classList.add('show');else clearBtn.classList.remove('show')}
+  renderActiveFilters(null,(document.getElementById('search-input')||{}).value||'');
 }
 
 function toggleTagsExpand(){
@@ -307,12 +342,22 @@ function switchSearchFilter(mode){
   onSearch();
 }
 function filterByTag(t){
-  activeTag=t;filterTag=t;
+  activeTags=t?[t]:[];
+  syncActiveTag();
+  applyTagFilterChange();
+}
+function toggleTag(t){
+  if(!t)activeTags=[];
+  else if(activeTags.indexOf(t)>=0)activeTags=activeTags.filter(function(tag){return tag!==t});
+  else activeTags=activeTags.concat(t);
+  syncActiveTag();
+  applyTagFilterChange();
+}
+function applyTagFilterChange(){
   if(currentPanelTab!=='search')switchPanelTab('search');
   var tagBar=document.getElementById('tags-bar');
   var tagBtn=document.querySelector('.tag-expand-btn');
-  if(t&&tagBar&&tagBar.classList.contains('expanded')){tagBar.classList.remove('expanded');if(tagBtn)tagBtn.textContent='更多标签'}
-  document.getElementById('search-input').value='';
+  if(activeTags.length&&tagBar&&tagBar.classList.contains('expanded')){tagBar.classList.remove('expanded');if(tagBtn)tagBtn.textContent='更多标签'}
   renderTags();
   onSearch();
   if(current&&document.getElementById('page-detail').classList.contains('active'))renderEntries();
@@ -322,7 +367,7 @@ function getSearchItems(query){
   var q=(query||'').trim().toLowerCase();
   var items=flattenEntries().filter(function(item){
     var e=item.entry,cat=item.cat,cn=getCnName(cat),tagText=e.meta.tags||'';
-    if(activeTag&&tagText.indexOf(activeTag)<0)return false;
+    if(!entryMatchesTags(e,activeTags))return false;
     if(q){
       var hay=(cat+' '+cn+' '+tagText+' '+e.content).toLowerCase();
       if(hay.indexOf(q)<0)return false;
@@ -335,11 +380,23 @@ function searchFilterName(){
   if(searchFilter==='pinned')return'置顶';
   return'全部';
 }
+function renderActiveFilters(itemsCount,query){
+  var bar=document.getElementById('active-filter-bar');
+  if(!bar)return;
+  var chips=[];
+  if(query)chips.push('<span class="filter-chip">关键词：'+esc(query)+'</span>');
+  if(searchFilter!=='all')chips.push('<span class="filter-chip">范围：'+esc(searchFilterName())+'</span>');
+  activeTags.forEach(function(t){chips.push('<button class="filter-chip removable" data-tag="'+escAttr(t)+'" onclick="toggleTag(this.dataset.tag)">#'+esc(t)+' ×</button>')});
+  if(!chips.length){bar.innerHTML='';return}
+  var count=itemsCount===null||itemsCount===undefined?'':'<b>'+itemsCount+' 条</b>';
+  bar.innerHTML='<div class="active-filter-main"><span>当前筛选</span>'+chips.join('')+'</div>'+count;
+}
 function renderSearchLanding(){
   var list=flattenEntries();
   document.getElementById('search-results').innerHTML='<div class="search-empty-card"><div class="search-empty-title">输入关键词开始搜索</div><div class="search-empty-sub">也可以点上方标签缩小范围</div></div>';
   var count=document.getElementById('search-count');
   if(count)count.textContent='共 '+list.length+' 条记忆';
+  renderActiveFilters(null,'');
 }
 function renderSearchSuggestionBlock(title,items,emptyText){
   var html='<section class="search-suggest"><div class="search-suggest-title">'+esc(title)+'</div>';
@@ -360,11 +417,12 @@ function renderSearchResultItem(item,query){
   return '<div class="search-result-item search-entry" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'"><div class="search-entry-main" onclick="openEntry(this.parentNode.dataset.cat,parseInt(this.parentNode.dataset.idx,10))"><div class="search-result-cat">'+esc(item.cat)+'</div><div class="search-result-text">'+body+'</div><div class="search-entry-meta">'+meta.map(function(m){return'<span>'+esc(m)+'</span>'}).join('')+'</div></div><button class="open-entry-btn" onclick="openEntry(this.parentNode.dataset.cat,parseInt(this.parentNode.dataset.idx,10))">打开</button></div>';
 }
 function renderSearchResults(items,query){
-  var title=(query?'“'+query+'”':'当前筛选')+' · '+searchFilterName()+(activeTag?' · #'+activeTag:'');
+  var title=query?'关键词：'+query:'筛选结果';
   var count=document.getElementById('search-count');
   if(count)count.textContent=title+' · '+items.length+' 条';
+  renderActiveFilters(items.length,query);
   if(!items.length){document.getElementById('search-results').innerHTML='<div class="empty-state">没有找到匹配记忆</div>';return}
-  var html='<div class="search-result-head"><span>'+esc(title)+'</span><b>'+items.length+'</b></div>';
+  var html='<div class="search-result-head"><span>明细</span><b>'+items.length+'</b></div>';
   items.slice(0,80).forEach(function(item){html+=renderSearchResultItem(item,query)});
   if(items.length>80)html+='<div class="empty-state small">只显示前 80 条，请加关键词缩小范围</div>';
   document.getElementById('search-results').innerHTML=html;
@@ -373,10 +431,10 @@ function onSearch(){
   var q=(document.getElementById('search-input').value||'').trim().toLowerCase();
   var cb=document.getElementById('search-clear');if(q)cb.classList.add('show');else cb.classList.remove('show');
   document.getElementById('search-results').style.display='block';
-  if(!q&&!activeTag&&searchFilter==='all'){renderSearchLanding();return}
+  if(!q&&!hasActiveTags()&&searchFilter==='all'){renderSearchLanding();return}
   renderSearchResults(getSearchItems(q),q);
 }
-function clearSearch(){document.getElementById('search-input').value='';document.getElementById('search-clear').classList.remove('show');activeTag='';filterTag='';searchFilter='all';document.querySelectorAll('.search-filter').forEach(function(btn){btn.classList.toggle('active',btn.getAttribute('data-filter')==='all')});renderTags();renderSearchLanding();renderGrid()}
+function clearSearch(){document.getElementById('search-input').value='';document.getElementById('search-clear').classList.remove('show');activeTags=[];syncActiveTag();searchFilter='all';document.querySelectorAll('.search-filter').forEach(function(btn){btn.classList.toggle('active',btn.getAttribute('data-filter')==='all')});renderTags();renderSearchLanding();renderGrid()}
 function toggleSearchResult(id){
   var preview=document.getElementById('sr-preview-'+id);
   var full=document.getElementById('sr-full-'+id);
@@ -393,7 +451,7 @@ function renderGrid(){
   var q=(document.getElementById('search-input').value||'').toLowerCase();
   var filtered=keys.filter(function(k){
     var d=allData[k];
-    if(activeTag){if(!d.entries.some(function(e){return e.meta.tags&&e.meta.tags.indexOf(activeTag)>=0}))return false}
+    if(hasActiveTags()){if(!d.entries.some(function(e){return entryMatchesTags(e,activeTags)}))return false}
     if(!q)return true;
     if(k.toLowerCase().indexOf(q)>=0)return true;
     return d.entries.some(function(e){return e.content.toLowerCase().indexOf(q)>=0});
@@ -450,12 +508,13 @@ function renderCategoryCard(k){
 function openDetail(k,opts){
   opts=opts||{};
   current=k;selectMode=null;selected.clear();currentView=opts.view||'active';
+  singleEntryIdx=typeof opts.singleIdx==='number'?opts.singleIdx:null;
   if(!opts.keepFilter)filterTag='';
   document.getElementById('select-bar').classList.remove('show');
   document.getElementById('menu-popup').classList.remove('show');
   document.getElementById('d-title').textContent=k;
-  document.getElementById('d-sub').textContent=countInfo();
-  updateSwitchCounts();renderEntries();
+  document.getElementById('d-sub').textContent=singleEntryIdx!==null?'单条记忆 · '+countInfo():countInfo();
+  updateSwitchCounts();updateSortButtons();renderEntries();
   document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(currentView==='active'&&i===0)||(currentView==='archived'&&i===1))});
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
   document.getElementById('page-detail').classList.add('active');
@@ -482,25 +541,21 @@ function renderEntries(){
   var entries=allData[current].entries;
   var sortedIdxs=[];for(var si=0;si<entries.length;si++)sortedIdxs.push(si);
   sortedIdxs.sort(function(a,b){
-  var ea=entries[a],eb=entries[b];
-  if(ea.meta.pin&&!eb.meta.pin)return -1;
-  if(!ea.meta.pin&&eb.meta.pin)return 1;
-  if(currentSort==='time'){
-    var ta=ea.meta.time||'',tb=eb.meta.time||'';
-    return tb.localeCompare(ta);
-  }else if(currentSort==='weight'){
-    var da=ea.meta.last?Math.floor((new Date()-new Date(ea.meta.last))/864e5):0;
-    var db=eb.meta.last?Math.floor((new Date()-new Date(eb.meta.last))/864e5):0;
-    var sa=ea.meta.imp*Math.pow(0.99,da);
-    var sb=eb.meta.imp*Math.pow(0.99,db);
-    return sb-sa;
-  }
-  return 0;
-});
+    var ea=entries[a],eb=entries[b],cmp=0;
+    if(currentSort==='time'){
+      var ta=entryDate(ea),tb=entryDate(eb);
+      cmp=ta.localeCompare(tb)||a-b;
+    }else if(currentSort==='weight'){
+      var sa=decayedScore(ea),sb=decayedScore(eb);
+      if(sa===sb)cmp=entryDate(ea).localeCompare(entryDate(eb))||a-b;
+      else cmp=sa<sb?-1:1;
+    }
+    return currentSortDir==='asc'?cmp:-cmp;
+  });
   var html='',count=0;
-  sortedIdxs.reverse();
   for(var si=0;si<sortedIdxs.length;si++){var i=sortedIdxs[si];
     var e=entries[i];
+    if(singleEntryIdx!==null&&i!==singleEntryIdx)continue;
     if(currentView==='active'&&e.meta.archived)continue;
     if(currentView==='archived'&&!e.meta.archived)continue;
     if(filterTag&&!(e.meta.tags&&e.meta.tags.indexOf(filterTag)>=0))continue;
@@ -656,7 +711,8 @@ function delCategory(){
 function addEntry(){
   var input=document.getElementById('add-input'),text=input.value.trim();if(!text)return;
   var imp=parseInt(document.getElementById('add-imp').value),tags=document.getElementById('add-tags').value.trim();
-  var today=new Date().toISOString().slice(0,10);
+  var today=dateKey(new Date());
+  singleEntryIdx=null;
   allData[current].entries.push({meta:{imp:imp,time:today,last:today,tags:tags,pin:false,resolved:false,archived:false},content:text});
   input.value='';document.getElementById('add-tags').value='';document.getElementById('char-count').textContent='0 字';
   renderEntries();updateStats();renderHomeInsights();savePanelCache();
@@ -682,7 +738,7 @@ function createCat(){
   allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();renderHomeInsights();savePanelCache();openDetail(name);
 }
 function goMemory(){
-  selectMode=null;selected.clear();filterTag='';activeTag='';
+  selectMode=null;selected.clear();filterTag='';activeTags=[];syncActiveTag();singleEntryIdx=null;
   document.getElementById('select-bar').classList.remove('show');
   document.getElementById('search-input').value='';
   document.getElementById('search-results').style.display='none';
@@ -709,7 +765,7 @@ function switchPanelTab(tab) {
   if(tab==='search'){
     renderTags();
     document.getElementById('search-results').style.display='block';
-    if(!document.getElementById('search-input').value.trim()&&!activeTag&&searchFilter==='all')renderSearchLanding();
+    if(!document.getElementById('search-input').value.trim()&&!hasActiveTags()&&searchFilter==='all')renderSearchLanding();
     else onSearch();
   }
   if(tab==='graph'&&!graphLoaded){
@@ -717,10 +773,20 @@ function switchPanelTab(tab) {
   }
   window.scrollTo(0,0);
 }
+function updateSortButtons(){
+  document.querySelectorAll('.sort-btn').forEach(function(el){
+    var key=el.getAttribute('data-sort');
+    var active=key===currentSort;
+    el.classList.toggle('active',active);
+    var label=key==='time'?'按时间':'按权重';
+    el.textContent=active?label+' '+(currentSortDir==='asc'?'↑':'↓'):label;
+    el.title=active?(currentSortDir==='asc'?'正序':'倒序'):'点击排序';
+  });
+}
 function switchSort(s){
-  currentSort=s;
-  document.querySelectorAll('.sort-btn').forEach(function(el){el.classList.remove('active')});
-  document.querySelector('.sort-btn[data-sort="'+s+'"]').classList.add('active');
+  if(currentSort===s)currentSortDir=currentSortDir==='asc'?'desc':'asc';
+  else{currentSort=s;currentSortDir='asc'}
+  updateSortButtons();
   renderEntries();
 }
 document.addEventListener('click',function(e){
