@@ -5,7 +5,7 @@ function rpc(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':
 function rpcStrict(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
-var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false;
+var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false;
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -51,6 +51,33 @@ function decayedScore(e){
   if(e.meta.pin&&e.meta.imp>=10)return Number.POSITIVE_INFINITY;
   if(e.meta.pin&&e.meta.imp>=9)return Math.max(e.meta.imp*Math.pow(0.99,days),4);
   return e.meta.imp*Math.pow(0.99,days);
+}
+function parseEntryTimeValue(s){
+  if(!s)return null;
+  var normalized=String(s).trim().replace(/\./g,'-').replace(/\//g,'-');
+  var t=Date.parse(normalized);
+  return isNaN(t)?normalized:t;
+}
+function compareEntryTimeAsc(ea,eb,a,b){
+  var va=parseEntryTimeValue(entryDate(ea)),vb=parseEntryTimeValue(entryDate(eb));
+  if(va===null&&vb===null)return a-b;
+  if(va===null)return 1;
+  if(vb===null)return -1;
+  if(typeof va==='number'&&typeof vb==='number'){
+    if(va!==vb)return va-vb;
+  }else{
+    var cmp=String(va).localeCompare(String(vb));
+    if(cmp!==0)return cmp;
+  }
+  return a-b;
+}
+function compareEntryTime(ea,eb,a,b,dir){
+  var da=entryDate(ea),db=entryDate(eb);
+  if(!da&&!db)return a-b;
+  if(!da)return 1;
+  if(!db)return -1;
+  var cmp=compareEntryTimeAsc(ea,eb,a,b);
+  return dir==='asc'?cmp:-cmp;
 }
 function init(){
   document.getElementById('day-num').textContent=daysSince();
@@ -312,9 +339,9 @@ function renderTags(){
   var visible=tagsExpanded?sorted:sorted.slice(0,tagLimit);
   activeTags.forEach(function(t){if(visible.indexOf(t)<0&&sorted.indexOf(t)>=0)visible.push(t)});
   if(bar)bar.classList.toggle('expanded',tagsExpanded);
-  var html='<div class="tag-btn'+(!activeTags.length?' active':'')+'" data-tag="" onclick="toggleTag(this.dataset.tag)">全部</div>';
+  var html='';
   visible.forEach(function(t){html+='<div class="tag-btn'+(selected.has(t)?' active':'')+'" data-tag="'+escAttr(t)+'" onclick="toggleTag(this.dataset.tag)">'+esc(t)+' ('+tagCounts[t]+')</div>'});
-  bar.innerHTML=html;
+  bar.innerHTML=html||'<div class="empty-state small">暂无标签</div>';
   var summary=document.getElementById('tag-summary');
   if(summary)summary.textContent=sorted.length?(activeTags.length?'已选 '+activeTags.length+' 个 · 按出现次数排序':(tagsExpanded?'全部 '+sorted.length+' 个':'常用前 '+Math.min(tagLimit,sorted.length)+' / '+sorted.length+' 个')):'暂无标签';
   var expandBtn=document.querySelector('.tag-expand-btn');
@@ -329,7 +356,8 @@ function toggleTagsExpand(){
   renderTags();
 }
 function switchSearchFilter(mode){
-  searchFilter=mode||'all';
+  mode=mode||'all';
+  searchFilter=(searchFilter===mode&&mode!=='all')?'all':mode;
   document.querySelectorAll('.search-filter').forEach(function(btn){
     btn.classList.toggle('active',btn.getAttribute('data-filter')===searchFilter);
   });
@@ -498,7 +526,10 @@ function renderCategoryCard(k){
 }
 function openDetail(k,opts){
   opts=opts||{};
-  if(document.getElementById('page-memory').classList.contains('active'))returnPanelTab=opts.fromTab||currentPanelTab||'overview';
+  if(document.getElementById('page-memory').classList.contains('active')){
+    returnPanelTab=opts.fromTab||currentPanelTab||'overview';
+    returnScrollY=window.scrollY||0;
+  }
   current=k;selectMode=null;selected.clear();currentView=opts.view||'active';
   singleEntryIdx=typeof opts.singleIdx==='number'?opts.singleIdx:null;
   if(!opts.keepFilter)filterTag='';
@@ -534,12 +565,14 @@ function renderEntries(){
   var sortedIdxs=[];for(var si=0;si<entries.length;si++)sortedIdxs.push(si);
   sortedIdxs.sort(function(a,b){
     var ea=entries[a],eb=entries[b],cmp=0;
+    if(ea.meta.pin&&!eb.meta.pin)return -1;
+    if(!ea.meta.pin&&eb.meta.pin)return 1;
+    if(ea.meta.pin&&eb.meta.pin)return a-b;
     if(currentSort==='time'){
-      var ta=entryDate(ea),tb=entryDate(eb);
-      cmp=ta.localeCompare(tb)||a-b;
+      return compareEntryTime(ea,eb,a,b,currentSortDir);
     }else if(currentSort==='weight'){
       var sa=decayedScore(ea),sb=decayedScore(eb);
-      if(sa===sb)cmp=entryDate(ea).localeCompare(entryDate(eb))||a-b;
+      if(sa===sb)return compareEntryTime(ea,eb,a,b,currentSortDir);
       else cmp=sa<sb?-1:1;
     }
     return currentSortDir==='asc'?cmp:-cmp;
@@ -742,13 +775,14 @@ function goMemory(){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
   document.getElementById('page-memory').classList.add('active');
   updateStats();renderGrid();renderTags();renderHomeInsights();
-  switchPanelTab(target);
+  switchPanelTab(target,{restoreScroll:returnScrollY});
 }
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show';setTimeout(function(){t.className='toast'},2000)}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 document.addEventListener('click',function(e){var m=document.getElementById('menu-popup');if(m&&m.classList.contains('show')&&!e.target.closest('.menu-btn')&&!e.target.closest('.menu-popup'))m.classList.remove('show')});
-function switchPanelTab(tab) {
+function switchPanelTab(tab,opts) {
+  opts=opts||{};
   currentPanelTab=tab;
   document.querySelectorAll('.panel-tab').forEach(function(el){el.classList.remove('active')});
   document.querySelectorAll('.top-tab').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-tab')===tab)});
@@ -767,7 +801,11 @@ function switchPanelTab(tab) {
   if(tab==='graph'&&!graphLoaded){
     loadEntityGraph(false);
   }
-  window.scrollTo(0,0);
+  if(typeof opts.restoreScroll==='number'){
+    setTimeout(function(){window.scrollTo(0,opts.restoreScroll)},0);
+  }else{
+    window.scrollTo(0,0);
+  }
 }
 function updateSortButtons(){
   document.querySelectorAll('.sort-btn').forEach(function(el){
