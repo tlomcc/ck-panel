@@ -70,7 +70,7 @@ function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-T
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
-var entityGraphData=null,entityGraphView='nodes',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false;
+var entityGraphData=null,entityGraphView='nodes',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false,entityGraphZoom=1;
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -443,7 +443,7 @@ function openEntityGraphPage(){
   if(page)page.classList.add('show');
   document.body.classList.add('entity-graph-open');
   renderEntityMap(entityGraphData,'entity-graph-stage',true);
-  showEntityPopover(null);
+  hideEntityPopover();
 }
 function closeEntityGraphPage(){
   entityGraphFullOpen=false;
@@ -452,6 +452,24 @@ function closeEntityGraphPage(){
   if(page)page.classList.remove('show');
   if(pop)pop.classList.remove('show');
   document.body.classList.remove('entity-graph-open');
+}
+function hideEntityPopover(){
+  var pop=document.getElementById('entity-popover');
+  if(pop)pop.classList.remove('show');
+}
+function updateEntityZoomLabel(){
+  var label=document.getElementById('entity-zoom-label');
+  if(label)label.textContent=Math.round(entityGraphZoom*100)+'%';
+}
+function setEntityGraphZoom(delta){
+  entityGraphZoom=Math.max(.65,Math.min(1.8,Math.round((entityGraphZoom+(delta||0))*100)/100));
+  updateEntityZoomLabel();
+  if(entityGraphFullOpen&&entityGraphData)renderEntityMap(entityGraphData,'entity-graph-stage',true);
+}
+function resetEntityGraphZoom(){
+  entityGraphZoom=1;
+  updateEntityZoomLabel();
+  if(entityGraphFullOpen&&entityGraphData)renderEntityMap(entityGraphData,'entity-graph-stage',true);
 }
 function showEntityPopover(evt){
   var pop=document.getElementById('entity-popover');
@@ -470,36 +488,139 @@ function showEntityPopover(evt){
   pop.style.left=x+'px';
   pop.style.top=y+'px';
 }
+function graphNodeTerms(n){
+  var raw=[n&&n.key,n&&n.name].concat((n&&n.aliases)||[]),out=[];
+  raw.forEach(function(v){
+    var term=graphTerm(v);
+    if(term&&out.indexOf(term)<0)out.push(term);
+  });
+  return out;
+}
+function graphLabelTerms(data,label){
+  var node=findGraphNode(data,label),terms=node?graphNodeTerms(node):[];
+  var labelTerm=graphTerm(label);
+  if(labelTerm&&terms.indexOf(labelTerm)<0)terms.push(labelTerm);
+  return terms;
+}
+function graphAddTerms(set,terms){
+  terms.forEach(function(t){if(t)set[t]=true});
+}
+function graphHasTerm(set,terms){
+  for(var i=0;i<terms.length;i++){if(set[terms[i]])return true}
+  return false;
+}
+function graphNodeForLabel(data,label){
+  return findGraphNode(data,label)||{key:label,name:label,type:'节点',importance:5,mentions:0,summary:'暂时没有完整说明'};
+}
+function graphJsArg(s){
+  return escAttr(JSON.stringify(String(s||'')));
+}
+function entityGraphContext(data){
+  var ctx={active:false,selectedTerms:{},relatedTerms:{},relatedRelations:{}};
+  if(!data||!entityGraphSelectedType||!entityGraphSelectedKey)return ctx;
+  ctx.active=true;
+  var rels=data.recent_relations||[];
+  if(entityGraphSelectedType==='relation'){
+    var idx=parseInt(entityGraphSelectedKey,10),rel=rels[idx];
+    if(rel){
+      ctx.relatedRelations[String(idx)]=true;
+      graphAddTerms(ctx.selectedTerms,graphLabelTerms(data,rel.source));
+      graphAddTerms(ctx.selectedTerms,graphLabelTerms(data,rel.target));
+      graphAddTerms(ctx.relatedTerms,graphLabelTerms(data,rel.source));
+      graphAddTerms(ctx.relatedTerms,graphLabelTerms(data,rel.target));
+    }
+    return ctx;
+  }
+  var node=findGraphNode(data,entityGraphSelectedKey)||{key:entityGraphSelectedKey,name:entityGraphSelectedKey};
+  var selected=graphNodeTerms(node);
+  graphAddTerms(ctx.selectedTerms,selected);
+  graphAddTerms(ctx.relatedTerms,selected);
+  rels.forEach(function(rel,i){
+    var sourceTerms=graphLabelTerms(data,rel.source);
+    var targetTerms=graphLabelTerms(data,rel.target);
+    if(graphHasTerm(ctx.selectedTerms,sourceTerms)||graphHasTerm(ctx.selectedTerms,targetTerms)){
+      ctx.relatedRelations[String(i)]=true;
+      graphAddTerms(ctx.relatedTerms,sourceTerms);
+      graphAddTerms(ctx.relatedTerms,targetTerms);
+    }
+  });
+  return ctx;
+}
+function graphNodeClass(data,label,ctx){
+  if(!ctx.active)return '';
+  var terms=graphLabelTerms(data,label);
+  if(graphHasTerm(ctx.selectedTerms,terms))return ' is-selected active';
+  if(graphHasTerm(ctx.relatedTerms,terms))return ' is-related';
+  return ' is-dim';
+}
+function graphEdgeClass(idx,ctx){
+  if(!ctx.active)return '';
+  return ctx.relatedRelations[String(idx)]?' is-related':' is-dim';
+}
+function graphUniqueNames(names){
+  var seen={},out=[];
+  names.forEach(function(name){
+    var key=graphTerm(name);
+    if(key&&!seen[key]){seen[key]=true;out.push(name)}
+  });
+  return out;
+}
 function renderEntityMap(data,targetId,full){
   var map=document.getElementById(targetId||'entity-map');
   if(!map)return;
-  var nodes=(data.top_nodes||[]).slice(0,full?28:16);
-  if(!nodes.length){map.innerHTML='<div class="empty-state small">暂无示意图</div>';return}
-  var w=full?1120:720,h=full?720:360,cx=w/2,cy=h/2,rx=full?420:268,ry=full?250:116,coords={},parts=[];
-  for(var i=0;i<nodes.length;i++){
-    var a=nodes.length===1?0:(Math.PI*2*i/nodes.length-Math.PI/2);
-    var x=nodes.length===1?cx:cx+Math.cos(a)*rx;
-    var y=nodes.length===1?cy:cy+Math.sin(a)*ry;
-    coords[graphTerm(nodes[i].key)]=coords[graphTerm(nodes[i].name)]={x:x,y:y,n:nodes[i]};
-  }
-  var rels=(data.recent_relations||[]).slice(0,80);
-  parts.push('<svg class="entity-svg '+(full?'entity-svg-full':'')+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="信息网关系示意图"><defs><marker id="entity-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"></path></marker></defs>');
+  var allNodes=data.top_nodes||[],allRels=data.recent_relations||[];
+  var rels=allRels.filter(function(r){return r&&r.source&&r.target}).slice(0,full?36:8);
+  var touched={};
   rels.forEach(function(r){
-    var s=coords[graphTerm(r.source)],t=coords[graphTerm(r.target)];
-    if(!s||!t)return;
-    parts.push('<line class="entity-edge" x1="'+s.x.toFixed(1)+'" y1="'+s.y.toFixed(1)+'" x2="'+t.x.toFixed(1)+'" y2="'+t.y.toFixed(1)+'"></line>');
-    parts.push('<text class="entity-edge-label" x="'+((s.x+t.x)/2).toFixed(1)+'" y="'+((s.y+t.y)/2-5).toFixed(1)+'">'+esc(shortText(r.relation||'',10))+'</text>');
+    graphLabelTerms(data,r.source).forEach(function(t){touched[t]=true});
+    graphLabelTerms(data,r.target).forEach(function(t){touched[t]=true});
   });
-  nodes.forEach(function(n){
-    var k=graphNodeKey(n),c=coords[graphTerm(k)],r=Math.max(16,Math.min(28,14+(n.importance||5)));
-    var active=entityGraphSelectedType==='node'&&entityGraphSelectedKey===k?' active':'';
-    parts.push('<g class="entity-node'+active+'" onclick="event.stopPropagation();openEntityGraphItem(\'node\',\''+escAttr(k)+'\',event)" tabindex="0">');
-    parts.push('<circle cx="'+c.x.toFixed(1)+'" cy="'+c.y.toFixed(1)+'" r="'+r+'"></circle>');
-    parts.push('<text x="'+c.x.toFixed(1)+'" y="'+(c.y+r+15).toFixed(1)+'">'+esc(shortText(graphNodeName(n),12))+'</text>');
+  var orphanNames=graphUniqueNames((data.orphan_nodes||[]).concat(allNodes.filter(function(n){
+    return !graphHasTerm(touched,graphNodeTerms(n));
+  }).map(function(n){return graphNodeName(n)}))).slice(0,full?32:9);
+  if(!rels.length&&!orphanNames.length){map.innerHTML='<div class="empty-state small">暂无示意图</div>';return}
+  var w=full?1180:720,rowGap=full?94:74,topPad=full?62:44,bottomPad=full?64:38;
+  var sourceX=full?230:148,targetX=full?950:572,midX=(sourceX+targetX)/2;
+  var nodeR=full?22:17,labelW=full?190:134;
+  var relationBottom=rels.length?topPad+(rels.length-1)*rowGap+72:topPad;
+  var orphanCols=full?4:3,orphanGapX=full?250:190,orphanGapY=full?86:68;
+  var orphanStartX=full?160:105,orphanTop=relationBottom+(orphanNames.length?(full?64:42):0);
+  var orphanRows=orphanNames.length?Math.ceil(orphanNames.length/orphanCols):0;
+  var h=Math.max(full?680:300,orphanTop+(orphanRows?orphanRows*orphanGapY+28:0)+bottomPad);
+  var ctx=entityGraphContext(data),parts=[],markerId=full?'entity-arrow-full':'entity-arrow-mini';
+  var scale=full?entityGraphZoom:1,svgStyle=full?' style="width:'+Math.round(w*scale)+'px;height:'+Math.round(h*scale)+'px"':'';
+  parts.push('<svg class="entity-svg '+(full?'entity-svg-full':'entity-svg-preview')+'" viewBox="0 0 '+w+' '+h+'"'+svgStyle+' role="img" aria-label="信息网关系示意图"><defs><marker id="'+markerId+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"></path></marker></defs>');
+  if(rels.length)parts.push('<text class="entity-cluster-title" x="'+(full?34:22)+'" y="'+(full?30:26)+'">关系通道</text>');
+  rels.forEach(function(r,i){
+    var y=topPad+i*rowGap,edgeClass=graphEdgeClass(i,ctx),sx=sourceX+nodeR+12,tx=targetX-nodeR-12;
+    var sourceNode=graphNodeForLabel(data,r.source),targetNode=graphNodeForLabel(data,r.target);
+    var sourceKey=graphNodeKey(sourceNode)||r.source,targetKey=graphNodeKey(targetNode)||r.target;
+    var sourceClass=graphNodeClass(data,r.source,ctx),targetClass=graphNodeClass(data,r.target,ctx);
+    parts.push('<line class="entity-lane-guide'+edgeClass+'" x1="'+(full?44:24)+'" y1="'+y+'" x2="'+(w-(full?44:24))+'" y2="'+y+'"></line>');
+    parts.push('<line class="entity-edge-hit" x1="'+sx+'" y1="'+y+'" x2="'+tx+'" y2="'+y+'" onclick="event.stopPropagation();openEntityGraphItem(\'relation\','+graphJsArg(i)+',event)"></line>');
+    parts.push('<line class="entity-edge'+edgeClass+'" x1="'+sx+'" y1="'+y+'" x2="'+tx+'" y2="'+y+'" marker-end="url(#'+markerId+')"></line>');
+    parts.push('<rect class="entity-edge-pill'+edgeClass+'" x="'+(midX-labelW/2)+'" y="'+(y-16)+'" width="'+labelW+'" height="32" rx="16"></rect>');
+    parts.push('<text class="entity-edge-label'+edgeClass+'" x="'+midX+'" y="'+(y+4)+'" onclick="event.stopPropagation();openEntityGraphItem(\'relation\','+graphJsArg(i)+',event)">'+esc(shortText(r.relation||'关系',full?16:10))+'</text>');
+    parts.push('<g class="entity-node entity-node-source'+sourceClass+'" onclick="event.stopPropagation();openEntityGraphItem(\'node\','+graphJsArg(sourceKey)+',event)" tabindex="0">');
+    parts.push('<circle cx="'+sourceX+'" cy="'+y+'" r="'+nodeR+'"></circle><text class="entity-node-name" x="'+sourceX+'" y="'+(y+nodeR+18)+'">'+esc(shortText(graphNodeName(sourceNode),full?13:9))+'</text>');
+    parts.push('</g>');
+    parts.push('<g class="entity-node entity-node-target'+targetClass+'" onclick="event.stopPropagation();openEntityGraphItem(\'node\','+graphJsArg(targetKey)+',event)" tabindex="0">');
+    parts.push('<circle cx="'+targetX+'" cy="'+y+'" r="'+nodeR+'"></circle><text class="entity-node-name" x="'+targetX+'" y="'+(y+nodeR+18)+'">'+esc(shortText(graphNodeName(targetNode),full?13:9))+'</text>');
     parts.push('</g>');
   });
+  if(orphanNames.length){
+    parts.push('<text class="entity-cluster-title entity-orphan-title" x="'+(full?34:22)+'" y="'+(orphanTop-24)+'">'+(rels.length?'孤立节点':'节点概览')+'</text>');
+    orphanNames.forEach(function(name,i){
+      var col=i%orphanCols,row=Math.floor(i/orphanCols),x=orphanStartX+col*orphanGapX,y=orphanTop+row*orphanGapY;
+      var node=graphNodeForLabel(data,name),key=graphNodeKey(node)||name,nodeClass=graphNodeClass(data,name,ctx);
+      parts.push('<g class="entity-node entity-orphan-node'+nodeClass+'" onclick="event.stopPropagation();openEntityGraphItem(\'node\','+graphJsArg(key)+',event)" tabindex="0">');
+      parts.push('<circle cx="'+x+'" cy="'+y+'" r="'+(nodeR-2)+'"></circle><text class="entity-node-name" x="'+x+'" y="'+(y+nodeR+15)+'">'+esc(shortText(graphNodeName(node),full?13:9))+'</text>');
+      parts.push('</g>');
+    });
+  }
   parts.push('</svg>');
   map.innerHTML=parts.join('');
+  if(full)updateEntityZoomLabel();
 }
 function renderEntityBrowser(data){
   var list=document.getElementById('entity-list');
