@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ck-panel-shell-v2';
+const CACHE_NAME = 'ck-panel-shell-v3';
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -7,11 +7,11 @@ const SHELL_ASSETS = [
   './script-extra.js',
   './pwa.js',
   './manifest.webmanifest',
-  './icons/icon-192.png',
-  './icons/icon-maskable-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/app-icon-v2-192.png',
+  './icons/app-icon-v2-maskable-192.png',
+  './icons/app-icon-v2-512.png',
+  './icons/app-icon-v2-maskable-512.png',
+  './icons/apple-touch-icon-v2.png'
 ];
 
 self.addEventListener('install', function(event) {
