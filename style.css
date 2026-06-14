@@ -3152,3 +3152,287 @@ body.dark .graph-hero p{
   border-color:rgba(var(--ck-accent-rgb),.3)!important;
   color:var(--ck-accent-strong)!important;
 }
+
+/* Fresh green folio theme */
+body{
+  --ck-bg:#eef7f2;
+  --ck-bg-soft:#f8fbf7;
+  --ck-surface:#ffffff;
+  --ck-surface-2:#fbfdfb;
+  --ck-surface-3:#edf8f1;
+  --ck-text:#1f2d28;
+  --ck-text-soft:#40534b;
+  --ck-muted:#7f8f88;
+  --ck-faint:#aab7b0;
+  --ck-border:#e2ece6;
+  --ck-border-strong:#cfddd5;
+  --ck-accent:#52c596;
+  --ck-accent-strong:#24956d;
+  --ck-accent-soft:#e8f8ef;
+  --ck-accent-rgb:82,197,150;
+  --ck-cyan:#a9dec9;
+  --ck-shadow:0 18px 42px rgba(46,86,70,.08);
+  --ck-shadow-soft:0 8px 24px rgba(46,86,70,.055);
+  background:linear-gradient(180deg,#f8fbf7 0%,#eef7f2 100%)!important;
+}
+
+body.dark{
+  --ck-bg:#101813;
+  --ck-bg-soft:#142019;
+  --ck-surface:#17231d;
+  --ck-surface-2:#1d2a23;
+  --ck-surface-3:#122019;
+  --ck-text:#eef8f2;
+  --ck-text-soft:#d3e3db;
+  --ck-muted:#98aaa1;
+  --ck-faint:#72847b;
+  --ck-border:#2b3d34;
+  --ck-border-strong:#3b5248;
+  --ck-accent:#80dab8;
+  --ck-accent-strong:#56c7a0;
+  --ck-accent-soft:#16372c;
+  --ck-accent-rgb:128,218,184;
+  --ck-cyan:#bae9d6;
+  background:linear-gradient(180deg,#142019 0%,#101813 100%)!important;
+}
+
+.page{
+  max-width:1040px;
+}
+
+.brand-mark{
+  background:#fff!important;
+  border-color:#dceae2!important;
+  color:var(--ck-accent-strong)!important;
+  box-shadow:0 10px 28px rgba(46,86,70,.07)!important;
+}
+
+.top-tabs{
+  background:rgba(255,255,255,.72)!important;
+  border-color:#e3eee7!important;
+  box-shadow:0 14px 36px rgba(46,86,70,.06)!important;
+}
+
+.top-tab{
+  color:#84938c!important;
+}
+
+.top-tab.active{
+  background:#1f2d28!important;
+  color:#fff!important;
+  box-shadow:none!important;
+}
+
+.day-card,
+.detail-top,
+.graph-hero{
+  background:linear-gradient(135deg,#ffffff 0%,#effaf3 100%)!important;
+  border:1px solid #dceee5!important;
+  color:var(--ck-text)!important;
+  box-shadow:0 18px 44px rgba(46,86,70,.08)!important;
+}
+
+.day-card::before{
+  background:radial-gradient(circle,rgba(var(--ck-accent-rgb),.18),transparent 70%)!important;
+}
+
+.day-card h2,
+.detail-top h3,
+.graph-hero h2{
+  color:var(--ck-text)!important;
+}
+
+.day-card h2 span,
+.brand-lockup h1,
+.tab-head h2{
+  color:#2f4b40!important;
+}
+
+.day-card p,
+.detail-top small,
+.graph-hero p,
+.brand-lockup p,
+.tab-head p{
+  color:#81918a!important;
+}
+
+.stat-box,
+.home-console,
+.search-panel,
+.cat-card,
+.entry-item,
+.add-area,
+.modal,
+.confirm-box,
+.entity-console,
+.today-roll-item,
+.mini-item,
+.pinned-card,
+.search-result-item,
+.search-suggest,
+.search-empty-card,
+.tag-panel{
+  background:rgba(255,255,255,.88)!important;
+  border-color:#e4eee8!important;
+  box-shadow:0 12px 32px rgba(46,86,70,.055)!important;
+}
+
+.cat-card,
+.entry-item,
+.today-roll-item,
+.mini-item,
+.pinned-card,
+.search-result-item{
+  border-radius:12px!important;
+}
+
+.stat-box:hover,
+.cat-card:hover,
+.today-roll-item:hover,
+.mini-item:hover,
+.search-result-item:hover,
+.pinned-card:hover{
+  border-color:rgba(var(--ck-accent-rgb),.34)!important;
+  background:#fff!important;
+}
+
+.btn-blue{
+  background:linear-gradient(135deg,#2fa777,#66d3a8)!important;
+  box-shadow:0 12px 26px rgba(var(--ck-accent-rgb),.22)!important;
+}
+
+.btn-outline,
+.entity-open,
+.entity-close,
+.tag-expand-btn,
+.tag-clear-btn,
+.search-filter,
+.tag-btn,
+.sort-btn,
+.entry-action-btn{
+  background:#fff!important;
+  border-color:#dfeae4!important;
+  color:#72827a!important;
+}
+
+.tag-btn.active,
+.search-filter.active,
+.sort-btn.active,
+.entry-action-btn.active,
+.switch-item.active,
+#tab-search .tag-expand-btn{
+  background:#1f2d28!important;
+  border-color:#1f2d28!important;
+  color:#fff!important;
+}
+
+.switch-bar{
+  background:#fff!important;
+  border-color:#e4eee8!important;
+}
+
+.cat-mark,
+.roll-count,
+.filter-chip.removable,
+.entry-badge.pin,
+.entry-badge.imp-high,
+.pinned-card-pin,
+.search-entry-meta span,
+.entry-badge{
+  background:#eef9f2!important;
+  border-color:#d7eee1!important;
+  color:#24956d!important;
+}
+
+.entry-badge,
+.search-entry-meta span{
+  color:#7f8f88!important;
+}
+
+.entry-badge.imp-high,
+.entry-badge.pin{
+  color:#24956d!important;
+}
+
+.mini-top span,
+.search-result-cat,
+.entry-expand,
+.score-badge,
+.nav-item.active,
+.entity-error a{
+  color:#24956d!important;
+}
+
+.search-wrap input,
+.modal input,
+.modal textarea,
+.modal select,
+.add-area textarea,
+.add-area-options select,
+#add-tags{
+  background:#fff!important;
+  border-color:#e1ebe5!important;
+}
+
+.search-wrap input:focus,
+.modal input:focus,
+.modal select:focus,
+.modal textarea:focus,
+.add-area-options select:focus,
+#add-tags:focus{
+  border-color:#52c596!important;
+  box-shadow:0 0 0 3px rgba(82,197,150,.16)!important;
+}
+
+.highlight{
+  background:rgba(82,197,150,.22)!important;
+  border-color:rgba(82,197,150,.32)!important;
+}
+
+.loading-bar-inner{
+  background:linear-gradient(90deg,#2fa777,#a9dec9)!important;
+}
+
+.back-btn{
+  background:rgba(255,255,255,.92)!important;
+  border-color:#dbe9e2!important;
+  color:#24956d!important;
+}
+
+.install-app-btn{
+  background:#eef9f2!important;
+  border-color:#d7eee1!important;
+  color:#24956d!important;
+}
+
+body.dark .top-tab.active{
+  background:var(--ck-accent)!important;
+  color:#102018!important;
+}
+
+body.dark .day-card,
+body.dark .detail-top,
+body.dark .graph-hero{
+  background:linear-gradient(135deg,#17231d 0%,#20382f 100%)!important;
+  border-color:var(--ck-border)!important;
+}
+
+body.dark .stat-box,
+body.dark .home-console,
+body.dark .search-panel,
+body.dark .cat-card,
+body.dark .entry-item,
+body.dark .add-area,
+body.dark .modal,
+body.dark .confirm-box,
+body.dark .entity-console,
+body.dark .today-roll-item,
+body.dark .mini-item,
+body.dark .pinned-card,
+body.dark .search-result-item,
+body.dark .search-suggest,
+body.dark .search-empty-card,
+body.dark .tag-panel{
+  background:var(--ck-surface)!important;
+  border-color:var(--ck-border)!important;
+}
