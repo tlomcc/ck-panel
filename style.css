@@ -1762,21 +1762,36 @@ body.dark .bottom-nav{
   border:1px solid var(--ck-border);
   background:var(--ck-surface-2);
   border-radius:8px;
-  padding:11px;
+  padding:12px;
 }
 
 .tag-panel-head{
-  margin-bottom:9px;
+  margin-bottom:10px;
 }
 
 .tags-bar{
-  gap:7px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(92px,1fr));
+  gap:8px;
+  max-height:none;
+  overflow:visible;
+}
+
+.tags-bar.expanded{
+  max-height:220px;
+  overflow-y:auto;
+  padding-right:4px;
 }
 
 .tag-btn{
-  display:inline-flex;
+  display:flex;
   align-items:center;
+  justify-content:center;
   min-height:29px;
+  padding:7px 9px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 
 .active-filter-bar{
@@ -1847,6 +1862,16 @@ button.filter-chip{
   color:var(--ck-accent);
 }
 
+.graph-hero{
+  align-items:flex-start;
+}
+
+.graph-actions{
+  margin-left:auto;
+  justify-content:flex-end;
+  flex-shrink:0;
+}
+
 body.dark .today-roll-item,
 body.dark .tag-panel,
 body.dark .filter-chip{
@@ -1869,6 +1894,21 @@ body.dark .roll-count{
 @media (max-width:520px){
   .search-head{
     display:block;
+  }
+
+  .tags-bar{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .graph-hero{
+    display:flex;
+    flex-direction:column;
+  }
+
+  .graph-actions{
+    width:100%;
+    justify-content:flex-end;
+    margin-top:10px;
   }
 
   .active-filter-bar{
