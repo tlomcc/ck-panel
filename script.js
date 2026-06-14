@@ -54,9 +54,14 @@ function apiFetch(init){
     return r;
   });
 }
-function entityGraphFetch(){
-  return fetch(addStoredKey(ENTITY_GRAPH_URL)).then(function(r){
-    if(r.status===403&&requestApiKey())return fetch(addStoredKey(ENTITY_GRAPH_URL));
+function entityGraphUrl(full){
+  var url=ENTITY_GRAPH_URL;
+  if(full&&url.indexOf('full=')<0)url+=(url.indexOf('?')>=0?'&':'?')+'full=1';
+  return url;
+}
+function entityGraphFetch(full){
+  return fetch(addStoredKey(entityGraphUrl(full))).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(addStoredKey(entityGraphUrl(full)));
     return r;
   });
 }
@@ -65,6 +70,7 @@ function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-T
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
+var entityGraphData=null,entityGraphView='nodes',entityGraphSelectedType='',entityGraphSelectedKey='';
 var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1};
 function parseEntries(raw){
@@ -347,33 +353,35 @@ function hideEntityGraph(){
 }
 function loadEntityGraph(showPanel){
   var box=document.getElementById('entity-console');
-  var nodes=document.getElementById('entity-nodes');
-  var rels=document.getElementById('entity-relations');
+  var list=document.getElementById('entity-list');
+  var detail=document.getElementById('entity-detail');
+  var map=document.getElementById('entity-map');
   var status=document.getElementById('graph-status');
   if(showPanel&&currentPanelTab!=='graph'){switchPanelTab('graph');return}
   if(box)box.classList.add('loading');
   if(status)status.textContent='正在读取信息网...';
-  if(nodes)nodes.innerHTML='<div class="empty-state small">加载中...</div>';
-  if(rels)rels.innerHTML='';
-  entityGraphFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
+  if(list)list.innerHTML='<div class="empty-state small">加载中...</div>';
+  if(detail)detail.innerHTML='<div class="empty-state small">等待数据...</div>';
+  if(map)map.innerHTML='<div class="empty-state small">正在生成示意图...</div>';
+  entityGraphFetch(true).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
     if(!data||typeof data!=='object'||Array.isArray(data)||(!data.counts&&!data.top_nodes&&!data.recent_relations))throw new Error('Invalid graph data');
     graphLoaded=true;
+    entityGraphData=data;
     if(box)box.classList.remove('loading');
-    if(status)status.textContent='已读取面板预览数据。';
+    if(status)status.textContent='已读取完整信息网数据。点击节点、关系或上方分类查看明细。';
     renderEntityGraph(data);
   }).catch(function(){
     if(box)box.classList.remove('loading');
     if(status)status.textContent='没有读到可用的信息网数据。';
-    if(nodes)nodes.innerHTML='<div class="entity-error">预览暂时读不到。接口当前没有返回可用的节点/关系数据。</div>';
-    if(rels)rels.innerHTML='';
+    if(list)list.innerHTML='<div class="entity-error">暂时读不到。接口当前没有返回可用的节点/关系数据。</div>';
+    if(detail)detail.innerHTML='';
+    if(map)map.innerHTML='';
     var stats=document.getElementById('entity-stats');
     if(stats)stats.innerHTML='';
   });
 }
 function renderEntityGraph(data){
   var stats=document.getElementById('entity-stats');
-  var nodes=document.getElementById('entity-nodes');
-  var rels=document.getElementById('entity-relations');
   var updated=document.getElementById('entity-updated');
   var status=document.getElementById('graph-status');
   var counts=data.counts||{};
@@ -382,21 +390,133 @@ function renderEntityGraph(data){
     if((counts.nodes||0)===0&&(counts.relations||0)===0)status.textContent='读取成功，但信息网里还没有节点和关系。通常是当天整理任务还没生成，或后端还没部署最新版本。';
     else status.textContent='已读取：'+(counts.nodes||0)+' 个节点，'+(counts.relations||0)+' 条关系。';
   }
-  if(stats)stats.innerHTML='<div><b>'+(counts.nodes||0)+'</b><span>节点</span></div><div><b>'+(counts.relations||0)+'</b><span>关系</span></div><div><b>'+(counts.orphan_nodes||0)+'</b><span>孤立</span></div>';
-  var nodeList=(data.top_nodes||[]).slice(0,8);
-  if(nodes){
-    if(!nodeList.length)nodes.innerHTML='<div class="empty-state small">暂无节点</div>';
-    else nodes.innerHTML=nodeList.map(function(n){
-      return '<div class="mini-item"><div class="mini-top"><span>'+esc(n.name||n.key||'')+'</span><b>'+esc(n.type||'')+'</b></div><div class="mini-text">'+esc(shortText(n.summary||'',90))+'</div><div class="mini-reason">重要性 '+(n.importance||5)+' · 提及 '+(n.mentions||0)+'</div></div>';
-    }).join('');
+  if(stats)stats.innerHTML=[
+    entityStatHtml('nodes',counts.nodes||0,'节点'),
+    entityStatHtml('relations',counts.relations||0,'关系'),
+    entityStatHtml('orphans',counts.orphan_nodes||0,'孤立')
+  ].join('');
+  renderEntityMap(data);
+  renderEntityBrowser(data);
+}
+function entityStatHtml(view,count,label){
+  return '<button class="entity-stat '+(entityGraphView===view?'active':'')+'" onclick="setEntityGraphView(\''+view+'\')"><b>'+count+'</b><span>'+label+'</span></button>';
+}
+function graphTerm(s){return String(s||'').trim().toLowerCase()}
+function graphNodeKey(n){return String((n&&n.key)||(n&&n.name)||'').trim()}
+function graphNodeName(n){return String((n&&n.name)||(n&&n.key)||'').trim()}
+function findGraphNode(data,key){
+  var term=graphTerm(key),nodes=(data&&data.top_nodes)||[];
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i],aliases=n.aliases||[];
+    if(graphTerm(n.key)===term||graphTerm(n.name)===term)return n;
+    for(var j=0;j<aliases.length;j++){if(graphTerm(aliases[j])===term)return n}
   }
-  var relList=(data.recent_relations||[]).slice(0,8);
-  if(rels){
-    if(!relList.length)rels.innerHTML='<div class="empty-state small">暂无关系</div>';
-    else rels.innerHTML=relList.map(function(r){
-      return '<div class="mini-item"><div class="mini-top"><span>'+esc(r.source||'')+' → '+esc(r.target||'')+'</span><b>'+esc(r.relation||'')+'</b></div><div class="mini-text">'+esc(shortText(r.detail||'',90))+'</div><div class="mini-reason">'+esc(r.last_seen||'')+'</div></div>';
-    }).join('');
+  return null;
+}
+function relationTouchesNode(r,n){
+  var terms=[graphTerm(n.key),graphTerm(n.name)];
+  return terms.indexOf(graphTerm(r.source))>=0||terms.indexOf(graphTerm(r.target))>=0;
+}
+function setEntityGraphView(view){
+  entityGraphView=view||'nodes';
+  entityGraphSelectedType='';
+  entityGraphSelectedKey='';
+  if(entityGraphData)renderEntityGraph(entityGraphData);
+}
+function openEntityGraphItem(type,key){
+  entityGraphSelectedType=type||'';
+  entityGraphSelectedKey=key||'';
+  renderEntityBrowser(entityGraphData);
+  renderEntityMap(entityGraphData);
+}
+function renderEntityMap(data){
+  var map=document.getElementById('entity-map');
+  if(!map)return;
+  var nodes=(data.top_nodes||[]).slice(0,16);
+  if(!nodes.length){map.innerHTML='<div class="empty-state small">暂无示意图</div>';return}
+  var w=720,h=360,cx=360,cy=178,rx=268,ry=116,coords={},parts=[];
+  for(var i=0;i<nodes.length;i++){
+    var a=nodes.length===1?0:(Math.PI*2*i/nodes.length-Math.PI/2);
+    var x=nodes.length===1?cx:cx+Math.cos(a)*rx;
+    var y=nodes.length===1?cy:cy+Math.sin(a)*ry;
+    coords[graphTerm(nodes[i].key)]=coords[graphTerm(nodes[i].name)]={x:x,y:y,n:nodes[i]};
   }
+  var rels=(data.recent_relations||[]).slice(0,80);
+  parts.push('<svg class="entity-svg" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="信息网关系示意图"><defs><marker id="entity-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"></path></marker></defs>');
+  rels.forEach(function(r){
+    var s=coords[graphTerm(r.source)],t=coords[graphTerm(r.target)];
+    if(!s||!t)return;
+    parts.push('<line class="entity-edge" x1="'+s.x.toFixed(1)+'" y1="'+s.y.toFixed(1)+'" x2="'+t.x.toFixed(1)+'" y2="'+t.y.toFixed(1)+'"></line>');
+    parts.push('<text class="entity-edge-label" x="'+((s.x+t.x)/2).toFixed(1)+'" y="'+((s.y+t.y)/2-5).toFixed(1)+'">'+esc(shortText(r.relation||'',10))+'</text>');
+  });
+  nodes.forEach(function(n){
+    var k=graphNodeKey(n),c=coords[graphTerm(k)],r=Math.max(16,Math.min(28,14+(n.importance||5)));
+    var active=entityGraphSelectedType==='node'&&entityGraphSelectedKey===k?' active':'';
+    parts.push('<g class="entity-node'+active+'" onclick="openEntityGraphItem(\'node\',\''+escAttr(k)+'\')" tabindex="0">');
+    parts.push('<circle cx="'+c.x.toFixed(1)+'" cy="'+c.y.toFixed(1)+'" r="'+r+'"></circle>');
+    parts.push('<text x="'+c.x.toFixed(1)+'" y="'+(c.y+r+15).toFixed(1)+'">'+esc(shortText(graphNodeName(n),12))+'</text>');
+    parts.push('</g>');
+  });
+  parts.push('</svg>');
+  map.innerHTML=parts.join('');
+}
+function renderEntityBrowser(data){
+  var list=document.getElementById('entity-list');
+  var title=document.getElementById('entity-list-title');
+  var detail=document.getElementById('entity-detail');
+  var meta=document.getElementById('entity-detail-meta');
+  if(!data||!list)return;
+  var rows=[],label='节点明细';
+  if(entityGraphView==='relations'){
+    label='关系明细';
+    rows=(data.recent_relations||[]).map(function(r,i){return {type:'relation',key:String(i),raw:r}});
+  }else if(entityGraphView==='orphans'){
+    label='孤立节点';
+    rows=(data.orphan_nodes||[]).map(function(name){
+      return {type:'node',key:graphNodeKey(findGraphNode(data,name)||{key:name,name:name}),raw:findGraphNode(data,name)||{key:name,name:name,summary:'暂时没有关系线。'}};
+    });
+  }else{
+    rows=(data.top_nodes||[]).map(function(n){return {type:'node',key:graphNodeKey(n),raw:n}});
+  }
+  if(title)title.textContent=label;
+  if(!rows.length){list.innerHTML='<div class="empty-state small">暂无内容</div>';if(detail)detail.innerHTML='';return}
+  if(!entityGraphSelectedType||!entityGraphSelectedKey){
+    entityGraphSelectedType=rows[0].type;
+    entityGraphSelectedKey=rows[0].key;
+  }
+  list.innerHTML=rows.map(function(row){
+    var active=row.type===entityGraphSelectedType&&row.key===entityGraphSelectedKey?' active':'';
+    if(row.type==='relation'){
+      var r=row.raw;
+      return '<div class="mini-item entity-row'+active+'" onclick="openEntityGraphItem(\'relation\',\''+escAttr(row.key)+'\')"><div class="mini-top"><span>'+esc(r.source||'')+' → '+esc(r.target||'')+'</span><b>'+esc(r.relation||'')+'</b></div><div class="mini-text">'+esc(shortText(r.detail||'',120))+'</div><div class="mini-reason">'+esc(r.last_seen||'')+' · 重要性 '+(r.importance||5)+'</div></div>';
+    }
+    var n=row.raw;
+    return '<div class="mini-item entity-row'+active+'" onclick="openEntityGraphItem(\'node\',\''+escAttr(row.key)+'\')"><div class="mini-top"><span>'+esc(graphNodeName(n))+'</span><b>'+esc(n.type||'节点')+'</b></div><div class="mini-text">'+esc(shortText(n.summary||'',120))+'</div><div class="mini-reason">重要性 '+(n.importance||5)+' · 提及 '+(n.mentions||0)+(entityGraphView==='orphans'?' · 孤立':'')+'</div></div>';
+  }).join('');
+  if(detail)detail.innerHTML=renderEntityDetail(data,entityGraphSelectedType,entityGraphSelectedKey);
+  if(meta)meta.textContent=entityGraphSelectedType==='relation'?'关系':'节点';
+}
+function renderEntityDetail(data,type,key){
+  if(type==='relation'){
+    var rel=(data.recent_relations||[])[parseInt(key,10)];
+    if(!rel)return '<div class="empty-state small">没有找到这条关系</div>';
+    return '<div class="entity-detail-title">'+esc(rel.source||'')+' <span>→</span> '+esc(rel.target||'')+'</div><div class="entity-detail-sub">'+esc(rel.relation||'关系')+' · '+esc(rel.last_seen||'')+'</div><div class="entity-detail-block"><b>关系说明</b><p>'+esc(rel.detail||'暂无说明')+'</p></div><div class="entity-detail-grid"><span>重要性 '+(rel.importance||5)+'</span><span>出现 '+(rel.count||1)+' 次</span><span>首次 '+esc(rel.first_seen||'')+'</span></div>'+rawEntityBlock(rel);
+  }
+  var node=findGraphNode(data,key)||{key:key,name:key,summary:''};
+  var rels=(data.recent_relations||[]).filter(function(r){return relationTouchesNode(r,node)});
+  var aliases=(node.aliases||[]).filter(Boolean);
+  var evidence=(node.evidence||[]).filter(Boolean);
+  var links=(node.links||[]).filter(Boolean);
+  var html='<div class="entity-detail-title">'+esc(graphNodeName(node))+'</div><div class="entity-detail-sub">'+esc(node.type||'节点')+' · 重要性 '+(node.importance||5)+' · 提及 '+(node.mentions||0)+'</div>';
+  if(aliases.length)html+='<div class="entity-chip-row">'+aliases.map(function(a){return '<span>'+esc(a)+'</span>'}).join('')+'</div>';
+  html+='<div class="entity-detail-block"><b>完整说明</b><p>'+esc(node.summary||'暂无说明')+'</p></div>';
+  if(evidence.length)html+='<div class="entity-detail-block"><b>证据 / 原文线索</b>'+evidence.map(function(e){return '<p>'+esc(e)+'</p>'}).join('')+'</div>';
+  if(links.length)html+='<div class="entity-detail-block"><b>节点内关联</b>'+links.map(function(l){return '<p>'+esc(l.relation||'关联')+' → '+esc(l.target||'')+(l.detail?'：'+esc(l.detail):'')+'</p>'}).join('')+'</div>';
+  if(rels.length)html+='<div class="entity-detail-block"><b>相关关系</b>'+rels.map(function(r){return '<p>'+esc(r.source||'')+' → '+esc(r.target||'')+'：'+esc(r.relation||'')+(r.detail?'，'+esc(r.detail):'')+'</p>'}).join('')+'</div>';
+  return html+rawEntityBlock(node);
+}
+function rawEntityBlock(obj){
+  return '<details class="entity-raw"><summary>结构原文</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>';
 }
 function renderTags(){
   var bar=document.getElementById('tags-bar');
