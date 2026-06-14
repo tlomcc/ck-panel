@@ -1,8 +1,40 @@
-var API='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run';
-var ENTITY_GRAPH_URL=localStorage.getItem('entityGraphUrl')||API+'/entity-graph';
+var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run';
+var API_KEY_STORAGE='ckMemoryApiKey';
+var API=API_BASE;
+var ENTITY_GRAPH_URL=localStorage.getItem('entityGraphUrl')||API_BASE+'/entity-graph';
 var PANEL_CACHE_KEY='ckPanelCacheV2';
-function rpc(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''}).catch(function(){return ''})}
-function rpcStrict(tool,args){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
+function initApiKeyFromUrl(){
+  try{
+    var params=new URLSearchParams(window.location.search||'');
+    var key=params.get('key');
+    if(key){
+      localStorage.setItem(API_KEY_STORAGE,key);
+      params.delete('key');
+      var qs=params.toString();
+      var clean=window.location.pathname+(qs?'?'+qs:'')+(window.location.hash||'');
+      history.replaceState(null,'',clean);
+    }
+  }catch(e){}
+}
+function apiUrl(){
+  var key='';
+  try{key=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
+  return key?API_BASE+'?key='+encodeURIComponent(key):API_BASE;
+}
+function requestApiKey(){
+  var key=window.prompt('后端已开启访问密钥，请输入 memory_tools 的 AUTH_KEY');
+  if(!key)return false;
+  try{localStorage.setItem(API_KEY_STORAGE,key.trim())}catch(e){}
+  return true;
+}
+function apiFetch(init){
+  return fetch(apiUrl(),init).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(apiUrl(),init);
+    return r;
+  });
+}
+function rpc(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''}).catch(function(){return ''})}
+function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){return d.result&&d.result.content&&d.result.content[0]?d.result.content[0].text:''})}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='overview',returnPanelTab='overview',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false;
@@ -80,6 +112,7 @@ function compareEntryTime(ea,eb,a,b,dir){
   return dir==='asc'?cmp:-cmp;
 }
 function init(){
+  initApiKeyFromUrl();
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
