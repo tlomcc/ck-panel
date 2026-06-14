@@ -1067,7 +1067,7 @@ function renderEntryCard(i,e,isLong,compact){
   var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div>';
   if(compact)actionHtml+='<div class="entry-action-btn open" onclick="event.stopPropagation();openEntry(current,'+i+')">打开</div>';
   actionHtml+='</div>';
-  var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+(selectMode&&selected.has(i)?' selected':'')+'"><div class="entry-del-bg" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
+  var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+(selectMode&&selected.has(i)?' selected':'')+'"><div class="entry-del-bg" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
   var swipeAttrs=window.PointerEvent?' onpointerdown="ps(event,'+i+')" onpointermove="pm(event,'+i+')" onpointerup="pe(event,'+i+')" onpointercancel="pe(event,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"';
   var itemAttrs=compact?' onclick="'+(selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')')+'"':swipeAttrs+' onclick="onEntryCardClick('+i+')"';
   var textClick='';
@@ -1222,7 +1222,13 @@ function saveEdit(){
   hideEdit();renderEntries();renderHomeInsights();toast('已保存');
   setTimeout(function(){saveCurrentCategory()},50);
 }
-function showDelConfirm(i){delIdx=i;document.getElementById('confirmDel').classList.add('show')}
+function showDelConfirm(i){
+  suppressClickUntil=0;
+  delIdx=i;
+  var btn=document.querySelector('#confirmDel .btn-red');
+  if(btn){btn.disabled=false;btn.textContent='删除'}
+  document.getElementById('confirmDel').classList.add('show');
+}
 function cancelDel(){document.getElementById('confirmDel').classList.remove('show');delIdx=null;resetSwipes()}
 function confirmDel(){
   if(delIdx===null||!allData[current]||!allData[current].entries[delIdx]){cancelDel();return}
@@ -1345,14 +1351,19 @@ function addEntry(){
   rpc('append_memory',{category:current,content:text,importance:imp,tags:tags});
 }
 function updateCount(){document.getElementById('char-count').textContent=document.getElementById('add-input').value.length+' 字'}
+function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
 function writeCategoryEntries(category,entries){
   var content=serializeEntries(entries);
   return rpcStrict('write_memory',{category:category,content:content}).then(function(){
-    return rpcStrict('read_memory',{category:category});
-  }).then(function(raw){
-    var actual=(!raw||raw==='Empty')?'':serializeEntries(parseEntries(raw));
-    if(actual.trim()!==content.trim())throw new Error('write verification failed');
-    return raw;
+    function verify(tries){
+      return rpcStrict('read_memory',{category:category}).then(function(raw){
+        var actual=(!raw||raw==='Empty')?'':serializeEntries(parseEntries(raw));
+        if(actual.trim()===content.trim())return raw;
+        if(tries<=0)throw new Error('write verification failed');
+        return wait(450).then(function(){return verify(tries-1)});
+      });
+    }
+    return verify(3);
   });
 }
 function saveCurrentCategory(){
@@ -1417,6 +1428,7 @@ function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.c
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 document.addEventListener('click',function(e){
+  if(e.target.closest('.entry-del-bg'))return;
   if(Date.now()<suppressClickUntil){
     e.preventDefault();
     e.stopImmediatePropagation();

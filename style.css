@@ -4082,11 +4082,16 @@ body.dark .entity-node circle{
   width:86px;
   transform:translateX(100%);
   transition:transform .18s ease;
-  z-index:1;
+  z-index:3;
+  pointer-events:none;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
 }
 .entry-wrap.swiping .entry-del-bg,
 .entry-wrap.swiped .entry-del-bg{
   transform:translateX(0);
+  pointer-events:auto;
 }
 .entry-item{
   width:100%;
