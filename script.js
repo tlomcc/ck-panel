@@ -21,6 +21,18 @@ function apiUrl(){
   try{key=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
   return key?API_BASE+'?key='+encodeURIComponent(key):API_BASE;
 }
+function addStoredKey(url){
+  var key='';
+  try{key=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
+  if(!key)return url;
+  try{
+    var u=new URL(url,window.location.href);
+    if(!u.searchParams.get('key'))u.searchParams.set('key',key);
+    return u.toString();
+  }catch(e){
+    return url+(url.indexOf('?')>=0?'&':'?')+'key='+encodeURIComponent(key);
+  }
+}
 function requestApiKey(){
   var key=window.prompt('后端已开启访问密钥，请输入 memory_tools 的 AUTH_KEY');
   if(!key)return false;
@@ -30,6 +42,12 @@ function requestApiKey(){
 function apiFetch(init){
   return fetch(apiUrl(),init).then(function(r){
     if(r.status===403&&requestApiKey())return fetch(apiUrl(),init);
+    return r;
+  });
+}
+function entityGraphFetch(){
+  return fetch(addStoredKey(ENTITY_GRAPH_URL)).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(addStoredKey(ENTITY_GRAPH_URL));
     return r;
   });
 }
@@ -328,7 +346,7 @@ function loadEntityGraph(showPanel){
   if(status)status.textContent='正在读取信息网...';
   if(nodes)nodes.innerHTML='<div class="empty-state small">加载中...</div>';
   if(rels)rels.innerHTML='';
-  fetch(ENTITY_GRAPH_URL).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
+  entityGraphFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
     if(!data||typeof data!=='object'||Array.isArray(data)||(!data.counts&&!data.top_nodes&&!data.recent_relations))throw new Error('Invalid graph data');
     graphLoaded=true;
     if(box)box.classList.remove('loading');
