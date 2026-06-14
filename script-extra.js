@@ -1,5 +1,5 @@
 (function(){
-  var THEME_PALETTE_VERSION='fresh-green-folio-v1';
+  var THEME_PALETTE_VERSION='fresh-green-folio-v2';
 
   function applyTheme(theme){
     var isDark=theme==='dark';
