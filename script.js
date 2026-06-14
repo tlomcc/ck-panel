@@ -75,6 +75,8 @@ var currentSort='time',currentSortDir='desc';
 var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1,offset:0,startOffset:0,openIdx:-1,pointerId:null};
 var entityPinchState={active:false,startDist:0,startZoom:1};
 var syncingCategories={};
+var categoryWriteVersions={},categoryWriteChains={};
+var EMPTY_CATEGORY_MARKER='[ck-panel-empty]';
 function parseEntries(raw){
   if(!raw||!raw.trim())return[];
   var blocks=raw.split(/\n---\n|\n---$/),entries=[];
@@ -1121,18 +1123,13 @@ function renderEntries(){
   updateSwitchCounts();
 }
 function quickPin(i){
-  if(syncingCategories[current]){toast('正在同步，请稍后');return}
-  var cat=current,next=cloneEntries(allData[cat].entries),entry=next[i];
+  var cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries),entry=next[i];
   if(!entry)return;
   entry.meta.pin=!entry.meta.pin;
-  toast('正在同步...');
-  writeCategoryEntries(cat,next).then(function(){
-    allData[cat].entries=next;
-    renderEntries();renderHomeInsights();updateStats();savePanelCache();
-    toast(entry.meta.pin?'已置顶':'已取消置顶');
-  }).catch(function(){
-    toast('同步失败，未改动');
-  });
+  var version=nextCategoryVersion(cat);
+  setCategoryEntries(cat,next);
+  toast((entry.meta.pin?'已置顶':'已取消置顶')+'，后台同步中');
+  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'同步失败，已回滚'});
 }
 function toggleExpand(i){
   if(touchState.moved){touchState.moved=false;return}
@@ -1223,8 +1220,7 @@ function showEdit(i){
 function hideEdit(){document.getElementById('editModal').classList.remove('show');editIdx=null}
 function saveEdit(){
   if(editIdx===null)return;
-  if(syncingCategories[current]){toast('正在同步，请稍后');return}
-  var cat=current,idx=editIdx,next=cloneEntries(allData[cat].entries),e=next[idx];
+  var cat=current,idx=editIdx,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries),e=next[idx];
   if(!e)return;
   var nc=document.getElementById('edit-content').value.trim();
   if(nc)e.content=nc;
@@ -1232,17 +1228,11 @@ function saveEdit(){
   e.meta.pin=document.getElementById('edit-pin').value==='1';
   e.meta.tags=document.getElementById('edit-tags').value.trim();
   e.meta.archived=document.getElementById('edit-archived').value==='1';
-  var btn=document.querySelector('#editModal .btn-blue');
-  if(btn){btn.disabled=true;btn.textContent='同步中...'}
-  toast('正在同步保存...');
-  writeCategoryEntries(cat,next).then(function(){
-    allData[cat].entries=next;
-    if(btn){btn.disabled=false;btn.textContent='保存'}
-    hideEdit();renderEntries();renderHomeInsights();updateStats();savePanelCache();toast('已保存');
-  }).catch(function(){
-    if(btn){btn.disabled=false;btn.textContent='保存'}
-    toast('保存失败，未改动');
-  });
+  var version=nextCategoryVersion(cat);
+  hideEdit();
+  setCategoryEntries(cat,next);
+  toast('已保存，后台同步中');
+  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'保存同步失败，已回滚'});
 }
 function showDelConfirm(i){
   suppressClickUntil=0;
@@ -1254,20 +1244,16 @@ function showDelConfirm(i){
 function cancelDel(){document.getElementById('confirmDel').classList.remove('show');delIdx=null;resetSwipes()}
 function confirmDel(){
   if(delIdx===null||!allData[current]||!allData[current].entries[delIdx]){cancelDel();return}
-  var idx=delIdx,cat=current,next=allData[cat].entries.slice();
+  var idx=delIdx,cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries);
   next.splice(idx,1);
   var btn=document.querySelector('#confirmDel .btn-red');
-  if(btn){btn.disabled=true;btn.textContent='同步中...'}
-  toast('正在同步删除...');
-  writeCategoryEntries(cat,next).then(function(){
-    allData[cat].entries=next;
-    document.getElementById('confirmDel').classList.remove('show');delIdx=null;
-    if(btn){btn.disabled=false;btn.textContent='删除'}
-    resetSwipes();renderEntries();updateStats();renderHomeInsights();savePanelCache();toast('已删除');
-  }).catch(function(){
-    if(btn){btn.disabled=false;btn.textContent='删除'}
-    toast('删除失败，未改动');
-  });
+  if(btn){btn.disabled=false;btn.textContent='删除'}
+  document.getElementById('confirmDel').classList.remove('show');delIdx=null;
+  resetSwipes();
+  var version=nextCategoryVersion(cat);
+  setCategoryEntries(cat,next);
+  toast('已删除，后台同步中');
+  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'删除同步失败，已恢复'});
 }
 function closeSwipe(i){
   var el=document.getElementById('entry-'+i);
@@ -1321,20 +1307,15 @@ function doSelectAction(){
   }else{
     var idxs=Array.from(selected).sort(function(a,b){return b-a});
     if(!confirm('确定删除选中的 '+idxs.length+' 条记忆？'))return;
-    var cat=current,next=allData[cat].entries.slice();
+    var cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries);
     idxs.forEach(function(i){next.splice(i,1)});
     var btn=document.getElementById('select-action-btn');
-    if(btn){btn.disabled=true;btn.textContent='同步中...'}
-    toast('正在同步删除...');
-    writeCategoryEntries(cat,next).then(function(){
-      allData[cat].entries=next;
-      selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');
-      if(btn)btn.disabled=false;
-      renderEntries();updateStats();renderHomeInsights();savePanelCache();toast('已删除 '+idxs.length+' 条');
-    }).catch(function(){
-      if(btn){btn.disabled=false;btn.textContent='删除 ('+selected.size+')'}
-      toast('删除失败，未改动');
-    });
+    if(btn)btn.disabled=false;
+    selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');
+    var version=nextCategoryVersion(cat);
+    setCategoryEntries(cat,next);
+    toast('已删除 '+idxs.length+' 条，后台同步中');
+    queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'批量删除同步失败，已恢复'});
     return;
   }
 }
@@ -1343,54 +1324,78 @@ function hideRename(){document.getElementById('renameModal').classList.remove('s
 function doRename(){
   var nn=document.getElementById('rename-input').value.trim();
   if(!nn||nn===current){hideRename();return}
-  var content=allData[current].entries.length?serializeEntries(allData[current].entries):'';
-  rpc('write_memory',{category:nn,content:content}).then(function(){
-    rpc('write_memory',{category:current,content:''});
-    allData[nn]={entries:allData[current].entries};delete allData[current];current=nn;
-    hideRename();document.getElementById('d-title').textContent=nn;document.getElementById('d-sub').textContent=countInfo();renderAll();savePanelCache();toast('已重命名');
+  if(allData[nn]){toast('分类已存在');return}
+  var old=current,entries=cloneEntries(allData[old].entries),backup=allData[old],version=nextCategoryVersion(nn);
+  allData[nn]={entries:entries};delete allData[old];current=nn;
+  hideRename();document.getElementById('d-title').textContent=nn;document.getElementById('d-sub').textContent=countInfo();renderAll();savePanelCache();toast('已重命名，后台同步中');
+  syncingCategories[nn]=(syncingCategories[nn]||0)+1;
+  writeCategoryEntries(nn,entries).then(function(){
+    return rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+old+'.md'});
+  }).then(function(){
+    toast('重命名已同步');
+  }).catch(function(){
+    if(categoryWriteVersions[nn]===version){
+      delete allData[nn];allData[old]=backup;current=old;
+      document.getElementById('d-title').textContent=old;document.getElementById('d-sub').textContent=countInfo();
+      renderAll();renderEntries();savePanelCache();toast('重命名同步失败，已恢复');
+    }else{
+      toast('重命名后台同步失败，请刷新确认');
+    }
+  }).then(function(){
+    syncingCategories[nn]=Math.max(0,(syncingCategories[nn]||1)-1);
+    if(!syncingCategories[nn])delete syncingCategories[nn];
   });
 }
 function delCategory(){
   document.getElementById('menu-popup').classList.remove('show');
   if(!confirm('确定删除分类「'+current+'」？'))return;
-  toast('正在同步删除分类...');
-  rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+current+'.md'}).then(function(){
-    delete allData[current];savePanelCache();toast('已删除');goMemory();
+  var cat=current,backup=allData[cat];
+  delete allData[cat];savePanelCache();toast('已删除分类，后台同步中');goMemory();
+  rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+cat+'.md'}).then(function(){
+    toast('分类已同步删除');
   }).catch(function(){
-    toast('删除失败，未改动');
+    allData[cat]=backup;savePanelCache();renderAll();toast('分类删除失败，已恢复');
   });
 }
 function addEntry(){
   var input=document.getElementById('add-input'),text=input.value.trim();if(!text)return;
-  if(syncingCategories[current]){toast('正在同步，请稍后');return}
   var imp=parseInt(document.getElementById('add-imp').value),tags=document.getElementById('add-tags').value.trim();
   var today=dateKey(new Date());
-  var cat=current,next=cloneEntries(allData[cat].entries);
+  var cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries);
   next.push({meta:{imp:imp,time:today,last:today,tags:tags,pin:false,resolved:false,archived:false},content:text});
-  var btn=document.querySelector('#page-detail .add-area .btn-blue');
-  if(btn){btn.disabled=true;btn.textContent='同步中...'}
-  toast('正在同步添加...');
-  writeCategoryEntries(cat,next).then(function(){
-    singleEntryIdx=null;
-    allData[cat].entries=next;
-    input.value='';document.getElementById('add-tags').value='';document.getElementById('char-count').textContent='0 字';
-    if(btn){btn.disabled=false;btn.textContent='添加'}
-    renderEntries();updateStats();renderHomeInsights();savePanelCache();
-    var wraps=document.querySelectorAll('.entry-wrap');if(wraps.length)wraps[wraps.length-1].classList.add('new-entry');
-    toast('已添加');
-  }).catch(function(){
-    if(btn){btn.disabled=false;btn.textContent='添加'}
-    toast('添加失败，未改动');
-  });
+  singleEntryIdx=null;
+  input.value='';document.getElementById('add-tags').value='';document.getElementById('char-count').textContent='0 字';
+  var version=nextCategoryVersion(cat);
+  setCategoryEntries(cat,next);
+  var wraps=document.querySelectorAll('.entry-wrap');if(wraps.length)wraps[wraps.length-1].classList.add('new-entry');
+  toast('已添加，后台同步中');
+  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'添加同步失败，已回滚'});
 }
 function updateCount(){document.getElementById('char-count').textContent=document.getElementById('add-input').value.length+' 字'}
 function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
 function cloneEntries(entries){
   return JSON.parse(JSON.stringify(entries||[]));
 }
+function nextCategoryVersion(category){
+  categoryWriteVersions[category]=(categoryWriteVersions[category]||0)+1;
+  return categoryWriteVersions[category];
+}
+function renderCategoryState(category){
+  if(current===category&&document.getElementById('page-detail').classList.contains('active')){
+    updateSwitchCounts();
+    renderEntries();
+  }
+  updateStats();
+  renderHomeInsights();
+  savePanelCache();
+}
+function setCategoryEntries(category,entries){
+  if(!allData[category])allData[category]={entries:[]};
+  allData[category].entries=entries;
+  renderCategoryState(category);
+}
 function writeCategoryEntries(category,entries){
   var content=serializeEntries(entries);
-  syncingCategories[category]=(syncingCategories[category]||0)+1;
   return rpcStrict('write_memory',{category:category,content:content}).then(function(){
     function verify(tries){
       return rpcStrict('read_memory',{category:category}).then(function(raw){
@@ -1401,15 +1406,30 @@ function writeCategoryEntries(category,entries){
       });
     }
     return verify(3);
-  }).then(function(raw){
-    syncingCategories[category]=Math.max(0,(syncingCategories[category]||1)-1);
-    if(!syncingCategories[category])delete syncingCategories[category];
-    return raw;
-  }).catch(function(err){
-    syncingCategories[category]=Math.max(0,(syncingCategories[category]||1)-1);
-    if(!syncingCategories[category])delete syncingCategories[category];
-    throw err;
   });
+}
+function queueCategoryWrite(category,entries,opts){
+  opts=opts||{};
+  var snapshot=cloneEntries(entries);
+  var version=opts.version||categoryWriteVersions[category]||0;
+  syncingCategories[category]=(syncingCategories[category]||0)+1;
+  var prior=categoryWriteChains[category]||Promise.resolve();
+  var job=prior.catch(function(){}).then(function(){return writeCategoryEntries(category,snapshot)});
+  categoryWriteChains[category]=job;
+  job.then(function(){
+    if(opts.successMsg&&categoryWriteVersions[category]===version)toast(opts.successMsg);
+  }).catch(function(){
+    if(opts.rollback&&categoryWriteVersions[category]===version){
+      setCategoryEntries(category,cloneEntries(opts.rollback));
+      toast(opts.failMsg||'同步失败，已回滚');
+    }else{
+      toast(opts.failMsgNoRollback||'后台同步失败，请刷新确认');
+    }
+  }).then(function(){
+    syncingCategories[category]=Math.max(0,(syncingCategories[category]||1)-1);
+    if(!syncingCategories[category])delete syncingCategories[category];
+  });
+  return job;
 }
 function saveCurrentCategory(){
   savePanelCache();
@@ -1419,6 +1439,7 @@ function saveCurrentCategory(){
   });
 }
 function serializeEntries(entries){
+  if(!entries||!entries.length)return EMPTY_CATEGORY_MARKER;
   return entries.map(function(e){
     var m=e.meta,p=[];
     if(m.pin)p.push('[pin]');if(m.resolved)p.push('[resolved]');if(m.archived)p.push('[archived]');
@@ -1430,16 +1451,14 @@ function showModal(){document.getElementById('newModal').classList.add('show');d
 function hideModal(){document.getElementById('newModal').classList.remove('show');document.getElementById('new-name').value=''}
 function createCat(){
   var name=document.getElementById('new-name').value.trim();if(!name)return;
-  if(syncingCategories[name]){toast('正在同步，请稍后');return}
-  var btn=document.querySelector('#newModal .btn-blue');
-  if(btn){btn.disabled=true;btn.textContent='同步中...'}
-  toast('正在创建...');
-  writeCategoryEntries(name,[]).then(function(){
-    if(btn){btn.disabled=false;btn.textContent='创建'}
-    allData[name]={entries:[]};hideModal();toast('已创建');renderGrid();updateStats();renderHomeInsights();savePanelCache();openDetail(name);
-  }).catch(function(){
-    if(btn){btn.disabled=false;btn.textContent='创建'}
-    toast('创建失败');
+  if(allData[name]){hideModal();openDetail(name);return}
+  allData[name]={entries:[]};hideModal();renderGrid();updateStats();renderHomeInsights();savePanelCache();openDetail(name);
+  var version=nextCategoryVersion(name);
+  toast('已创建，后台同步中');
+  queueCategoryWrite(name,[],{version:version,failMsgNoRollback:'分类创建同步失败'}).catch(function(){
+    if(categoryWriteVersions[name]===version&&allData[name]&&!(allData[name].entries||[]).length){
+      delete allData[name];savePanelCache();renderGrid();goMemory();
+    }
   });
 }
 function goMemory(){
