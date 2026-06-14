@@ -2859,3 +2859,49 @@ body.dark .insight-mini-list .mini-text{
     min-height:110px;
   }
 }
+
+/* Search tag compactness and persistent highlight */
+#tab-search .tags-bar:not(.expanded){
+  max-height:58px!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:6px!important;
+}
+
+#tab-search .tag-btn{
+  min-height:26px!important;
+  height:26px;
+  padding:0 8px!important;
+  font-size:10px!important;
+  line-height:1;
+}
+
+#tab-search .tags-bar.expanded{
+  max-height:214px!important;
+}
+
+#tab-search .tag-panel{
+  padding:9px!important;
+}
+
+.highlight{
+  background:rgba(var(--ck-accent-rgb),.28)!important;
+  color:var(--ck-text)!important;
+  border:1px solid rgba(var(--ck-accent-rgb),.28);
+  border-radius:4px;
+  padding:0 3px;
+  font-weight:850;
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+}
+
+.entry-text .highlight{
+  background:rgba(var(--ck-accent-rgb),.2)!important;
+  border-color:rgba(var(--ck-accent-rgb),.3);
+}
+
+@media (min-width:768px){
+  #tab-search .tags-bar:not(.expanded){
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    max-height:58px!important;
+  }
+}
