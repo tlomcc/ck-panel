@@ -2905,3 +2905,48 @@ body.dark .insight-mini-list .mini-text{
     max-height:58px!important;
   }
 }
+
+/* PWA install entry */
+.header-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-shrink:0;
+}
+
+.install-app-btn{
+  display:none;
+  height:42px;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(var(--ck-accent-rgb),.34);
+  border-radius:8px;
+  background:var(--ck-accent-soft);
+  color:var(--ck-accent);
+  padding:0 14px;
+  font-size:12px;
+  font-weight:850;
+  font-family:inherit;
+  cursor:pointer;
+  box-shadow:var(--ck-shadow-soft);
+}
+
+.install-app-btn.show{
+  display:inline-flex;
+}
+
+.install-app-btn:active{
+  transform:scale(.96);
+}
+
+body.dark .install-app-btn{
+  background:rgba(var(--ck-accent-rgb),.16);
+}
+
+@media (max-width:420px){
+  .install-app-btn{
+    width:42px;
+    padding:0;
+    font-size:11px;
+  }
+}

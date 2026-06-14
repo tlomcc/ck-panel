@@ -1,0 +1,73 @@
+const CACHE_NAME = 'ck-panel-shell-v1';
+const SHELL_ASSETS = [
+  './',
+  './index.html',
+  './style.css',
+  './script.js',
+  './script-extra.js',
+  './pwa.js',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png'
+];
+
+self.addEventListener('install', function(event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.addAll(SHELL_ASSETS);
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', function(event) {
+  event.waitUntil(
+    caches.keys().then(function(keys) {
+      return Promise.all(keys.map(function(key) {
+        if (key !== CACHE_NAME) return caches.delete(key);
+        return null;
+      }));
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', function(event) {
+  var request = event.request;
+  var url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).then(function(response) {
+        var copy = response.clone();
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put('./index.html', copy);
+        });
+        return response;
+      }).catch(function() {
+        return caches.match('./index.html');
+      })
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(request).then(function(response) {
+      if (!response || response.status !== 200) return response;
+      var copy = response.clone();
+      caches.open(CACHE_NAME).then(function(cache) {
+        cache.put(request, copy);
+      });
+      return response;
+    }).catch(function() {
+      return caches.match(request).then(function(cached) {
+        if (cached) return cached;
+        return Response.error();
+      });
+    })
+  );
+});

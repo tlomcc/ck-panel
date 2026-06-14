@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CK记忆">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>CK · 此刻</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,7 +18,10 @@
 <div class="page active" id="page-memory">
 <header class="app-header">
 <div class="brand-lockup"><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
+<div class="header-actions">
+<button class="install-app-btn" id="install-app-btn" type="button">安装</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
+</div>
 </header>
 <nav class="top-tabs" aria-label="面板分页">
 <button class="top-tab active" data-tab="overview" onclick="switchPanelTab('overview')">总览</button>
@@ -87,5 +97,6 @@
 <div class="toast" id="toast"></div>
 <script src="script.js"></script>
 <script src="script-extra.js"></script>
+<script src="pwa.js"></script>
 </body>
 </html>
