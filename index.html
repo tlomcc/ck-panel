@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<meta name="theme-color" content="#111827">
+<meta name="theme-color" content="#f8f3e8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="CK记忆">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -86,7 +86,7 @@
 <div class="menu-popup" id="menu-popup"><div class="menu-popup-item" onclick="startSelect('export')">批量导出</div><div class="menu-popup-item" onclick="startSelect('delete')">批量删除</div><div class="menu-popup-item" onclick="showRename()">重命名</div><div class="menu-popup-item danger" onclick="delCategory()">删除分类</div></div>
 <div class="switch-bar"><div class="switch-item active" onclick="switchView('active')">活跃 <span id="active-count"></span></div><div class="switch-item" onclick="switchView('archived')">归档 <span id="archived-count"></span></div></div>
 <div class="sort-bar"><button class="sort-btn active" data-sort="time" onclick="switchSort('time')">按时间</button><button class="sort-btn" data-sort="weight" onclick="switchSort('weight')">按权重</button></div>
-<div class="select-bar" id="select-bar"><div style="display:flex;gap:12px;align-items:center"><span style="font-size:12px;color:#43a047;cursor:pointer;font-weight:600" onclick="selectAll()">全选</span><span style="font-size:12px;color:#8c939e;cursor:pointer" onclick="cancelSelect()">取消</span></div><button class="btn btn-sm" id="select-action-btn" onclick="doSelectAction()"></button></div>
+<div class="select-bar" id="select-bar"><div style="display:flex;gap:12px;align-items:center"><span style="font-size:12px;color:#58bfa5;cursor:pointer;font-weight:600" onclick="selectAll()">全选</span><span style="font-size:12px;color:#8c939e;cursor:pointer" onclick="cancelSelect()">取消</span></div><button class="btn btn-sm" id="select-action-btn" onclick="doSelectAction()"></button></div>
 <div class="entry-list" id="d-entries"></div>
 <div class="add-area"><textarea id="add-input" placeholder="写一条新记忆..." oninput="updateCount()"></textarea><div class="add-area-foot"><span class="add-area-count" id="char-count">0 字</span><div class="add-area-options"><select id="add-imp"><option value="5">重要性:5</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5" selected>5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select><input id="add-tags" placeholder="标签" style="width:80px;padding:4px 8px;border:1px solid #e4e8ed;border-radius:6px;font-size:11px" /><button class="btn btn-blue btn-sm" onclick="addEntry()">添加</button></div></div></div>
 </div>

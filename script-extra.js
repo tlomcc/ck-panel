@@ -1,4 +1,6 @@
 (function(){
+  var THEME_PALETTE_VERSION='mint-cream-v1';
+
   function applyTheme(theme){
     var isDark=theme==='dark';
     document.body.classList.toggle('dark',isDark);
@@ -15,5 +17,10 @@
     applyTheme(next);
   };
 
-  applyTheme(localStorage.getItem('theme')||'dark');
+  if(localStorage.getItem('themePalette')!==THEME_PALETTE_VERSION){
+    localStorage.setItem('theme','light');
+    localStorage.setItem('themePalette',THEME_PALETTE_VERSION);
+  }
+
+  applyTheme(localStorage.getItem('theme')||'light');
 })();
