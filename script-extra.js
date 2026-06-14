@@ -1,16 +1,19 @@
-function toggleTheme(){
-  document.body.classList.toggle('dark');
-  var btn=document.querySelector('.theme-toggle');
-  if(document.body.classList.contains('dark')){
-    btn.textContent='☀️';
-    localStorage.setItem('theme','dark');
-  }else{
-    btn.textContent='🌙';
-    localStorage.setItem('theme','light');
+(function(){
+  function applyTheme(theme){
+    var isDark=theme==='dark';
+    document.body.classList.toggle('dark',isDark);
+    var btn=document.querySelector('.theme-toggle');
+    if(btn){
+      btn.textContent=isDark?'☀️':'🌙';
+      btn.setAttribute('aria-label',isDark?'切换浅色模式':'切换深色模式');
+    }
   }
-}
-if(localStorage.getItem('theme')==='dark'){
-  document.body.classList.add('dark');
-  var btn=document.querySelector('.theme-toggle');
-  if(btn)btn.textContent='☀️';
-}
+
+  window.toggleTheme=function(){
+    var next=document.body.classList.contains('dark')?'light':'dark';
+    localStorage.setItem('theme',next);
+    applyTheme(next);
+  };
+
+  applyTheme(localStorage.getItem('theme')||'dark');
+})();
