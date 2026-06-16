@@ -1,4 +1,4 @@
-var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run';
+var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/mcp';
 var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
@@ -11,7 +11,7 @@ try{
     localStorage.removeItem('entityGraphUrl');
   }
 }catch(e){}
-var PANEL_CACHE_KEY='ckPanelCacheV2';
+var PANEL_CACHE_KEY='ckPanelCacheV3';
 function initApiKeyFromUrl(){
   try{
     var params=new URLSearchParams(window.location.search||'');
@@ -161,6 +161,7 @@ function init(){
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
   loadAll();
+  startMemoryRealtime();
 }
 function setLoading(pct,msg){
   var inner=document.getElementById('loading-inner');
@@ -202,7 +203,7 @@ function loadPanelCache(){
     var raw=localStorage.getItem(PANEL_CACHE_KEY);
     if(!raw)return false;
     var cached=JSON.parse(raw);
-    if(!cached||cached.version!==2||!cached.data)return false;
+    if(!cached||cached.version!==3||!cached.data)return false;
     allData=cached.data;
     rebuildTags();
     renderAll();
@@ -216,7 +217,7 @@ function loadPanelCache(){
 }
 function savePanelCache(){
   try{
-    localStorage.setItem(PANEL_CACHE_KEY,JSON.stringify({version:2,ts:Date.now(),data:allData}));
+    localStorage.setItem(PANEL_CACHE_KEY,JSON.stringify({version:3,ts:Date.now(),data:allData}));
   }catch(e){
     try{localStorage.removeItem(PANEL_CACHE_KEY)}catch(_e){}
   }
@@ -1743,6 +1744,133 @@ function switchPanelTab(tab,opts) {
   }else{
     window.scrollTo(0,0);
   }
+}
+var memoryRealtimeTimer=null;
+var memoryLoadInFlight=false;
+var MEMORY_SYNC_INTERVAL_MS=45000;
+function hasPendingCategoryWrites(){
+  return Object.keys(syncingCategories||{}).some(function(k){return (syncingCategories[k]||0)>0});
+}
+function normalizeMemoryCategories(text){
+  var seen={},out=[];
+  String(text||'').split('\n').map(function(x){return x.trim()}).filter(Boolean).forEach(function(cat){
+    if(cat==='Empty'||seen[cat])return;
+    seen[cat]=true;
+    out.push(cat);
+  });
+  return out;
+}
+function waitRetryDelay(attempt){
+  return wait(Math.min(1600,250*Math.pow(2,attempt||0)));
+}
+function rpcStrictRetry(tool,args,attempts){
+  attempts=attempts||3;
+  var run=function(n){
+    return rpcStrict(tool,args).catch(function(err){
+      if(n>=attempts-1)throw err;
+      return waitRetryDelay(n).then(function(){return run(n+1)});
+    });
+  };
+  return run(0);
+}
+function readMemoryCategoryWithRetry(category){
+  return rpcStrictRetry('read_memory',{category:category},3).then(function(raw){
+    return {category:category,entries:parseEntries(raw),ok:true};
+  }).catch(function(err){
+    return {category:category,entries:null,ok:false,error:err};
+  });
+}
+function readMemoryCategoriesLimited(cats,onProgress){
+  var limit=3,index=0,done=0,failed=0,results=[];
+  return new Promise(function(resolve){
+    function launch(){
+      while(index<cats.length&&limit>0){
+        (function(cat){
+          index++;limit--;
+          readMemoryCategoryWithRetry(cat).then(function(result){
+            results.push(result);
+            done++;
+            if(!result.ok)failed++;
+            if(onProgress)onProgress(done,cats.length,failed,result);
+          }).then(function(){
+            limit++;
+            if(done>=cats.length)resolve({results:results,failed:failed});
+            else launch();
+          });
+        })(cats[index]);
+      }
+      if(!cats.length)resolve({results:[],failed:0});
+    }
+    launch();
+  });
+}
+function startMemoryRealtime(){
+  stopMemoryRealtime();
+  memoryRealtimeTimer=setInterval(function(){
+    if(hasPendingCategoryWrites())return;
+    loadAll({silent:true,skipCache:true,realtime:true});
+  },MEMORY_SYNC_INTERVAL_MS);
+}
+function stopMemoryRealtime(){
+  if(memoryRealtimeTimer){
+    clearInterval(memoryRealtimeTimer);
+    memoryRealtimeTimer=null;
+  }
+}
+function loadAll(opts){
+  opts=opts||{};
+  if(memoryLoadInFlight)return Promise.resolve(false);
+  memoryLoadInFlight=true;
+  var hadCache=false;
+  if(!opts.skipCache)hadCache=loadPanelCache();
+  if(!hadCache&&!opts.silent)setLoading(4,'正在读取仓库分类...');
+  return rpcStrictRetry('list_memories',{},3).then(function(t){
+    var cats=normalizeMemoryCategories(t);
+    if(!cats.length){
+      allData={};allTags=new Set();renderAll();savePanelCache();
+      setSyncStatus('仓库暂无记忆');
+      if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(160)}
+      return true;
+    }
+    var previous=allData||{},next={};
+    cats.forEach(function(c){next[c]=previous[c]||{entries:[]}});
+    allData=next;rebuildTags();renderAll();
+    setSyncStatus((opts.realtime?'实时同步中 ':'正在同步 ')+cats.length+' 个分类');
+    if(!hadCache&&!opts.silent)hideLoadingSoon(180);
+    return readMemoryCategoriesLimited(cats,function(loaded,total,failed,result){
+      if(result.ok&&!syncingCategories[result.category]){
+        allData[result.category]={entries:result.entries};
+      }
+      if(!opts.silent)setLoading(Math.round(loaded/total*100),'同步仓库 '+loaded+'/'+total);
+      if(result.ok&&current===result.category&&document.getElementById('page-detail').classList.contains('active')){
+        updateSwitchCounts();renderEntries();
+      }
+      if(loaded===1||loaded%3===0||loaded===total){
+        rebuildTags();renderAll();
+      }
+    }).then(function(summary){
+      rebuildTags();renderAll();savePanelCache();
+      var total=cats.length,ok=total-summary.failed;
+      setSyncStatus(summary.failed?'已同步 '+ok+'/'+total+'，失败项保留上次内容':'已和 GitHub 仓库同步');
+      if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(120)}
+      return summary.failed===0;
+    });
+  }).catch(function(){
+    setSyncStatus(hadCache?'仓库暂时没连上，显示本地缓存':'仓库暂时没连上');
+    if(!hadCache){
+      allData={};allTags=new Set();renderAll();
+      var grid=document.getElementById('cat-grid');
+      if(grid)grid.innerHTML='<div class="empty-state">加载失败，请稍后刷新</div>';
+    }
+    if(!opts.silent)hideLoadingSoon(200);
+    return false;
+  }).then(function(result){
+    memoryLoadInFlight=false;
+    return result;
+  },function(err){
+    memoryLoadInFlight=false;
+    throw err;
+  });
 }
 function updateSortButtons(){
   document.querySelectorAll('.sort-btn').forEach(function(el){
