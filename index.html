@@ -28,6 +28,7 @@
 <button class="top-tab" data-tab="categories" onclick="switchPanelTab('categories')">分类</button>
 <button class="top-tab" data-tab="search" onclick="switchPanelTab('search')">搜索</button>
 <button class="top-tab" data-tab="graph" onclick="switchPanelTab('graph')">信息网</button>
+<button class="top-tab" data-tab="status" onclick="switchPanelTab('status')">状态</button>
 </nav>
 
 <section class="panel-tab active" id="tab-overview">
@@ -69,19 +70,23 @@
 
 <section class="panel-tab" id="tab-graph">
 <div class="graph-hero">
-<div><h2>信息网</h2><p>先按节点、关系、孤立进入分类，再查看对应明细。</p></div>
-<div class="graph-actions"><button class="btn btn-outline btn-sm" onclick="loadEntityGraph(true,true)">刷新读取</button></div>
+<div><h2>关系网 · 小档案</h2><p id="entity-updated">进入本页自动读取“人和事”的档案。</p></div>
+<div class="graph-actions"><button class="btn btn-outline btn-sm" onclick="loadEntityGraph(true,true)">刷新</button></div>
 </div>
-<div class="entity-console" id="entity-console">
-<div class="entity-head"><div><strong>关系网分类</strong><small id="entity-updated"></small></div></div>
-<div class="entity-status" id="graph-status">进入本页后会自动读取。</div>
-<div class="entity-stats" id="entity-stats"></div>
-<div class="entity-browser">
-<div class="entity-list-panel"><div class="entity-section-head"><div class="console-card-title" id="entity-list-title">面板预览</div><small>点击一条查看完整内容</small></div><div id="entity-list" class="mini-list entity-list"></div></div>
-<div class="entity-detail-panel"><div class="entity-section-head"><div class="console-card-title">完整明细</div><small id="entity-detail-meta"></small></div><div id="entity-detail" class="entity-detail"><div class="empty-state small">先点一个节点或关系</div></div></div>
+<div class="eg-statbar" id="entity-stats"></div>
+<div class="eg-toolbar">
+<div class="eg-search"><span class="eg-search-icon">🔍</span><input id="eg-search" placeholder="搜名字、画像、性格、事件…" oninput="onEntitySearch(this.value)" autocomplete="off"><button class="eg-search-clear" id="eg-search-clear" onclick="clearEntitySearch()">✕</button></div>
+<div class="eg-filter-row" id="eg-type-filters"></div>
+<div class="eg-sort-row"><span class="eg-result-count" id="eg-count"></span><label class="eg-sort-label">排序<select id="eg-sort" onchange="onEntitySort(this.value)"><option value="importance">重要性</option><option value="recent">最近</option><option value="mentions">提及最多</option><option value="name">名称</option></select></label></div>
 </div>
-</div>
+<div class="eg-status" id="graph-status">进入本页后会自动读取。</div>
+<div class="eg-cards" id="eg-cards"><div class="empty-state small">加载中...</div></div>
 </section>
+<section class="panel-tab" id="tab-status">
+<div class="tab-head"><div><h2>每日状态</h2><p id="status-sub">前一天有没有整理好，一眼就知道</p></div><button class="btn btn-outline btn-sm" onclick="loadDailyStatus(true)">刷新</button></div>
+<div id="daily-status-body"><div class="empty-state">进入本页自动读取...</div></div>
+</section>
+<div class="eg-detail-sheet" id="eg-detail-sheet"><div class="eg-detail-mask" onclick="closeEntityDetail()"></div><div class="eg-detail-panel"><button class="eg-detail-close" onclick="closeEntityDetail()" aria-label="关闭">✕</button><div class="eg-detail-body" id="eg-detail-body"></div></div></div>
 </div>
 <div class="page" id="page-detail" style="position:relative">
 <button class="back-btn" onclick="goMemory()">← 返回</button>
