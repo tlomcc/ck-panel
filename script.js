@@ -1627,11 +1627,11 @@ function loadAll(opts){
       if(result.ok&&!syncingCategories[result.category]){
         allData[result.category]={entries:result.entries};
       }
-      if(!opts.silent)setLoading(Math.round(loaded/total*100),'同步仓库 '+loaded+'/'+total);
+      if(!opts.silent&&!hadCache)setLoading(Math.round(loaded/total*100),'同步仓库 '+loaded+'/'+total);
       if(result.ok&&current===result.category&&document.getElementById('page-detail').classList.contains('active')){
         updateSwitchCounts();renderEntries();
       }
-      if(loaded===1||loaded%3===0||loaded===total){
+      if(loaded===total||(!hadCache&&(loaded===1||loaded%3===0))){
         rebuildTags();renderAll();
       }
     }).then(function(summary){

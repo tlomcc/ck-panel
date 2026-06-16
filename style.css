@@ -612,8 +612,8 @@ body{background:#f6f7f2;color:#20242b}
 .brand-lockup h1{font-size:20px;line-height:1.2;letter-spacing:0;color:#20242b}
 .brand-lockup p{font-size:11px;color:#7b828c;margin-top:3px}
 .icon-btn{width:38px;height:38px;border:1px solid #dfe3e8;background:#fff;border-radius:10px;font-size:16px;cursor:pointer}
-.top-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#e9ede7;border:1px solid #dfe5df;border-radius:10px;padding:4px;margin-bottom:16px;position:sticky;top:0;z-index:40}
-.top-tab{border:none;background:transparent;color:#6f7780;border-radius:7px;padding:10px 6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.top-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;background:#e9ede7;border:1px solid #dfe5df;border-radius:10px;padding:4px;margin-bottom:16px;position:sticky;top:0;z-index:40}
+.top-tab{border:none;background:transparent;color:#6f7780;border-radius:7px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top-tab.active{background:#fff;color:#20242b;box-shadow:0 1px 4px rgba(20,24,28,.06)}
 .panel-tab{display:none}
 .panel-tab.active{display:block}
@@ -4491,3 +4491,13 @@ body.dark .ds-meta{background:#1b1f28;border-color:#2b303c}
 body.dark .ds-meta-row{border-color:#262b35}
 body.dark .ds-meta-row>b{color:#e9edf2}
 body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
+
+/* ===== 交互细节·让点按更跟手、过渡更顺 ===== */
+.top-tab{transition:background .16s ease,color .16s ease}
+.btn{transition:transform .1s ease,filter .15s ease}
+.btn:active{transform:scale(.96)}
+.mini-item,.today-roll-item,.eg-card,.ds-tile,.eg-chip,.search-filter,.sort-btn{transition:transform .12s ease,box-shadow .15s ease,background .15s ease,border-color .15s ease}
+.mini-item:active,.today-roll-item:active{transform:scale(.985)}
+.loading-bar-inner{transition:width .3s ease}
+/* 列表底部多留白，最后一条不被底部输入区盖住 */
+#d-entries{padding-bottom:14px}
