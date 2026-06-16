@@ -834,6 +834,150 @@ function renderEntityDetail(data,type,key){
 function rawEntityBlock(obj){
   return '<details class="entity-raw"><summary>结构原文</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>';
 }
+function entityTypeLabel(type){
+  var map={person:'人',event:'事',place:'地点',thing:'物品/作品',mood:'情绪',topic:'主题'};
+  return map[String(type||'').toLowerCase()]||String(type||'节点');
+}
+function entityFactLabel(key){
+  var map={
+    relation_to_caicai:'关系',closeness:'亲密度',role_tags:'身份',personality:'性格',
+    likes:'喜欢',dislikes:'雷区',habits:'习惯',key_dates:'重要日期',status:'近况',
+    home_location:'常驻地',interaction_notes:'相处要点',
+    when:'时间',when_precision:'时间精度',participants:'当事人',places:'地点',
+    trigger:'起因',process:'经过',outcome:'结果',emotion_impact:'情绪影响',
+    significance:'意义',follow_up:'后续',desc:'说明'
+  };
+  return map[key]||key;
+}
+function entityFactText(value){
+  if(value===null||value===undefined)return '';
+  if(Array.isArray(value)){
+    return value.map(function(item){
+      if(item&&typeof item==='object'){
+        var label=item.label||item.name||'';
+        var date=item.date||item.value||'';
+        return (label&&date)?label+' '+date:(label||date||JSON.stringify(item));
+      }
+      return String(item);
+    }).filter(Boolean).join('、');
+  }
+  if(typeof value==='object')return JSON.stringify(value);
+  return String(value);
+}
+function entityFactsList(facts){
+  if(!facts||typeof facts!=='object'||Array.isArray(facts))return [];
+  var preferred=['relation_to_caicai','closeness','role_tags','personality','likes','dislikes','habits','home_location','key_dates','status','interaction_notes','when','when_precision','participants','places','trigger','process','outcome','emotion_impact','significance','follow_up','desc'];
+  var keys=Object.keys(facts).sort(function(a,b){
+    var ai=preferred.indexOf(a),bi=preferred.indexOf(b);
+    if(ai<0)ai=999;if(bi<0)bi=999;
+    return ai===bi?a.localeCompare(b):ai-bi;
+  });
+  return keys.map(function(key){return {key:key,label:entityFactLabel(key),text:entityFactText(facts[key])}}).filter(function(row){return row.text});
+}
+function renderEntityFacts(facts){
+  var rows=entityFactsList(facts);
+  if(!rows.length)return '';
+  return '<div class="entity-detail-block"><b>结构化事实</b><div class="entity-facts">'+rows.map(function(row){
+    return '<div class="entity-fact"><span>'+esc(row.label)+'</span><p>'+esc(row.text)+'</p></div>';
+  }).join('')+'</div></div>';
+}
+function graphNodePreview(n){
+  if(!n)return '';
+  var profile=String(n.profile||'').trim();
+  if(profile)return profile;
+  var factRows=entityFactsList(n.facts);
+  if(factRows.length)return factRows.slice(0,3).map(function(row){return row.label+'：'+row.text}).join('；');
+  return String(n.summary||'').trim();
+}
+function entityGraphCoverage(data){
+  var nodes=(data&&data.top_nodes)||[];
+  var facts=0,profiles=0,typeCounts={};
+  nodes.forEach(function(n){
+    if(graphNodePreview(n))profiles++;
+    if(entityFactsList(n&&n.facts).length)facts++;
+    var t=String((n&&n.type)||'').toLowerCase()||'node';
+    typeCounts[t]=(typeCounts[t]||0)+1;
+  });
+  return {nodes:nodes.length,profiles:profiles,facts:facts,typeCounts:typeCounts};
+}
+function renderEntitySourceRefs(refs){
+  if(!Array.isArray(refs)||!refs.length)return '';
+  return '<div class="entity-detail-block"><b>来源</b>'+refs.slice(-5).reverse().map(function(ref){
+    var bits=[ref.date,ref.path].filter(Boolean).join(' · ');
+    var body=ref.quote||ref.summary||'';
+    return '<p><strong>'+esc(bits||'source')+'</strong>'+(body?'：'+esc(body):'')+'</p>';
+  }).join('')+'</div>';
+}
+function renderEntityGraph(data){
+  var stats=document.getElementById('entity-stats');
+  var updated=document.getElementById('entity-updated');
+  var status=document.getElementById('graph-status');
+  var counts=data.counts||{};
+  var coverage=entityGraphCoverage(data);
+  var processed=(data.processed_days||data.indexed_days||[]).length;
+  if(updated)updated.textContent=(data.updated?'更新 '+data.updated:'')+(processed?' · 已索引 '+processed+' 天':'');
+  if(status){
+    if((counts.nodes||0)===0&&(counts.relations||0)===0){
+      status.textContent='读取成功，但信息网里还没有节点和关系。';
+    }else{
+      status.textContent='已同步新版人/事档案：'+(counts.nodes||coverage.nodes||0)+' 张卡，'+(counts.relations||0)+' 条关系，'+coverage.facts+' 张有结构化 facts。';
+    }
+  }
+  if(stats)stats.innerHTML=[
+    entityStatHtml('nodes',counts.nodes||coverage.nodes||0,'节点','查看人、事、地点、物品等档案'),
+    entityStatHtml('relations',counts.relations||0,'关系','查看节点之间的受控关系'),
+    entityStatHtml('orphans',counts.orphan_nodes||0,'孤立','查看暂时没有关系线的节点'),
+    entityStatHtml('facts',coverage.facts,'Facts','已拆成新版结构的档案')
+  ].join('');
+  renderEntityBrowser(data);
+}
+function entityStatHtml(view,count,label,note){
+  var target=view==='facts'?'nodes':view;
+  var sub=view==='relations'?'关系链路明细':(view==='orphans'?'未连接节点明细':(view==='facts'?'新版结构覆盖':'核心节点明细'));
+  return '<button class="entity-stat entity-block-card '+(entityGraphView===target?'active':'')+'" onclick="openEntityGraphList(\''+target+'\')"><div class="entity-block-left"><div class="entity-block-mark">'+esc(label.slice(0,1))+'</div><div><strong>'+esc(label)+'</strong><small>'+esc(sub)+'</small></div></div><div class="entity-block-right"><b>'+count+'</b><span>'+esc(note||'查看明细')+'</span></div></button>';
+}
+function entityGraphViewLabel(view){
+  if(view==='relations')return '关系';
+  if(view==='orphans')return '孤立';
+  return '节点';
+}
+function renderEntityListRow(row){
+  var active=row.type===entityGraphSelectedType&&row.key===entityGraphSelectedKey?' active':'';
+  if(row.type==='relation'){
+    var r=row.raw;
+    return '<div class="mini-item entity-row'+active+'" onclick="openEntityGraphItem(\'relation\',\''+escAttr(row.key)+'\')"><div class="mini-top"><span>'+esc(r.source||'')+' → '+esc(r.target||'')+'</span><b>'+esc(r.relation||'关系')+'</b></div><div class="mini-text">'+esc(shortText(r.detail||'',140))+'</div><div class="mini-reason">'+esc(r.last_seen||'')+' · 重要性 '+(r.importance||5)+' · 出现 '+(r.count||1)+' 次</div></div>';
+  }
+  var n=row.raw;
+  var factCount=entityFactsList(n&&n.facts).length;
+  return '<div class="mini-item entity-row'+active+'" onclick="openEntityGraphItem(\'node\',\''+escAttr(row.key)+'\')"><div class="mini-top"><span>'+esc(graphNodeName(n))+'</span><b>'+esc(entityTypeLabel(n.type))+'</b></div><div class="mini-text">'+esc(shortText(graphNodePreview(n)||'暂无说明',150))+'</div><div class="mini-reason">重要性 '+(n.importance||5)+' · 提及 '+(n.mentions||0)+(factCount?' · facts '+factCount:'')+(entityGraphView==='orphans'?' · 孤立':'')+'</div></div>';
+}
+function renderEntityDetail(data,type,key){
+  if(type==='relation'){
+    var rel=(data.recent_relations||[])[parseInt(key,10)];
+    if(!rel)return '<div class="empty-state small">没有找到这条关系</div>';
+    return '<div class="entity-detail-title">'+esc(rel.source||'')+' <span>→</span> '+esc(rel.target||'')+'</div><div class="entity-detail-sub">'+esc(rel.relation||'关系')+' · '+esc(rel.last_seen||'')+'</div><div class="entity-detail-block"><b>关系说明</b><p>'+esc(rel.detail||'暂无说明')+'</p></div><div class="entity-detail-grid"><span>重要性 '+(rel.importance||5)+'</span><span>出现 '+(rel.count||1)+' 次</span><span>首次 '+esc(rel.first_seen||'')+'</span></div>'+renderEntitySourceRefs(rel.source_refs)+rawEntityBlock(rel);
+  }
+  var node=findGraphNode(data,key)||{key:key,name:key,summary:''};
+  var rels=(data.recent_relations||[]).filter(function(r){return relationTouchesNode(r,node)});
+  var aliases=(node.aliases||[]).filter(Boolean);
+  var evidence=(node.evidence||[]).filter(Boolean);
+  var links=(node.links||[]).filter(Boolean);
+  var profile=String(node.profile||'').trim();
+  var summary=String(node.summary||'').trim();
+  var html='<div class="entity-detail-title">'+esc(graphNodeName(node))+'</div><div class="entity-detail-sub">'+esc(entityTypeLabel(node.type))+' · 重要性 '+(node.importance||5)+' · 提及 '+(node.mentions||0)+'</div>';
+  if(aliases.length)html+='<div class="entity-chip-row">'+aliases.map(function(a){return '<span>'+esc(a)+'</span>'}).join('')+'</div>';
+  html+='<div class="entity-detail-block"><b>一句话画像</b><p>'+esc(profile||summary||'暂无说明')+'</p></div>';
+  html+=renderEntityFacts(node.facts);
+  if(summary&&summary!==profile)html+='<div class="entity-detail-block"><b>旧摘要</b><p>'+esc(summary)+'</p></div>';
+  if(evidence.length)html+='<div class="entity-detail-block"><b>证据 / 原文线索</b>'+evidence.map(function(e){return '<p>'+esc(e)+'</p>'}).join('')+'</div>';
+  html+=renderEntitySourceRefs(node.source_refs);
+  if(links.length)html+='<div class="entity-detail-block"><b>节点内关联</b>'+links.map(function(l){return '<p>'+esc(l.relation||'关联')+' → '+esc(l.target||'')+(l.detail?'：'+esc(l.detail):'')+'</p>'}).join('')+'</div>';
+  if(rels.length)html+='<div class="entity-detail-block"><b>相关关系</b>'+rels.map(function(r){return '<p>'+esc(r.source||'')+' → '+esc(r.target||'')+'：'+esc(r.relation||'')+(r.detail?'，'+esc(r.detail):'')+'</p>'}).join('')+'</div>';
+  return html+rawEntityBlock(node);
+}
+function rawEntityBlock(obj){
+  return '<details class="entity-raw"><summary>结构原文</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>';
+}
 function renderTags(){
   var bar=document.getElementById('tags-bar');
   var tagCounts={};
