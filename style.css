@@ -4526,21 +4526,6 @@ body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
 .key-route{font-size:11px;background:#f6f7f2;border:1px solid #e8ebe6;border-radius:8px;padding:9px 11px;overflow-x:auto;white-space:pre;color:#5a626c;line-height:1.7;margin-bottom:8px}
 .key-route-edit{width:100%;box-sizing:border-box;min-height:70px;padding:9px 11px;border:1px solid #e1e6ea;border-radius:9px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;background:#fbfcfc;color:#1c2028;outline:none;resize:vertical}
 .key-save{width:100%;margin-top:6px;padding:13px}
-.key-legacy-title{margin:18px 0 10px;color:#7b828c}
-.api-module{background:#fff;border:1px solid #e4e9ed;border-radius:12px;padding:12px;margin-bottom:12px}
-.api-module-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
-.api-module-head b{display:block;font-size:14px;color:#1c2028;margin-bottom:5px}
-.api-module-head p{font-size:12px;line-height:1.65;color:#6f7782;margin:0}
-.api-module-head label{min-width:145px;font-size:11px;color:#8c939e}
-.api-active{width:100%;margin-top:5px;padding:8px 9px;border:1px solid #dfe5e8;border-radius:9px;background:#fbfcfc;color:#1c2028;font-size:12px}
-.api-provider{border:1px solid #edf0f2;background:#fbfcfc;border-radius:10px;padding:10px;margin-top:8px}
-.api-provider-top{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.api-provider-name{flex:1;padding:8px 9px;border:1px solid #dfe5e8;border-radius:8px;font-size:13px;background:#fff;color:#1c2028}
-.api-provider label{display:block;font-size:11px;color:#8c939e;margin-top:8px}
-.api-provider-url,.api-provider-key,.api-provider-model{width:100%;box-sizing:border-box;margin-top:4px;padding:8px 9px;border:1px solid #dfe5e8;border-radius:8px;font-size:12px;background:#fff;color:#1c2028;outline:none}
-.api-provider-url:focus,.api-provider-key:focus,.api-provider-model:focus,.api-provider-name:focus,.api-active:focus{border-color:#58bfa5;box-shadow:0 0 0 3px rgba(88,191,165,.14)}
-.api-provider-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:7px}
-.key-add-api{width:100%;margin-top:8px;padding:10px;border:1px dashed #b9d9d0;border-radius:9px;background:#f6fbf9;color:#3a8d78;font-size:12px;font-weight:700;cursor:pointer}
 
 body.dark .key-sheet-head{border-color:#262b35}
 body.dark .key-sheet-head h3{color:#e9edf2}
@@ -4553,9 +4538,3 @@ body.dark .key-route{background:#1d202b;border-color:#343846;color:#aeb6c0}
 body.dark .key-set{background:#152a1e;color:#7fd3b4}
 body.dark .key-unset{background:#262b35;color:#8c939e}
 body.dark .key-ov{background:#3a2e15;color:#e0b667}
-body.dark .api-module{background:#1b1f28;border-color:#2b303c}
-body.dark .api-module-head b{color:#e9edf2}
-body.dark .api-module-head p{color:#aeb6c0}
-body.dark .api-provider{background:#171a22;border-color:#2e3340}
-body.dark .api-active,body.dark .api-provider-name,body.dark .api-provider-url,body.dark .api-provider-key,body.dark .api-provider-model{background:#151922;border-color:#303646;color:#e9edf2}
-body.dark .key-add-api{background:#16241f;border-color:#2f6f61;color:#7fd3b4}
