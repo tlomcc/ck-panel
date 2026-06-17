@@ -11,8 +11,8 @@ try{
     localStorage.removeItem('entityGraphUrl');
   }
 }catch(e){}
-API_BASE='http://127.0.0.1:9000/mcp';
-GRAPH_API_BASE='http://127.0.0.1:9000';
+API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run/mcp';
+GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 API=API_BASE;
 ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var PANEL_CACHE_KEY='ckPanelCacheV3';
