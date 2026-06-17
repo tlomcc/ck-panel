@@ -1596,9 +1596,14 @@ function switchPanelTab(tab,opts) {
   opts=opts||{};
   currentPanelTab=tab;
   document.querySelectorAll('.panel-tab').forEach(function(el){el.classList.remove('active')});
-  document.querySelectorAll('.top-tab').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-tab')===tab)});
+  document.querySelectorAll('.top-tab,.side-nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-tab')===tab)});
+  var subTabs=document.getElementById('sub-tabs');
+  if(subTabs)subTabs.style.display=(tab==='apiconfig')?'grid':'none';
   var panel=document.getElementById('tab-'+tab);
   if(panel)panel.classList.add('active');
+  if(tab==='apiconfig'){
+    renderApiConfig();
+  }
   if(tab==='categories'){
     document.getElementById('cat-grid').style.display='grid';
     renderGrid();
@@ -1782,4 +1787,239 @@ document.addEventListener('click',function(e){
   badge.appendChild(popup);
   setTimeout(function(){popup.remove()},3000);
 });
+
+/* ===================== 导航：汉堡侧栏 + API 配置页 (v4) ===================== */
+function openSidebar(){
+  var d=document.getElementById('side-drawer'),m=document.getElementById('side-drawer-mask');
+  if(d)d.classList.add('open');
+  if(m)m.classList.add('show');
+  document.body.classList.add('drawer-open');
+}
+function closeSidebar(){
+  var d=document.getElementById('side-drawer'),m=document.getElementById('side-drawer-mask');
+  if(d)d.classList.remove('open');
+  if(m)m.classList.remove('show');
+  document.body.classList.remove('drawer-open');
+}
+function navTo(tab){
+  closeSidebar();
+  switchPanelTab(tab);
+}
+
+/* ---- API 配置：数据结构与状态 ---- */
+var API_TABS=[
+  {key:'main',label:'主链路',info:'主链路是你和大模型对话的主干通道：把你说的话发给模型，再把模型的回答取回来。这里配置对话主模型的接入信息。',groups:[
+    {key:'main_io',label:'输入与输出',info:'对话主模型的接入地址、密钥和默认模型。换供应商、换模型都在这里改。'}
+  ]},
+  {key:'memory',label:'记忆',info:'记忆相关的两件事：把“人和事”整理成小档案，以及把聊天记录离线切成片段存档。',groups:[
+    {key:'mem_profile',label:'小档案',info:'整理“人和事”小档案时所调用的模型。'},
+    {key:'mem_chatlog',label:'Chatlog离线切片',info:'把聊天记录离线切片、做摘要时所调用的模型。'}
+  ]},
+  {key:'rolling',label:'滚动',info:'滚动相关：系统提示（System）的滚动更新，以及每日状态的滚动汇总。',groups:[
+    {key:'roll_sys',label:'Sys Rolling',info:'系统提示（System Prompt）滚动更新时所调用的模型。'},
+    {key:'roll_status',label:'状态滚动',info:'每日状态滚动汇总时所调用的模型。'}
+  ]},
+  {key:'recall',label:'召回',info:'召回相关：把内容转成向量做语义召回，以及用关键词辅助检索。',groups:[
+    {key:'recall_vector',label:'向量化',info:'把记忆/档案转成向量（用于语义召回）的模型或服务。'},
+    {key:'recall_keyword',label:'关键词辅助',info:'关键词辅助召回时所调用的模型或服务。'}
+  ]}
+];
+var currentApiTab='main';
+var apiProviders={};
+var apiProvidersLoaded=false;
+var apiProvIdSeq=0;
+var pendingProvDel=null;
+var RELOAD_CONFIG_URL=GRAPH_API_BASE+'/reload-config';
+function newProvId(){apiProvIdSeq++;return 'p'+Date.now().toString(36)+apiProvIdSeq}
+function apiGroupSlot(g){
+  if(!apiProviders[g]||typeof apiProviders[g]!=='object')apiProviders[g]={providers:[],current:''};
+  if(!Array.isArray(apiProviders[g].providers))apiProviders[g].providers=[];
+  if(typeof apiProviders[g].current!=='string')apiProviders[g].current='';
+  return apiProviders[g];
+}
+function findApiTab(k){for(var i=0;i<API_TABS.length;i++){if(API_TABS[i].key===k)return API_TABS[i]}return API_TABS[0]}
+
+function switchApiTab(k){
+  currentApiTab=k;
+  renderApiConfig();
+}
+
+function renderApiConfig(){
+  var body=document.getElementById('api-config-body');
+  if(!body)return;
+  document.querySelectorAll('.sub-tab').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-subtab')===currentApiTab)});
+  if(!apiProvidersLoaded){
+    body.innerHTML='<div class="empty-state small">读取中...</div>';
+    loadApiProviders();
+    return;
+  }
+  var tab=findApiTab(currentApiTab);
+  var html='';
+  html+='<div class="api-info-row"><button class="api-info-btn" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button>'+
+        '<div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info)+'</div></div></div>';
+  tab.groups.forEach(function(g){
+    var slot=apiGroupSlot(g.key);
+    html+='<div class="api-group" data-group="'+escAttr(g.key)+'">';
+    html+='<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span>'+
+          '<button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button></div>';
+    html+='<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>';
+    html+='<div class="api-group-cards">';
+    if(!slot.providers.length){
+      html+='<div class="empty-state small">还没有供应商，点下面的按钮添加。</div>';
+    }else{
+      slot.providers.forEach(function(p){html+=provCardHtml(g.key,p,slot.current===p.id)});
+    }
+    html+='</div>';
+    html+='<button class="prov-add" type="button" onclick="addProvider(\''+g.key+'\')">+ 添加供应商</button>';
+    html+='</div>';
+  });
+  body.innerHTML=html;
+  body.scrollTop=0;
+}
+
+function provCardHtml(group,p,isCurrent){
+  var name=p.name||'未命名供应商';
+  var status=isCurrent
+    ?'<span class="prov-status prov-status-on">使用中</span>'
+    :'<span class="prov-status prov-status-off">备用</span>';
+  return '<div class="prov-card" data-group="'+escAttr(group)+'" data-id="'+escAttr(p.id)+'">'+
+    '<div class="prov-card-head" onclick="toggleProvCard(this)"><span class="prov-name">'+esc(name)+'</span>'+status+'</div>'+
+    '<div class="prov-card-body">'+
+      '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
+      '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
+      '<div class="prov-row"><label>API Key</label><div class="prov-key-wrap"><input class="prov-key" type="password" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"><button class="prov-eye" type="button" onclick="toggleProvKey(this)" aria-label="显示或隐藏密钥">👁</button></div></div>'+
+      '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></div>'+
+      '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存</button><button class="btn btn-outline prov-setcur" type="button" onclick="setProviderCurrent(this)">设为当前使用</button></div>'+
+      '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
+    '</div></div>';
+}
+
+function toggleInfo(btn){
+  var wrap=btn.nextElementSibling;
+  if(!wrap||!wrap.classList||!wrap.classList.contains('api-info-wrap')){
+    var head=btn.closest('.api-group-head');
+    if(head)wrap=head.nextElementSibling;
+  }
+  if(!wrap||!wrap.classList||!wrap.classList.contains('api-info-wrap'))return;
+  var open=wrap.classList.toggle('open');
+  btn.classList.toggle('active',open);
+}
+function toggleProvCard(head){
+  var card=head.closest('.prov-card');
+  if(card)card.classList.toggle('expanded');
+}
+function toggleProvKey(btn){
+  var wrap=btn.closest('.prov-key-wrap');if(!wrap)return;
+  var inp=wrap.querySelector('.prov-key');if(!inp)return;
+  if(inp.type==='password'){inp.type='text';btn.textContent='🙈'}
+  else{inp.type='password';btn.textContent='👁'}
+}
+function readProvCard(card){
+  function v(sel){var el=card.querySelector(sel);return el?el.value:''}
+  return {
+    group:card.getAttribute('data-group'),
+    id:card.getAttribute('data-id'),
+    name:v('.prov-name-input'),
+    url:v('.prov-url'),
+    key:v('.prov-key'),
+    model:v('.prov-model')
+  };
+}
+function upsertProvider(group,id){
+  var slot=apiGroupSlot(group);
+  for(var i=0;i<slot.providers.length;i++){if(slot.providers[i].id===id)return slot.providers[i]}
+  var np={id:id,name:'',url:'',key:'',model:''};
+  slot.providers.push(np);
+  return np;
+}
+function addProvider(group){
+  var slot=apiGroupSlot(group);
+  var id=newProvId();
+  slot.providers.push({id:id,name:'',url:'',key:'',model:''});
+  renderApiConfig();
+  setTimeout(function(){
+    var card=document.querySelector('.prov-card[data-id="'+id+'"]');
+    if(card){
+      card.classList.add('expanded');
+      card.scrollIntoView({behavior:'smooth',block:'center'});
+      var ni=card.querySelector('.prov-name-input');if(ni)ni.focus();
+    }
+  },30);
+}
+function saveProvider(btn){
+  var card=btn.closest('.prov-card');if(!card)return;
+  var d=readProvCard(card);
+  var p=upsertProvider(d.group,d.id);
+  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
+  btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
+  persistAndReload('已保存并生效').then(function(ok){
+    btn.disabled=false;btn.textContent=old;
+    if(ok){var nm=card.querySelector('.prov-name');if(nm)nm.textContent=p.name||'未命名供应商'}
+  });
+}
+function setProviderCurrent(btn){
+  var card=btn.closest('.prov-card');if(!card)return;
+  var d=readProvCard(card);
+  var slot=apiGroupSlot(d.group);
+  var p=upsertProvider(d.group,d.id);
+  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
+  slot.current=d.id;
+  btn.disabled=true;var old=btn.textContent;btn.textContent='切换中...';
+  persistAndReload('已设为当前使用').then(function(){
+    btn.disabled=false;btn.textContent=old;
+    renderApiConfig();
+  });
+}
+function deleteProvider(btn){
+  var card=btn.closest('.prov-card');if(!card)return;
+  var group=card.getAttribute('data-group'),id=card.getAttribute('data-id');
+  var slot=apiGroupSlot(group);
+  if(slot.current===id){toast('请先切换到其他供应商再删除');return}
+  pendingProvDel={group:group,id:id};
+  var m=document.getElementById('provDelModal');if(m)m.classList.add('show');
+}
+function closeProvDel(){
+  pendingProvDel=null;
+  var m=document.getElementById('provDelModal');if(m)m.classList.remove('show');
+}
+function confirmProvDel(){
+  if(!pendingProvDel){closeProvDel();return}
+  var group=pendingProvDel.group,id=pendingProvDel.id;
+  var slot=apiGroupSlot(group);
+  slot.providers=slot.providers.filter(function(x){return x.id!==id});
+  if(slot.current===id)slot.current='';
+  closeProvDel();
+  persistAndReload('已删除').then(function(){renderApiConfig()});
+}
+
+function persistApiProviders(){
+  return keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:{API_PROVIDERS:apiProviders}})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})});
+}
+function reloadGatewayConfig(){
+  var u=function(){return addStoredKey(RELOAD_CONFIG_URL+'?_t='+Date.now())};
+  return fetch(u(),{method:'POST'}).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(u(),{method:'POST'});
+    return r;
+  });
+}
+function persistAndReload(okMsg){
+  return persistApiProviders().then(function(res){
+    if(!res.ok){toast('保存失败：'+((res.j&&res.j.error)||''));return false}
+    return reloadGatewayConfig().then(function(){toast(okMsg||'已保存并生效');return true},function(){toast('已保存，但刷新配置失败（稍后会自动生效）');return true});
+  }).catch(function(){toast('保存失败，检查网络');return false});
+}
+function loadApiProviders(){
+  keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+    var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
+    apiProviders=prov;
+    apiProvidersLoaded=true;
+    renderApiConfig();
+  }).catch(function(){
+    var body=document.getElementById('api-config-body');
+    if(body)body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署、面板 key 正确。</div>'+
+      '<button class="prov-add" type="button" style="margin-top:14px" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>';
+  });
+}
+
 init();

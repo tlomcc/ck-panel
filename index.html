@@ -17,19 +17,32 @@
 <div class="loading-bar-wrap" id="loading-wrap"><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">加载中...</div></div>
 <div class="page active" id="page-memory">
 <header class="app-header">
-<div class="brand-lockup"><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
+<div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
 <button class="icon-btn" onclick="openKeyManager()" aria-label="密钥管理" title="密钥管理">⚙</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
-<nav class="top-tabs" aria-label="面板分页">
-<button class="top-tab active" data-tab="overview" onclick="switchPanelTab('overview')">总览</button>
-<button class="top-tab" data-tab="categories" onclick="switchPanelTab('categories')">分类</button>
-<button class="top-tab" data-tab="search" onclick="switchPanelTab('search')">搜索</button>
-<button class="top-tab" data-tab="graph" onclick="switchPanelTab('graph')">信息网</button>
-<button class="top-tab" data-tab="status" onclick="switchPanelTab('status')">状态</button>
+<!-- 侧栏抽屉导航（替代原顶栏 tab） -->
+<div class="side-drawer-mask" id="side-drawer-mask" onclick="closeSidebar()"></div>
+<aside class="side-drawer" id="side-drawer" aria-label="导航菜单">
+<div class="side-drawer-head">菜单</div>
+<nav class="side-nav">
+<button class="side-nav-item active" data-tab="overview" onclick="navTo('overview')">总览</button>
+<button class="side-nav-item" data-tab="categories" onclick="navTo('categories')">分类</button>
+<button class="side-nav-item" data-tab="search" onclick="navTo('search')">搜索</button>
+<button class="side-nav-item" data-tab="graph" onclick="navTo('graph')">信息网</button>
+<button class="side-nav-item" data-tab="status" onclick="navTo('status')">状态</button>
+<button class="side-nav-item" data-tab="apiconfig" onclick="navTo('apiconfig')">API配置</button>
+</nav>
+</aside>
+<!-- 二级 tab：仅 API 配置页显示，占用原顶栏位置 -->
+<nav class="sub-tabs" id="sub-tabs" aria-label="API 配置分类" style="display:none">
+<button class="sub-tab active" data-subtab="main" onclick="switchApiTab('main')">主链路</button>
+<button class="sub-tab" data-subtab="memory" onclick="switchApiTab('memory')">记忆</button>
+<button class="sub-tab" data-subtab="rolling" onclick="switchApiTab('rolling')">滚动</button>
+<button class="sub-tab" data-subtab="recall" onclick="switchApiTab('recall')">召回</button>
 </nav>
 
 <section class="panel-tab active" id="tab-overview">
@@ -87,6 +100,9 @@
 <div class="tab-head"><div><h2>每日状态</h2><p id="status-sub">前一天有没有整理好，一眼就知道</p></div><button class="btn btn-outline btn-sm" onclick="loadDailyStatus(true)">刷新</button></div>
 <div id="daily-status-body"><div class="empty-state">进入本页自动读取...</div></div>
 </section>
+<section class="panel-tab" id="tab-apiconfig">
+<div class="api-config-page" id="api-config-body"><div class="empty-state small">读取中...</div></div>
+</section>
 <div class="eg-detail-sheet" id="eg-detail-sheet"><div class="eg-detail-mask" onclick="closeEntityDetail()"></div><div class="eg-detail-panel"><button class="eg-detail-close" onclick="closeEntityDetail()" aria-label="关闭">✕</button><div class="eg-detail-body" id="eg-detail-body"></div></div></div>
 <div class="eg-detail-sheet" id="key-sheet"><div class="eg-detail-mask" onclick="closeKeyManager()"></div><div class="eg-detail-panel"><button class="eg-detail-close" onclick="closeKeyManager()" aria-label="关闭">✕</button><div class="key-sheet-head"><h3>密钥管理</h3><small>在这里查看/修改网关和后端的密钥，免上阿里云</small></div><div class="eg-detail-body" id="key-body"><div class="empty-state small">读取中...</div></div></div></div>
 </div>
@@ -104,6 +120,7 @@
 <div class="modal-bg" id="renameModal" onclick="hideRename()"><div class="modal" onclick="event.stopPropagation()"><h3>重命名</h3><input id="rename-input" placeholder="新名称" /><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="hideRename()">取消</button><button class="btn btn-blue btn-sm" onclick="doRename()">保存</button></div></div></div>
 <div class="modal-bg" id="editModal" onclick="hideEdit()"><div class="modal" onclick="event.stopPropagation()"><h3>编辑</h3><textarea id="edit-content" placeholder="内容"></textarea><div class="modal-row"><div><label style="font-size:11px;color:#8c939e">重要性</label><select id="edit-imp"></select></div><div><label style="font-size:11px;color:#8c939e">置顶</label><select id="edit-pin"><option value="0">否</option><option value="1">★ 是</option></select></div></div><div style="margin-top:10px"><label style="font-size:11px;color:#8c939e">标签</label><input id="edit-tags" placeholder="逗号分隔" /></div><div><label style="font-size:11px;color:#8c939e">归档</label><select id="edit-archived"><option value="0">否</option><option value="1">是</option></select></div><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="hideEdit()">取消</button><button class="btn btn-blue btn-sm" onclick="saveEdit()">保存</button></div></div></div>
 <div class="confirm-bg" id="confirmDel"><div class="confirm-box"><p>确定删除？</p><div class="confirm-box-btns"><button class="btn btn-outline btn-sm" onclick="cancelDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmDel()">删除</button></div></div></div>
+<div class="modal-bg" id="provDelModal" onclick="closeProvDel()"><div class="modal" onclick="event.stopPropagation()"><h3>删除供应商</h3><p class="prov-del-q">确定要删除该供应商吗？</p><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="closeProvDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmProvDel()">确定</button></div></div></div>
 <div class="toast" id="toast"></div>
 <script src="script.js"></script>
 <script src="script-extra.js"></script>
