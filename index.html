@@ -20,6 +20,7 @@
 <div class="brand-lockup"><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
+<button class="icon-btn" onclick="openKeyManager()" aria-label="密钥管理" title="密钥管理">⚙</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -87,6 +88,7 @@
 <div id="daily-status-body"><div class="empty-state">进入本页自动读取...</div></div>
 </section>
 <div class="eg-detail-sheet" id="eg-detail-sheet"><div class="eg-detail-mask" onclick="closeEntityDetail()"></div><div class="eg-detail-panel"><button class="eg-detail-close" onclick="closeEntityDetail()" aria-label="关闭">✕</button><div class="eg-detail-body" id="eg-detail-body"></div></div></div>
+<div class="eg-detail-sheet" id="key-sheet"><div class="eg-detail-mask" onclick="closeKeyManager()"></div><div class="eg-detail-panel"><button class="eg-detail-close" onclick="closeKeyManager()" aria-label="关闭">✕</button><div class="key-sheet-head"><h3>密钥管理</h3><small>在这里查看/修改网关和后端的密钥，免上阿里云</small></div><div class="eg-detail-body" id="key-body"><div class="empty-state small">读取中...</div></div></div></div>
 </div>
 <div class="page" id="page-detail" style="position:relative">
 <button class="back-btn" onclick="goMemory()">← 返回</button>

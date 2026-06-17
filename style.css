@@ -4501,3 +4501,40 @@ body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
 .loading-bar-inner{transition:width .3s ease}
 /* 列表底部多留白，最后一条不被底部输入区盖住 */
 #d-entries{padding-bottom:14px}
+
+/* ===== 密钥管理 ===== */
+.key-sheet-head{padding:2px 0 12px;border-bottom:1px solid #eef1f0;margin-bottom:12px}
+.key-sheet-head h3{font-size:17px;font-weight:700;color:#1c2028}
+.key-sheet-head small{font-size:12px;color:#8c939e}
+.key-note{font-size:12px;line-height:1.7;color:#7b6a3a;background:#fff7e6;border:1px solid #f0e0b8;border-radius:10px;padding:10px 12px;margin-bottom:14px}
+.key-group{margin-bottom:16px}
+.key-group-title{font-size:13px;font-weight:700;color:#58bfa5;margin-bottom:8px;padding-left:2px}
+.key-field{background:#fff;border:1px solid #e9edf0;border-radius:12px;padding:12px;margin-bottom:9px}
+.key-field-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.key-field-head b{font-size:14px;color:#1c2028}
+.key-tag{font-size:10px;font-weight:700;border-radius:999px;padding:1px 8px}
+.key-set{background:#e6f5ee;color:#3a8d78}
+.key-unset{background:#f0f1f3;color:#9aa1ab}
+.key-ov{background:#fdeede;color:#c2700f}
+.key-purpose{font-size:12px;color:#8c939e;line-height:1.6;margin-bottom:6px}
+.key-current{font-size:12px;color:#7b828c;margin-bottom:8px;word-break:break-all}
+.key-current code{background:#f4f6f7;border-radius:5px;padding:1px 6px;color:#5a626c;font-family:ui-monospace,Menlo,Consolas,monospace}
+.key-input{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #e1e6ea;border-radius:9px;font-size:13px;background:#fbfcfc;color:#1c2028;outline:none}
+.key-input:focus{border-color:#58bfa5;box-shadow:0 0 0 3px rgba(88,191,165,.14);background:#fff}
+.key-clear{margin-top:8px;font-size:11px;color:#c0392b;background:none;border:none;cursor:pointer;padding:2px 0;text-decoration:underline}
+.key-clear:disabled{color:#9aa1ab;cursor:default;text-decoration:none}
+.key-route{font-size:11px;background:#f6f7f2;border:1px solid #e8ebe6;border-radius:8px;padding:9px 11px;overflow-x:auto;white-space:pre;color:#5a626c;line-height:1.7;margin-bottom:8px}
+.key-route-edit{width:100%;box-sizing:border-box;min-height:70px;padding:9px 11px;border:1px solid #e1e6ea;border-radius:9px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;background:#fbfcfc;color:#1c2028;outline:none;resize:vertical}
+.key-save{width:100%;margin-top:6px;padding:13px}
+
+body.dark .key-sheet-head{border-color:#262b35}
+body.dark .key-sheet-head h3{color:#e9edf2}
+body.dark .key-note{background:#2b2415;border-color:#5c4d2a;color:#d8c089}
+body.dark .key-field{background:#1b1f28;border-color:#2b303c}
+body.dark .key-field-head b{color:#e9edf2}
+body.dark .key-current code{background:#252a35;color:#aeb6c0}
+body.dark .key-input,body.dark .key-route-edit{background:#171a22;border-color:#2e3340;color:#e9edf2}
+body.dark .key-route{background:#1d202b;border-color:#343846;color:#aeb6c0}
+body.dark .key-set{background:#152a1e;color:#7fd3b4}
+body.dark .key-unset{background:#262b35;color:#8c939e}
+body.dark .key-ov{background:#3a2e15;color:#e0b667}

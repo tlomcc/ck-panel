@@ -759,6 +759,102 @@ function stopDailyStatusRealtime(){
   if(dailyStatusTimer){clearInterval(dailyStatusTimer);dailyStatusTimer=null}
 }
 
+/* ===== 密钥管理 ===== */
+var KEY_CONFIG_URL=GRAPH_API_BASE+'/config';
+function keyCfgFetch(init){
+  var u=function(){return addStoredKey(KEY_CONFIG_URL+'?_t='+Date.now())};
+  return fetch(u(),init).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(u(),init);
+    return r;
+  });
+}
+function openKeyManager(){
+  var sheet=document.getElementById('key-sheet');
+  if(!sheet)return;
+  sheet.classList.add('show');
+  document.body.classList.add('eg-sheet-open');
+  loadKeys();
+}
+function closeKeyManager(){
+  var sheet=document.getElementById('key-sheet');
+  if(sheet)sheet.classList.remove('show');
+  document.body.classList.remove('eg-sheet-open');
+}
+function loadKeys(){
+  var body=document.getElementById('key-body');
+  if(!body)return;
+  body.innerHTML='<div class="empty-state small">读取中...</div>';
+  keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(renderKeys).catch(function(){
+    body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署到 v3.8、面板 key 正确（点一下会让你重输 key）。</div>';
+  });
+}
+function renderKeys(d){
+  var body=document.getElementById('key-body');
+  if(!body)return;
+  d=d||{};
+  var keys=d.keys||[],groups={},order=[];
+  keys.forEach(function(k){if(!groups[k.group]){groups[k.group]=[];order.push(k.group)}groups[k.group].push(k)});
+  var html='<div class="key-note">'+esc(d.note||'')+'</div>';
+  order.forEach(function(g){
+    html+='<div class="key-group"><div class="key-group-title">'+esc(g)+'</div>';
+    groups[g].forEach(function(k){
+      var status=k.overridden?'<span class="key-tag key-ov">面板覆盖中</span>':(k.set?'<span class="key-tag key-set">已设置</span>':'<span class="key-tag key-unset">未设置</span>');
+      html+='<div class="key-field" data-key="'+escAttr(k.key)+'">'+
+        '<div class="key-field-head"><b>'+esc(k.label)+'</b>'+status+'</div>'+
+        '<div class="key-purpose">'+esc(k.purpose)+'</div>'+
+        '<div class="key-current">当前：<code>'+esc(k.display||'（空）')+'</code></div>'+
+        '<input class="key-input" type="text" placeholder="留空=不改，填新值=覆盖" autocomplete="off" autocapitalize="off" spellcheck="false">'+
+        (k.overridden?'<button class="key-clear" type="button" onclick="markClearKey(this)">清除覆盖（回退到阿里云环境变量）</button>':'')+
+        '</div>';
+    });
+    html+='</div>';
+  });
+  var rm=(d.route_map||[]).map(function(x){return esc(x.key_mask)+'  →  '+esc(x.url)}).join('\n');
+  html+='<div class="key-group"><div class="key-group-title">上游路由 ROUTE_MAP（高级）</div>'+
+    '<div class="key-purpose">不同上游 Key → 地址 的路由表。当前：'+(d.route_override?'面板覆盖中':'用代码默认')+'</div>'+
+    '<pre class="key-route">'+(rm||'（空）')+'</pre>'+
+    '<div class="key-purpose">要改就粘贴完整 JSON（{"上游key":"https://.../v1"}）到下面，留空=不改：</div>'+
+    '<textarea class="key-route-edit" id="key-route-edit" placeholder=\'{"sk-xxx":"https://xxx/v1"}\' autocapitalize="off" spellcheck="false"></textarea>'+
+    '</div>';
+  html+='<button class="btn btn-blue key-save" type="button" onclick="saveKeys()">保存全部修改</button>';
+  body.innerHTML=html;
+  body.scrollTop=0;
+}
+function markClearKey(btn){
+  var field=btn.parentNode;
+  if(!field)return;
+  field.setAttribute('data-clear','1');
+  btn.textContent='已标记清除（保存后生效）';
+  btn.disabled=true;
+}
+function saveKeys(){
+  var updates={};
+  document.querySelectorAll('#key-body .key-field').forEach(function(f){
+    var key=f.getAttribute('data-key');
+    if(f.getAttribute('data-clear')==='1'){updates[key]='__CLEAR__';return}
+    var inp=f.querySelector('.key-input');
+    if(inp&&inp.value.trim())updates[key]=inp.value.trim();
+  });
+  var rt=document.getElementById('key-route-edit');
+  if(rt&&rt.value.trim()){
+    try{
+      var obj=JSON.parse(rt.value.trim());
+      if(obj&&typeof obj==='object'&&!Array.isArray(obj))updates.ROUTE_MAP=obj;
+      else{toast('ROUTE_MAP 要是 {…} 形式，未保存路由');}
+    }catch(e){toast('ROUTE_MAP 不是合法 JSON，未保存路由');return}
+  }
+  if(!Object.keys(updates).length){toast('没有要保存的修改');return}
+  var btn=document.querySelector('.key-save');
+  if(btn){btn.disabled=true;btn.textContent='保存中...'}
+  keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})
+    .then(function(res){
+      if(!res.ok){toast('保存失败：'+((res.j&&res.j.error)||'')); if(btn){btn.disabled=false;btn.textContent='保存全部修改'} return}
+      toast((res.j&&res.j.note)||'已保存');
+      loadKeys();
+    }).catch(function(){toast('保存失败，检查网络');if(btn){btn.disabled=false;btn.textContent='保存全部修改'}});
+}
+
 function renderTags(){
   var bar=document.getElementById('tags-bar');
   var tagCounts={};
