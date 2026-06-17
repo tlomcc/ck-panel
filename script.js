@@ -704,6 +704,62 @@ function closeEntityDetail(){
   document.body.classList.remove('eg-sheet-open');
 }
 
+/* ===== 实体详情底部卡片：下滑关闭手势 ===== */
+var egSheetDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null,wide:false};
+function egSheetBaseTransform(){return egSheetDrag.wide?'translateX(-50%)':''}
+function egSheetTouchStart(e){
+  var sheet=document.getElementById('eg-detail-sheet');
+  if(!sheet||!sheet.classList.contains('show')){egSheetDrag.active=false;return}
+  var body=document.getElementById('eg-detail-body');
+  if(body&&body.scrollTop>0){egSheetDrag.active=false;return}   // 内容没滚到顶 → 先让它正常滚
+  var panel=sheet.querySelector('.eg-detail-panel');
+  if(!panel){egSheetDrag.active=false;return}
+  var t=e.touches?e.touches[0]:e;
+  egSheetDrag.active=true;egSheetDrag.committed=false;
+  egSheetDrag.startY=t.clientY;egSheetDrag.startT=Date.now();egSheetDrag.dy=0;egSheetDrag.panel=panel;
+  egSheetDrag.wide=window.matchMedia('(min-width:560px)').matches;
+}
+function egSheetTouchMove(e){
+  if(!egSheetDrag.active)return;
+  var t=e.touches?e.touches[0]:e;
+  var dy=t.clientY-egSheetDrag.startY;
+  if(!egSheetDrag.committed){
+    if(dy>6){egSheetDrag.committed=true;egSheetDrag.panel.style.transition='none';}
+    else if(dy<-6){egSheetDrag.active=false;return;}            // 往上滑 → 放弃，交还滚动
+    else return;
+  }
+  if(dy<0)dy=0;
+  egSheetDrag.dy=dy;
+  egSheetDrag.panel.style.transform=egSheetBaseTransform()+' translateY('+dy+'px)';
+  if(e.cancelable)e.preventDefault();
+}
+function egSheetTouchEnd(){
+  if(!egSheetDrag.active)return;
+  var panel=egSheetDrag.panel,dy=egSheetDrag.dy,dt=Date.now()-egSheetDrag.startT;
+  egSheetDrag.active=false;egSheetDrag.committed=false;
+  if(!panel)return;
+  var flick=dt<300&&dy>24;                                       // 快速轻滑也算
+  if(dy>60||flick){
+    panel.style.transition='transform .2s ease';
+    panel.style.transform=egSheetBaseTransform()+' translateY(100%)';
+    setTimeout(function(){closeEntityDetail();panel.style.transition='';panel.style.transform=egSheetBaseTransform();},190);
+  }else{
+    panel.style.transition='transform .2s ease';
+    panel.style.transform=egSheetBaseTransform();
+    setTimeout(function(){panel.style.transition='';},210);
+  }
+}
+(function attachEgSheetGesture(){
+  var sheet=document.getElementById('eg-detail-sheet');
+  if(!sheet)return;
+  var panel=sheet.querySelector('.eg-detail-panel');
+  if(!panel)return;
+  panel.addEventListener('touchstart',egSheetTouchStart,{passive:true});
+  panel.addEventListener('touchmove',egSheetTouchMove,{passive:false});
+  panel.addEventListener('touchend',egSheetTouchEnd,{passive:true});
+  panel.addEventListener('touchcancel',egSheetTouchEnd,{passive:true});
+})();
+
 /* ===== 每日状态页 ===== */
 var DAILY_STATUS_URL=GRAPH_API_BASE+'/daily-status';
 var dailyStatusTimer=null,dailyStatusLoading=false;
@@ -759,7 +815,7 @@ function stopDailyStatusRealtime(){
   if(dailyStatusTimer){clearInterval(dailyStatusTimer);dailyStatusTimer=null}
 }
 
-/* ===== 密钥管理 ===== */
+/* ===== 网关配置读写助手（供 API 配置页使用） ===== */
 var KEY_CONFIG_URL=GRAPH_API_BASE+'/config';
 function keyCfgFetch(init){
   var u=function(){return addStoredKey(KEY_CONFIG_URL+'?_t='+Date.now())};
@@ -767,92 +823,6 @@ function keyCfgFetch(init){
     if(r.status===403&&requestApiKey())return fetch(u(),init);
     return r;
   });
-}
-function openKeyManager(){
-  var sheet=document.getElementById('key-sheet');
-  if(!sheet)return;
-  sheet.classList.add('show');
-  document.body.classList.add('eg-sheet-open');
-  loadKeys();
-}
-function closeKeyManager(){
-  var sheet=document.getElementById('key-sheet');
-  if(sheet)sheet.classList.remove('show');
-  document.body.classList.remove('eg-sheet-open');
-}
-function loadKeys(){
-  var body=document.getElementById('key-body');
-  if(!body)return;
-  body.innerHTML='<div class="empty-state small">读取中...</div>';
-  keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(renderKeys).catch(function(){
-    body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署到 v3.8、面板 key 正确（点一下会让你重输 key）。</div>';
-  });
-}
-function renderKeys(d){
-  var body=document.getElementById('key-body');
-  if(!body)return;
-  d=d||{};
-  var keys=d.keys||[],groups={},order=[];
-  keys.forEach(function(k){if(!groups[k.group]){groups[k.group]=[];order.push(k.group)}groups[k.group].push(k)});
-  var html='<div class="key-note">'+esc(d.note||'')+'</div>';
-  order.forEach(function(g){
-    html+='<div class="key-group"><div class="key-group-title">'+esc(g)+'</div>';
-    groups[g].forEach(function(k){
-      var status=k.overridden?'<span class="key-tag key-ov">面板覆盖中</span>':(k.set?'<span class="key-tag key-set">已设置</span>':'<span class="key-tag key-unset">未设置</span>');
-      html+='<div class="key-field" data-key="'+escAttr(k.key)+'">'+
-        '<div class="key-field-head"><b>'+esc(k.label)+'</b>'+status+'</div>'+
-        '<div class="key-purpose">'+esc(k.purpose)+'</div>'+
-        '<div class="key-current">当前：<code>'+esc(k.display||'（空）')+'</code></div>'+
-        '<input class="key-input" type="text" placeholder="留空=不改，填新值=覆盖" autocomplete="off" autocapitalize="off" spellcheck="false">'+
-        (k.overridden?'<button class="key-clear" type="button" onclick="markClearKey(this)">清除覆盖（回退到阿里云环境变量）</button>':'')+
-        '</div>';
-    });
-    html+='</div>';
-  });
-  var rm=(d.route_map||[]).map(function(x){return esc(x.key_mask)+'  →  '+esc(x.url)}).join('\n');
-  html+='<div class="key-group"><div class="key-group-title">上游路由 ROUTE_MAP（高级）</div>'+
-    '<div class="key-purpose">不同上游 Key → 地址 的路由表。当前：'+(d.route_override?'面板覆盖中':'用代码默认')+'</div>'+
-    '<pre class="key-route">'+(rm||'（空）')+'</pre>'+
-    '<div class="key-purpose">要改就粘贴完整 JSON（{"上游key":"https://.../v1"}）到下面，留空=不改：</div>'+
-    '<textarea class="key-route-edit" id="key-route-edit" placeholder=\'{"sk-xxx":"https://xxx/v1"}\' autocapitalize="off" spellcheck="false"></textarea>'+
-    '</div>';
-  html+='<button class="btn btn-blue key-save" type="button" onclick="saveKeys()">保存全部修改</button>';
-  body.innerHTML=html;
-  body.scrollTop=0;
-}
-function markClearKey(btn){
-  var field=btn.parentNode;
-  if(!field)return;
-  field.setAttribute('data-clear','1');
-  btn.textContent='已标记清除（保存后生效）';
-  btn.disabled=true;
-}
-function saveKeys(){
-  var updates={};
-  document.querySelectorAll('#key-body .key-field').forEach(function(f){
-    var key=f.getAttribute('data-key');
-    if(f.getAttribute('data-clear')==='1'){updates[key]='__CLEAR__';return}
-    var inp=f.querySelector('.key-input');
-    if(inp&&inp.value.trim())updates[key]=inp.value.trim();
-  });
-  var rt=document.getElementById('key-route-edit');
-  if(rt&&rt.value.trim()){
-    try{
-      var obj=JSON.parse(rt.value.trim());
-      if(obj&&typeof obj==='object'&&!Array.isArray(obj))updates.ROUTE_MAP=obj;
-      else{toast('ROUTE_MAP 要是 {…} 形式，未保存路由');}
-    }catch(e){toast('ROUTE_MAP 不是合法 JSON，未保存路由');return}
-  }
-  if(!Object.keys(updates).length){toast('没有要保存的修改');return}
-  var btn=document.querySelector('.key-save');
-  if(btn){btn.disabled=true;btn.textContent='保存中...'}
-  keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
-    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})
-    .then(function(res){
-      if(!res.ok){toast('保存失败：'+((res.j&&res.j.error)||'')); if(btn){btn.disabled=false;btn.textContent='保存全部修改'} return}
-      toast((res.j&&res.j.note)||'已保存');
-      loadKeys();
-    }).catch(function(){toast('保存失败，检查网络');if(btn){btn.disabled=false;btn.textContent='保存全部修改'}});
 }
 
 function renderTags(){
@@ -1121,6 +1091,7 @@ function renderEntryCard(i,e,isLong,compact){
   metaHtml+='</div>';
   var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div>';
   if(compact)actionHtml+='<div class="entry-action-btn open" onclick="event.stopPropagation();openEntry(current,'+i+')">打开</div>';
+  actionHtml+='<div class="entry-action-btn danger" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
   actionHtml+='</div>';
   var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+(selectMode&&selected.has(i)?' selected':'')+'"><div class="entry-del-bg" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
   var swipeAttrs=window.PointerEvent?' onpointerdown="ps(event,'+i+')" onpointermove="pm(event,'+i+')" onpointerup="pe(event,'+i+')" onpointercancel="pe(event,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"';
@@ -1808,20 +1779,20 @@ function navTo(tab){
 
 /* ---- API 配置：数据结构与状态 ---- */
 var API_TABS=[
-  {key:'main',label:'主链路',info:'主链路是你和大模型对话的主干通道：把你说的话发给模型，再把模型的回答取回来。这里配置对话主模型的接入信息。',groups:[
-    {key:'main_io',label:'输入与输出',info:'对话主模型的接入地址、密钥和默认模型。换供应商、换模型都在这里改。'}
+  {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个账号”。',groups:[
+    {key:'main_io',label:'输入与输出',info:'在这里填你要用哪家的 AI、用哪个账号（钥匙），以及默认用它家的哪个模型。想换一家 AI 或换个模型，改这里就行。'}
   ]},
-  {key:'memory',label:'记忆',info:'记忆相关的两件事：把“人和事”整理成小档案，以及把聊天记录离线切成片段存档。',groups:[
-    {key:'mem_profile',label:'小档案',info:'整理“人和事”小档案时所调用的模型。'},
-    {key:'mem_chatlog',label:'Chatlog离线切片',info:'把聊天记录离线切片、做摘要时所调用的模型。'}
+  {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：一是把聊天里提到的人和事，自动整理成一张张小卡片；二是把每天聊的内容存起来、剪成小段，方便以后回看。',groups:[
+    {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片（这个人是谁、你们之间有过什么）。这里选让哪个 AI 来做这件整理。'},
+    {key:'mem_chatlog',label:'Chatlog离线切片',info:'把每天的聊天记录存档，并剪成一小段一小段、每段配一句简短说明，方便以后快速翻找。这里选让哪个 AI 来做这个剪段和写说明。'}
   ]},
-  {key:'rolling',label:'滚动',info:'滚动相关：系统提示（System）的滚动更新，以及每日状态的滚动汇总。',groups:[
-    {key:'roll_sys',label:'Sys Rolling',info:'系统提示（System Prompt）滚动更新时所调用的模型。'},
-    {key:'roll_status',label:'状态滚动',info:'每日状态滚动汇总时所调用的模型。'}
+  {key:'rolling',label:'滚动',info:'这一栏管“自动整理近况”：放久了的旧近况会被自动概括一下、收进长期记录里，让“最近怎么样”这块始终干净，不会越堆越乱。',groups:[
+    {key:'roll_sys',label:'Sys Rolling',info:'把“当前近况”里放了挺久（大概一周以上）的旧条目，自动概括成一两句、并进长期时间线，原来的就收起来。这样“现在的情况”不会越攒越多。这里选让哪个 AI 来做。'},
+    {key:'roll_status',label:'状态滚动',info:'每天自动把这一天的情况汇总成一份“今日状态”（也就是你在“状态”那页看到的那份小结）。这里选让哪个 AI 来写这份小结。'}
   ]},
-  {key:'recall',label:'召回',info:'召回相关：把内容转成向量做语义召回，以及用关键词辅助检索。',groups:[
-    {key:'recall_vector',label:'向量化',info:'把记忆/档案转成向量（用于语义召回）的模型或服务。'},
-    {key:'recall_keyword',label:'关键词辅助',info:'关键词辅助召回时所调用的模型或服务。'}
+  {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从一大堆记忆里翻出相关的内容递给 AI，让它接得上话、记得住你。这里管翻找时用的工具。',groups:[
+    {key:'recall_vector',label:'向量化',info:'把每条记忆变成电脑能比对“意思像不像”的形式。这样哪怕你换种说法，也能把相关的记忆找回来。这里选用哪个服务来做这个转换。'},
+    {key:'recall_keyword',label:'关键词辅助',info:'除了按“意思”找，再用关键词兜个底，免得漏掉那些明明提到过、只是换了说法没对上的内容。这里设置相关的服务。'}
   ]}
 ];
 var currentApiTab='main';
