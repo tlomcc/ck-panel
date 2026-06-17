@@ -761,6 +761,7 @@ function stopDailyStatusRealtime(){
 
 /* ===== 密钥管理 ===== */
 var KEY_CONFIG_URL=GRAPH_API_BASE+'/config';
+var keyConfigData=null;
 function keyCfgFetch(init){
   var u=function(){return addStoredKey(KEY_CONFIG_URL+'?_t='+Date.now())};
   return fetch(u(),init).then(function(r){
@@ -792,9 +793,21 @@ function renderKeys(d){
   var body=document.getElementById('key-body');
   if(!body)return;
   d=d||{};
+  keyConfigData=d;
+  var modules=d.modules||[];
+  var html='<div class="key-note">'+esc(d.note||'')+'</div>';
+  if(modules.length){
+    var moduleGroups={},moduleOrder=[];
+    modules.forEach(function(m){if(!moduleGroups[m.group]){moduleGroups[m.group]=[];moduleOrder.push(m.group)}moduleGroups[m.group].push(m)});
+    moduleOrder.forEach(function(g){
+      html+='<div class="key-group api-group"><div class="key-group-title">'+esc(g)+'</div>';
+      moduleGroups[g].forEach(function(m){html+=renderApiModule(m)});
+      html+='</div>';
+    });
+  }
   var keys=d.keys||[],groups={},order=[];
   keys.forEach(function(k){if(!groups[k.group]){groups[k.group]=[];order.push(k.group)}groups[k.group].push(k)});
-  var html='<div class="key-note">'+esc(d.note||'')+'</div>';
+  if(order.length)html+='<div class="key-group-title key-legacy-title">兼容旧配置</div>';
   order.forEach(function(g){
     html+='<div class="key-group"><div class="key-group-title">'+esc(g)+'</div>';
     groups[g].forEach(function(k){
@@ -820,6 +833,66 @@ function renderKeys(d){
   body.innerHTML=html;
   body.scrollTop=0;
 }
+function renderApiModule(m){
+  var providers=m.providers||[];
+  var options=providers.map(function(p){
+    return '<option value="'+escAttr(p.id)+'" '+(p.id===m.active?'selected':'')+'>'+esc(p.name||p.id)+'</option>';
+  }).join('');
+  var html='<div class="api-module" data-module="'+escAttr(m.key)+'">'+
+    '<div class="api-module-head"><div><b>'+esc(m.label||m.key)+'</b><p>'+esc(m.purpose||'')+'</p></div>'+
+    '<label>当前使用<select class="api-active">'+options+'</select></label></div>'+
+    '<div class="api-provider-list">';
+  providers.forEach(function(p){html+=renderApiProvider(p)});
+  html+='</div><button class="key-add-api" type="button" onclick="addApiProvider(this)">+ 添加供应商</button></div>';
+  return html;
+}
+function renderApiProvider(p){
+  p=p||{};
+  var keyState=p.key_set?('已保存：'+(p.key_display||'已设置')):'未保存密钥';
+  return '<div class="api-provider" data-provider="'+escAttr(p.id||'')+'" data-builtin="'+(p.builtin?'1':'0')+'">'+
+    '<div class="api-provider-top"><input class="api-provider-name" value="'+escAttr(p.name||'')+'" placeholder="供应商名称">'+
+    '<span class="key-tag '+(p.key_set?'key-set':'key-unset')+'">'+esc(keyState)+'</span></div>'+
+    '<label>API URL / Base URL<input class="api-provider-url" value="'+escAttr(p.base_url||'')+'" placeholder="https://example.com/v1" autocapitalize="off" spellcheck="false"></label>'+
+    '<label>API Key<input class="api-provider-key" type="password" placeholder="留空=不改；填新密钥=覆盖" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
+    '<label>默认模型<input class="api-provider-model" value="'+escAttr(p.model||'')+'" placeholder="可留空，按请求或代码默认" autocapitalize="off" spellcheck="false"></label>'+
+    '<div class="api-provider-actions">'+
+      (p.key_set?'<button class="key-clear" type="button" onclick="markClearApiKey(this)">清除本供应商密钥</button>':'')+
+      (!p.builtin?'<button class="key-clear" type="button" onclick="deleteApiProvider(this)">删除供应商</button>':'')+
+    '</div></div>';
+}
+function addApiProvider(btn){
+  var module=btn.closest('.api-module');
+  if(!module)return;
+  var id='custom_'+Date.now();
+  var p={id:id,name:'新供应商',base_url:'',model:'',key_set:false,builtin:false};
+  var list=module.querySelector('.api-provider-list');
+  if(list)list.insertAdjacentHTML('beforeend',renderApiProvider(p));
+  var sel=module.querySelector('.api-active');
+  if(sel){
+    var opt=document.createElement('option');
+    opt.value=id;opt.textContent=p.name;opt.selected=true;sel.appendChild(opt);
+  }
+}
+function markClearApiKey(btn){
+  var card=btn.closest('.api-provider');
+  if(!card)return;
+  card.setAttribute('data-clear-key','1');
+  btn.textContent='已标记清除（保存后生效）';
+  btn.disabled=true;
+}
+function deleteApiProvider(btn){
+  var card=btn.closest('.api-provider');
+  var module=btn.closest('.api-module');
+  if(!card||!module)return;
+  var id=card.getAttribute('data-provider');
+  card.setAttribute('data-delete','1');
+  card.style.display='none';
+  var sel=module.querySelector('.api-active');
+  if(sel){
+    Array.prototype.slice.call(sel.options).forEach(function(o){if(o.value===id)o.remove()});
+    if(!sel.value&&sel.options.length)sel.selectedIndex=0;
+  }
+}
 function markClearKey(btn){
   var field=btn.parentNode;
   if(!field)return;
@@ -829,6 +902,27 @@ function markClearKey(btn){
 }
 function saveKeys(){
   var updates={};
+  var aiModules={};
+  document.querySelectorAll('#key-body .api-module').forEach(function(module){
+    var moduleKey=module.getAttribute('data-module');
+    var active=(module.querySelector('.api-active')||{}).value||'';
+    var providers={};
+    module.querySelectorAll('.api-provider').forEach(function(card){
+      var id=card.getAttribute('data-provider')||'';
+      if(!id)return;
+      if(card.getAttribute('data-delete')==='1'){providers[id]={id:id,delete:true};return}
+      var name=(card.querySelector('.api-provider-name')||{}).value||'';
+      var url=(card.querySelector('.api-provider-url')||{}).value||'';
+      var model=(card.querySelector('.api-provider-model')||{}).value||'';
+      var keyInput=(card.querySelector('.api-provider-key')||{}).value||'';
+      if(!name.trim()&&!url.trim()&&!model.trim()&&!keyInput.trim())return;
+      providers[id]={id:id,name:name.trim(),base_url:url.trim(),model:model.trim()};
+      if(card.getAttribute('data-clear-key')==='1')providers[id].api_key='__CLEAR__';
+      else if(keyInput.trim())providers[id].api_key=keyInput.trim();
+    });
+    if(Object.keys(providers).length)aiModules[moduleKey]={active:active,providers:providers};
+  });
+  if(Object.keys(aiModules).length)updates.__AI_MODULES_MARKER__='1';
   document.querySelectorAll('#key-body .key-field').forEach(function(f){
     var key=f.getAttribute('data-key');
     if(f.getAttribute('data-clear')==='1'){updates[key]='__CLEAR__';return}
@@ -844,9 +938,10 @@ function saveKeys(){
     }catch(e){toast('ROUTE_MAP 不是合法 JSON，未保存路由');return}
   }
   if(!Object.keys(updates).length){toast('没有要保存的修改');return}
+  delete updates.__AI_MODULES_MARKER__;
   var btn=document.querySelector('.key-save');
   if(btn){btn.disabled=true;btn.textContent='保存中...'}
-  keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
+  keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates,ai_modules:aiModules})})
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})
     .then(function(res){
       if(!res.ok){toast('保存失败：'+((res.j&&res.j.error)||'')); if(btn){btn.disabled=false;btn.textContent='保存全部修改'} return}
