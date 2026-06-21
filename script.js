@@ -102,9 +102,10 @@ function parseEntries(raw){
     var lines=block.split('\n'),meta={imp:5,time:'',last:'',tags:'',pin:false,resolved:false,archived:false};
     var first=lines[0],contentLines;
     if(first.charAt(0)==='['){
-      if(first.indexOf('[pin]')>=0)meta.pin=true;
-      if(first.indexOf('[resolved]')>=0)meta.resolved=true;
-      if(first.indexOf('[archived]')>=0)meta.archived=true;
+      function flag(k){return first.indexOf('['+k+']')>=0||new RegExp('\\['+k+':\\s*(true|1|yes|y|on)\\]','i').test(first)}
+      if(flag('pin'))meta.pin=true;
+      if(flag('resolved'))meta.resolved=true;
+      if(flag('archived'))meta.archived=true;
       var impIdx=first.indexOf('[imp:');
       if(impIdx>=0){var impEnd=first.indexOf(']',impIdx);if(impEnd>impIdx)meta.imp=parseInt(first.substring(impIdx+5,impEnd))||5}
       var timeIdx=first.indexOf('[time:');
@@ -1160,7 +1161,7 @@ function quickPin(i){
   var version=nextCategoryVersion(cat);
   setCategoryEntries(cat,next);
   toast((entry.meta.pin?'已置顶':'已取消置顶')+'，后台同步中');
-  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'同步失败，已回滚'});
+  queueEntryUpdate(cat,i,entry,{version:version,rollback:before,failMsg:'同步失败，已回滚'});
 }
 function toggleExpand(i){
   if(touchState.moved){touchState.moved=false;return}
@@ -1263,7 +1264,7 @@ function saveEdit(){
   hideEdit();
   setCategoryEntries(cat,next);
   toast('已保存，后台同步中');
-  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'保存同步失败，已回滚'});
+  queueEntryUpdate(cat,idx,e,{version:version,rollback:before,failMsg:'保存同步失败，已回滚'});
 }
 function showDelConfirm(i){
   suppressClickUntil=0;
@@ -1400,7 +1401,7 @@ function addEntry(){
   setCategoryEntries(cat,next);
   var wraps=document.querySelectorAll('.entry-wrap');if(wraps.length)wraps[wraps.length-1].classList.add('new-entry');
   toast('已添加，后台同步中');
-  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'添加同步失败，已回滚'});
+  queueEntryAppend(cat,next[next.length-1],{version:version,rollback:before,failMsg:'添加同步失败，已回滚'});
 }
 function updateCount(){document.getElementById('char-count').textContent=document.getElementById('add-input').value.length+' 字'}
 function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
@@ -1439,20 +1440,75 @@ function writeCategoryEntries(category,entries){
     return verify(3);
   });
 }
+function sameEntryCore(a,b){
+  a=a||{};b=b||{};
+  var am=a.meta||{},bm=b.meta||{};
+  return String(a.content||'').trim()===String(b.content||'').trim()&&
+    (parseInt(am.imp)||5)===(parseInt(bm.imp)||5)&&
+    String(am.time||'')===String(bm.time||'')&&
+    String(am.last||'')===String(bm.last||'')&&
+    String(am.tags||'').trim()===String(bm.tags||'').trim()&&
+    !!am.pin===!!bm.pin&&!!am.archived===!!bm.archived;
+}
+function readCategoryParsed(category){
+  return rpcStrict('read_memory',{category:category}).then(function(raw){return parseEntries(raw||'')});
+}
+function verifyEntryAt(category,index,expected,tries){
+  return readCategoryParsed(category).then(function(entries){
+    if(entries[index]&&sameEntryCore(entries[index],expected))return entries;
+    if(tries<=0)throw new Error('entry verification failed');
+    return wait(450).then(function(){return verifyEntryAt(category,index,expected,tries-1)});
+  });
+}
+function verifyAppendedEntry(category,expected,tries){
+  return readCategoryParsed(category).then(function(entries){
+    for(var i=entries.length-1;i>=0;i--){
+      if(sameEntryCore(entries[i],expected))return entries;
+    }
+    if(tries<=0)throw new Error('append verification failed');
+    return wait(450).then(function(){return verifyAppendedEntry(category,expected,tries-1)});
+  });
+}
+function writeEntryUpdate(category,index,entry){
+  var m=entry.meta||{};
+  return rpcStrict('update_entry',{
+    category:category,
+    index:index,
+    content:entry.content||'',
+    importance:parseInt(m.imp)||5,
+    tags:m.tags||'',
+    time:m.time||'',
+    last:m.last||'',
+    pin:!!m.pin,
+    archived:!!m.archived
+  }).then(function(){return verifyEntryAt(category,index,entry,3)});
+}
+function writeEntryAppend(category,entry){
+  var m=entry.meta||{};
+  return rpcStrict('append_memory',{
+    category:category,
+    content:entry.content||'',
+    importance:parseInt(m.imp)||5,
+    tags:m.tags||'',
+    time:m.time||'',
+    last:m.last||'',
+    pin:!!m.pin
+  }).then(function(){return verifyAppendedEntry(category,entry,3)});
+}
 function errText(err){
   var msg=err&&err.message?err.message:String(err||'');
   msg=msg.replace(/\s+/g,' ').trim();
   return msg?('：'+msg.slice(0,90)):'';
 }
-function queueCategoryWrite(category,entries,opts){
+function queueCategoryJob(category,run,opts){
   opts=opts||{};
-  var snapshot=cloneEntries(entries);
   var version=opts.version||categoryWriteVersions[category]||0;
   syncingCategories[category]=(syncingCategories[category]||0)+1;
   var prior=categoryWriteChains[category]||Promise.resolve();
-  var job=prior.catch(function(){}).then(function(){return writeCategoryEntries(category,snapshot)});
+  var job=prior.catch(function(){}).then(run);
   categoryWriteChains[category]=job;
-  job.then(function(){
+  job.then(function(result){
+    if(opts.applyResult&&categoryWriteVersions[category]===version)opts.applyResult(result);
     if(opts.successMsg&&categoryWriteVersions[category]===version)toast(opts.successMsg);
   }).catch(function(err){
     if(opts.rollback&&categoryWriteVersions[category]===version){
@@ -1466,6 +1522,22 @@ function queueCategoryWrite(category,entries,opts){
     if(!syncingCategories[category])delete syncingCategories[category];
   });
   return job;
+}
+function queueCategoryWrite(category,entries,opts){
+  var snapshot=cloneEntries(entries);
+  return queueCategoryJob(category,function(){return writeCategoryEntries(category,snapshot)},opts);
+}
+function queueEntryUpdate(category,index,entry,opts){
+  var snapshot=cloneEntries([entry])[0];
+  opts=opts||{};
+  opts.applyResult=function(entries){setCategoryEntries(category,entries)};
+  return queueCategoryJob(category,function(){return writeEntryUpdate(category,index,snapshot)},opts);
+}
+function queueEntryAppend(category,entry,opts){
+  var snapshot=cloneEntries([entry])[0];
+  opts=opts||{};
+  opts.applyResult=function(entries){setCategoryEntries(category,entries)};
+  return queueCategoryJob(category,function(){return writeEntryAppend(category,snapshot)},opts);
 }
 function saveCurrentCategory(){
   savePanelCache();
