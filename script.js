@@ -2292,6 +2292,22 @@ function providerUsage(id){
   allApiGroups().forEach(function(g){if(apiGroupSlot(g.key).current===id)used.push(g.label)});
   return used;
 }
+function apiConfigStats(){
+  var providers=providerLibraryList(),groups=allApiGroups();
+  var configured=0,modelCount=0,usedProviders={};
+  groups.forEach(function(g){
+    var slot=apiGroupSlot(g.key);
+    if(slot.current){configured++;usedProviders[slot.current]=1}
+  });
+  providers.forEach(function(p){modelCount+=cleanModelList(p.models,p.model).length});
+  return {providers:providers.length,used:Object.keys(usedProviders).length,configured:configured,total:groups.length,models:modelCount};
+}
+function apiPageHeadHtml(title,subtitle,actionHtml){
+  var s=apiConfigStats();
+  return '<div class="api-page-head"><div class="api-page-title"><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p><div class="api-page-stats">'+
+    '<span>'+s.providers+' 供应商</span><span>'+s.configured+'/'+s.total+' 已绑定</span><span>'+s.models+' 模型</span>'+
+    '</div></div><div class="api-page-actions">'+(actionHtml||'')+'</div></div>';
+}
 function modelOptionsHtml(models,selected){
   var html='<option value="">选择已拉取模型</option>';
   cleanModelList(models,selected).forEach(function(m){
@@ -2349,7 +2365,7 @@ function renderApiIntro(tab){
 }
 function renderProviderLibrary(){
   var tab=findApiTab('providers'),list=providerLibraryList();
-  var html='<div class="api-page-head"><div><h2>供应商库</h2><p>新增、维护 API URL / Key，并拉取模型列表。</p></div><button class="prov-add compact" type="button" onclick="addProvider()">添加供应商</button></div>';
+  var html=apiPageHeadHtml('供应商库','维护 API URL / Key 和模型列表。','<button class="prov-add compact" type="button" onclick="addProvider()">添加供应商</button>');
   html+=renderApiIntro(tab);
   if(!list.length){
     html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先添加一个供应商，再到主链路、记忆、滚动或召回页选择它。</p><button class="prov-add" type="button" onclick="addProvider()">添加供应商</button></div>';
@@ -2362,24 +2378,25 @@ function renderProviderLibrary(){
 }
 function providerCardHtml(p){
   var usage=providerUsage(p.id);
-  var usageHtml=usage.length?usage.map(function(x){return '<span>'+esc(x)+'</span>'}).join(''):'<span>未使用</span>';
+  var usageHtml=usage.length?'<div class="prov-usage">'+usage.map(function(x){return '<span>'+esc(x)+'</span>'}).join('')+'</div>':'';
   var models=cleanModelList(p.models,p.model);
   var modelHint=models.length?'<div class="prov-model-hint">已缓存 '+models.length+' 个模型。默认模型会作为新功能选择的初始值。</div>':'<div class="prov-model-hint">先填 API URL 和 API Key，再拉取模型；也可以直接手填默认模型。</div>';
+  var usedLabel=usage.length?(usage.length+' 处使用'):'未使用';
   return '<div class="prov-card" data-id="'+escAttr(p.id)+'">'+
-    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span><small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><span class="prov-status prov-status-off">'+models.length+' 模型</span></div>'+
-    '<div class="prov-usage">'+usageHtml+'</div>'+
+    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span><small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><div class="prov-card-badges"><span class="prov-status prov-status-model">'+models.length+' 模型</span><span class="prov-status '+(usage.length?'prov-status-on':'prov-status-off')+'">'+usedLabel+'</span></div></div>'+
+    usageHtml+
     '<div class="prov-card-body">'+
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
-      '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
-      '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
+      '<div class="prov-row prov-row-wide"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
+      '<div class="prov-row prov-row-wide"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
       '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存供应商</button></div>'+
       '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
     '</div></div>';
 }
 function renderApiAssignments(tab){
   var list=providerLibraryList();
-  var html='<div class="api-page-head"><div><h2>'+esc(tab.label)+'</h2><p>选择此类任务使用的供应商和模型。</p></div></div>';
+  var html=apiPageHeadHtml(tab.label,'选择此类任务使用的供应商和模型。','');
   html+=renderApiIntro(tab);
   if(!list.length){
     html+='<div class="api-empty-callout"><b>先添加供应商</b><p>功能页只负责选择供应商；请到供应商页新增 API URL / Key。</p><button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
@@ -2396,7 +2413,7 @@ function assignmentCardHtml(g){
   return '<div class="api-assign-card" data-group="'+escAttr(g.key)+'">'+
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
-    '<div class="api-assign-summary">'+esc(providerText)+'</div>'+
+    '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
     '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
     '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
     '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。')+'</div>'+
