@@ -4603,6 +4603,20 @@ body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
   font-size:13px;background:var(--ck-bg-soft);color:var(--ck-text);outline:none;font-family:inherit;
 }
 .prov-row input:focus{border-color:var(--ck-accent)}
+.prov-model-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
+.prov-model-select{
+  min-width:0;width:100%;padding:10px 10px;border:1.5px solid var(--ck-border);border-radius:10px;
+  font-size:13px;background:var(--ck-bg-soft);color:var(--ck-text);outline:none;font-family:inherit;
+}
+.prov-model-select:focus{border-color:var(--ck-accent)}
+.prov-fetch-models{
+  height:40px;padding:0 12px;border:1.5px solid var(--ck-accent);border-radius:10px;
+  background:var(--ck-surface);color:var(--ck-accent);font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;white-space:nowrap;
+}
+.prov-fetch-models:disabled{opacity:.58;cursor:default}
+.prov-fetch-models:active{background:rgba(var(--ck-accent-rgb),.08)}
+.prov-model-hint{margin-top:6px;font-size:11.5px;line-height:1.55;color:var(--ck-muted)}
 .prov-key-wrap{position:relative;display:flex;align-items:center}
 .prov-key-wrap input{padding-right:44px}
 .prov-eye{
@@ -4624,6 +4638,11 @@ body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
 }
 .prov-add:active{background:rgba(var(--ck-accent-rgb),.07)}
 .prov-del-q{font-size:13px;color:var(--ck-muted);margin-bottom:6px;line-height:1.6}
+
+@media (max-width:420px){
+  .prov-model-tools{grid-template-columns:1fr}
+  .prov-fetch-models{width:100%}
+}
 
 /* ===================== 交互优化（v4.1） ===================== */
 /* 分类页顶部操作栏：滚动时固定在顶部 */
