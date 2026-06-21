@@ -1971,7 +1971,7 @@ function provCardHtml(group,p,isCurrent){
     '<div class="prov-card-body">'+
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
       '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
-      '<div class="prov-row"><label>API Key</label><div class="prov-key-wrap"><input class="prov-key" type="password" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"><button class="prov-eye" type="button" onclick="toggleProvKey(this)" aria-label="显示或隐藏密钥">👁</button></div></div>'+
+      '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false">'+
         '<div class="prov-model-tools">'+modelSelect+'<button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
       '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存</button><button class="btn btn-outline prov-setcur" type="button" onclick="setProviderCurrent(this)">设为当前使用</button></div>'+
@@ -1992,12 +1992,6 @@ function toggleInfo(btn){
 function toggleProvCard(head){
   var card=head.closest('.prov-card');
   if(card)card.classList.toggle('expanded');
-}
-function toggleProvKey(btn){
-  var wrap=btn.closest('.prov-key-wrap');if(!wrap)return;
-  var inp=wrap.querySelector('.prov-key');if(!inp)return;
-  if(inp.type==='password'){inp.type='text';btn.textContent='🙈'}
-  else{inp.type='password';btn.textContent='👁'}
 }
 function readProvCard(card){
   function v(sel){var el=card.querySelector(sel);return el?el.value:''}
@@ -2377,7 +2371,7 @@ function providerCardHtml(p){
     '<div class="prov-card-body">'+
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
       '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
-      '<div class="prov-row"><label>API Key</label><div class="prov-key-wrap"><input class="prov-key" type="password" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"><button class="prov-eye" type="button" onclick="toggleProvKey(this)" aria-label="显示或隐藏密钥">显示</button></div></div>'+
+      '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
       '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存供应商</button></div>'+
       '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
@@ -2408,12 +2402,6 @@ function assignmentCardHtml(g){
     '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存选择</button></div>'+
   '</div>';
-}
-function toggleProvKey(btn){
-  var wrap=btn.closest('.prov-key-wrap');if(!wrap)return;
-  var inp=wrap.querySelector('.prov-key');if(!inp)return;
-  if(inp.type==='password'){inp.type='text';btn.textContent='隐藏'}
-  else{inp.type='password';btn.textContent='显示'}
 }
 function readProvCard(card){
   function v(sel){var el=card.querySelector(sel);return el?el.value:''}
