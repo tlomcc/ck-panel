@@ -2070,4 +2070,362 @@ function loadApiProviders(){
   });
 }
 
+/* ---- API 配置：供应商库 + 功能选择（新版） ---- */
+var API_PROVIDER_LIBRARY_KEY='provider_library';
+API_TABS=[
+  {key:'providers',label:'供应商',kind:'providers',info:'先在这里维护可用的 API 供应商。每个供应商只保存一次，模型也在这里拉取；下面的功能页只负责选择用哪个供应商。'},
+  {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
+    {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
+  ]},
+  {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：一是把聊天里提到的人和事，自动整理成一张张小卡片；二是把每天聊的内容存起来、剪成一小段一小段、每段配一句简短说明，方便以后回看。',groups:[
+    {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
+    {key:'mem_chatlog',label:'Chatlog离线切片',info:'把每天的聊天记录存档，并剪成一小段一小段。这里直接选择负责切片和写摘要的供应商和模型。'}
+  ]},
+  {key:'rolling',label:'滚动',info:'这一栏管“自动整理近况”：放久了的旧近况会被自动概括一下、收进长期记录里，让“最近怎么样”这块始终干净。',groups:[
+    {key:'roll_sys',label:'Sys Rolling',info:'把“当前近况”里放了挺久的旧条目，自动概括并进长期时间线。这里选择负责这个任务的供应商和模型。'},
+    {key:'roll_status',label:'状态滚动',info:'每天自动把这一天的情况汇总成一份“今日状态”。这里选择负责写状态的供应商和模型。'}
+  ]},
+  {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
+    {key:'recall_vector',label:'向量化',info:'把每条记忆变成电脑能比对“意思像不像”的形式。这里选择向量化服务供应商和模型。'},
+    {key:'recall_keyword',label:'关键词辅助',info:'除了按“意思”找，再用关键词兜底，减少漏召回。这里选择关键词辅助服务。'}
+  ]}
+];
+currentApiTab='providers';
+apiProviders={};
+apiProvidersLoaded=false;
+apiProvIdSeq=0;
+pendingProvDel=null;
+
+function allApiGroups(){
+  var out=[];
+  API_TABS.forEach(function(t){(t.groups||[]).forEach(function(g){out.push(g)})});
+  return out;
+}
+function findApiGroup(k){
+  var groups=allApiGroups();
+  for(var i=0;i<groups.length;i++){if(groups[i].key===k)return groups[i]}
+  return null;
+}
+function apiProviderLibrarySlot(){
+  if(!apiProviders||typeof apiProviders!=='object'||Array.isArray(apiProviders))apiProviders={};
+  if(!apiProviders[API_PROVIDER_LIBRARY_KEY]||typeof apiProviders[API_PROVIDER_LIBRARY_KEY]!=='object'||Array.isArray(apiProviders[API_PROVIDER_LIBRARY_KEY])){
+    apiProviders[API_PROVIDER_LIBRARY_KEY]={providers:[]};
+  }
+  var slot=apiProviders[API_PROVIDER_LIBRARY_KEY];
+  if(!Array.isArray(slot.providers))slot.providers=[];
+  return slot;
+}
+function apiGroupSlot(g){
+  if(!apiProviders[g]||typeof apiProviders[g]!=='object'||Array.isArray(apiProviders[g]))apiProviders[g]={current:'',model:''};
+  apiProviders[g].current=String(apiProviders[g].current||'');
+  apiProviders[g].model=String(apiProviders[g].model||'');
+  delete apiProviders[g].providers;
+  return apiProviders[g];
+}
+function normalizeProvider(p){
+  p=p&&typeof p==='object'&&!Array.isArray(p)?p:{};
+  return {
+    id:String(p.id||'').trim()||newProvId(),
+    name:String(p.name||'').trim(),
+    url:String(p.url||'').trim(),
+    key:String(p.key||'').trim(),
+    model:String(p.model||'').trim(),
+    models:cleanModelList(p.models,p.model)
+  };
+}
+function providerFingerprint(p){
+  var url=String(p&&p.url||'').trim().toLowerCase();
+  var key=String(p&&p.key||'').trim();
+  return (url||key)?(url+'\n'+key):String(p&&p.id||'');
+}
+function addProviderToLibrary(raw){
+  var slot=apiProviderLibrarySlot();
+  var p=normalizeProvider(raw);
+  var fp=providerFingerprint(p);
+  for(var i=0;i<slot.providers.length;i++){
+    var old=slot.providers[i];
+    if(old.id===p.id||providerFingerprint(old)===fp){
+      old.name=old.name||p.name;
+      old.url=old.url||p.url;
+      old.key=old.key||p.key;
+      old.model=old.model||p.model;
+      old.models=cleanModelList((old.models||[]).concat(p.models||[]),old.model||p.model);
+      return old.id;
+    }
+  }
+  slot.providers.push(p);
+  return p.id;
+}
+function normalizeApiProviders(raw){
+  apiProviders=(raw&&typeof raw==='object'&&!Array.isArray(raw))?raw:{};
+  var sourceProviders=[];
+  var existingLibrary=apiProviders[API_PROVIDER_LIBRARY_KEY];
+  if(existingLibrary&&typeof existingLibrary==='object'&&!Array.isArray(existingLibrary)&&Array.isArray(existingLibrary.providers)){
+    sourceProviders=sourceProviders.concat(existingLibrary.providers);
+  }
+  var oldGroupRefs=[];
+  var oldCurrentMap={};
+  allApiGroups().forEach(function(g){
+    var slot=apiProviders[g.key];
+    if(slot&&typeof slot==='object'&&!Array.isArray(slot)&&Array.isArray(slot.providers)){
+      var current=String(slot.current||'');
+      slot.providers.forEach(function(p){
+        sourceProviders.push(p);
+        oldGroupRefs.push({group:g.key,current:current,provider:p});
+      });
+    }
+  });
+  var library=apiProviderLibrarySlot();
+  library.providers=[];
+  sourceProviders.forEach(function(p){addProviderToLibrary(p)});
+  oldGroupRefs.forEach(function(ref){
+    var p=ref.provider;
+    if(String(p&&p.id||'')===ref.current){
+      oldCurrentMap[ref.group]={id:addProviderToLibrary(p),model:String(p.model||'')};
+    }
+  });
+  allApiGroups().forEach(function(g){
+    var slot=apiProviders[g.key];
+    if(!slot||typeof slot!=='object'||Array.isArray(slot))slot=apiProviders[g.key]={};
+    if(oldCurrentMap[g.key]){
+      slot.current=oldCurrentMap[g.key].id;
+      if(!slot.model)slot.model=oldCurrentMap[g.key].model;
+    }
+    slot.current=String(slot.current||'');
+    slot.model=String(slot.model||'');
+    delete slot.providers;
+  });
+}
+function providerLibraryList(){return apiProviderLibrarySlot().providers}
+function findLibraryProvider(id){
+  id=String(id||'');
+  var list=providerLibraryList();
+  for(var i=0;i<list.length;i++){if(String(list[i].id)===id)return list[i]}
+  return null;
+}
+function providerHost(url){
+  try{return new URL(String(url||'')).host}catch(e){return String(url||'').replace(/^https?:\/\//,'').split('/')[0]}
+}
+function providerDisplayName(p){return (p&&p.name)||providerHost(p&&p.url)||'未命名供应商'}
+function providerUsage(id){
+  var used=[];
+  allApiGroups().forEach(function(g){if(apiGroupSlot(g.key).current===id)used.push(g.label)});
+  return used;
+}
+function modelOptionsHtml(models,selected){
+  var html='<option value="">选择已拉取模型</option>';
+  cleanModelList(models,selected).forEach(function(m){
+    html+='<option value="'+escAttr(m)+'"'+(m===selected?' selected':'')+'>'+esc(m)+'</option>';
+  });
+  return html;
+}
+function providerOptionsHtml(selected){
+  var html='<option value="">不选择</option>';
+  providerLibraryList().forEach(function(p){
+    html+='<option value="'+escAttr(p.id)+'"'+(p.id===selected?' selected':'')+'>'+esc(providerDisplayName(p))+'</option>';
+  });
+  return html;
+}
+function renderApiConfig(){
+  var body=document.getElementById('api-config-body');
+  if(!body)return;
+  document.querySelectorAll('.sub-tab').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-subtab')===currentApiTab)});
+  if(!apiProvidersLoaded){
+    body.innerHTML='<div class="empty-state small">读取中...</div>';
+    loadApiProviders();
+    return;
+  }
+  var tab=findApiTab(currentApiTab);
+  body.innerHTML=tab.kind==='providers'?renderProviderLibrary():renderApiAssignments(tab);
+  body.scrollTop=0;
+}
+function renderApiIntro(tab){
+  return '<div class="api-info-row"><button class="api-info-btn" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button><div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info||'')+'</div></div></div>';
+}
+function renderProviderLibrary(){
+  var tab=findApiTab('providers'),list=providerLibraryList();
+  var html='<div class="api-page-head"><div><h2>供应商库</h2><p>新增、维护 API URL / Key，并拉取模型列表。</p></div><button class="prov-add compact" type="button" onclick="addProvider()">添加供应商</button></div>';
+  html+=renderApiIntro(tab);
+  if(!list.length){
+    html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先添加一个供应商，再到主链路、记忆、滚动或召回页选择它。</p><button class="prov-add" type="button" onclick="addProvider()">添加供应商</button></div>';
+  }else{
+    html+='<div class="api-provider-list">';
+    list.forEach(function(p){html+=providerCardHtml(p)});
+    html+='</div>';
+  }
+  return html;
+}
+function providerCardHtml(p){
+  var usage=providerUsage(p.id);
+  var usageHtml=usage.length?usage.map(function(x){return '<span>'+esc(x)+'</span>'}).join(''):'<span>未使用</span>';
+  var models=cleanModelList(p.models,p.model);
+  var modelHint=models.length?'<div class="prov-model-hint">已缓存 '+models.length+' 个模型。默认模型会作为新功能选择的初始值。</div>':'<div class="prov-model-hint">先填 API URL 和 API Key，再拉取模型；也可以直接手填默认模型。</div>';
+  return '<div class="prov-card" data-id="'+escAttr(p.id)+'">'+
+    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span><small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><span class="prov-status prov-status-off">'+models.length+' 模型</span></div>'+
+    '<div class="prov-usage">'+usageHtml+'</div>'+
+    '<div class="prov-card-body">'+
+      '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
+      '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
+      '<div class="prov-row"><label>API Key</label><div class="prov-key-wrap"><input class="prov-key" type="password" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"><button class="prov-eye" type="button" onclick="toggleProvKey(this)" aria-label="显示或隐藏密钥">显示</button></div></div>'+
+      '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
+      '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存供应商</button></div>'+
+      '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
+    '</div></div>';
+}
+function renderApiAssignments(tab){
+  var list=providerLibraryList();
+  var html='<div class="api-page-head"><div><h2>'+esc(tab.label)+'</h2><p>选择此类任务使用的供应商和模型。</p></div></div>';
+  html+=renderApiIntro(tab);
+  if(!list.length){
+    html+='<div class="api-empty-callout"><b>先添加供应商</b><p>功能页只负责选择供应商；请到供应商页新增 API URL / Key。</p><button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
+    return html;
+  }
+  (tab.groups||[]).forEach(function(g){html+=assignmentCardHtml(g)});
+  return html;
+}
+function assignmentCardHtml(g){
+  var slot=apiGroupSlot(g.key),p=findLibraryProvider(slot.current);
+  var selectedModel=slot.model||(p&&p.model)||'';
+  var models=p?cleanModelList(p.models,selectedModel):[];
+  var providerText=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
+  return '<div class="api-assign-card" data-group="'+escAttr(g.key)+'">'+
+    '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button></div>'+
+    '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
+    '<div class="api-assign-summary">'+esc(providerText)+'</div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="prov-model-tools"><select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
+    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。')+'</div>'+
+    '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存选择</button></div>'+
+  '</div>';
+}
+function toggleProvKey(btn){
+  var wrap=btn.closest('.prov-key-wrap');if(!wrap)return;
+  var inp=wrap.querySelector('.prov-key');if(!inp)return;
+  if(inp.type==='password'){inp.type='text';btn.textContent='隐藏'}
+  else{inp.type='password';btn.textContent='显示'}
+}
+function readProvCard(card){
+  function v(sel){var el=card.querySelector(sel);return el?el.value:''}
+  var id=card.getAttribute('data-id');
+  var old=findLibraryProvider(id);
+  return {id:id,name:v('.prov-name-input'),url:v('.prov-url'),key:v('.prov-key'),model:v('.prov-model'),models:old&&Array.isArray(old.models)?old.models:[]};
+}
+function addProvider(){
+  switchApiTab('providers');
+  var id=newProvId();
+  apiProviderLibrarySlot().providers.push({id:id,name:'',url:'',key:'',model:'',models:[]});
+  renderApiConfig();
+  setTimeout(function(){
+    var card=document.querySelector('.prov-card[data-id="'+id+'"]');
+    if(card){card.classList.add('expanded');card.scrollIntoView({behavior:'smooth',block:'center'});var ni=card.querySelector('.prov-name-input');if(ni)ni.focus()}
+  },30);
+}
+function pickAssignModel(sel){
+  var row=sel.closest('.api-assign-card');if(!row)return;
+  var inp=row.querySelector('.assign-model');if(inp&&sel.value)inp.value=sel.value;
+}
+function fetchModelsForProvider(p){
+  return fetch(addStoredKey(PROVIDER_MODELS_URL+'?_t='+Date.now()),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key})}).then(function(r){
+    if(r.status===403&&requestApiKey())return fetch(addStoredKey(PROVIDER_MODELS_URL+'?_t='+Date.now()),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key})});
+    return r;
+  }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})}).then(function(res){
+    if(!res.ok||!res.j||!res.j.ok)throw new Error((res.j&&res.j.error)||'拉取失败');
+    return cleanModelList(res.j.models,p.model);
+  });
+}
+function fetchProviderModels(btn){
+  var card=btn.closest('.prov-card');if(!card)return;
+  var d=readProvCard(card);
+  if(!d.url.trim()){toast('先填写 API URL');return}
+  if(!d.key.trim()){toast('先填写 API Key');return}
+  var p=findLibraryProvider(d.id)||{};
+  p.id=d.id;p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
+  btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
+  fetchModelsForProvider(p).then(function(models){
+    p.models=cleanModelList(models,p.model);
+    if(!p.model&&p.models.length)p.model=p.models[0];
+    addProviderToLibrary(p);
+    return persistAndReload('已拉取 '+p.models.length+' 个模型');
+  }).then(function(){renderApiConfig();setTimeout(function(){var next=document.querySelector('.prov-card[data-id="'+d.id+'"]');if(next)next.classList.add('expanded')},30)})
+    .catch(function(e){toast((e&&e.message)?e.message:'拉取模型失败')})
+    .finally(function(){btn.disabled=false;btn.textContent=old});
+}
+function saveProvider(btn){
+  var card=btn.closest('.prov-card');if(!card)return;
+  var d=readProvCard(card);
+  var p=findLibraryProvider(d.id);
+  if(!p){apiProviderLibrarySlot().providers.push(normalizeProvider(d));p=findLibraryProvider(d.id)}
+  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();p.models=cleanModelList(d.models,p.model);
+  btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
+  persistAndReload('供应商已保存').then(function(ok){btn.disabled=false;btn.textContent=old;if(ok)renderApiConfig()});
+}
+function deleteProvider(btn){
+  var card=btn.closest('.prov-card');if(!card)return;
+  var id=card.getAttribute('data-id');
+  var used=providerUsage(id);
+  if(used.length){toast('先在 '+used.join('、')+' 切换供应商');return}
+  pendingProvDel={id:id};
+  var m=document.getElementById('provDelModal');if(m)m.classList.add('show');
+}
+function confirmProvDel(){
+  if(!pendingProvDel){closeProvDel();return}
+  var id=pendingProvDel.id,slot=apiProviderLibrarySlot();
+  slot.providers=slot.providers.filter(function(x){return x.id!==id});
+  closeProvDel();
+  persistAndReload('已删除供应商').then(function(){renderApiConfig()});
+}
+function readAssignmentRow(row){
+  function v(sel){var el=row.querySelector(sel);return el?el.value:''}
+  return {group:row.getAttribute('data-group'),providerId:v('.assign-provider'),model:v('.assign-model')};
+}
+function onAssignProviderChange(sel){
+  var row=sel.closest('.api-assign-card');if(!row)return;
+  var p=findLibraryProvider(sel.value);
+  var input=row.querySelector('.assign-model');if(input)input.value=(p&&p.model)||'';
+  var ms=row.querySelector('.assign-model-select');if(ms)ms.innerHTML=modelOptionsHtml(p?p.models:[],(p&&p.model)||'');
+  var summary=row.querySelector('.api-assign-summary');if(summary)summary.textContent=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
+  var hint=row.querySelector('.prov-model-hint');
+  if(hint){
+    var models=p?cleanModelList(p.models,(p&&p.model)||''):[];
+    hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。';
+  }
+}
+function saveAssignment(btn){
+  var row=btn.closest('.api-assign-card');if(!row)return;
+  var d=readAssignmentRow(row),slot=apiGroupSlot(d.group);
+  slot.current=d.providerId;slot.model=d.model.trim();
+  btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
+  persistAndReload(d.providerId?'选择已保存':'已清空选择').then(function(){btn.disabled=false;btn.textContent=old;renderApiConfig()});
+}
+function fetchAssignmentModels(btn){
+  var row=btn.closest('.api-assign-card');if(!row)return;
+  var d=readAssignmentRow(row),p=findLibraryProvider(d.providerId);
+  if(!p){toast('先选择供应商');return}
+  if(!p.url){toast('供应商缺少 API URL');return}
+  if(!p.key){toast('供应商缺少 API Key');return}
+  var slot=apiGroupSlot(d.group);
+  slot.current=d.providerId;slot.model=d.model.trim()||slot.model;
+  btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
+  fetchModelsForProvider(p).then(function(models){
+    p.models=cleanModelList(models,slot.model||p.model);
+    if(!slot.model&&p.model)slot.model=p.model;
+    if(!slot.model&&p.models.length)slot.model=p.models[0];
+    if(!p.model&&p.models.length)p.model=p.models[0];
+    return persistAndReload('模型已拉取并保存');
+  }).then(function(){renderApiConfig()})
+    .catch(function(e){toast((e&&e.message)?e.message:'拉取模型失败')})
+    .finally(function(){btn.disabled=false;btn.textContent=old});
+}
+function loadApiProviders(){
+  keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+    var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
+    normalizeApiProviders(prov);
+    apiProvidersLoaded=true;
+    renderApiConfig();
+  }).catch(function(){
+    var body=document.getElementById('api-config-body');
+    if(body)body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署、面板 key 正确。</div><button class="prov-add" type="button" style="margin-top:14px" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>';
+  });
+}
+
 init();
