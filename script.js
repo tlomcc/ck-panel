@@ -2305,6 +2305,31 @@ function modelOptionsHtml(models,selected){
   });
   return html;
 }
+function modelSearchHtml(models){
+  var has=cleanModelList(models,'').length>0;
+  return '<input class="prov-model-search" type="search" value="" placeholder="'+(has?'搜索模型':'拉取模型后可搜索')+'" oninput="filterModelOptions(this)" autocomplete="off" autocapitalize="off" spellcheck="false"'+(has?'':' disabled')+'>';
+}
+function filterModelOptions(input){
+  var wrap=input&&input.closest?input.closest('.prov-model-picker'):null;
+  var sel=wrap?wrap.querySelector('select'):null;
+  if(!sel)return;
+  var q=String(input.value||'').trim().toLowerCase();
+  for(var i=0;i<sel.options.length;i++){
+    var opt=sel.options[i];
+    if(!opt.value){opt.hidden=false;continue}
+    var text=(opt.textContent||opt.value||'').toLowerCase();
+    opt.hidden=!!q&&text.indexOf(q)<0;
+  }
+}
+function setModelSearchState(scope,models){
+  var input=scope&&scope.querySelector?scope.querySelector('.prov-model-search'):null;
+  if(!input)return;
+  var has=cleanModelList(models,'').length>0;
+  input.value='';
+  input.disabled=!has;
+  input.placeholder=has?'搜索模型':'拉取模型后可搜索';
+  filterModelOptions(input);
+}
 function providerOptionsHtml(selected){
   var html='<option value="">不选择</option>';
   providerLibraryList().forEach(function(p){
@@ -2353,7 +2378,7 @@ function providerCardHtml(p){
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
       '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row"><label>API Key</label><div class="prov-key-wrap"><input class="prov-key" type="password" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"><button class="prov-eye" type="button" onclick="toggleProvKey(this)" aria-label="显示或隐藏密钥">显示</button></div></div>'+
-      '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
+      '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
       '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存供应商</button></div>'+
       '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
     '</div></div>';
@@ -2379,7 +2404,7 @@ function assignmentCardHtml(g){
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary">'+esc(providerText)+'</div>'+
     '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
-    '<div class="prov-model-tools"><select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
+    '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
     '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存选择</button></div>'+
   '</div>';
@@ -2469,6 +2494,7 @@ function onAssignProviderChange(sel){
   var p=findLibraryProvider(sel.value);
   var input=row.querySelector('.assign-model');if(input)input.value=(p&&p.model)||'';
   var ms=row.querySelector('.assign-model-select');if(ms)ms.innerHTML=modelOptionsHtml(p?p.models:[],(p&&p.model)||'');
+  setModelSearchState(row,p?p.models:[]);
   var summary=row.querySelector('.api-assign-summary');if(summary)summary.textContent=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
   var hint=row.querySelector('.prov-model-hint');
   if(hint){

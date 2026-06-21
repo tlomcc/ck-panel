@@ -4649,6 +4649,13 @@ body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
 }
 .prov-row input:focus{border-color:var(--ck-accent)}
 .prov-model-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
+.prov-model-picker{display:grid;gap:7px;min-width:0}
+.prov-model-search{
+  width:100%;min-width:0;padding:10px 10px;border:1.5px solid var(--ck-border);border-radius:10px;
+  font-size:13px;background:var(--ck-bg-soft);color:var(--ck-text);outline:none;font-family:inherit;
+}
+.prov-model-search:focus{border-color:var(--ck-accent)}
+.prov-model-search:disabled{opacity:.62;cursor:default}
 .prov-model-select{
   min-width:0;width:100%;padding:10px 10px;border:1.5px solid var(--ck-border);border-radius:10px;
   font-size:13px;background:var(--ck-bg-soft);color:var(--ck-text);outline:none;font-family:inherit;
