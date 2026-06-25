@@ -1,8 +1,9 @@
-const CACHE_NAME = 'ck-panel-shell-v24';
+const CACHE_NAME = 'ck-panel-shell-v25';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './style.css',
+  './polish.css',
   './script.js',
   './script-extra.js',
   './pwa.js',
