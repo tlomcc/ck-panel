@@ -34,6 +34,7 @@
 <button class="side-nav-item" data-tab="search" onclick="navTo('search')">搜索</button>
 <button class="side-nav-item" data-tab="graph" onclick="navTo('graph')">信息网</button>
 <button class="side-nav-item" data-tab="status" onclick="navTo('status')">状态</button>
+<button class="side-nav-item" data-tab="chat" onclick="navTo('chat')">聊天</button>
 <button class="side-nav-item" data-tab="apiconfig" onclick="navTo('apiconfig')">API配置</button>
 </nav>
 </aside>
@@ -103,6 +104,32 @@
 </section>
 <section class="panel-tab" id="tab-apiconfig">
 <div class="api-config-page" id="api-config-body"><div class="empty-state small">读取中...</div></div>
+</section>
+<section class="panel-tab" id="tab-chat">
+<div class="chat-shell">
+<div class="chat-main">
+<div class="tab-head chat-head"><div><h2>聊天</h2><p id="chat-status">配置好网关和上游 API 后就可以直接聊</p></div><button class="btn btn-outline btn-sm" onclick="chatNewSession()">新会话</button></div>
+<div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
+<div class="chat-compose">
+<textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+<button class="btn btn-blue" id="chat-send-btn" onclick="chatSendMessage()">发送</button>
+</div>
+</div>
+<aside class="chat-settings">
+<div class="chat-settings-head"><b>API 配置</b><button class="btn btn-outline btn-sm" onclick="chatSaveConfig()">保存</button></div>
+<label>网关地址<input id="chat-gateway-url" autocomplete="off" placeholder="https://ck-gateway..."></label>
+<label>面板 Key<input id="chat-panel-key" type="password" autocomplete="off"></label>
+<label>上游 API Base<input id="chat-api-base" autocomplete="off" placeholder="https://nowcoding.ai/v1"></label>
+<label>上游 Key<input id="chat-upstream-key" type="password" autocomplete="off"></label>
+<label>模型<input id="chat-model" autocomplete="off" placeholder="claude-opus-4-6"></label>
+<label>Session ID<input id="chat-session-id" autocomplete="off"></label>
+<label>System<textarea id="chat-system" rows="4"></textarea></label>
+<label>Memory Pack<textarea id="chat-memory-pack" rows="7" placeholder="网关召回的记忆会保存在这里，下轮作为稳定上下文发送"></textarea></label>
+<div class="chat-checks"><label><input id="chat-recall" type="checkbox" checked> 网关召回</label><label><input id="chat-auto-memory" type="checkbox" checked> 空时自动保存记忆包</label></div>
+<div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatClearMemory()">清空记忆包</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">清空窗口</button></div>
+<pre class="chat-debug" id="chat-debug"></pre>
+</aside>
+</div>
 </section>
 <div class="eg-detail-sheet" id="eg-detail-sheet"><div class="eg-detail-mask" onclick="closeEntityDetail()"></div><div class="eg-detail-panel"><button class="eg-detail-close" onclick="closeEntityDetail()" aria-label="关闭">✕</button><div class="eg-detail-body" id="eg-detail-body"></div></div></div>
 </div>
