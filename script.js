@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v16';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v17';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1651,6 +1651,7 @@ var chatActiveSessionId='';
 var chatDebugRecords=[];
 var chatCacheTimer=null;
 var chatWorldbookActiveId='';
+var chatEditingIndex=-1;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
@@ -2283,6 +2284,50 @@ function chatClearPendingMessages(){
   chatRenderMessages();
   chatRenderPendingBar();
 }
+function chatStartEditMessage(i){
+  if(chatSending)return;
+  var m=chatMessages[i];
+  if(!m||m.role==='notice')return;
+  var input=document.getElementById('chat-input');
+  var btn=document.getElementById('chat-send-btn');
+  if(!input)return;
+  chatEditingIndex=i;
+  input.value=String(m.text||'');
+  chatAutosizeInput(input);
+  input.focus();
+  if(btn){btn.textContent='✓';btn.title='保存编辑'}
+  chatSetStatus('编辑中');
+  chatScrollMessagesBottom(true);
+}
+function chatCancelEdit(){
+  chatEditingIndex=-1;
+  var btn=document.getElementById('chat-send-btn');
+  if(btn){btn.textContent='↑';btn.title='发送'}
+  chatSetStatus();
+}
+function chatSaveEditedMessage(){
+  var input=document.getElementById('chat-input');
+  if(chatEditingIndex<0||!input)return false;
+  var m=chatMessages[chatEditingIndex];
+  if(!m)return false;
+  var text=String(input.value||'').trim();
+  if(!text)return false;
+  m.text=text;
+  m.edited=true;
+  m.updated=Date.now();
+  if(m.role==='user'){
+    m.cacheHit=false;
+    delete m.cacheRead;
+    delete m.cacheCreate;
+  }
+  input.value='';
+  chatAutosizeInput(input);
+  chatCancelEdit();
+  chatSaveLocalMessages();
+  chatRenderMessages();
+  toast('已保存编辑');
+  return true;
+}
 /* ===== 聊天增强：Markdown 渲染（防 XSS）/ 复制 / 停止 ===== */
 function chatEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function chatMdInline(raw){
@@ -2344,7 +2389,7 @@ function chatSplitThinkingText(src){
 function chatRenderAssistantContent(rawText,streaming){
   var split=chatSplitThinkingText(rawText);
   var thinking=split.thinking?(
-    '<div class="chat-thinking open"><button class="chat-thinking-head" type="button"><span>思考过程</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
+    '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考过程</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
   return thinking+'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'+(streaming?'<span class="chat-caret"></span>':'');
 }
@@ -2518,11 +2563,30 @@ document.addEventListener('click',function(e){
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
   var th=e.target.closest('.chat-thinking-head');
   if(th&&th.parentNode){th.parentNode.classList.toggle('open');return;}
-  var act=e.target.closest('.chat-msg-act');
-  if(act){var i=parseInt(act.getAttribute('data-i'),10);if(act.getAttribute('data-act')==='copy'&&chatMessages[i])chatCopyText(chatMessages[i].text||'');return;}
+  var act=e.target.closest('.chat-msg-act,.chat-user-regen');
+  if(act){
+    var i=parseInt(act.getAttribute('data-i'),10);
+    var a=act.getAttribute('data-act');
+    if(a==='copy'&&chatMessages[i])chatCopyText(chatMessages[i].text||'');
+    if(a==='regen')chatRegenerateFromUser(i);
+    return;
+  }
+});
+document.addEventListener('dblclick',function(e){
+  if(!e.target||!e.target.closest)return;
+  if(e.target.closest('button,.chat-recall,.chat-thinking,.cb'))return;
+  var bubble=e.target.closest('.chat-bubble');
+  if(!bubble)return;
+  var i=parseInt(bubble.getAttribute('data-i'),10);
+  chatStartEditMessage(i);
 });
 document.addEventListener('keydown',function(e){
   if(e.key!=='Escape')return;
+  if(chatEditingIndex>=0){
+    chatCancelEdit();
+    var input=document.getElementById('chat-input');
+    if(input){input.value='';chatAutosizeInput(input)}
+  }
   chatToggleSessions(false,true);
   chatToggleSettings(false,true);
   chatTogglePlus(false);
@@ -2535,12 +2599,24 @@ function chatRenderMessages(){
   if(!chatMessages.length){
     box.innerHTML='<div class="chat-welcome"><b>CK Chat</b><p>新对话</p></div>';
     chatRenderPendingBar();
+    chatScrollMessagesBottom(true);
     return;
   }
   chatEnsureCacheExpiryNotice();
   box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
-  box.scrollTop=box.scrollHeight;
   chatRenderPendingBar();
+  chatScrollMessagesBottom(true);
+}
+function chatScrollMessagesBottom(instant){
+  var box=document.getElementById('chat-messages');
+  if(!box)return;
+  var old=box.style.scrollBehavior;
+  if(instant)box.style.scrollBehavior='auto';
+  box.scrollTop=box.scrollHeight;
+  requestAnimationFrame(function(){
+    box.scrollTop=box.scrollHeight;
+    if(instant)box.style.scrollBehavior=old;
+  });
 }
 function chatIsRealMessage(m){
   return m&&(m.role==='user'||m.role==='assistant')&&Number(m.ts||0);
@@ -2584,10 +2660,11 @@ function chatRenderMessageRow(m,i){
   }
   var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false):esc(m.text||'');
   if(role==='user')inner='<span class="chat-user-text">'+inner+'</span>'+chatCacheTickHtml(m);
+  var regen=(role==='user'&&!pending)?'<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>':'';
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+(pending?' · 待发送':'')+'</div>';
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+acts+'</div>';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+'">'+(role==='assistant'?recall:'')+bubble+time+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+'">'+(role==='assistant'?recall:'')+bubble+regen+time+'</div>';
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -2723,6 +2800,10 @@ function chatInit(){
   if(input){
     chatAutosizeInput(input);
     input.addEventListener('input',function(){chatAutosizeInput(input)});
+    input.addEventListener('focus',function(){
+      chatScrollMessagesBottom(true);
+      setTimeout(function(){chatScrollMessagesBottom(true)},180);
+    });
     input.addEventListener('keydown',function(e){
       if(e.key==='Enter'&&!e.shiftKey){
         e.preventDefault();
@@ -2734,6 +2815,10 @@ function chatInit(){
 async function chatSendMessage(){
   chatInit();
   if(chatSending){chatStopMessage();return;}
+  if(chatEditingIndex>=0){
+    chatSaveEditedMessage();
+    return;
+  }
   var input=document.getElementById('chat-input');
   var text=(input.value||'').trim();
   if(text){
@@ -2743,6 +2828,19 @@ async function chatSendMessage(){
     return;
   }
   if(chatPendingMessages().length)chatSubmitPendingMessages();
+}
+function chatRegenerateFromUser(i){
+  if(chatSending)return;
+  var m=chatMessages[i];
+  if(!m||m.role!=='user'||!String(m.text||'').trim())return;
+  chatMessages=chatMessages.slice(0,i+1);
+  chatMessages[i].role='pending_user';
+  chatMessages[i].cacheHit=false;
+  delete chatMessages[i].cacheRead;
+  delete chatMessages[i].cacheCreate;
+  chatSaveLocalMessages();
+  chatRenderMessages();
+  chatSubmitPendingMessages();
 }
 async function chatSubmitPendingMessages(){
   chatInit();
