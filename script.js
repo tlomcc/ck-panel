@@ -3,6 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v9';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -12,6 +13,25 @@ try{
   }
 }catch(e){}
 var PANEL_CACHE_KEY='ckPanelCacheV3';
+function startPanelVersionWatcher(){
+  if(window.__ckPanelVersionWatcher||location.protocol==='file:')return;
+  window.__ckPanelVersionWatcher=true;
+  function check(){
+    fetch('index.html?__ck_version_check='+Date.now(),{cache:'no-store'})
+      .then(function(r){return r.ok?r.text():''})
+      .then(function(html){
+        var m=String(html||'').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
+        var latest=m&&m[1];
+        if(latest&&latest!==CK_PANEL_VERSION){
+          try{sessionStorage.setItem('ck_panel_reloaded_to',latest)}catch(e){}
+          toast('检测到新版本，正在刷新页面');
+          setTimeout(function(){location.reload()},600);
+        }
+      }).catch(function(){});
+  }
+  setTimeout(check,5000);
+  setInterval(check,120000);
+}
 function initApiKeyFromUrl(){
   try{
     var params=new URLSearchParams(window.location.search||'');
@@ -167,6 +187,7 @@ function compareEntryTime(ea,eb,a,b,dir){
   return dir==='asc'?cmp:-cmp;
 }
 function init(){
+  startPanelVersionWatcher();
   initApiKeyFromUrl();
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];

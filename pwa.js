@@ -48,7 +48,15 @@
     }
 
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-      navigator.serviceWorker.register('./sw.js').catch(function() {});
+      var refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register('./sw.js?v=chat-v9').then(function(reg) {
+        if (reg && reg.update) reg.update();
+      }).catch(function() {});
     }
 
     updateInstallButton();
