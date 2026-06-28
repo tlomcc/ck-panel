@@ -8408,6 +8408,41 @@ body.dark.chat-active .chat-user-regen{
   color:#57c78c!important;
 }
 
+body.chat-active .chat-msg-acts{
+  position:static!important;
+  right:auto!important;
+  bottom:auto!important;
+  align-self:flex-start!important;
+  margin:2px 0 0 4px!important;
+  display:flex!important;
+  gap:5px!important;
+  height:auto!important;
+  opacity:.68!important;
+  pointer-events:auto!important;
+  background:transparent!important;
+  border-radius:0!important;
+}
+
+body.chat-active .chat-msg-row.user .chat-msg-acts{
+  align-self:flex-end!important;
+  margin:2px 5px 0 0!important;
+}
+
+body.chat-active .chat-bubble:hover .chat-msg-acts{
+  opacity:.68!important;
+}
+
+body.chat-active .chat-msg-act{
+  height:18px!important;
+  padding:0 6px!important;
+  border:1px solid rgba(15,23,42,.08)!important;
+  border-radius:999px!important;
+  background:rgba(255,255,255,.72)!important;
+  color:var(--chat5-muted)!important;
+  font-size:10px!important;
+  line-height:16px!important;
+}
+
 /* Chat viewport hardening: keep the composer visible during SW refresh and mobile keyboard resize. */
 body.chat-active{
   position:fixed!important;
@@ -8488,6 +8523,48 @@ body.chat-active #chat-input{
   display:block!important;
   visibility:visible!important;
   opacity:1!important;
+}
+
+body.chat-active .chat-compose-row{
+  grid-template-columns:36px minmax(0,1fr) 34px 36px!important;
+}
+
+body.chat-active .chat-store-btn{
+  width:34px!important;
+  height:36px!important;
+  min-width:34px!important;
+  min-height:36px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  margin:0!important;
+  border:1px solid #cfd7dc!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:#4b5563!important;
+  font-size:17px!important;
+  line-height:1!important;
+  box-shadow:none!important;
+  cursor:pointer!important;
+}
+
+body.chat-active .chat-store-btn:hover{
+  background:#eefaf3!important;
+  border-color:#aedcc0!important;
+  color:#128c4c!important;
+}
+
+@media(max-width:760px){
+  body.chat-active .chat-compose-row{
+    grid-template-columns:34px minmax(0,1fr) 32px 34px!important;
+  }
+  body.chat-active .chat-store-btn{
+    width:32px!important;
+    height:34px!important;
+    min-width:32px!important;
+    min-height:34px!important;
+    border-radius:9px!important;
+  }
 }
 
 @media(max-width:760px){
