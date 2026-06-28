@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v15';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v16';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1930,6 +1930,10 @@ function chatFormatRecallDiag(data){
   var diag=(data.recall_diag&&typeof data.recall_diag==='object')?data.recall_diag:null;
   if(!diag)return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字';
   var sources=(diag.sources&&typeof diag.sources==='object')?diag.sources:{};
+  var hasSources=Object.keys(sources).length>0;
+  if(!hasSources){
+    return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||diag.memory_chars||0)+' 字\n📦 拉取数量｜网关未返回明细，请上传带召回诊断的新网关代码。';
+  }
   var final=(diag.final_injected&&typeof diag.final_injected==='object')?diag.final_injected:{};
   var phases=Array.isArray(diag.phases)?diag.phases:[];
   function sec(v){
@@ -2246,12 +2250,38 @@ function chatSaveLocalMessages(){
   var s=chatCurrentSession();
   s.messages=chatMessages.slice(-80);
   s.updated=Date.now();
-  if(chatMessages.length){
-    var first=chatMessages.find(function(m){return m.role==='user'&&m.text});
-    if(first)s.title=String(first.text).replace(/\s+/g,' ').slice(0,24);
-  }
   chatSaveSessions();
   chatRenderSessions();
+}
+function chatPendingMessages(){
+  return chatMessages.filter(function(m){return m&&m.role==='pending_user'&&String(m.text||'').trim()});
+}
+function chatRenderPendingBar(){
+  var bar=document.getElementById('chat-pending-bar');
+  if(!bar)return;
+  var count=chatPendingMessages().length;
+  if(!count){
+    bar.classList.remove('show');
+    bar.innerHTML='';
+    return;
+  }
+  bar.classList.add('show');
+  bar.innerHTML='<span>待发送 '+count+' 条</span><button type="button" onclick="chatSubmitPendingMessages()">提交 '+count+' 条</button><button type="button" class="muted" onclick="chatClearPendingMessages()">清空</button>';
+}
+function chatStageUserMessage(text){
+  text=String(text||'').trim();
+  if(!text)return;
+  chatMessages.push({role:'pending_user',text:text,ts:Date.now()});
+  chatSaveLocalMessages();
+  chatRenderMessages();
+  chatRenderPendingBar();
+  chatSetStatus();
+}
+function chatClearPendingMessages(){
+  chatMessages=chatMessages.filter(function(m){return !(m&&m.role==='pending_user')});
+  chatSaveLocalMessages();
+  chatRenderMessages();
+  chatRenderPendingBar();
 }
 /* ===== 聊天增强：Markdown 渲染（防 XSS）/ 复制 / 停止 ===== */
 function chatEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -2504,11 +2534,13 @@ function chatRenderMessages(){
   if(title)title.textContent=chatCurrentSession().title||'聊天';
   if(!chatMessages.length){
     box.innerHTML='<div class="chat-welcome"><b>CK Chat</b><p>新对话</p></div>';
+    chatRenderPendingBar();
     return;
   }
   chatEnsureCacheExpiryNotice();
   box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
   box.scrollTop=box.scrollHeight;
+  chatRenderPendingBar();
 }
 function chatIsRealMessage(m){
   return m&&(m.role==='user'||m.role==='assistant')&&Number(m.ts||0);
@@ -2544,7 +2576,8 @@ function chatRenderMessageRow(m,i){
     var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
     return '<div class="chat-msg-row notice"><div class="chat-cache-expired-tip persisted">'+esc(m.text||CHAT_CACHE_NOTICE_TEXT)+'</div>'+time+'</div>';
   }
-  var role=m.role==='user'?'user':(m.role==='system'?'system':'assistant');
+  var pending=m&&m.role==='pending_user';
+  var role=(m.role==='user'||pending)?'user':(m.role==='system'?'system':'assistant');
   var recall='';
   if(role==='assistant'&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
@@ -2552,9 +2585,9 @@ function chatRenderMessageRow(m,i){
   var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false):esc(m.text||'');
   if(role==='user')inner='<span class="chat-user-text">'+inner+'</span>'+chatCacheTickHtml(m);
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
-  var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
-  var bubble='<div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+acts+'</div>';
-  return '<div class="chat-msg-row '+role+'">'+(role==='assistant'?recall:'')+bubble+time+'</div>';
+  var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+(pending?' · 待发送':'')+'</div>';
+  var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+acts+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+'">'+(role==='assistant'?recall:'')+bubble+time+'</div>';
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -2703,6 +2736,26 @@ async function chatSendMessage(){
   if(chatSending){chatStopMessage();return;}
   var input=document.getElementById('chat-input');
   var text=(input.value||'').trim();
+  if(text){
+    input.value='';
+    chatAutosizeInput(input);
+    chatStageUserMessage(text);
+    return;
+  }
+  if(chatPendingMessages().length)chatSubmitPendingMessages();
+}
+async function chatSubmitPendingMessages(){
+  chatInit();
+  if(chatSending){chatStopMessage();return;}
+  var input=document.getElementById('chat-input');
+  var extra=(input&&input.value||'').trim();
+  if(extra){
+    input.value='';
+    chatAutosizeInput(input);
+    chatMessages.push({role:'pending_user',text:extra,ts:Date.now()});
+  }
+  var pending=chatPendingMessages();
+  var text=pending.map(function(m){return String(m.text||'').trim()}).filter(Boolean).join('\n\n');
   if(!text)return;
   var cfg=chatSaveConfig(true);
   chatActiveSessionId=cfg.sessionId;
@@ -2712,14 +2765,20 @@ async function chatSendMessage(){
   }).slice(-60).map(function(m){
     return {role:m.role,text:String(m.text||''),ts:m.ts||0};
   });
-  input.value='';
-  chatAutosizeInput(input);
   cfg.memoryPreview='';
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
-  var userBubble=chatAddBubble('user',text,true);
-  var userMessageIndex=chatMessages.length-1;
+  var userMessageIndexes=[];
+  chatMessages.forEach(function(m,i){
+    if(m&&m.role==='pending_user'){
+      m.role='user';
+      m.cacheHit=false;
+      userMessageIndexes.push(i);
+    }
+  });
+  chatSaveLocalMessages();
+  chatRenderMessages();
   var out=chatAddBubble('assistant','',false);
   var btn=document.getElementById('chat-send-btn');
   chatSending=true;
@@ -2779,10 +2838,10 @@ async function chatSendMessage(){
             chatDebug(ev,data);
             if(ev==='usage'){
               chatUpdateRuntime(cfg,data||{});
-              chatApplyCacheTick(userMessageIndex,data||{},userBubble);
+              userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data||{},null)});
             }
             if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
-            if(ev==='done'&&data&&data.usage)chatApplyCacheTick(userMessageIndex,data.usage,userBubble);
+            if(ev==='done'&&data&&data.usage)userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data.usage,null)});
             if(ev==='done')chatSetStatus('完成');
           }else if(ev==='error'){
             throw new Error(data.error||data.message||JSON.stringify(data));
