@@ -140,7 +140,7 @@
 </div>
 <div class="chat-side-panel" id="chat-side-memory">
 <label>当前 Session<input id="chat-session-id" autocomplete="off" readonly></label>
-<div class="chat-memory-card"><b>缓存策略</b><p>本页展示本地消息；请求只发送最新输入和 session。继续旧对话会复用网关历史，新分支请开新会话。</p></div>
+<div class="chat-memory-card"><b>缓存策略</b><p>新会话会更换全新的 session_id；旧窗口仍可从左侧打开，但不会参与新窗口请求。</p></div>
 <label>本轮召回预览<textarea id="chat-memory-pack" rows="9" readonly placeholder="有召回时会显示在这里"></textarea></label>
 <div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatRenameCurrent()">重命名</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">新会话</button></div>
 </div>

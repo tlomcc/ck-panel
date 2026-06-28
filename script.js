@@ -1936,16 +1936,20 @@ function chatClearLocalMessages(){
 function chatNewSession(){
   var cfg=chatReadForm();
   cfg.sessionId=chatSessionId();
+  cfg.memoryPreview='';
   chatActiveSessionId=cfg.sessionId;
   chatMessages=[];
   chatSessions.unshift({id:cfg.sessionId,title:chatNowTitle(),messages:[],created:Date.now(),updated:Date.now()});
   document.getElementById('chat-session-id').value=cfg.sessionId;
+  var memoryPack=document.getElementById('chat-memory-pack');
+  if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
   chatSaveSessions();
   chatRenderSessions();
   chatRenderMessages();
-  chatDebug({session_id:cfg.sessionId});
+  chatDebug({session_id:cfg.sessionId,mode:'new_session',history:'empty'});
   chatUpdateRuntime(cfg);
+  chatSetStatus('新会话已创建，旧窗口不会参与本次请求');
   toast('已创建新会话');
 }
 function chatRenameCurrent(){
