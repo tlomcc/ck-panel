@@ -4896,6 +4896,17 @@ body.chat-active .chat-bubble.assistant .chat-msg-acts{
   right:5px!important;
   bottom:auto!important;
 }
+body.chat-active .chat-debug-toolbar{
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  gap:8px!important;
+  margin:0 0 8px!important;
+}
+body.chat-active .chat-debug{
+  font-family:ui-monospace,Menlo,Consolas,monospace!important;
+  line-height:1.55!important;
+  white-space:pre-wrap!important;
+}
 body.dark.chat-active .chat-bubble.assistant .chat-recall{
   border-color:#2f3b37!important;
   background:#121b18!important;
