@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v12';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v13';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -192,7 +192,13 @@ function init(){
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
-  switchPanelTab('chat');
+  var startTab='chat';
+  try{
+    startTab=localStorage.getItem('ckPanelAfterUpdateTab')||'chat';
+    localStorage.removeItem('ckPanelAfterUpdateTab');
+  }catch(e){}
+  if(!document.getElementById('tab-'+startTab))startTab='chat';
+  switchPanelTab(startTab);
   loadAll();
   startMemoryRealtime();
 }
@@ -1751,7 +1757,9 @@ function chatWorldbooksEndpoint(cfg){
 }
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
-  if(el)el.textContent=text;
+  if(!el)return;
+  var waiting=/请求网关|正在请求|对方正在输入|等待回复|发送中/.test(String(text||''));
+  el.innerHTML=waiting?'对方正在输入...':'<span class="chat-online-dot"></span>在线';
 }
 function chatWorldbookPack(cfg){
   cfg=cfg||chatLoadConfig();
@@ -2075,6 +2083,34 @@ function chatNowTitle(){
   var d=new Date();
   return '新对话 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
+function chatTitleDate(ts){
+  var d=new Date(ts||Date.now());
+  return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+}
+function chatCircledNumber(n){
+  var nums=['','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
+  return nums[n]||String(n);
+}
+function chatCircledValue(ch){
+  var nums={'①':1,'②':2,'③':3,'④':4,'⑤':5,'⑥':6,'⑦':7,'⑧':8,'⑨':9,'⑩':10,'⑪':11,'⑫':12,'⑬':13,'⑭':14,'⑮':15,'⑯':16,'⑰':17,'⑱':18,'⑲':19,'⑳':20};
+  return nums[ch]||0;
+}
+function chatDefaultWindowTitle(){
+  var day=chatTitleDate(Date.now());
+  var max=0;
+  (chatSessions||[]).forEach(function(s){
+    var title=String((s&&s.title)||'');
+    if(title.indexOf('号窗口'+day)<0)return;
+    var m=title.match(/^([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\d+)号窗口/);
+    if(!m)return;
+    var n=/^\d+$/.test(m[1])?Number(m[1]):chatCircledValue(m[1]);
+    if(n>max)max=n;
+  });
+  if(!max){
+    max=(chatSessions||[]).filter(function(s){return chatTitleDate((s&&s.created)||0)===day}).length;
+  }
+  return chatCircledNumber(max+1)+'号窗口'+day;
+}
 function chatLoadSessions(){
   try{
     var raw=localStorage.getItem(CHAT_MESSAGES_KEY);
@@ -2086,7 +2122,7 @@ function chatLoadSessions(){
   chatActiveSessionId=cfg.sessionId||chatActiveSessionId;
   if(!chatSessions.length){
     chatActiveSessionId=chatActiveSessionId||chatSessionId();
-    chatSessions=[{id:chatActiveSessionId,title:chatNowTitle(),messages:[],created:Date.now(),updated:Date.now()}];
+    chatSessions=[{id:chatActiveSessionId,title:chatDefaultWindowTitle(),messages:[],created:Date.now(),updated:Date.now()}];
   }
   if(!chatSessions.some(function(s){return s.id===chatActiveSessionId}))chatActiveSessionId=chatSessions[0].id;
   cfg.sessionId=chatActiveSessionId;
@@ -2101,7 +2137,7 @@ function chatSaveSessions(){
 function chatCurrentSession(){
   var s=chatSessions.find(function(x){return x.id===chatActiveSessionId});
   if(!s){
-    s={id:chatActiveSessionId||chatSessionId(),title:chatNowTitle(),messages:[],created:Date.now(),updated:Date.now()};
+    s={id:chatActiveSessionId||chatSessionId(),title:chatDefaultWindowTitle(),messages:[],created:Date.now(),updated:Date.now()};
     chatActiveSessionId=s.id;
     chatSessions.unshift(s);
   }
@@ -2485,7 +2521,8 @@ function chatRenderMessageRow(m,i){
   if(role==='user')inner='<span class="chat-user-text">'+inner+'</span>'+chatCacheTickHtml(m);
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
-  return '<div class="chat-msg-row '+role+'"><div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+recall+acts+'</div>'+time+'</div>';
+  var bubble='<div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+acts+'</div>';
+  return '<div class="chat-msg-row '+role+'">'+(role==='assistant'?recall:'')+bubble+time+'</div>';
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -2558,7 +2595,7 @@ function chatNewSession(){
   cfg.memoryPreview='';
   chatActiveSessionId=cfg.sessionId;
   chatMessages=[];
-  chatSessions.unshift({id:cfg.sessionId,title:chatNowTitle(),messages:[],created:Date.now(),updated:Date.now()});
+  chatSessions.unshift({id:cfg.sessionId,title:chatDefaultWindowTitle(),messages:[],created:Date.now(),updated:Date.now()});
   document.getElementById('chat-session-id').value=cfg.sessionId;
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
@@ -2568,7 +2605,7 @@ function chatNewSession(){
   chatRenderMessages();
   chatDebug('debug',{session_id:cfg.sessionId,mode:'new_session',history:'empty'});
   chatUpdateRuntime(cfg);
-  chatSetStatus('新会话已创建，旧窗口不会参与本次请求');
+  chatSetStatus();
   toast('已创建新会话');
 }
 function chatRenameCurrent(){

@@ -8238,3 +8238,24 @@ body.dark.chat-active .chat-settings-head .chat-icon-btn{
     max-height:190px!important;
   }
 }
+
+body.chat-active .chat-titlebar p .chat-online-dot,
+.chat-online-dot{
+  display:inline-block!important;
+  width:7px!important;
+  height:7px!important;
+  margin-right:5px!important;
+  border-radius:50%!important;
+  background:#07c160!important;
+  vertical-align:1px!important;
+  box-shadow:0 0 0 2px rgba(7,193,96,.12)!important;
+}
+
+body.chat-active .chat-field-hint{
+  display:block!important;
+  margin-top:6px!important;
+  color:var(--chat5-muted)!important;
+  font-size:11px!important;
+  line-height:1.45!important;
+  font-weight:500!important;
+}

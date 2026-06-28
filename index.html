@@ -14,11 +14,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v12">
-<link rel="stylesheet" href="polish.css?v=chat-v12">
-<script>window.CK_PANEL_VERSION='chat-v12';</script>
+<link rel="stylesheet" href="style.css?v=chat-v13">
+<link rel="stylesheet" href="polish.css?v=chat-v13">
+<script>window.CK_PANEL_VERSION='chat-v13';</script>
 </head>
-<body>
+<body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap"><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">加载中...</div></div>
 <div class="page active" id="page-memory">
 <header class="app-header">
@@ -118,7 +118,7 @@
 <button class="chat-drawer-mask" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表"></button>
 <div class="chat-main">
 <div class="chat-head">
-<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center" ondblclick="chatRenameCurrent()" title="双击重命名"><h2 id="chat-title">聊天</h2><p id="chat-status">就绪</p></div><div class="chat-head-actions"><button class="chat-icon-btn chat-debug-open" type="button" onclick="chatOpenSettingTab('debug')" title="调试">调</button></div></div>
+<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center" ondblclick="chatRenameCurrent()" title="双击重命名"><h2 id="chat-title">聊天</h2><p id="chat-status"><span class="chat-online-dot"></span>在线</p></div><div class="chat-head-actions"><button class="chat-icon-btn chat-debug-open" type="button" onclick="chatOpenSettingTab('debug')" title="调试">调</button></div></div>
 <div class="chat-runtime"><span id="chat-runtime-model">模型未配置</span><span id="chat-runtime-cache">网关 session</span><span id="chat-runtime-recall">召回开启</span></div>
 </div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
@@ -160,7 +160,7 @@
 <div class="chat-worldbook-list" id="chat-worldbook-list"></div>
 <label>名称<input id="chat-worldbook-name" autocomplete="off" placeholder="例如：项目设定 / 人物资料"></label>
 <label class="chat-switch"><input id="chat-worldbook-enabled" type="checkbox"><span>启用这个世界书</span></label>
-<label>优先级<input id="chat-worldbook-priority" type="number" min="0" max="999" step="1" value="100"></label>
+<label>优先级<input id="chat-worldbook-priority" type="number" min="0" max="999" step="1" value="100"><small class="chat-field-hint">数字越小越靠前；1 比 100 优先注入。</small></label>
 <label>内容<textarea id="chat-worldbook-content" rows="10" placeholder="写稳定背景资料、设定、人物关系、术语说明。"></textarea></label>
 <div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" onclick="chatSaveWorldbook()">保存世界书</button><button class="btn btn-outline btn-sm" type="button" onclick="chatDeleteWorldbook()">删除</button></div>
 </div>
@@ -195,8 +195,8 @@
 <div class="confirm-bg" id="confirmDel"><div class="confirm-box"><p>确定删除？</p><div class="confirm-box-btns"><button class="btn btn-outline btn-sm" onclick="cancelDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmDel()">删除</button></div></div></div>
 <div class="modal-bg" id="provDelModal" onclick="closeProvDel()"><div class="modal" onclick="event.stopPropagation()"><h3>删除供应商</h3><p class="prov-del-q">确定要删除该供应商吗？</p><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="closeProvDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmProvDel()">确定</button></div></div></div>
 <div class="toast" id="toast"></div>
-<script src="script.js?v=chat-v12"></script>
-<script src="script-extra.js?v=chat-v12"></script>
-<script src="pwa.js?v=chat-v12"></script>
+<script src="script.js?v=chat-v13"></script>
+<script src="script-extra.js?v=chat-v13"></script>
+<script src="pwa.js?v=chat-v13"></script>
 </body>
 </html>

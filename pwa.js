@@ -52,9 +52,14 @@
       navigator.serviceWorker.addEventListener('controllerchange', function() {
         if (refreshing) return;
         refreshing = true;
+        try {
+          if (document.body && document.body.classList.contains('chat-active')) {
+            localStorage.setItem('ckPanelAfterUpdateTab', 'chat');
+          }
+        } catch (e) {}
         location.reload();
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v12').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v13').then(function(reg) {
         if (reg && reg.update) reg.update();
       }).catch(function() {});
     }
