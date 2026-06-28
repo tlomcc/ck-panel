@@ -2166,8 +2166,8 @@ function chatStopMessage(){if(chatAbort){try{chatAbort.abort()}catch(e){}}}
 function chatAutosizeInput(input){
   if(!input)return;
   input.style.height='auto';
-  var max=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?118:142;
-  input.style.height=Math.min(max,Math.max(42,input.scrollHeight))+'px';
+  var max=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?104:120;
+  input.style.height=Math.min(max,Math.max(36,input.scrollHeight))+'px';
   input.style.overflowY=input.scrollHeight>max?'auto':'hidden';
 }
 function chatLayoutCompose(){
