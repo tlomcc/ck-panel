@@ -1613,6 +1613,7 @@ var CHAT_CONFIG_KEY='ckChatConfigV2';
 var CHAT_MESSAGES_KEY='ckChatSessionsV2';
 var CHAT_DEBUG_KEY='ckChatDebugV1';
 var CHAT_DEBUG_TTL=24*60*60*1000;
+var CHAT_CACHE_TTL=5*60*1000;
 var chatInitialized=false;
 var chatSending=false;
 var chatMessages=[];
@@ -1620,6 +1621,7 @@ var chatAbort=null;
 var chatSessions=[];
 var chatActiveSessionId='';
 var chatDebugRecords=[];
+var chatCacheTimer=null;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
@@ -2137,7 +2139,32 @@ function chatRenderMessages(){
     return;
   }
   box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
+  chatUpdateCacheExpiryHint(false);
   box.scrollTop=box.scrollHeight;
+}
+function chatLastMessageTs(){
+  for(var i=chatMessages.length-1;i>=0;i--){
+    if(chatMessages[i]&&chatMessages[i].ts)return Number(chatMessages[i].ts)||0;
+  }
+  return 0;
+}
+function chatUpdateCacheExpiryHint(keepScroll){
+  var box=document.getElementById('chat-messages');
+  if(!box)return;
+  var old=box.querySelector('.chat-cache-expired-tip');
+  var lastTs=chatLastMessageTs();
+  var expired=!!(lastTs&&chatMessages.length&&!chatSending&&(Date.now()-lastTs>=CHAT_CACHE_TTL));
+  if(!expired){
+    if(old)old.remove();
+    return;
+  }
+  if(!old){
+    old=document.createElement('div');
+    old.className='chat-cache-expired-tip';
+    box.appendChild(old);
+  }
+  old.textContent='已超过5min，下一次会重新创建缓存';
+  if(!keepScroll)box.scrollTop=box.scrollHeight;
 }
 function chatRenderMessageRow(m,i){
   var role=m.role==='user'?'user':(m.role==='system'?'system':'assistant');
@@ -2154,6 +2181,8 @@ function chatAddBubble(role,text,persist){
   var box=document.getElementById('chat-messages');
   if(!box)return null;
   if(box.querySelector('.empty-state')||box.querySelector('.chat-welcome'))box.innerHTML='';
+  var tip=box.querySelector('.chat-cache-expired-tip');
+  if(tip)tip.remove();
   var ts=Date.now();
   var row=document.createElement('div');
   row.className='chat-msg-row '+role;
@@ -2234,6 +2263,7 @@ function chatInit(){
   var input=document.getElementById('chat-input');
   chatLayoutCompose();
   window.addEventListener('resize',chatLayoutCompose);
+  if(!chatCacheTimer)chatCacheTimer=setInterval(function(){chatUpdateCacheExpiryHint(true)},15000);
   if(input){
     chatAutosizeInput(input);
     input.addEventListener('input',function(){chatAutosizeInput(input)});

@@ -6918,20 +6918,20 @@ body.chat-active .chat-head{
 body.chat-active .chat-titlebar{
   position:relative!important;
   height:56px!important;
-  padding:0 160px!important;
+  padding:0 128px!important;
   display:flex!important;
   align-items:center!important;
   justify-content:center!important;
   gap:12px!important;
   border:0!important;
 }
-body.chat-active .chat-titlebar>div:first-child{
+body.chat-active .chat-title-center{
   position:absolute!important;
   left:50%!important;
   top:50%!important;
   transform:translate(-50%,-50%)!important;
   min-width:0!important;
-  max-width:min(520px,calc(100% - 340px))!important;
+  max-width:min(520px,calc(100% - 280px))!important;
   text-align:center!important;
 }
 body.chat-active .chat-titlebar h2{
@@ -6957,12 +6957,22 @@ body.chat-active .chat-head-actions{
   right:12px!important;
   top:11px!important;
   flex:0 0 auto!important;
-  width:146px!important;
+  width:110px!important;
   display:grid!important;
-  grid-template-columns:34px 34px 34px 34px!important;
+  grid-template-columns:34px 34px 34px!important;
   align-items:center!important;
   gap:3px!important;
   overflow:visible!important;
+}
+body.chat-active .chat-left-actions{
+  position:absolute!important;
+  left:12px!important;
+  top:11px!important;
+  width:34px!important;
+  display:grid!important;
+  grid-template-columns:34px!important;
+  align-items:center!important;
+  gap:0!important;
 }
 body.chat-active .chat-icon-btn{
   display:inline-flex!important;
@@ -6982,6 +6992,19 @@ body.chat-active .chat-icon-btn:hover{
   border-color:var(--chat5-line)!important;
   background:#f5f7f8!important;
   color:var(--chat5-text)!important;
+}
+body.chat-active .chat-cache-expired-tip{
+  align-self:center!important;
+  max-width:min(420px,86%)!important;
+  margin:2px auto!important;
+  padding:2px 8px!important;
+  border-radius:999px!important;
+  color:var(--chat5-faint)!important;
+  background:rgba(17,24,39,.05)!important;
+  font-size:10.5px!important;
+  line-height:1.7!important;
+  text-align:center!important;
+  user-select:none!important;
 }
 body.chat-active .chat-runtime{
   display:none!important;
@@ -7343,6 +7366,10 @@ body.dark.chat-active .chat-head{
   background:var(--chat5-panel)!important;
   color:var(--chat5-text)!important;
 }
+body.dark.chat-active .chat-cache-expired-tip{
+  background:rgba(255,255,255,.06)!important;
+  color:var(--chat5-faint)!important;
+}
 body.dark.chat-active .chat-compose{
   background:#121820!important;
 }
@@ -7384,8 +7411,14 @@ body.dark.chat-active .chat-bubble.user{
     height:52px!important;
     padding:0 84px!important;
   }
-  body.chat-active .chat-titlebar>div:first-child{
+  body.chat-active .chat-title-center{
     max-width:calc(100% - 176px)!important;
+  }
+  body.chat-active .chat-left-actions{
+    left:8px!important;
+    top:10px!important;
+    width:32px!important;
+    grid-template-columns:32px!important;
   }
   body.chat-active .chat-head-actions{
     right:8px!important;
@@ -7394,8 +7427,7 @@ body.dark.chat-active .chat-bubble.user{
     grid-template-columns:32px 32px!important;
     gap:4px!important;
   }
-  body.chat-active .chat-head-actions .chat-settings-toggle,
-  body.chat-active .chat-head-actions button:nth-child(4){
+  body.chat-active .chat-head-actions button:nth-child(3){
     display:none!important;
   }
   body.chat-active .chat-titlebar h2{
