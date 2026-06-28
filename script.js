@@ -1614,6 +1614,7 @@ var CHAT_MESSAGES_KEY='ckChatSessionsV2';
 var CHAT_DEBUG_KEY='ckChatDebugV1';
 var CHAT_DEBUG_TTL=24*60*60*1000;
 var CHAT_CACHE_TTL=5*60*1000;
+var CHAT_CACHE_NOTICE_TEXT='已超过5min，下一次会重新创建缓存';
 var chatInitialized=false;
 var chatSending=false;
 var chatMessages=[];
@@ -2241,35 +2242,44 @@ function chatRenderMessages(){
     box.innerHTML='<div class="chat-welcome"><b>CK Chat</b><p>新对话</p></div>';
     return;
   }
+  chatEnsureCacheExpiryNotice();
   box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
-  chatUpdateCacheExpiryHint(false);
   box.scrollTop=box.scrollHeight;
+}
+function chatIsRealMessage(m){
+  return m&&(m.role==='user'||m.role==='assistant')&&Number(m.ts||0);
 }
 function chatLastMessageTs(){
   for(var i=chatMessages.length-1;i>=0;i--){
-    if(chatMessages[i]&&chatMessages[i].ts)return Number(chatMessages[i].ts)||0;
+    if(chatIsRealMessage(chatMessages[i]))return Number(chatMessages[i].ts)||0;
   }
   return 0;
+}
+function chatHasCacheNoticeAfter(ts){
+  return chatMessages.some(function(m){
+    return m&&m.role==='notice'&&m.kind==='cache-expired'&&Number(m.afterTs||0)===Number(ts||0);
+  });
+}
+function chatEnsureCacheExpiryNotice(){
+  var lastTs=chatLastMessageTs();
+  var expired=!!(lastTs&&chatMessages.length&&!chatSending&&(Date.now()-lastTs>=CHAT_CACHE_TTL));
+  if(!expired||chatHasCacheNoticeAfter(lastTs))return false;
+  chatMessages.push({role:'notice',kind:'cache-expired',text:CHAT_CACHE_NOTICE_TEXT,ts:Date.now(),afterTs:lastTs});
+  chatSaveLocalMessages();
+  return true;
 }
 function chatUpdateCacheExpiryHint(keepScroll){
   var box=document.getElementById('chat-messages');
   if(!box)return;
-  var old=box.querySelector('.chat-cache-expired-tip');
-  var lastTs=chatLastMessageTs();
-  var expired=!!(lastTs&&chatMessages.length&&!chatSending&&(Date.now()-lastTs>=CHAT_CACHE_TTL));
-  if(!expired){
-    if(old)old.remove();
-    return;
-  }
-  if(!old){
-    old=document.createElement('div');
-    old.className='chat-cache-expired-tip';
-    box.appendChild(old);
-  }
-  old.textContent='已超过5min，下一次会重新创建缓存';
-  if(!keepScroll)box.scrollTop=box.scrollHeight;
+  var old=box.querySelector('.chat-cache-expired-tip:not(.persisted)');
+  if(old)old.remove();
+  if(chatEnsureCacheExpiryNotice())chatRenderMessages();
 }
 function chatRenderMessageRow(m,i){
+  if(m&&m.role==='notice'){
+    var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
+    return '<div class="chat-msg-row notice"><div class="chat-cache-expired-tip persisted">'+esc(m.text||CHAT_CACHE_NOTICE_TEXT)+'</div>'+time+'</div>';
+  }
   var role=m.role==='user'?'user':(m.role==='system'?'system':'assistant');
   var recall='';
   if(role==='assistant'&&m.recall&&(m.recall.chars||m.recall.preview)){
@@ -2284,7 +2294,7 @@ function chatAddBubble(role,text,persist){
   var box=document.getElementById('chat-messages');
   if(!box)return null;
   if(box.querySelector('.empty-state')||box.querySelector('.chat-welcome'))box.innerHTML='';
-  var tip=box.querySelector('.chat-cache-expired-tip');
+  var tip=box.querySelector('.chat-cache-expired-tip:not(.persisted)');
   if(tip)tip.remove();
   var ts=Date.now();
   var row=document.createElement('div');
@@ -2388,9 +2398,9 @@ async function chatSendMessage(){
   var cfg=chatSaveConfig(true);
   chatActiveSessionId=cfg.sessionId;
   chatTogglePlus(false);
-  var outboundHistory=chatMessages.slice(-60).filter(function(m){
+  var outboundHistory=chatMessages.filter(function(m){
     return m&&(m.role==='user'||m.role==='assistant')&&String(m.text||'').trim();
-  }).map(function(m){
+  }).slice(-60).map(function(m){
     return {role:m.role,text:String(m.text||''),ts:m.ts||0};
   });
   input.value='';

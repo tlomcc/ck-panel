@@ -7067,6 +7067,15 @@ body.chat-active .chat-cache-expired-tip{
   text-align:center!important;
   user-select:none!important;
 }
+body.chat-active .chat-msg-row.notice{
+  align-items:center!important;
+  gap:2px!important;
+}
+body.chat-active .chat-msg-row.notice .chat-msg-time{
+  max-width:none!important;
+  align-self:center!important;
+  text-align:center!important;
+}
 body.chat-active .chat-runtime{
   display:none!important;
 }
