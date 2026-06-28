@@ -8259,3 +8259,65 @@ body.chat-active .chat-field-hint{
   line-height:1.45!important;
   font-weight:500!important;
 }
+
+body.chat-active .chat-thinking{
+  width:100%!important;
+  margin:0 0 8px!important;
+  border:1px solid #ead9ae!important;
+  border-left:3px solid #c79327!important;
+  border-radius:8px!important;
+  background:#fff9ea!important;
+  overflow:hidden!important;
+}
+
+body.chat-active .chat-thinking-head{
+  width:100%!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  padding:6px 9px!important;
+  border:0!important;
+  background:transparent!important;
+  color:#7a5416!important;
+  font-size:12px!important;
+  font-weight:700!important;
+  text-align:left!important;
+  cursor:pointer!important;
+}
+
+body.chat-active .chat-thinking-head .chev{
+  margin-left:auto!important;
+  font-size:10px!important;
+  transition:transform .16s ease!important;
+}
+
+body.chat-active .chat-thinking.open .chat-thinking-head .chev{
+  transform:rotate(180deg)!important;
+}
+
+body.chat-active .chat-thinking-body{
+  display:none!important;
+  padding:0 9px 8px!important;
+  color:#6b5b3c!important;
+  font-size:12px!important;
+  line-height:1.55!important;
+  white-space:pre-wrap!important;
+}
+
+body.chat-active .chat-thinking.open .chat-thinking-body{
+  display:block!important;
+}
+
+body.dark.chat-active .chat-thinking{
+  border-color:#5b4a25!important;
+  border-left-color:#d6a33a!important;
+  background:#272211!important;
+}
+
+body.dark.chat-active .chat-thinking-head{
+  color:#f0c46d!important;
+}
+
+body.dark.chat-active .chat-thinking-body{
+  color:#dbc48f!important;
+}

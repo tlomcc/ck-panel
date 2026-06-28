@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v13';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v14';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2301,6 +2301,23 @@ function chatRenderMarkdown(src){
   }
   return out.join('\n');
 }
+function chatSplitThinkingText(src){
+  var text=String(src||'');
+  var thoughts=[];
+  text=text.replace(/<(thinking|think)\b[^>]*>([\s\S]*?)<\/\1>/gi,function(_all,_tag,body){
+    var clean=String(body||'').trim();
+    if(clean)thoughts.push(clean);
+    return '\n';
+  }).replace(/\n{3,}/g,'\n\n').trim();
+  return {text:text,thinking:thoughts.join('\n\n')};
+}
+function chatRenderAssistantContent(rawText,streaming){
+  var split=chatSplitThinkingText(rawText);
+  var thinking=split.thinking?(
+    '<div class="chat-thinking open"><button class="chat-thinking-head" type="button"><span>思考过程</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
+  ):'';
+  return thinking+'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'+(streaming?'<span class="chat-caret"></span>':'');
+}
 function chatCopyText(t){
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){toast('已复制')},function(){chatFallbackCopy(t)})}
   else chatFallbackCopy(t);
@@ -2456,6 +2473,8 @@ document.addEventListener('click',function(e){
   if(cb){var code=cb.closest('.cb')?cb.closest('.cb').querySelector('pre code'):null;if(code){chatCopyText(code.textContent);cb.textContent='已复制';setTimeout(function(){cb.textContent='复制'},1200)}return;}
   var rh=e.target.closest('.chat-recall-head');
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
+  var th=e.target.closest('.chat-thinking-head');
+  if(th&&th.parentNode){th.parentNode.classList.toggle('open');return;}
   var act=e.target.closest('.chat-msg-act');
   if(act){var i=parseInt(act.getAttribute('data-i'),10);if(act.getAttribute('data-act')==='copy'&&chatMessages[i])chatCopyText(chatMessages[i].text||'');return;}
 });
@@ -2517,7 +2536,7 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
-  var inner=role==='assistant'?('<div class="chat-md">'+chatRenderMarkdown(m.text||'')+'</div>'):esc(m.text||'');
+  var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false):esc(m.text||'');
   if(role==='user')inner='<span class="chat-user-text">'+inner+'</span>'+chatCacheTickHtml(m);
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
@@ -2719,7 +2738,7 @@ async function chatSendMessage(){
     if(!resp.body){
       var plain=await resp.text();
       assistantText=plain;
-      out.innerHTML='<div class="chat-md">'+chatRenderMarkdown(plain)+'</div>';
+      out.innerHTML=chatRenderAssistantContent(plain,false);
     }else{
       var reader=resp.body.getReader();
       var decoder=new TextDecoder();
@@ -2731,7 +2750,7 @@ async function chatSendMessage(){
         buffer=chatParseSse(buffer,function(ev,data){
           if(ev==='delta'){
             assistantText+=data.text||'';
-            out.innerHTML='<div class="chat-md">'+chatRenderMarkdown(assistantText)+'</div><span class="chat-caret"></span>';
+            out.innerHTML=chatRenderAssistantContent(assistantText,true);
             var box=document.getElementById('chat-messages');
             if(box)box.scrollTop=box.scrollHeight;
           }else if(ev==='memory'){
