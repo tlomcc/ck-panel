@@ -6988,6 +6988,12 @@ body.chat-active .chat-title-center{
   min-width:0!important;
   max-width:min(520px,calc(100% - 280px))!important;
   text-align:center!important;
+  cursor:text!important;
+  border-radius:8px!important;
+  padding:3px 8px!important;
+}
+body.chat-active .chat-title-center:hover{
+  background:rgba(17,24,39,.04)!important;
 }
 body.chat-active .chat-titlebar h2{
   max-width:100%!important;
@@ -7424,6 +7430,9 @@ body.dark.chat-active .chat-head{
 body.dark.chat-active .chat-cache-expired-tip{
   background:rgba(255,255,255,.06)!important;
   color:var(--chat5-faint)!important;
+}
+body.dark.chat-active .chat-title-center:hover{
+  background:rgba(255,255,255,.06)!important;
 }
 body.dark.chat-active .chat-worldbook-row{
   background:#10161d!important;

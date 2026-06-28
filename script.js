@@ -2333,6 +2333,7 @@ function chatRenameCurrent(){
   chatSaveSessions();
   chatRenderSessions();
   chatRenderMessages();
+  toast('窗口已重命名');
 }
 function chatParseSse(buffer,onEvent){
   buffer=buffer.replace(/\r\n/g,'\n');
