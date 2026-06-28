@@ -1702,6 +1702,25 @@ function chatDebug(data){
   if(!el)return;
   try{el.textContent=JSON.stringify(data,null,2)}catch(e){el.textContent=String(data)}
 }
+function chatFriendlyError(err){
+  var msg=String((err&&err.message)||err||'请求失败');
+  var parsed=null;
+  var jsonStart=msg.indexOf('{');
+  if(jsonStart>=0){
+    try{parsed=JSON.parse(msg.slice(jsonStart))}catch(e){}
+  }
+  var upstream=(parsed&&parsed.error&&(parsed.error.message||parsed.error.type))||'';
+  if(/Insufficient account balance/i.test(msg)||/Insufficient account balance/i.test(upstream)){
+    return '请求失败：上游模型账号余额不足。请更换“上游模型 API Key”，或到对应模型平台充值/换有额度的 key。';
+  }
+  if(/Upstream HTTP 401|unauthorized|invalid api key/i.test(msg)){
+    return '请求失败：上游模型 API Key 无效或没有权限。请检查聊天设置里的“上游模型 API Key”。';
+  }
+  if(/Upstream HTTP 403/i.test(msg)){
+    return '请求失败：上游模型服务拒绝了请求。请检查上游模型 API Key、账号额度和 API Base。' + (upstream?('\n'+upstream):'');
+  }
+  return '请求失败：'+msg;
+}
 function chatShortSession(id){
   id=String(id||'');
   return id.length>12?id.slice(0,8)+'...'+id.slice(-4):id;
@@ -1740,6 +1759,7 @@ function chatLoadSessions(){
   try{
     var raw=localStorage.getItem(CHAT_MESSAGES_KEY);
     chatSessions=raw?JSON.parse(raw):[];
+    if(chatSessions&&!Array.isArray(chatSessions)&&chatSessions.id)chatSessions=[chatSessions];
     if(!Array.isArray(chatSessions))chatSessions=[];
   }catch(e){chatSessions=[]}
   var cfg=chatLoadConfig();
@@ -1868,6 +1888,36 @@ function chatCopyText(t){
 }
 function chatFallbackCopy(t){try{var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('已复制')}catch(e){toast('复制失败')}}
 function chatStopMessage(){if(chatAbort){try{chatAbort.abort()}catch(e){}}}
+function chatAutosizeInput(input){
+  if(!input)return;
+  input.style.height='auto';
+  var max=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?118:142;
+  input.style.height=Math.min(max,Math.max(42,input.scrollHeight))+'px';
+  input.style.overflowY=input.scrollHeight>max?'auto':'hidden';
+}
+function chatLayoutCompose(){
+  var btn=document.getElementById('chat-send-btn');
+  if(!btn)return;
+  if(window.innerWidth<=760){
+    btn.style.position='fixed';
+    btn.style.left=Math.max(9,window.innerWidth-49)+'px';
+    btn.style.right='auto';
+    btn.style.bottom='9px';
+    btn.style.zIndex='80';
+    btn.style.display='flex';
+    btn.style.alignItems='center';
+    btn.style.justifyContent='center';
+  }else{
+    btn.style.position='';
+    btn.style.left='';
+    btn.style.right='';
+    btn.style.bottom='';
+    btn.style.zIndex='';
+    btn.style.display='';
+    btn.style.alignItems='';
+    btn.style.justifyContent='';
+  }
+}
 function chatToggleSessions(force,silent){
   var shell=document.querySelector('.chat-shell');
   if(!shell)return;
@@ -1906,6 +1956,11 @@ document.addEventListener('click',function(e){
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
   var act=e.target.closest('.chat-msg-act');
   if(act){var i=parseInt(act.getAttribute('data-i'),10);if(act.getAttribute('data-act')==='copy'&&chatMessages[i])chatCopyText(chatMessages[i].text||'');return;}
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  chatToggleSessions(false,true);
+  chatToggleSettings(false,true);
 });
 function chatRenderMessages(){
   var box=document.getElementById('chat-messages');
@@ -2011,7 +2066,11 @@ function chatInit(){
   chatRenderSessions();
   chatRenderMessages();
   var input=document.getElementById('chat-input');
+  chatLayoutCompose();
+  window.addEventListener('resize',chatLayoutCompose);
   if(input){
+    chatAutosizeInput(input);
+    input.addEventListener('input',function(){chatAutosizeInput(input)});
     input.addEventListener('keydown',function(e){
       if(e.key==='Enter'&&!e.shiftKey){
         e.preventDefault();
@@ -2034,6 +2093,7 @@ async function chatSendMessage(){
     return {role:m.role,text:String(m.text||''),ts:m.ts||0};
   });
   input.value='';
+  chatAutosizeInput(input);
   cfg.memoryPreview='';
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
@@ -2112,7 +2172,7 @@ async function chatSendMessage(){
       chatMessages.push({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,ts:Date.now()});
       chatSaveLocalMessages();chatRenderMessages();chatSetStatus('已停止');
     }else{
-      var emsg=(assistantText?assistantText+'\n':'')+'请求失败：'+String(e.message||e);
+      var emsg=(assistantText?assistantText+'\n':'')+chatFriendlyError(e);
       chatMessages.push({role:'assistant',text:emsg,recall:recallInfo,ts:Date.now()});
       chatSaveLocalMessages();chatRenderMessages();chatSetStatus('请求失败');
     }

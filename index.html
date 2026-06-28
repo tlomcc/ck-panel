@@ -11,8 +11,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="polish.css">
+<link rel="stylesheet" href="style.css?v=chat-v5">
+<link rel="stylesheet" href="polish.css?v=chat-v5">
 </head>
 <body>
 <div class="loading-bar-wrap" id="loading-wrap"><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">加载中...</div></div>
@@ -108,7 +108,7 @@
 <section class="panel-tab active" id="tab-chat">
 <div class="chat-shell">
 <aside class="chat-drawer">
-<div class="chat-drawer-head"><div><b>对话</b><span id="chat-session-count">0</span></div><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div>
+<div class="chat-drawer-head"><div><b>对话</b><span id="chat-session-count">0</span></div><div class="chat-drawer-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSettings()" title="设置">⚙</button><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div></div>
 <div class="chat-session-list" id="chat-session-list"></div>
 </aside>
 <button class="chat-drawer-mask" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表"></button>
