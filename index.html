@@ -119,8 +119,19 @@
 </div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
 <div class="chat-compose">
+<div class="chat-plus-panel" id="chat-plus-panel">
+<button type="button" onclick="chatOpenSettingTab('model')"><span>◉</span><b>模型</b></button>
+<button type="button" onclick="chatOpenSettingTab('gateway')"><span>⌁</span><b>网关</b></button>
+<button type="button" onclick="chatOpenSettingTab('worldbook')"><span>□</span><b>世界书</b></button>
+<button type="button" onclick="chatOpenSettingTab('memory')"><span>◇</span><b>记忆</b></button>
+<button type="button" onclick="chatOpenSettingTab('debug')"><span>※</span><b>调试</b></button>
+<button type="button" onclick="chatNewSession()"><span>＋</span><b>新会话</b></button>
+</div>
+<div class="chat-compose-row">
+<button class="chat-plus-btn" id="chat-plus-btn" type="button" onclick="chatTogglePlus()" title="更多">＋</button>
 <textarea id="chat-input" placeholder="发消息给 CK"></textarea>
 <button class="chat-send" id="chat-send-btn" onclick="chatSendMessage()" title="发送">↑</button>
+</div>
 </div>
 </div>
 <aside class="chat-settings">

@@ -2165,25 +2165,27 @@ function chatAutosizeInput(input){
 function chatLayoutCompose(){
   var btn=document.getElementById('chat-send-btn');
   if(!btn)return;
-  if(window.innerWidth<=760){
-    btn.style.position='fixed';
-    btn.style.left=Math.max(9,window.innerWidth-49)+'px';
-    btn.style.right='auto';
-    btn.style.bottom='9px';
-    btn.style.zIndex='80';
-    btn.style.display='flex';
-    btn.style.alignItems='center';
-    btn.style.justifyContent='center';
-  }else{
-    btn.style.position='';
-    btn.style.left='';
-    btn.style.right='';
-    btn.style.bottom='';
-    btn.style.zIndex='';
-    btn.style.display='';
-    btn.style.alignItems='';
-    btn.style.justifyContent='';
-  }
+  btn.style.position='';
+  btn.style.left='';
+  btn.style.right='';
+  btn.style.bottom='';
+  btn.style.zIndex='';
+  btn.style.display='';
+  btn.style.alignItems='';
+  btn.style.justifyContent='';
+}
+function chatTogglePlus(force){
+  var panel=document.getElementById('chat-plus-panel');
+  var btn=document.getElementById('chat-plus-btn');
+  if(!panel)return;
+  var open=typeof force==='boolean'?force:!panel.classList.contains('open');
+  panel.classList.toggle('open',open);
+  if(btn)btn.classList.toggle('open',open);
+}
+function chatOpenSettingTab(tab){
+  chatTogglePlus(false);
+  chatToggleSettings(true);
+  chatSwitchSideTab(tab||'model');
 }
 function chatToggleSessions(force,silent){
   var shell=document.querySelector('.chat-shell');
@@ -2228,6 +2230,7 @@ document.addEventListener('keydown',function(e){
   if(e.key!=='Escape')return;
   chatToggleSessions(false,true);
   chatToggleSettings(false,true);
+  chatTogglePlus(false);
 });
 function chatRenderMessages(){
   var box=document.getElementById('chat-messages');
@@ -2384,6 +2387,7 @@ async function chatSendMessage(){
   if(!text)return;
   var cfg=chatSaveConfig(true);
   chatActiveSessionId=cfg.sessionId;
+  chatTogglePlus(false);
   var outboundHistory=chatMessages.slice(-60).filter(function(m){
     return m&&(m.role==='user'||m.role==='assistant')&&String(m.text||'').trim();
   }).map(function(m){
