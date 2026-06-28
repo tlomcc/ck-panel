@@ -6918,18 +6918,24 @@ body.chat-active .chat-head{
 body.chat-active .chat-titlebar{
   position:relative!important;
   height:56px!important;
-  padding:0 128px 0 16px!important;
+  padding:0 160px!important;
   display:flex!important;
   align-items:center!important;
-  justify-content:space-between!important;
+  justify-content:center!important;
   gap:12px!important;
   border:0!important;
 }
 body.chat-active .chat-titlebar>div:first-child{
+  position:absolute!important;
+  left:50%!important;
+  top:50%!important;
+  transform:translate(-50%,-50%)!important;
   min-width:0!important;
+  max-width:min(520px,calc(100% - 340px))!important;
+  text-align:center!important;
 }
 body.chat-active .chat-titlebar h2{
-  max-width:52vw!important;
+  max-width:100%!important;
   margin:0!important;
   overflow:hidden!important;
   text-overflow:ellipsis!important;
@@ -6951,9 +6957,9 @@ body.chat-active .chat-head-actions{
   right:12px!important;
   top:11px!important;
   flex:0 0 auto!important;
-  width:110px!important;
+  width:146px!important;
   display:grid!important;
-  grid-template-columns:34px 34px 34px!important;
+  grid-template-columns:34px 34px 34px 34px!important;
   align-items:center!important;
   gap:3px!important;
   overflow:visible!important;
@@ -7376,25 +7382,28 @@ body.dark.chat-active .chat-bubble.user{
   }
   body.chat-active .chat-titlebar{
     height:52px!important;
-    padding:0 48px 0 10px!important;
+    padding:0 84px!important;
+  }
+  body.chat-active .chat-titlebar>div:first-child{
+    max-width:calc(100% - 176px)!important;
   }
   body.chat-active .chat-head-actions{
     right:8px!important;
     top:10px!important;
-    width:32px!important;
-    grid-template-columns:32px!important;
-    gap:0!important;
+    width:68px!important;
+    grid-template-columns:32px 32px!important;
+    gap:4px!important;
   }
   body.chat-active .chat-head-actions .chat-settings-toggle,
-  body.chat-active .chat-head-actions button:nth-child(3){
+  body.chat-active .chat-head-actions button:nth-child(4){
     display:none!important;
   }
   body.chat-active .chat-titlebar h2{
-    max-width:46vw!important;
+    max-width:100%!important;
     font-size:14px!important;
   }
   body.chat-active .chat-titlebar p{
-    max-width:48vw!important;
+    max-width:100%!important;
   }
   body.chat-active .chat-icon-btn{
     width:32px!important;

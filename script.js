@@ -1964,6 +1964,30 @@ function chatLoadLocalMessages(){
   chatLoadSessions();
   chatMessages=chatCurrentSession().messages||[];
 }
+function chatRefreshView(){
+  if(chatSending){
+    toast('正在请求中，先停止或等完成');
+    return;
+  }
+  var cfg=chatLoadConfig();
+  chatLoadSessions();
+  if(cfg.sessionId&&chatSessions.some(function(s){return s.id===cfg.sessionId})){
+    chatActiveSessionId=cfg.sessionId;
+  }else{
+    chatActiveSessionId=(chatSessions[0]&&chatSessions[0].id)||chatSessionId();
+    cfg.sessionId=chatActiveSessionId;
+    chatSaveConfigObject(cfg);
+  }
+  chatMessages=chatCurrentSession().messages||[];
+  chatLoadDebugRecords();
+  chatWriteForm(cfg);
+  chatRenderSessions();
+  chatRenderMessages();
+  chatLayoutCompose();
+  chatUpdateRuntime(cfg);
+  chatSetStatus('已刷新');
+  toast('聊天界面已刷新');
+}
 function chatSaveLocalMessages(){
   var s=chatCurrentSession();
   s.messages=chatMessages.slice(-80);
