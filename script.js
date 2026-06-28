@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v11';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v12';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1917,6 +1917,34 @@ function chatScrollDebugBottom(){
   el.scrollTop=el.scrollHeight;
   setTimeout(function(){el.scrollTop=el.scrollHeight},0);
 }
+function chatFormatRecallDiag(data){
+  data=data||{};
+  var diag=(data.recall_diag&&typeof data.recall_diag==='object')?data.recall_diag:null;
+  if(!diag)return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字';
+  var sources=(diag.sources&&typeof diag.sources==='object')?diag.sources:{};
+  var final=(diag.final_injected&&typeof diag.final_injected==='object')?diag.final_injected:{};
+  var phases=Array.isArray(diag.phases)?diag.phases:[];
+  function sec(v){
+    var n=Number(v||0);
+    if(!isFinite(n))n=0;
+    return n.toFixed(3)+'秒';
+  }
+  function src(key,title,unit){
+    var item=(sources[key]&&typeof sources[key]==='object')?sources[key]:{};
+    var count=item.count;
+    if(count===undefined||count===null)count=item.total||0;
+    return title+' '+count+(unit||'条')+'（'+(item.source||'未知')+'，'+sec(item.seconds)+'）';
+  }
+  var vec=(sources.entity_vectors&&typeof sources.entity_vectors==='object')?sources.entity_vectors:{};
+  var phaseText=phases.filter(function(p){return p&&typeof p==='object'}).map(function(p){
+    return String(p.name||'未知阶段')+' '+sec(p.seconds);
+  }).join('｜')||'无';
+  return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||diag.memory_chars||0)+' 字｜总耗时 '+sec(diag.total_seconds)+'\n'
+    +'📦 拉取数量｜'+src('embeddings','普通CK记忆')+'｜'+src('chatlog','chatlog索引')+'｜'+src('entity_profiles','小档案','个')+'｜小档案向量 '+(vec.items||0)+'项/'+(vec.relations||0)+'关系（'+(vec.source||'未知')+'，'+sec(vec.seconds)+'）\n'
+    +'🎯 最终注入｜普通记忆 '+(final.memory||0)+' 条｜chatlog '+(final.chatlog||0)+' 条｜小档案 '+(final.entity||0)+' 条｜合计 '+(final.total||0)+' 条\n'
+    +'⏱ 耗时明细｜'+phaseText+'\n'
+    +'🧮 明细合计 '+sec(diag.phase_sum_seconds)+'｜实际总耗时 '+sec(diag.total_seconds);
+}
 function chatFormatDebug(ev,data){
   data=data||{};
   if(data&&data.mode==='new_session'){
@@ -1931,7 +1959,7 @@ function chatFormatDebug(ev,data){
     return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+(data.history_source==='client_history'?'面板当前窗口':'网关会话')+'｜历史条数：'+(data.history_messages||0)+'｜世界书：'+(data.worldbook_chars||0)+' 字';
   }
   if(ev==='memory'){
-    return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字';
+    return chatFormatRecallDiag(data);
   }
   if(ev==='usage'){
     var read=data.cache_read_input_tokens||data.cache_read||0;
@@ -1955,7 +1983,7 @@ function chatFormatDebug(ev,data){
       return '🧊 缓存诊断｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮';
     }
     if(data.recall_query||data.memory_chars!==undefined){
-      return '🧠 召回诊断｜召回 '+(data.memory_chars||0)+' 字｜耗时 '+(data.recall_seconds||0)+' 秒｜查询：'+String(data.recall_query||'').slice(0,180);
+      return chatFormatRecallDiag(data)+'\n🔎 召回查询｜'+String(data.recall_query||'').slice(0,180);
     }
     if(data.recall_error){
       return '⚠️ 召回异常｜'+data.recall_error;
@@ -2673,7 +2701,7 @@ async function chatSendMessage(){
             recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
             document.getElementById('chat-memory-pack').value=recallInfo.preview||'';
             var savedCfg=chatLoadConfig();savedCfg.memoryPreview=recallInfo.preview||'';chatSaveConfigObject(savedCfg);
-            chatDebug(ev,{memory_chars:recallInfo.chars,has_memory:!!recallInfo.preview});
+            chatDebug(ev,{memory_chars:recallInfo.chars,has_memory:!!recallInfo.preview,recall_diag:data.recall_diag||{}});
           }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
             chatDebug(ev,data);
             if(ev==='usage'){
