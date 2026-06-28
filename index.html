@@ -128,21 +128,21 @@
 <div class="chat-side-tabs"><button class="active" data-chat-side="model" onclick="chatSwitchSideTab('model')">模型</button><button data-chat-side="gateway" onclick="chatSwitchSideTab('gateway')">网关</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>模型<input id="chat-model" autocomplete="off" placeholder="claude-opus-4-6"></label>
-<label>System<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
-<label class="chat-switch"><input id="chat-recall" type="checkbox" checked><span>启用网关召回</span></label>
+<label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
+<label class="chat-switch"><input id="chat-recall" type="checkbox" checked><span>网关召回</span></label>
 <button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存模型设置</button>
 </div>
 <div class="chat-side-panel" id="chat-side-gateway">
 <label>网关地址<input id="chat-gateway-url" autocomplete="off" placeholder="https://ck-gateway..."></label>
 <label>面板 Key<input id="chat-panel-key" type="password" autocomplete="off"></label>
 <label>上游 API Base<input id="chat-api-base" autocomplete="off" placeholder="https://nowcoding.ai/v1"></label>
-<label>上游 Key<input id="chat-upstream-key" type="password" autocomplete="off"></label>
+<label>上游模型 API Key<input id="chat-upstream-key" type="password" autocomplete="off"></label>
 <button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存连接</button>
 </div>
 <div class="chat-side-panel" id="chat-side-memory">
 <label>当前 Session<input id="chat-session-id" autocomplete="off" readonly></label>
 <div class="chat-memory-card"><b>缓存策略</b><p>新会话会更换全新的 session_id；旧窗口仍可从左侧打开，但不会参与新窗口请求。</p></div>
-<label>本轮召回预览<textarea id="chat-memory-pack" rows="9" readonly placeholder="有召回时会显示在这里"></textarea></label>
+<label>本轮召回内容<textarea id="chat-memory-pack" rows="9" readonly placeholder="本轮没有召回时这里为空"></textarea></label>
 <div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatRenameCurrent()">重命名</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">新会话</button></div>
 </div>
 <div class="chat-side-panel" id="chat-side-debug">

@@ -2028,6 +2028,10 @@ async function chatSendMessage(){
   var cfg=chatSaveConfig(true);
   chatActiveSessionId=cfg.sessionId;
   input.value='';
+  cfg.memoryPreview='';
+  var memoryPack=document.getElementById('chat-memory-pack');
+  if(memoryPack)memoryPack.value='';
+  chatSaveConfigObject(cfg);
   chatAddBubble('user',text,true);
   var out=chatAddBubble('assistant','',false);
   var btn=document.getElementById('chat-send-btn');
