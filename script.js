@@ -2297,7 +2297,7 @@ function chatRenderMessageRow(m,i){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
   var inner=role==='assistant'?('<div class="chat-md">'+chatRenderMarkdown(m.text||'')+'</div>'):esc(m.text||'');
-  if(role==='user')inner+=chatCacheTickHtml(m);
+  if(role==='user')inner='<span class="chat-user-text">'+inner+'</span>'+chatCacheTickHtml(m);
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
   return '<div class="chat-msg-row '+role+'"><div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+recall+acts+'</div>'+time+'</div>';
@@ -2305,7 +2305,7 @@ function chatRenderMessageRow(m,i){
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
   var title=hit?'本轮命中缓存':'本轮未命中缓存';
-  return '<span class="chat-cache-tick '+(hit?'hit':'miss')+'" title="'+title+'"><i>✓</i>'+(hit?'<i>✓</i>':'')+'</span>';
+  return '<span class="chat-cache-tick '+(hit?'hit':'miss')+'" title="'+title+'" aria-label="'+title+'"><i>✓</i>'+(hit?'<i>✓</i>':'')+'</span>';
 }
 function chatUsageCacheRead(usage){
   usage=usage||{};
@@ -2342,11 +2342,10 @@ function chatAddBubble(role,text,persist){
   row.className='chat-msg-row '+role;
   var el=document.createElement('div');
   el.className='chat-bubble '+role;
-  el.textContent=text||'';
   if(role==='user'){
-    var tick=document.createElement('span');
-    tick.innerHTML=chatCacheTickHtml({cacheHit:false});
-    el.appendChild(tick.firstChild);
+    el.innerHTML='<span class="chat-user-text">'+esc(text||'')+'</span>'+chatCacheTickHtml({cacheHit:false});
+  }else{
+    el.textContent=text||'';
   }
   var time=document.createElement('div');
   time.className='chat-msg-time';
