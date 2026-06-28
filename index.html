@@ -29,12 +29,12 @@
 <aside class="side-drawer" id="side-drawer" aria-label="导航菜单">
 <div class="side-drawer-head">菜单</div>
 <nav class="side-nav">
-<button class="side-nav-item active" data-tab="overview" onclick="navTo('overview')">总览</button>
+<button class="side-nav-item active" data-tab="chat" onclick="navTo('chat')">聊天</button>
+<button class="side-nav-item" data-tab="overview" onclick="navTo('overview')">总览</button>
 <button class="side-nav-item" data-tab="categories" onclick="navTo('categories')">分类</button>
 <button class="side-nav-item" data-tab="search" onclick="navTo('search')">搜索</button>
 <button class="side-nav-item" data-tab="graph" onclick="navTo('graph')">信息网</button>
 <button class="side-nav-item" data-tab="status" onclick="navTo('status')">状态</button>
-<button class="side-nav-item" data-tab="chat" onclick="navTo('chat')">聊天</button>
 <button class="side-nav-item" data-tab="apiconfig" onclick="navTo('apiconfig')">API配置</button>
 </nav>
 </aside>
@@ -47,7 +47,7 @@
 <button class="sub-tab" data-subtab="recall" onclick="switchApiTab('recall')">召回</button>
 </nav>
 
-<section class="panel-tab active" id="tab-overview">
+<section class="panel-tab" id="tab-overview">
 <div class="overview-grid">
 <div class="day-card"><h2>Day <span id="day-num">0</span></h2><p>Since 2026.3.26</p></div>
 <div class="stats-row"><div class="stat-box"><div class="val" id="st-total">-</div><div class="lbl">总数</div></div><div class="stat-box"><div class="val" id="st-active">-</div><div class="lbl">活跃</div></div><div class="stat-box"><div class="val" id="st-archived">-</div><div class="lbl">归档</div></div></div>
@@ -105,7 +105,7 @@
 <section class="panel-tab" id="tab-apiconfig">
 <div class="api-config-page" id="api-config-body"><div class="empty-state small">读取中...</div></div>
 </section>
-<section class="panel-tab" id="tab-chat">
+<section class="panel-tab active" id="tab-chat">
 <div class="chat-shell">
 <aside class="chat-drawer">
 <div class="chat-drawer-head"><div><b>对话</b><span id="chat-session-count">0</span></div><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div>
