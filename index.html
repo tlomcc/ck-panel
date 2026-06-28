@@ -107,27 +107,42 @@
 </section>
 <section class="panel-tab" id="tab-chat">
 <div class="chat-shell">
+<aside class="chat-drawer">
+<div class="chat-drawer-head"><div><b>对话</b><span id="chat-session-count">0</span></div><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div>
+<div class="chat-session-list" id="chat-session-list"></div>
+</aside>
 <div class="chat-main">
-<div class="tab-head chat-head"><div><h2>聊天</h2><p id="chat-status">配置好网关和上游 API 后就可以直接聊</p></div><button class="btn btn-outline btn-sm" onclick="chatNewSession()">新会话</button></div>
+<div class="chat-head">
+<div class="chat-titlebar"><div><h2 id="chat-title">聊天</h2><p id="chat-status">配置好网关和上游 API 后就可以直接聊</p></div><div class="chat-head-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSettings()" title="设置">⚙</button><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div></div>
+</div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
 <div class="chat-compose">
-<textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
-<button class="btn btn-blue" id="chat-send-btn" onclick="chatSendMessage()">发送</button>
+<textarea id="chat-input" placeholder="输入消息"></textarea>
+<button class="chat-send" id="chat-send-btn" onclick="chatSendMessage()" title="发送">↑</button>
 </div>
 </div>
 <aside class="chat-settings">
-<div class="chat-settings-head"><b>API 配置</b><button class="btn btn-outline btn-sm" onclick="chatSaveConfig()">保存</button></div>
+<div class="chat-settings-head"><b>聊天设置</b><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-side-tabs"><button class="active" data-chat-side="provider" onclick="chatSwitchSideTab('provider')">模型</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
+<div class="chat-side-panel active" id="chat-side-provider">
 <label>网关地址<input id="chat-gateway-url" autocomplete="off" placeholder="https://ck-gateway..."></label>
 <label>面板 Key<input id="chat-panel-key" type="password" autocomplete="off"></label>
 <label>上游 API Base<input id="chat-api-base" autocomplete="off" placeholder="https://nowcoding.ai/v1"></label>
 <label>上游 Key<input id="chat-upstream-key" type="password" autocomplete="off"></label>
 <label>模型<input id="chat-model" autocomplete="off" placeholder="claude-opus-4-6"></label>
-<label>Session ID<input id="chat-session-id" autocomplete="off"></label>
-<label>System<textarea id="chat-system" rows="4"></textarea></label>
-<label>Memory Pack<textarea id="chat-memory-pack" rows="7" placeholder="网关召回的记忆会保存在这里，下轮作为稳定上下文发送"></textarea></label>
-<div class="chat-checks"><label><input id="chat-recall" type="checkbox" checked> 网关召回</label><label><input id="chat-auto-memory" type="checkbox" checked> 空时自动保存记忆包</label></div>
-<div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatClearMemory()">清空记忆包</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">清空窗口</button></div>
+<label>System<textarea id="chat-system" rows="5" placeholder="可选；留空使用网关默认人格"></textarea></label>
+<label class="chat-switch"><input id="chat-recall" type="checkbox" checked><span>启用网关召回</span></label>
+<button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存配置</button>
+</div>
+<div class="chat-side-panel" id="chat-side-memory">
+<label>当前 Session<input id="chat-session-id" autocomplete="off" readonly></label>
+<div class="chat-memory-card"><b>缓存策略</b><p>面板只发送最新消息，历史由网关按 session 保存并回填注入后的旧消息，避免前端历史和网关缓存断点不一致。</p></div>
+<label>本轮召回预览<textarea id="chat-memory-pack" rows="9" readonly placeholder="有召回时会显示在这里"></textarea></label>
+<div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatRenameCurrent()">重命名</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">换新窗口</button></div>
+</div>
+<div class="chat-side-panel" id="chat-side-debug">
 <pre class="chat-debug" id="chat-debug"></pre>
+</div>
 </aside>
 </div>
 </section>
