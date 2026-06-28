@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v21';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v22';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1687,6 +1687,24 @@ function chatDefaultConfig(){
     worldbooks:[]
   };
 }
+function chatStyleSystemPrompt(){
+  return [
+    '【CK聊天输出规则】',
+    '你要像熟人微信聊天，不要写成文章、报告、客服回复或网页说明。',
+    '优先短句、自然接话、有来有回。不要每次都总结，不要频繁讲大道理。',
+    '如果用户是在闲聊、抱怨、撒娇、情绪表达或普通对话，通常回复2-3条短消息；每条之间必须用一个空行分隔。',
+    '如果内容确实很少，可以只回一条；如果用户明确要求解释、分析、教程，再用更完整的段落。',
+    '每条消息都要像真的单独发出去的聊天气泡，不要把一段文章机械切开。',
+    '口吻：聪明、松弛、直接，有熟人感；可以轻微调侃、嘴欠一点，但不要刻薄伤人。',
+    '安慰用户时要平静准确，不喊口号，不煽情过度。',
+    '如果启用了世界书，其中关于人物口吻/说话风格的内容是高优先级风格参考；不要复述世界书标签。'
+  ].join('\n');
+}
+function chatComposeSystemPrompt(cfg){
+  var userSystem=String((cfg&&cfg.system)||'').trim();
+  var style=chatStyleSystemPrompt();
+  return userSystem ? (userSystem+'\n\n'+style) : style;
+}
 function chatLoadConfig(){
   var cfg=chatDefaultConfig();
   try{
@@ -3043,7 +3061,7 @@ async function chatSubmitPendingMessages(){
     session_id:cfg.sessionId,
     text:text,
     model:cfg.model,
-    system:cfg.system,
+    system:chatComposeSystemPrompt(cfg),
     history:outboundHistory,
     worldbook_pack:chatWorldbookPack(cfg),
     api_base:cfg.apiBase,
