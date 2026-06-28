@@ -6575,14 +6575,27 @@ body.chat-active .chat-md ol{
   margin:6px 0!important;
 }
 body.chat-active .chat-msg-acts{
-  height:16px!important;
-  margin-top:4px!important;
+  position:absolute!important;
+  right:6px!important;
+  bottom:3px!important;
+  height:auto!important;
+  margin:0!important;
   justify-content:flex-end!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  background:rgba(255,255,255,.82)!important;
+  border-radius:6px!important;
+  backdrop-filter:blur(4px)!important;
+}
+body.chat-active .chat-bubble:hover .chat-msg-acts{
+  opacity:1!important;
+  pointer-events:auto!important;
 }
 body.chat-active .chat-msg-act{
-  height:16px!important;
-  padding:0 5px!important;
+  height:15px!important;
+  padding:0 4px!important;
   font-size:10px!important;
+  line-height:15px!important;
 }
 body.chat-active .chat-recall{
   margin-bottom:2px!important;

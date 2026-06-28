@@ -2027,6 +2027,11 @@ async function chatSendMessage(){
   if(!text)return;
   var cfg=chatSaveConfig(true);
   chatActiveSessionId=cfg.sessionId;
+  var outboundHistory=chatMessages.slice(-60).filter(function(m){
+    return m&&(m.role==='user'||m.role==='assistant')&&String(m.text||'').trim();
+  }).map(function(m){
+    return {role:m.role,text:String(m.text||''),ts:m.ts||0};
+  });
   input.value='';
   cfg.memoryPreview='';
   var memoryPack=document.getElementById('chat-memory-pack');
@@ -2046,6 +2051,7 @@ async function chatSendMessage(){
     text:text,
     model:cfg.model,
     system:cfg.system,
+    history:outboundHistory,
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall,
