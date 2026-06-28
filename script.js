@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v18';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v19';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2386,8 +2386,22 @@ function chatSplitThinkingText(src){
     var clean=String(body||'').trim();
     if(clean)thoughts.push(clean);
     return '\n';
-  }).replace(/\n{3,}/g,'\n\n').trim();
+  });
+  if(/<\/(?:thinking|think)>/i.test(text)&&!/<(?:thinking|think)\b[^>]*>/i.test(text)){
+    var parts=text.split(/<\/(?:thinking|think)>/i);
+    var before=(parts.shift()||'').trim();
+    var after=parts.join('\n').trim();
+    if(before)thoughts.push(before);
+    text=after||'';
+  }
+  text=text
+    .replace(/<\/?(?:thinking|think)\b[^>]*>/gi,'\n')
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
   return {text:text,thinking:thoughts.join('\n\n')};
+}
+function chatCleanAssistantTextForHistory(rawText){
+  return chatSplitThinkingText(rawText).text || String(rawText||'').replace(/<\/?(?:thinking|think)\b[^>]*>/gi,'').trim();
 }
 function chatRenderAssistantContent(rawText,streaming){
   var split=chatSplitThinkingText(rawText);
@@ -2913,7 +2927,7 @@ async function chatSubmitPendingMessages(){
   var outboundHistory=chatMessages.filter(function(m){
     return m&&(m.role==='user'||m.role==='assistant')&&String(m.text||'').trim();
   }).slice(-60).map(function(m){
-    return {role:m.role,text:String(m.text||''),ts:m.ts||0};
+    return {role:m.role,text:m.role==='assistant'?chatCleanAssistantTextForHistory(m.text):String(m.text||''),ts:m.ts||0};
   });
   cfg.memoryPreview='';
   var memoryPack=document.getElementById('chat-memory-pack');
