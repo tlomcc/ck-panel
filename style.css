@@ -8443,6 +8443,75 @@ body.chat-active .chat-msg-act{
   line-height:16px!important;
 }
 
+/* Final message tools: keep copy/regenerate on one compact row under the bubble. */
+body.chat-active .chat-msg-tools{
+  position:static!important;
+  width:auto!important;
+  max-width:min(680px,84%)!important;
+  margin:1px 4px 0!important;
+  padding:0!important;
+  display:flex!important;
+  flex-direction:row!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:5px!important;
+  opacity:.72!important;
+  pointer-events:auto!important;
+  background:transparent!important;
+}
+
+body.chat-active .chat-msg-row.user .chat-msg-tools{
+  align-self:flex-end!important;
+  justify-content:flex-end!important;
+  margin-right:6px!important;
+}
+
+body.chat-active .chat-msg-row.assistant .chat-msg-tools{
+  align-self:flex-start!important;
+  justify-content:flex-start!important;
+  margin-left:6px!important;
+}
+
+body.chat-active .chat-msg-tools .chat-msg-act,
+body.chat-active .chat-msg-tools .chat-user-regen{
+  flex:0 0 auto!important;
+  width:auto!important;
+  min-width:22px!important;
+  height:19px!important;
+  margin:0!important;
+  padding:0 7px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:1px solid rgba(15,23,42,.08)!important;
+  border-radius:999px!important;
+  background:rgba(255,255,255,.78)!important;
+  color:var(--chat5-muted,#7c8792)!important;
+  box-shadow:0 1px 2px rgba(15,23,42,.05)!important;
+  font-size:10px!important;
+  line-height:1!important;
+  cursor:pointer!important;
+}
+
+body.chat-active .chat-msg-tools .chat-user-regen{
+  width:22px!important;
+  padding:0!important;
+  color:#128c4c!important;
+}
+
+body.chat-active .chat-msg-tools .chat-msg-act:hover,
+body.chat-active .chat-msg-tools .chat-user-regen:hover{
+  background:#e9f8ef!important;
+  color:#128c4c!important;
+}
+
+body.dark.chat-active .chat-msg-tools .chat-msg-act,
+body.dark.chat-active .chat-msg-tools .chat-user-regen{
+  border-color:rgba(255,255,255,.08)!important;
+  background:rgba(23,34,27,.9)!important;
+  color:#9fc8ae!important;
+}
+
 /* Chat viewport hardening: keep the composer visible during SW refresh and mobile keyboard resize. */
 body.chat-active{
   position:fixed!important;

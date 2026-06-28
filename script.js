@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v19';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v20';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2448,12 +2448,23 @@ function chatSplitAssistantReplies(rawText){
   if(parsed.thinking&&out.length)out[0]='<thinking>\n'+parsed.thinking+'\n</thinking>\n\n'+out[0];
   return out.length?out:[rawText];
 }
-function chatAppendAssistantReplies(rawText,recallInfo){
+function chatReplyRevealDelay(part,i,total){
+  if(i>=total-1)return 0;
+  var len=String(part||'').replace(/\s+/g,'').length;
+  return Math.max(180,Math.min(620,220+len*6));
+}
+function chatSleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
+async function chatAppendAssistantReplies(rawText,recallInfo){
   var parts=chatSplitAssistantReplies(rawText);
   var now=Date.now();
-  parts.forEach(function(part,i){
+  for(var i=0;i<parts.length;i++){
+    var part=parts[i];
     chatMessages.push({role:'assistant',text:part,recall:i===0?recallInfo:null,ts:now+i});
-  });
+    chatSaveLocalMessages();
+    chatRenderMessages();
+    var wait=chatReplyRevealDelay(part,i,parts.length);
+    if(wait)await chatSleep(wait);
+  }
 }
 function chatCopyText(t){
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){toast('已复制')},function(){chatFallbackCopy(t)})}
@@ -2725,12 +2736,12 @@ function chatRenderMessageRow(m,i){
   }
   var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false):esc(m.text||'');
   if(role==='user')inner='<span class="chat-user-text">'+inner+'</span>'+chatCacheTickHtml(m);
-  var regen=(role==='user'&&!pending)?'<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>':'';
-  var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
+  var toolButtons=role==='system'?[]:['<button class="chat-msg-act" data-act="copy" data-i="'+i+'" title="复制">复制</button>'];
+  if(role==='user'&&!pending)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
+  var tools=toolButtons.length?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+(pending?' · 待发送':'')+'</div>';
-  var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+acts+'</div>';
-  bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+'</div>';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+'">'+(role==='assistant'?recall:'')+bubble+acts+regen+time+'</div>';
+  var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+'">'+(role==='assistant'?recall:'')+bubble+tools+time+'</div>';
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -3013,9 +3024,10 @@ async function chatSubmitPendingMessages(){
         });
       }
     }
-    chatAppendAssistantReplies(assistantText||'',recallInfo);
-    chatSaveLocalMessages();
-    chatRenderMessages();
+    if(out&&out.parentNode)out.parentNode.remove();
+    chatSetStatus('正在显示回复...');
+    await chatAppendAssistantReplies(assistantText||'',recallInfo);
+    chatSetStatus('完成');
   }catch(e){
     if(e&&e.name==='AbortError'){
       chatMessages.push({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,ts:Date.now()});
