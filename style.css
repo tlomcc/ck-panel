@@ -7139,6 +7139,29 @@ body.chat-active .chat-bubble.user{
   background:var(--chat5-green)!important;
   color:#101820!important;
 }
+body.chat-active .chat-cache-tick{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  width:auto!important;
+  min-width:12px!important;
+  margin-left:6px!important;
+  vertical-align:-1px!important;
+  color:#078847!important;
+  font-size:12px!important;
+  font-weight:900!important;
+  line-height:1!important;
+  letter-spacing:0!important;
+  white-space:nowrap!important;
+}
+body.chat-active .chat-cache-tick i{
+  display:inline-block!important;
+  font-style:normal!important;
+}
+body.chat-active .chat-cache-tick.hit i+i{
+  margin-left:-5px!important;
+  transform:translateY(-2px)!important;
+}
 body.chat-active .chat-bubble.assistant{
   max-width:min(700px,82%)!important;
   border-color:#e2e6ea!important;

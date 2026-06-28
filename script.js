@@ -2286,9 +2286,39 @@ function chatRenderMessageRow(m,i){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
   var inner=role==='assistant'?('<div class="chat-md">'+chatRenderMarkdown(m.text||'')+'</div>'):esc(m.text||'');
+  if(role==='user')inner+=chatCacheTickHtml(m);
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
   return '<div class="chat-msg-row '+role+'"><div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+recall+acts+'</div>'+time+'</div>';
+}
+function chatCacheTickHtml(m){
+  var hit=!!(m&&m.cacheHit);
+  var title=hit?'本轮命中缓存':'本轮未命中缓存';
+  return '<span class="chat-cache-tick '+(hit?'hit':'miss')+'" title="'+title+'"><i>✓</i>'+(hit?'<i>✓</i>':'')+'</span>';
+}
+function chatUsageCacheRead(usage){
+  usage=usage||{};
+  return Number(usage.cache_read_input_tokens||usage.cache_read||0)||0;
+}
+function chatUsageCacheCreate(usage){
+  usage=usage||{};
+  return Number(usage.cache_creation_input_tokens||usage.cache_creation||0)||0;
+}
+function chatApplyCacheTick(userIndex,usage,userBubble){
+  if(userIndex<0||!chatMessages[userIndex]||chatMessages[userIndex].role!=='user')return;
+  var read=chatUsageCacheRead(usage);
+  var create=chatUsageCacheCreate(usage);
+  chatMessages[userIndex].cacheHit=read>0;
+  chatMessages[userIndex].cacheRead=read;
+  chatMessages[userIndex].cacheCreate=create;
+  if(userBubble){
+    var old=userBubble.querySelector('.chat-cache-tick');
+    if(old)old.remove();
+    var wrap=document.createElement('span');
+    wrap.innerHTML=chatCacheTickHtml(chatMessages[userIndex]);
+    userBubble.appendChild(wrap.firstChild);
+  }
+  chatSaveLocalMessages();
 }
 function chatAddBubble(role,text,persist){
   var box=document.getElementById('chat-messages');
@@ -2302,6 +2332,11 @@ function chatAddBubble(role,text,persist){
   var el=document.createElement('div');
   el.className='chat-bubble '+role;
   el.textContent=text||'';
+  if(role==='user'){
+    var tick=document.createElement('span');
+    tick.innerHTML=chatCacheTickHtml({cacheHit:false});
+    el.appendChild(tick.firstChild);
+  }
   var time=document.createElement('div');
   time.className='chat-msg-time';
   time.textContent=chatFullTimeLabel(ts);
@@ -2310,7 +2345,9 @@ function chatAddBubble(role,text,persist){
   box.appendChild(row);
   box.scrollTop=box.scrollHeight;
   if(persist){
-    chatMessages.push({role:role,text:text||'',ts:ts});
+    var msg={role:role,text:text||'',ts:ts};
+    if(role==='user')msg.cacheHit=false;
+    chatMessages.push(msg);
     chatSaveLocalMessages();
   }
   return el;
@@ -2409,7 +2446,8 @@ async function chatSendMessage(){
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
-  chatAddBubble('user',text,true);
+  var userBubble=chatAddBubble('user',text,true);
+  var userMessageIndex=chatMessages.length-1;
   var out=chatAddBubble('assistant','',false);
   var btn=document.getElementById('chat-send-btn');
   chatSending=true;
@@ -2467,8 +2505,12 @@ async function chatSendMessage(){
             chatDebug(ev,data);
           }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
             chatDebug(ev,data);
-            if(ev==='usage')chatUpdateRuntime(cfg,data||{});
+            if(ev==='usage'){
+              chatUpdateRuntime(cfg,data||{});
+              chatApplyCacheTick(userMessageIndex,data||{},userBubble);
+            }
             if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
+            if(ev==='done'&&data&&data.usage)chatApplyCacheTick(userMessageIndex,data.usage,userBubble);
             if(ev==='done')chatSetStatus('完成');
           }else if(ev==='error'){
             throw new Error(data.error||data.message||JSON.stringify(data));
