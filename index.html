@@ -134,8 +134,9 @@
 </div>
 </div>
 </div>
+<button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置"></button>
 <aside class="chat-settings">
-<div class="chat-settings-head"><b>聊天设置</b><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><b id="chat-settings-title">聊天设置</b><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-tabs"><button class="active" data-chat-side="model" onclick="chatSwitchSideTab('model')">模型</button><button data-chat-side="gateway" onclick="chatSwitchSideTab('gateway')">网关</button><button data-chat-side="worldbook" onclick="chatSwitchSideTab('worldbook')">世界书</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>模型<input id="chat-model" autocomplete="off" placeholder="claude-opus-4-6"></label>

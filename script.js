@@ -2190,10 +2190,13 @@ function chatTogglePlus(force){
   panel.classList.toggle('open',open);
   if(btn)btn.classList.toggle('open',open);
 }
+function chatSettingTitle(tab){
+  return ({model:'模型设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',debug:'调试记录'})[tab]||'聊天设置';
+}
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
-  chatToggleSettings(true);
   chatSwitchSideTab(tab||'model');
+  chatToggleSettings(true);
 }
 function chatToggleSessions(force,silent){
   var shell=document.querySelector('.chat-shell');
@@ -2217,6 +2220,8 @@ function chatToggleSettings(force,silent){
 }
 function chatSwitchSideTab(tab,silent){
   tab=tab||'model';
+  var title=document.getElementById('chat-settings-title');
+  if(title)title.textContent=chatSettingTitle(tab);
   document.querySelectorAll('.chat-side-tabs button').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-chat-side')===tab)});
   document.querySelectorAll('.chat-side-panel').forEach(function(p){p.classList.toggle('active',p.id==='chat-side-'+tab)});
   if(!silent){
