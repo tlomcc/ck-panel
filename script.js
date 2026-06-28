@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v14';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v15';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2330,8 +2330,21 @@ function chatAutosizeInput(input){
   var max=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?104:120;
   input.style.height=Math.min(max,Math.max(36,input.scrollHeight))+'px';
   input.style.overflowY=input.scrollHeight>max?'auto':'hidden';
+  chatLayoutCompose();
 }
 function chatLayoutCompose(){
+  var vv=window.visualViewport;
+  var h=vv&&vv.height?vv.height:window.innerHeight;
+  if(h&&document.documentElement){
+    document.documentElement.style.setProperty('--ck-chat-vh',Math.max(320,Math.floor(h))+'px');
+  }
+  var shell=document.querySelector('.chat-shell');
+  if(shell)shell.classList.add('chat-layout-ready');
+  var compose=document.querySelector('.chat-compose');
+  if(compose){
+    compose.style.display='';
+    compose.style.visibility='';
+  }
   var btn=document.getElementById('chat-send-btn');
   if(!btn)return;
   btn.style.position='';
@@ -2669,6 +2682,10 @@ function chatInit(){
   var input=document.getElementById('chat-input');
   chatLayoutCompose();
   window.addEventListener('resize',chatLayoutCompose);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',chatLayoutCompose);
+    window.visualViewport.addEventListener('scroll',chatLayoutCompose);
+  }
   if(!chatCacheTimer)chatCacheTimer=setInterval(function(){chatUpdateCacheExpiryHint(true)},15000);
   if(input){
     chatAutosizeInput(input);
