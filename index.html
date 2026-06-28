@@ -114,7 +114,7 @@
 <button class="chat-drawer-mask" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表"></button>
 <div class="chat-main">
 <div class="chat-head">
-<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center" ondblclick="chatRenameCurrent()" title="双击重命名"><h2 id="chat-title">聊天</h2><p id="chat-status">就绪</p></div><div class="chat-head-actions"><button class="chat-icon-btn" id="chat-refresh-btn" type="button" onclick="chatRefreshView()" title="刷新">⟳</button><button class="chat-icon-btn chat-settings-toggle" type="button" onclick="chatToggleSettings()" title="设置">⚙</button><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div></div>
+<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center" ondblclick="chatRenameCurrent()" title="双击重命名"><h2 id="chat-title">聊天</h2><p id="chat-status">就绪</p></div><div class="chat-head-actions"><button class="chat-icon-btn chat-debug-open" type="button" onclick="chatOpenSettingTab('debug')" title="调试">调</button></div></div>
 <div class="chat-runtime"><span id="chat-runtime-model">模型未配置</span><span id="chat-runtime-cache">网关 session</span><span id="chat-runtime-recall">召回开启</span></div>
 </div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>

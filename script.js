@@ -1825,10 +1825,17 @@ function chatRenderDebugRecords(){
   chatDebugRecords=chatDebugPrune(chatDebugRecords);
   if(!chatDebugRecords.length){
     el.textContent='暂无调试记录。这里会保留最近一天的聊天调试信息。';
+    chatScrollDebugBottom();
     return;
   }
   el.textContent=chatDebugRecords.map(chatDebugLine).join('\n\n');
+  chatScrollDebugBottom();
+}
+function chatScrollDebugBottom(){
+  var el=document.getElementById('chat-debug');
+  if(!el)return;
   el.scrollTop=el.scrollHeight;
+  setTimeout(function(){el.scrollTop=el.scrollHeight},0);
 }
 function chatFormatDebug(ev,data){
   data=data||{};
@@ -2216,6 +2223,10 @@ function chatSwitchSideTab(tab,silent){
     var cfg=chatLoadConfig();
     cfg.chatSideTab=tab;
     chatSaveConfigObject(cfg);
+  }
+  if(tab==='debug'){
+    chatRenderDebugRecords();
+    chatScrollDebugBottom();
   }
 }
 document.addEventListener('click',function(e){
