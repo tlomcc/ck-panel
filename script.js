@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v10';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v11';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1744,6 +1744,11 @@ function chatDebugEndpoint(cfg){
   if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
   return base+'/ck/debug';
 }
+function chatWorldbooksEndpoint(cfg){
+  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
+  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
+  return base+'/ck/worldbooks';
+}
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
   if(el)el.textContent=text;
@@ -1780,6 +1785,59 @@ function chatRenderWorldbooks(cfg){
   if(priority)priority.value=active?active.priority:100;
   if(content)content.value=active?active.content:'';
 }
+async function chatLoadWorldbooksRemote(silent){
+  var cfg=chatLoadConfig();
+  if(!cfg.panelKey){
+    if(!silent)toast('先填写面板 Key 才能同步世界书');
+    return false;
+  }
+  try{
+    var resp=await fetch(chatWorldbooksEndpoint(cfg)+'?key='+encodeURIComponent(cfg.panelKey),{
+      cache:'no-store',
+      headers:{'x-api-key':cfg.panelKey}
+    });
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var data=await resp.json();
+    var remote=chatNormalizeWorldbooks(data.worldbooks);
+    var local=chatNormalizeWorldbooks(cfg.worldbooks);
+    if(!remote.length&&local.length){
+      await chatSaveWorldbooksRemote(local,true);
+      return true;
+    }
+    cfg.worldbooks=remote;
+    chatSaveConfigObject(cfg);
+    chatRenderWorldbooks(cfg);
+    chatUpdateRuntime(cfg);
+    if(!silent)toast('世界书已从网关同步');
+    return true;
+  }catch(e){
+    if(!silent)toast('世界书同步失败：'+String((e&&e.message)||e));
+    return false;
+  }
+}
+async function chatSaveWorldbooksRemote(worldbooks,silent){
+  var cfg=chatLoadConfig();
+  cfg.worldbooks=chatNormalizeWorldbooks(worldbooks||cfg.worldbooks);
+  chatSaveConfigObject(cfg);
+  if(!cfg.panelKey){
+    if(!silent)toast('已保存在本机；填写面板 Key 后可同步到 GitHub');
+    return false;
+  }
+  try{
+    var resp=await fetch(chatWorldbooksEndpoint(cfg)+'?key='+encodeURIComponent(cfg.panelKey),{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':cfg.panelKey},
+      body:JSON.stringify({worldbooks:cfg.worldbooks})
+    });
+    var data=await resp.json().catch(function(){return {}});
+    if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));
+    if(!silent)toast('世界书已保存到 GitHub');
+    return true;
+  }catch(e){
+    if(!silent)toast('世界书保存到 GitHub 失败：'+String((e&&e.message)||e));
+    return false;
+  }
+}
 function chatSelectWorldbook(id){
   chatWorldbookActiveId=String(id||'');
   chatRenderWorldbooks();
@@ -1792,9 +1850,10 @@ function chatAddWorldbook(){
   chatWorldbookActiveId=book.id;
   chatSaveConfigObject(cfg);
   chatRenderWorldbooks(cfg);
+  chatSaveWorldbooksRemote(cfg.worldbooks,true);
   toast('已新增世界书');
 }
-function chatSaveWorldbook(){
+async function chatSaveWorldbook(){
   var cfg=chatReadForm();
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
   if(!chatWorldbookActiveId&&cfg.worldbooks.length)chatWorldbookActiveId=cfg.worldbooks[0].id;
@@ -1811,9 +1870,9 @@ function chatSaveWorldbook(){
   chatSaveConfigObject(cfg);
   chatRenderWorldbooks(cfg);
   chatUpdateRuntime(cfg);
-  toast('世界书已保存');
+  await chatSaveWorldbooksRemote(cfg.worldbooks,false);
 }
-function chatDeleteWorldbook(){
+async function chatDeleteWorldbook(){
   if(!chatWorldbookActiveId)return;
   var cfg=chatReadForm();
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks).filter(function(w){return w.id!==chatWorldbookActiveId});
@@ -1821,7 +1880,7 @@ function chatDeleteWorldbook(){
   chatSaveConfigObject(cfg);
   chatRenderWorldbooks(cfg);
   chatUpdateRuntime(cfg);
-  toast('世界书已删除');
+  await chatSaveWorldbooksRemote(cfg.worldbooks,false);
 }
 function chatDebugPrune(list){
   var cutoff=Date.now()-CHAT_DEBUG_TTL;
@@ -1872,7 +1931,7 @@ function chatFormatDebug(ev,data){
     return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+(data.history_source==='client_history'?'面板当前窗口':'网关会话')+'｜历史条数：'+(data.history_messages||0)+'｜世界书：'+(data.worldbook_chars||0)+' 字';
   }
   if(ev==='memory'){
-    return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字｜预览：'+String(data.memory_preview||data.memory_pack||'无').slice(0,220);
+    return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字';
   }
   if(ev==='usage'){
     var read=data.cache_read_input_tokens||data.cache_read||0;
@@ -2520,6 +2579,7 @@ function chatInit(){
   chatLoadDebugRecords();
   chatLoadLocalMessages();
   chatWriteForm(chatLoadConfig());
+  chatLoadWorldbooksRemote(true);
   chatRenderSessions();
   chatRenderMessages();
   var input=document.getElementById('chat-input');
@@ -2610,10 +2670,10 @@ async function chatSendMessage(){
             var box=document.getElementById('chat-messages');
             if(box)box.scrollTop=box.scrollHeight;
           }else if(ev==='memory'){
-            recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_preview||data.memory_pack||'').slice(0,1600)};
+            recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
             document.getElementById('chat-memory-pack').value=recallInfo.preview||'';
             var savedCfg=chatLoadConfig();savedCfg.memoryPreview=recallInfo.preview||'';chatSaveConfigObject(savedCfg);
-            chatDebug(ev,data);
+            chatDebug(ev,{memory_chars:recallInfo.chars,has_memory:!!recallInfo.preview});
           }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
             chatDebug(ev,data);
             if(ev==='usage'){
