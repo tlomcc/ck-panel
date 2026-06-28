@@ -4818,6 +4818,103 @@ body.dark .chat-checks label{color:#aeb6c0}
   border:1px solid var(--ck-border,#e5ebe7);
   border-radius:14px;
 }
+
+/* Final chat recall layout: keep recall inside the assistant bubble so it never
+   becomes an independent message row or changes the outer chat flow. */
+body.chat-active .chat-bubble.assistant .chat-recall{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  margin:8px 0 0!important;
+  box-sizing:border-box!important;
+  align-self:stretch!important;
+  overflow:hidden!important;
+  border:1px solid #dce8e3!important;
+  border-radius:8px!important;
+  background:#f6fbf8!important;
+  box-shadow:none!important;
+}
+body.chat-active .chat-bubble.assistant .chat-recall-head{
+  width:100%!important;
+  min-width:0!important;
+  min-height:30px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  padding:6px 8px!important;
+  border:0!important;
+  appearance:none!important;
+  background:transparent!important;
+  color:#42655d!important;
+  font-size:12px!important;
+  font-weight:600!important;
+  line-height:1.35!important;
+  font-family:inherit!important;
+  text-align:left!important;
+  cursor:pointer!important;
+}
+body.chat-active .chat-bubble.assistant .chat-recall-head span:first-child{
+  min-width:0!important;
+  flex:1 1 auto!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+body.chat-active .chat-bubble.assistant .chat-recall-head .chev{
+  flex:0 0 auto!important;
+  margin:0!important;
+  font-size:13px!important;
+  line-height:1!important;
+  transform:none!important;
+  transition:transform .16s ease!important;
+}
+body.chat-active .chat-bubble.assistant .chat-recall.open .chat-recall-head .chev{
+  transform:rotate(180deg)!important;
+}
+body.chat-active .chat-bubble.assistant .chat-recall-body{
+  display:none!important;
+  max-height:168px!important;
+  margin:0!important;
+  padding:0 8px 8px!important;
+  box-sizing:border-box!important;
+  overflow:auto!important;
+  color:#60756d!important;
+  font-size:12px!important;
+  line-height:1.55!important;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+}
+body.chat-active .chat-bubble.assistant .chat-recall.open .chat-recall-body{
+  display:block!important;
+}
+body.chat-active .chat-msg-row>.chat-recall{
+  display:none!important;
+}
+body.chat-active .chat-bubble.assistant .chat-msg-acts{
+  top:4px!important;
+  right:5px!important;
+  bottom:auto!important;
+}
+body.dark.chat-active .chat-bubble.assistant .chat-recall{
+  border-color:#2f3b37!important;
+  background:#121b18!important;
+}
+body.dark.chat-active .chat-bubble.assistant .chat-recall-head{
+  color:#a7c1b7!important;
+}
+body.dark.chat-active .chat-bubble.assistant .chat-recall-body{
+  color:#91a29a!important;
+}
+@media(max-width:760px){
+  body.chat-active .chat-bubble.assistant .chat-recall{
+    margin-top:7px!important;
+  }
+  body.chat-active .chat-bubble.assistant .chat-recall-body{
+    max-height:132px!important;
+    font-size:11.5px!important;
+  }
+}
 .chat-drawer{
   min-width:0;
   border-right:1px solid var(--ck-border,#e5ebe7);

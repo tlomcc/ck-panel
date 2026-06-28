@@ -2010,13 +2010,13 @@ function chatRenderMessages(){
 function chatRenderMessageRow(m,i){
   var role=m.role==='user'?'user':(m.role==='system'?'system':'assistant');
   var recall='';
-  if(m.recall&&(m.recall.chars||m.recall.preview)){
-    recall='<div class="chat-recall"><div class="chat-recall-head">🧠 召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'<span class="chev">▼</span></div><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
+  if(role==='assistant'&&m.recall&&(m.recall.chars||m.recall.preview)){
+    recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
   var inner=role==='assistant'?('<div class="chat-md">'+chatRenderMarkdown(m.text||'')+'</div>'):esc(m.text||'');
   var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
-  return recall+'<div class="chat-msg-row '+role+'"><div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+acts+'</div>'+time+'</div>';
+  return '<div class="chat-msg-row '+role+'"><div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+recall+acts+'</div>'+time+'</div>';
 }
 function chatAddBubble(role,text,persist){
   var box=document.getElementById('chat-messages');
