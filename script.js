@@ -1632,6 +1632,7 @@ function chatDefaultConfig(){
     system:'',
     recall:true,
     settingsOpen:false,
+    chatSideTab:'model',
     memoryPreview:''
   };
 }
@@ -1661,6 +1662,7 @@ function chatReadForm(){
     system:document.getElementById('chat-system').value||'',
     recall:document.getElementById('chat-recall').checked,
     settingsOpen:document.querySelector('.chat-settings')?document.querySelector('.chat-settings').classList.contains('open'):false,
+    chatSideTab:(document.querySelector('.chat-side-tabs button.active')||{}).getAttribute?document.querySelector('.chat-side-tabs button.active').getAttribute('data-chat-side'):'model',
     memoryPreview:document.getElementById('chat-memory-pack')?document.getElementById('chat-memory-pack').value:''
   };
 }
@@ -1675,10 +1677,13 @@ function chatWriteForm(cfg){
   document.getElementById('chat-memory-pack').value=cfg.memoryPreview||'';
   document.getElementById('chat-recall').checked=cfg.recall!==false;
   chatToggleSettings(!!cfg.settingsOpen,true);
+  chatSwitchSideTab(cfg.chatSideTab||'model',true);
+  chatUpdateRuntime(cfg);
 }
 function chatSaveConfig(silent){
   var cfg=chatReadForm();
   chatSaveConfigObject(cfg);
+  chatUpdateRuntime(cfg);
   if(!silent)toast('聊天配置已保存');
   return cfg;
 }
@@ -1695,6 +1700,32 @@ function chatDebug(data){
   var el=document.getElementById('chat-debug');
   if(!el)return;
   try{el.textContent=JSON.stringify(data,null,2)}catch(e){el.textContent=String(data)}
+}
+function chatShortSession(id){
+  id=String(id||'');
+  return id.length>12?id.slice(0,8)+'...'+id.slice(-4):id;
+}
+function chatTimeLabel(ts){
+  if(!ts)return'';
+  var d=new Date(ts),now=new Date();
+  var same=d.toDateString()===now.toDateString();
+  var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  return same?hm:(String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+hm);
+}
+function chatUpdateRuntime(cfg,usage){
+  cfg=cfg||chatLoadConfig();
+  var model=document.getElementById('chat-runtime-model');
+  var cache=document.getElementById('chat-runtime-cache');
+  var recall=document.getElementById('chat-runtime-recall');
+  if(model)model.textContent=(cfg.model||'模型未配置')+' · '+chatShortSession(cfg.sessionId);
+  if(recall)recall.textContent=cfg.recall===false?'召回关闭':'召回开启';
+  if(cache){
+    var u=usage||{};
+    var read=u.cache_read_input_tokens||u.cache_read||0;
+    var create=u.cache_creation_input_tokens||u.cache_creation||0;
+    if(read||create)cache.textContent='cache read '+read+' / create '+create;
+    else cache.textContent='网关 session 历史';
+  }
 }
 function chatNowTitle(){
   var d=new Date();
@@ -1735,6 +1766,10 @@ function chatSessionPreview(s){
   var m=(s.messages||[]).slice().reverse().find(function(x){return x.role!=='system'&&x.text});
   return m?String(m.text).replace(/\s+/g,' ').slice(0,54):'还没有消息';
 }
+function chatSessionMeta(s){
+  var n=(s.messages||[]).filter(function(m){return m.role==='user'}).length;
+  return (n?n+' 轮':'新会话')+(s.updated?' · '+chatTimeLabel(s.updated):'');
+}
 function chatRenderSessions(){
   var list=document.getElementById('chat-session-list');
   var count=document.getElementById('chat-session-count');
@@ -1742,7 +1777,7 @@ function chatRenderSessions(){
   if(!list)return;
   chatSessions.sort(function(a,b){return (b.updated||0)-(a.updated||0)});
   list.innerHTML=chatSessions.map(function(s){
-    return '<button class="chat-session-item '+(s.id===chatActiveSessionId?'active':'')+'" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><span>'+esc(s.title||'未命名对话')+'</span><small>'+esc(chatSessionPreview(s))+'</small></button>';
+    return '<button class="chat-session-item '+(s.id===chatActiveSessionId?'active':'')+'" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span>'+esc(s.title||'未命名对话')+'</span><small>'+esc(chatSessionPreview(s))+'</small><em>'+esc(chatSessionMeta(s))+'</em></button>';
   }).join('');
 }
 function chatSelectSession(id){
@@ -1755,6 +1790,7 @@ function chatSelectSession(id){
   chatMessages=chatCurrentSession().messages||[];
   chatRenderSessions();
   chatRenderMessages();
+  chatUpdateRuntime(cfg);
   chatSetStatus('已切换对话');
 }
 function chatLoadLocalMessages(){
@@ -1839,9 +1875,15 @@ function chatToggleSettings(force,silent){
     chatSaveConfigObject(cfg);
   }
 }
-function chatSwitchSideTab(tab){
+function chatSwitchSideTab(tab,silent){
+  tab=tab||'model';
   document.querySelectorAll('.chat-side-tabs button').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-chat-side')===tab)});
   document.querySelectorAll('.chat-side-panel').forEach(function(p){p.classList.toggle('active',p.id==='chat-side-'+tab)});
+  if(!silent){
+    var cfg=chatLoadConfig();
+    cfg.chatSideTab=tab;
+    chatSaveConfigObject(cfg);
+  }
 }
 document.addEventListener('click',function(e){
   if(!e.target||!e.target.closest)return;
@@ -1858,7 +1900,7 @@ function chatRenderMessages(){
   var title=document.getElementById('chat-title');
   if(title)title.textContent=chatCurrentSession().title||'聊天';
   if(!chatMessages.length){
-    box.innerHTML='<div class="chat-welcome"><b>CK Chat</b><p>像聊天客户端一样使用；API 和调试都收在右侧设置里。新会话会换新的 session，网关可以稳定维护历史和缓存。</p></div>';
+    box.innerHTML='<div class="chat-welcome"><b>CK Chat</b><p>新对话</p></div>';
     return;
   }
   box.innerHTML=chatMessages.map(function(m,i){
@@ -1903,6 +1945,7 @@ function chatNewSession(){
   chatRenderSessions();
   chatRenderMessages();
   chatDebug({session_id:cfg.sessionId});
+  chatUpdateRuntime(cfg);
   toast('已创建新会话');
 }
 function chatRenameCurrent(){
@@ -1966,6 +2009,7 @@ async function chatSendMessage(){
   chatAbort=(typeof AbortController!=='undefined')?new AbortController():null;
   if(btn){btn.disabled=false;btn.textContent='■';btn.title='停止';btn.classList.add('chat-stop-btn')}
   chatSetStatus('正在请求网关...');
+  chatUpdateRuntime(cfg);
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
@@ -2014,6 +2058,8 @@ async function chatSendMessage(){
             chatDebug(data);
           }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
             chatDebug(data);
+            if(ev==='usage')chatUpdateRuntime(cfg,data||{});
+            if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
             if(ev==='done')chatSetStatus('完成');
           }else if(ev==='error'){
             throw new Error(data.error||data.message||JSON.stringify(data));
@@ -2029,7 +2075,7 @@ async function chatSendMessage(){
       chatMessages.push({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,ts:Date.now()});
       chatSaveLocalMessages();chatRenderMessages();chatSetStatus('已停止');
     }else{
-      var emsg=(assistantText?assistantText+'\n':'')+'⚠️ '+String(e.message||e);
+      var emsg=(assistantText?assistantText+'\n':'')+'请求失败：'+String(e.message||e);
       chatMessages.push({role:'assistant',text:emsg,recall:recallInfo,ts:Date.now()});
       chatSaveLocalMessages();chatRenderMessages();chatSetStatus('请求失败');
     }
@@ -2082,6 +2128,7 @@ document.addEventListener('touchend',function(e){
 function switchPanelTab(tab,opts) {
   opts=opts||{};
   currentPanelTab=tab;
+  document.body.classList.toggle('chat-active',tab==='chat');
   document.querySelectorAll('.panel-tab').forEach(function(el){el.classList.remove('active')});
   document.querySelectorAll('.top-tab,.side-nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-tab')===tab)});
   var subTabs=document.getElementById('sub-tabs');
