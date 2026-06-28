@@ -1802,8 +1802,41 @@ function chatRenderSessions(){
   if(!list)return;
   chatSessions.sort(function(a,b){return (b.updated||0)-(a.updated||0)});
   list.innerHTML=chatSessions.map(function(s){
-    return '<button class="chat-session-item '+(s.id===chatActiveSessionId?'active':'')+'" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span>'+esc(s.title||'未命名对话')+'</span><small>'+esc(chatSessionPreview(s))+'</small><em>'+esc(chatSessionMeta(s))+'</em></button>';
+    return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span>'+esc(s.title||'未命名对话')+'</span><small>'+esc(chatSessionPreview(s))+'</small><em>'+esc(chatSessionMeta(s))+'</em></button><button class="chat-session-del" type="button" onclick="chatDeleteSession(\''+escAttr(s.id)+'\',event)" title="删除对话">×</button></div>';
   }).join('');
+}
+function chatDeleteSession(id,event){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if(chatSending)return;
+  var s=chatSessions.find(function(x){return x.id===id});
+  var title=(s&&s.title)||'这个对话';
+  if(!confirm('删除“'+title+'”？'))return;
+  chatSessions=chatSessions.filter(function(x){return x.id!==id});
+  if(!chatSessions.length){
+    var newId=chatSessionId();
+    chatSessions=[{id:newId,title:chatNowTitle(),messages:[],created:Date.now(),updated:Date.now()}];
+    chatActiveSessionId=newId;
+  }else if(chatActiveSessionId===id){
+    chatSessions.sort(function(a,b){return (b.updated||0)-(a.updated||0)});
+    chatActiveSessionId=chatSessions[0].id;
+  }
+  var cfg=chatLoadConfig();
+  cfg.sessionId=chatActiveSessionId;
+  cfg.memoryPreview='';
+  chatSaveConfigObject(cfg);
+  chatMessages=chatCurrentSession().messages||[];
+  var sessionInput=document.getElementById('chat-session-id');
+  if(sessionInput)sessionInput.value=chatActiveSessionId;
+  var memoryPack=document.getElementById('chat-memory-pack');
+  if(memoryPack)memoryPack.value='';
+  chatSaveSessions();
+  chatRenderSessions();
+  chatRenderMessages();
+  chatUpdateRuntime(cfg);
+  chatSetStatus('对话已删除');
 }
 function chatSelectSession(id){
   if(chatSending)return;
