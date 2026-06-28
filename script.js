@@ -1622,8 +1622,23 @@ var chatSessions=[];
 var chatActiveSessionId='';
 var chatDebugRecords=[];
 var chatCacheTimer=null;
+var chatWorldbookActiveId='';
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
+}
+function chatWorldbookId(){
+  return 'wb-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+}
+function chatNormalizeWorldbooks(list){
+  return (Array.isArray(list)?list:[]).filter(function(w){return w&&typeof w==='object'}).map(function(w){
+    return {
+      id:String(w.id||chatWorldbookId()),
+      name:String(w.name||'未命名世界书').slice(0,40),
+      enabled:w.enabled!==false,
+      priority:Number(w.priority||100)||100,
+      content:String(w.content||'')
+    };
+  });
 }
 function chatDefaultConfig(){
   var panelKey='';
@@ -1639,7 +1654,8 @@ function chatDefaultConfig(){
     recall:true,
     settingsOpen:false,
     chatSideTab:'model',
-    memoryPreview:''
+    memoryPreview:'',
+    worldbooks:[]
   };
 }
 function chatLoadConfig(){
@@ -1652,6 +1668,7 @@ function chatLoadConfig(){
     }
   }catch(e){}
   if(!cfg.sessionId)cfg.sessionId=chatSessionId();
+  cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
   return cfg;
 }
 function chatSaveConfigObject(cfg){
@@ -1669,7 +1686,8 @@ function chatReadForm(){
     recall:document.getElementById('chat-recall').checked,
     settingsOpen:document.querySelector('.chat-settings')?document.querySelector('.chat-settings').classList.contains('open'):false,
     chatSideTab:(document.querySelector('.chat-side-tabs button.active')||{}).getAttribute?document.querySelector('.chat-side-tabs button.active').getAttribute('data-chat-side'):'model',
-    memoryPreview:document.getElementById('chat-memory-pack')?document.getElementById('chat-memory-pack').value:''
+    memoryPreview:document.getElementById('chat-memory-pack')?document.getElementById('chat-memory-pack').value:'',
+    worldbooks:chatNormalizeWorldbooks(chatLoadConfig().worldbooks)
   };
 }
 function chatWriteForm(cfg){
@@ -1684,6 +1702,7 @@ function chatWriteForm(cfg){
   document.getElementById('chat-recall').checked=cfg.recall!==false;
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
+  chatRenderWorldbooks(cfg);
   chatUpdateRuntime(cfg);
 }
 function chatSaveConfig(silent){
@@ -1706,6 +1725,81 @@ function chatDebugEndpoint(cfg){
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
   if(el)el.textContent=text;
+}
+function chatWorldbookPack(cfg){
+  cfg=cfg||chatLoadConfig();
+  var books=chatNormalizeWorldbooks(cfg.worldbooks).filter(function(w){return w.enabled&&w.content.trim()});
+  books.sort(function(a,b){return (a.priority||100)-(b.priority||100)||String(a.name).localeCompare(String(b.name))});
+  if(!books.length)return '';
+  return books.map(function(w,i){
+    return '【世界书 '+(i+1)+'：'+w.name+'】\n'+w.content.trim();
+  }).join('\n\n---\n\n');
+}
+function chatRenderWorldbooks(cfg){
+  cfg=cfg||chatLoadConfig();
+  var list=document.getElementById('chat-worldbook-list');
+  var count=document.getElementById('chat-worldbook-count');
+  if(!list)return;
+  var books=chatNormalizeWorldbooks(cfg.worldbooks);
+  if(!chatWorldbookActiveId&&books.length)chatWorldbookActiveId=books[0].id;
+  if(chatWorldbookActiveId&&!books.some(function(w){return w.id===chatWorldbookActiveId}))chatWorldbookActiveId=books.length?books[0].id:'';
+  var enabled=books.filter(function(w){return w.enabled&&w.content.trim()}).length;
+  if(count)count.textContent=enabled+' 个启用';
+  list.innerHTML=books.length?books.map(function(w){
+    return '<button class="chat-worldbook-row '+(w.id===chatWorldbookActiveId?'active':'')+'" type="button" onclick="chatSelectWorldbook(\''+escAttr(w.id)+'\')"><span>'+esc(w.name||'未命名世界书')+'</span><small>'+(w.enabled?'启用':'停用')+' · 优先级 '+(w.priority||100)+'</small></button>';
+  }).join(''):'<div class="chat-worldbook-empty">还没有世界书</div>';
+  var active=books.find(function(w){return w.id===chatWorldbookActiveId})||null;
+  var name=document.getElementById('chat-worldbook-name');
+  var enabledInput=document.getElementById('chat-worldbook-enabled');
+  var priority=document.getElementById('chat-worldbook-priority');
+  var content=document.getElementById('chat-worldbook-content');
+  if(name)name.value=active?active.name:'';
+  if(enabledInput)enabledInput.checked=active?active.enabled:false;
+  if(priority)priority.value=active?active.priority:100;
+  if(content)content.value=active?active.content:'';
+}
+function chatSelectWorldbook(id){
+  chatWorldbookActiveId=String(id||'');
+  chatRenderWorldbooks();
+}
+function chatAddWorldbook(){
+  var cfg=chatReadForm();
+  var book={id:chatWorldbookId(),name:'新世界书',enabled:true,priority:100,content:''};
+  cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
+  cfg.worldbooks.push(book);
+  chatWorldbookActiveId=book.id;
+  chatSaveConfigObject(cfg);
+  chatRenderWorldbooks(cfg);
+  toast('已新增世界书');
+}
+function chatSaveWorldbook(){
+  var cfg=chatReadForm();
+  cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
+  if(!chatWorldbookActiveId&&cfg.worldbooks.length)chatWorldbookActiveId=cfg.worldbooks[0].id;
+  var book=cfg.worldbooks.find(function(w){return w.id===chatWorldbookActiveId});
+  if(!book){
+    book={id:chatWorldbookId(),name:'新世界书',enabled:true,priority:100,content:''};
+    cfg.worldbooks.push(book);
+    chatWorldbookActiveId=book.id;
+  }
+  book.name=(document.getElementById('chat-worldbook-name').value||'未命名世界书').trim().slice(0,40);
+  book.enabled=document.getElementById('chat-worldbook-enabled').checked;
+  book.priority=Number(document.getElementById('chat-worldbook-priority').value||100)||100;
+  book.content=document.getElementById('chat-worldbook-content').value||'';
+  chatSaveConfigObject(cfg);
+  chatRenderWorldbooks(cfg);
+  chatUpdateRuntime(cfg);
+  toast('世界书已保存');
+}
+function chatDeleteWorldbook(){
+  if(!chatWorldbookActiveId)return;
+  var cfg=chatReadForm();
+  cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks).filter(function(w){return w.id!==chatWorldbookActiveId});
+  chatWorldbookActiveId=cfg.worldbooks.length?cfg.worldbooks[0].id:'';
+  chatSaveConfigObject(cfg);
+  chatRenderWorldbooks(cfg);
+  chatUpdateRuntime(cfg);
+  toast('世界书已删除');
 }
 function chatDebugPrune(list){
   var cutoff=Date.now()-CHAT_DEBUG_TTL;
@@ -1746,7 +1840,7 @@ function chatFormatDebug(ev,data){
     }).join('，');
   }
   if(ev==='meta'){
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+(data.history_source==='client_history'?'面板当前窗口':'网关会话')+'｜历史条数：'+(data.history_messages||0);
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+(data.history_source==='client_history'?'面板当前窗口':'网关会话')+'｜历史条数：'+(data.history_messages||0)+'｜世界书：'+(data.worldbook_chars||0)+' 字';
   }
   if(ev==='memory'){
     return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字｜预览：'+String(data.memory_preview||data.memory_pack||'无').slice(0,220);
@@ -1971,6 +2065,9 @@ function chatRefreshView(){
     toast('正在请求中，先停止或等完成');
     return;
   }
+  var refreshBtn=document.getElementById('chat-refresh-btn');
+  if(refreshBtn)refreshBtn.classList.add('is-spinning');
+  chatSetStatus('正在刷新...');
   var cfg=chatLoadConfig();
   chatLoadSessions();
   if(cfg.sessionId&&chatSessions.some(function(s){return s.id===cfg.sessionId})){
@@ -1987,8 +2084,11 @@ function chatRefreshView(){
   chatRenderMessages();
   chatLayoutCompose();
   chatUpdateRuntime(cfg);
-  chatSetStatus('已刷新');
-  toast('聊天界面已刷新');
+  setTimeout(function(){
+    if(refreshBtn)refreshBtn.classList.remove('is-spinning');
+    chatSetStatus('已刷新');
+    toast('聊天界面已刷新');
+  },260);
 }
 function chatSaveLocalMessages(){
   var s=chatCurrentSession();
@@ -2309,6 +2409,7 @@ async function chatSendMessage(){
     model:cfg.model,
     system:cfg.system,
     history:outboundHistory,
+    worldbook_pack:chatWorldbookPack(cfg),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall,

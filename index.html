@@ -114,7 +114,7 @@
 <button class="chat-drawer-mask" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表"></button>
 <div class="chat-main">
 <div class="chat-head">
-<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center"><h2 id="chat-title">聊天</h2><p id="chat-status">就绪</p></div><div class="chat-head-actions"><button class="chat-icon-btn" type="button" onclick="chatRefreshView()" title="刷新">⟳</button><button class="chat-icon-btn chat-settings-toggle" type="button" onclick="chatToggleSettings()" title="设置">⚙</button><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div></div>
+<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center"><h2 id="chat-title">聊天</h2><p id="chat-status">就绪</p></div><div class="chat-head-actions"><button class="chat-icon-btn" id="chat-refresh-btn" type="button" onclick="chatRefreshView()" title="刷新">⟳</button><button class="chat-icon-btn chat-settings-toggle" type="button" onclick="chatToggleSettings()" title="设置">⚙</button><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div></div>
 <div class="chat-runtime"><span id="chat-runtime-model">模型未配置</span><span id="chat-runtime-cache">网关 session</span><span id="chat-runtime-recall">召回开启</span></div>
 </div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
@@ -125,7 +125,7 @@
 </div>
 <aside class="chat-settings">
 <div class="chat-settings-head"><b>聊天设置</b><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
-<div class="chat-side-tabs"><button class="active" data-chat-side="model" onclick="chatSwitchSideTab('model')">模型</button><button data-chat-side="gateway" onclick="chatSwitchSideTab('gateway')">网关</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
+<div class="chat-side-tabs"><button class="active" data-chat-side="model" onclick="chatSwitchSideTab('model')">模型</button><button data-chat-side="gateway" onclick="chatSwitchSideTab('gateway')">网关</button><button data-chat-side="worldbook" onclick="chatSwitchSideTab('worldbook')">世界书</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>模型<input id="chat-model" autocomplete="off" placeholder="claude-opus-4-6"></label>
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
@@ -138,6 +138,16 @@
 <label>上游 API Base<input id="chat-api-base" autocomplete="off" placeholder="https://nowcoding.ai/v1"></label>
 <label>上游模型 API Key<input id="chat-upstream-key" type="password" autocomplete="off"></label>
 <button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存连接</button>
+</div>
+<div class="chat-side-panel" id="chat-side-worldbook">
+<div class="chat-memory-card"><b>世界书</b><p>启用后全局通用，每轮固定注入；修改内容或开关后，下一轮会重新创建缓存。</p></div>
+<div class="chat-worldbook-head"><b id="chat-worldbook-count">0 个启用</b><button class="btn btn-outline btn-sm" type="button" onclick="chatAddWorldbook()">新增</button></div>
+<div class="chat-worldbook-list" id="chat-worldbook-list"></div>
+<label>名称<input id="chat-worldbook-name" autocomplete="off" placeholder="例如：项目设定 / 人物资料"></label>
+<label class="chat-switch"><input id="chat-worldbook-enabled" type="checkbox"><span>启用这个世界书</span></label>
+<label>优先级<input id="chat-worldbook-priority" type="number" min="0" max="999" step="1" value="100"></label>
+<label>内容<textarea id="chat-worldbook-content" rows="10" placeholder="写稳定背景资料、设定、人物关系、术语说明。"></textarea></label>
+<div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" onclick="chatSaveWorldbook()">保存世界书</button><button class="btn btn-outline btn-sm" type="button" onclick="chatDeleteWorldbook()">删除</button></div>
 </div>
 <div class="chat-side-panel" id="chat-side-memory">
 <label>当前 Session<input id="chat-session-id" autocomplete="off" readonly></label>
