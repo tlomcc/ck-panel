@@ -1712,6 +1712,10 @@ function chatTimeLabel(ts){
   var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   return same?hm:(String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+hm);
 }
+function chatFullTimeLabel(ts){
+  var d=new Date(ts||Date.now());
+  return String(d.getFullYear())+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
 function chatUpdateRuntime(cfg,usage){
   cfg=cfg||chatLoadConfig();
   var model=document.getElementById('chat-runtime-model');
@@ -1792,6 +1796,7 @@ function chatSelectSession(id){
   chatRenderMessages();
   chatUpdateRuntime(cfg);
   chatSetStatus('已切换对话');
+  chatToggleSessions(false,true);
 }
 function chatLoadLocalMessages(){
   chatLoadSessions();
@@ -1862,6 +1867,13 @@ function chatCopyText(t){
 }
 function chatFallbackCopy(t){try{var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('已复制')}catch(e){toast('复制失败')}}
 function chatStopMessage(){if(chatAbort){try{chatAbort.abort()}catch(e){}}}
+function chatToggleSessions(force,silent){
+  var shell=document.querySelector('.chat-shell');
+  if(!shell)return;
+  var open=typeof force==='boolean'?force:!shell.classList.contains('chat-sessions-open');
+  shell.classList.toggle('chat-sessions-open',open);
+  if(open)chatRenderSessions();
+}
 function chatToggleSettings(force,silent){
   var el=document.querySelector('.chat-settings');
   if(!el)return;
@@ -1903,29 +1915,39 @@ function chatRenderMessages(){
     box.innerHTML='<div class="chat-welcome"><b>CK Chat</b><p>新对话</p></div>';
     return;
   }
-  box.innerHTML=chatMessages.map(function(m,i){
-    var role=m.role==='user'?'user':(m.role==='system'?'system':'assistant');
-    var recall='';
-    if(m.recall&&(m.recall.chars||m.recall.preview)){
-      recall='<div class="chat-recall"><div class="chat-recall-head">🧠 召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'<span class="chev">▼</span></div><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
-    }
-    var inner=role==='assistant'?('<div class="chat-md">'+chatRenderMarkdown(m.text||'')+'</div>'):esc(m.text||'');
-    var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
-    return recall+'<div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+acts+'</div>';
-  }).join('');
+  box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
   box.scrollTop=box.scrollHeight;
+}
+function chatRenderMessageRow(m,i){
+  var role=m.role==='user'?'user':(m.role==='system'?'system':'assistant');
+  var recall='';
+  if(m.recall&&(m.recall.chars||m.recall.preview)){
+    recall='<div class="chat-recall"><div class="chat-recall-head">🧠 召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'<span class="chev">▼</span></div><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
+  }
+  var inner=role==='assistant'?('<div class="chat-md">'+chatRenderMarkdown(m.text||'')+'</div>'):esc(m.text||'');
+  var acts=role==='system'?'':('<div class="chat-msg-acts"><button class="chat-msg-act" data-act="copy" data-i="'+i+'">复制</button></div>');
+  var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
+  return recall+'<div class="chat-msg-row '+role+'"><div class="chat-bubble '+role+'" data-i="'+i+'">'+inner+acts+'</div>'+time+'</div>';
 }
 function chatAddBubble(role,text,persist){
   var box=document.getElementById('chat-messages');
   if(!box)return null;
   if(box.querySelector('.empty-state')||box.querySelector('.chat-welcome'))box.innerHTML='';
+  var ts=Date.now();
+  var row=document.createElement('div');
+  row.className='chat-msg-row '+role;
   var el=document.createElement('div');
   el.className='chat-bubble '+role;
   el.textContent=text||'';
-  box.appendChild(el);
+  var time=document.createElement('div');
+  time.className='chat-msg-time';
+  time.textContent=chatFullTimeLabel(ts);
+  row.appendChild(el);
+  row.appendChild(time);
+  box.appendChild(row);
   box.scrollTop=box.scrollHeight;
   if(persist){
-    chatMessages.push({role:role,text:text||'',ts:Date.now()});
+    chatMessages.push({role:role,text:text||'',ts:ts});
     chatSaveLocalMessages();
   }
   return el;
