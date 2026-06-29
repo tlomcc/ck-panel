@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v27';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v28';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -3043,6 +3043,11 @@ async function chatSubmitPendingMessages(){
   var cfg=chatSaveConfig(true);
   chatActiveSessionId=cfg.sessionId;
   chatTogglePlus(false);
+  var outboundHistory=chatMessages.filter(function(m){
+    return m&&(m.role==='user'||m.role==='assistant')&&String(m.text||'').trim();
+  }).slice(-60).map(function(m){
+    return {role:m.role,text:m.role==='assistant'?chatCleanAssistantTextForHistory(m.text):String(m.text||''),ts:m.ts||0};
+  });
   cfg.memoryPreview='';
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
@@ -3070,6 +3075,7 @@ async function chatSubmitPendingMessages(){
     text:text,
     model:cfg.model,
     system:chatComposeSystemPrompt(cfg),
+    history:outboundHistory,
     worldbook_pack:chatWorldbookPack(cfg),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
