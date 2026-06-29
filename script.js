@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v32';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v33';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1712,6 +1712,7 @@ function chatDefaultConfig(){
     recall:true,
     useMcp:false,
     mcpUrl:API_BASE,
+    promptCacheTtl:'1h',
     fullWindowContext:true,
     settingsOpen:false,
     chatSideTab:'model',
@@ -1884,6 +1885,7 @@ function chatReadForm(){
     recall:document.getElementById('chat-recall').checked,
     useMcp:document.getElementById('chat-use-mcp')?document.getElementById('chat-use-mcp').checked:false,
     mcpUrl:document.getElementById('chat-mcp-url')?(document.getElementById('chat-mcp-url').value||API_BASE).trim():API_BASE,
+    promptCacheTtl:chatLoadConfig().promptCacheTtl||'1h',
     fullWindowContext:document.getElementById('chat-full-window-context')?document.getElementById('chat-full-window-context').checked:true,
     settingsOpen:document.querySelector('.chat-settings')?document.querySelector('.chat-settings').classList.contains('open'):false,
     chatSideTab:(document.querySelector('.chat-side-tabs button.active')||{}).getAttribute?document.querySelector('.chat-side-tabs button.active').getAttribute('data-chat-side'):'model',
@@ -3393,6 +3395,7 @@ async function chatSubmitPendingMessages(){
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall,
     use_mcp:cfg.useMcp===true,
+    prompt_cache_ttl:cfg.promptCacheTtl||'1h',
     session_anchor:{
       first_user_text:anchorText,
       first_user_ts:currentSession.firstUserTs||0

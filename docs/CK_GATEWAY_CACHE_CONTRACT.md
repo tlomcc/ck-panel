@@ -18,6 +18,7 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "upstream_key": "upstream key",
   "recall": true,
   "use_mcp": false,
+  "prompt_cache_ttl": "1h",
   "session_anchor": {
     "first_user_text": "first visible user message in this CK window",
     "first_user_ts": 1760000000000
@@ -36,6 +37,8 @@ Do not send these fields:
 - `conversationHistory`
 
 `script.js` has a request-body lock that removes those fields before sending, but new code should not add them in the first place.
+
+`prompt_cache_ttl` defaults to `1h` for CK panel requests. The gateway maps this to Anthropic `cache_control.ttl = "1h"` and adds the extended cache TTL beta header for upstream requests. This reduces false instability from the default short prompt-cache lifetime.
 
 `transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts. The panel should omit this field when it has no hidden transport yet, and the gateway should ignore empty transport arrays so `window_messages` or gateway session history can still be used.
 
