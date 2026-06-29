@@ -1658,6 +1658,21 @@ function chatSessionId(){
 function chatWorldbookId(){
   return 'wb-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
 }
+var CHAT_GATEWAY_FORBIDDEN_BODY_FIELDS=['history','messages','outboundHistory','clientHistory','conversation','conversationHistory'];
+function chatLockGatewayBody(body){
+  body=body&&typeof body==='object'?body:{};
+  var removed=[];
+  CHAT_GATEWAY_FORBIDDEN_BODY_FIELDS.forEach(function(key){
+    if(Object.prototype.hasOwnProperty.call(body,key)){
+      delete body[key];
+      removed.push(key);
+    }
+  });
+  if(removed.length&&window.console&&console.warn){
+    console.warn('[CK cache lock] removed forbidden /ck/chat fields:',removed.join(','));
+  }
+  return body;
+}
 function chatNormalizeWorldbooks(list){
   return (Array.isArray(list)?list:[]).filter(function(w){return w&&typeof w==='object'}).map(function(w){
     return {
@@ -3076,6 +3091,7 @@ async function chatSubmitPendingMessages(){
     recall:cfg.recall,
     use_mcp:false
   };
+  body=chatLockGatewayBody(body);
   var assistantText='',recallInfo=null;
   try{
     var resp=await fetch(chatEndpoint(cfg),{
