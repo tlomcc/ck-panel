@@ -198,7 +198,7 @@ body.chat-active .chat-messages{
   width:100%!important;
   min-width:0!important;
   min-height:0!important;
-  height:auto!important;
+  height:auto;
   max-height:none!important;
   padding:18px max(14px,calc((100% - 820px)/2)) 16px!important;
   display:flex!important;
@@ -580,9 +580,9 @@ body.chat-active .chat-stop-btn{background:#b64b4b!important}
 body.chat-active #chat-input{
   width:100%!important;
   min-width:0!important;
-  height:auto!important;
+  height:auto;
   min-height:36px!important;
-  max-height:120px!important;
+  max-height:calc(1.4em * 3 + 14px)!important;
   box-sizing:border-box!important;
   display:block!important;
   visibility:visible!important;
@@ -1014,9 +1014,13 @@ body.chat-active .chat-debug-toolbar{
 body.chat-active .chat-debug{
   flex:1 1 auto!important;
   min-height:220px!important;
-  max-height:none!important;
+  max-height:min(46vh,420px)!important;
   margin:0!important;
   border-radius:8px!important;
+  overflow:auto!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-y!important;
   font-family:ui-monospace,Menlo,Consolas,monospace!important;
   font-size:11px!important;
   line-height:1.55!important;
@@ -1187,6 +1191,22 @@ body.dark.chat-active .chat-pending-bar{
 }
 body.dark.chat-active .chat-pending-bar button.muted{color:#9fc8ae!important}
 
+body.chat-active .toast{
+  background:rgba(255,255,255,.96)!important;
+  color:#24312d!important;
+  border:1px solid #dfe8e3!important;
+  border-radius:14px!important;
+  box-shadow:0 12px 28px rgba(15,23,42,.12)!important;
+  backdrop-filter:blur(10px)!important;
+}
+
+body.dark.chat-active .toast{
+  background:rgba(23,28,34,.96)!important;
+  color:#eef3f6!important;
+  border-color:#2d3742!important;
+  box-shadow:0 12px 28px rgba(0,0,0,.34)!important;
+}
+
 @media(min-width:560px){
   body.chat-active .chat-settings{
     left:50%!important;
@@ -1234,7 +1254,7 @@ body.dark.chat-active .chat-pending-bar button.muted{color:#9fc8ae!important}
   }
   body.chat-active #chat-input{
     min-height:34px!important;
-    max-height:104px!important;
+    max-height:calc(1.4em * 3 + 12px)!important;
     padding:6px 9px!important;
     border-radius:8px!important;
     font-size:14px!important;

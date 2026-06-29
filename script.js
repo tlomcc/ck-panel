@@ -2551,9 +2551,17 @@ function chatFallbackCopy(t){try{var ta=document.createElement('textarea');ta.va
 function chatStopMessage(){if(chatAbort){try{chatAbort.abort()}catch(e){}}}
 function chatAutosizeInput(input){
   if(!input)return;
+  var styles=window.getComputedStyle?window.getComputedStyle(input):null;
+  var lineHeight=styles?parseFloat(styles.lineHeight):0;
+  var paddingTop=styles?parseFloat(styles.paddingTop):0;
+  var paddingBottom=styles?parseFloat(styles.paddingBottom):0;
+  if(!lineHeight||isNaN(lineHeight))lineHeight=20;
+  if(isNaN(paddingTop))paddingTop=0;
+  if(isNaN(paddingBottom))paddingBottom=0;
+  var min=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?34:36;
+  var max=Math.ceil(lineHeight*3+paddingTop+paddingBottom);
   input.style.height='auto';
-  var max=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?104:120;
-  input.style.height=Math.min(max,Math.max(36,input.scrollHeight))+'px';
+  input.style.height=Math.min(max,Math.max(min,input.scrollHeight))+'px';
   input.style.overflowY=input.scrollHeight>max?'auto':'hidden';
   chatLayoutCompose();
 }
@@ -2631,6 +2639,11 @@ function chatSettingsBaseTransform(){return chatSettingsDrag.wide?'translateX(-5
 function chatSettingsTouchStart(e){
   var panel=document.querySelector('.chat-settings.open');
   if(!panel){chatSettingsDrag.active=false;return}
+  var target=e.target;
+  if(!target||!target.closest||!target.closest('.chat-settings-head')){
+    chatSettingsDrag.active=false;
+    return;
+  }
   var active=panel.querySelector('.chat-side-panel.active');
   if(active&&active.scrollTop>0){chatSettingsDrag.active=false;return}
   var t=e.touches?e.touches[0]:e;
@@ -2966,7 +2979,7 @@ function chatInit(){
     input.addEventListener('keydown',function(e){
       if(e.key==='Enter'&&!e.shiftKey){
         e.preventDefault();
-        chatSendMessage();
+        chatStoreDraftMessage({keepFocus:true});
       }
     });
   }
