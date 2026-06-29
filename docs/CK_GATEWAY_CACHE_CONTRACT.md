@@ -71,8 +71,9 @@ The panel displays this so cache misses can be traced to a changed system/tools 
 `window_messages` is the dedicated same-window full-context field. It is different from forbidden `history` / `messages`:
 
 - the panel sends only the currently selected CK window's visible user/assistant messages;
+- the panel must build `window_messages` before converting the current pending user input into persisted `user` messages, so the current turn is carried only by `text`;
 - the gateway treats it as `client_window:*`, not generic `client_history`;
-- the latest user message is de-duplicated against `text`;
+- the latest user message, including a tail of consecutive staged user messages joined by blank lines, is de-duplicated against `text`;
 - the gateway can still apply canonical injection to restore frozen old user messages.
 
 This mode matches CK window semantics: staying in the same window keeps forwarding that window's full context; creating or selecting another window uses another session/history.

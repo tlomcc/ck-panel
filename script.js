@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v30';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v31';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -3360,6 +3360,7 @@ async function chatSubmitPendingMessages(){
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
+  var windowMessagesForRequest=chatWindowContextMessages();
   var userMessageIndexes=[];
   chatMessages.forEach(function(m,i){
     if(m&&m.role==='pending_user'){
@@ -3399,7 +3400,7 @@ async function chatSubmitPendingMessages(){
   var transportForRequest=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
   if(transportForRequest.length)body.transport_messages=transportForRequest;
   if(cfg.useMcp===true&&cfg.mcpUrl)body.mcp_url=cfg.mcpUrl;
-  if(cfg.fullWindowContext!==false)body.window_messages=chatWindowContextMessages();
+  if(cfg.fullWindowContext!==false)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
   var assistantText='',recallInfo=null;
   try{
