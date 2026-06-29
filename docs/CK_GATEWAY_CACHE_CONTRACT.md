@@ -37,7 +37,7 @@ Do not send these fields:
 
 `script.js` has a request-body lock that removes those fields before sending, but new code should not add them in the first place.
 
-`transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts.
+`transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts. The panel should omit this field when it has no hidden transport yet, and the gateway should ignore empty transport arrays so `window_messages` or gateway session history can still be used.
 
 The gateway should send hidden history through a dedicated `transport` SSE event:
 
