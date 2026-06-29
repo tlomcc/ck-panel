@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v31';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v32';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2159,7 +2159,8 @@ function chatFormatDebug(ev,data){
   if(ev==='meta'){
     var source=data.history_source||'';
     var sourceText=source.indexOf('client_transport:')===0?'面板隐藏缓存历史':(source.indexOf('client_window:')===0?'同窗口全量上下文':(source==='client_history'?'面板当前窗口':'网关会话'));
-    var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'):'｜MCP：关闭';
+    var mcpCache=data.mcp_cache?('｜MCP缓存：'+data.mcp_cache+(data.mcp_cache_age_seconds?(' '+data.mcp_cache_age_seconds+'s'):'')):'';
+    var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+mcpCache):'｜MCP：关闭';
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
     return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+mcpText;
   }
