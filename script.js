@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v30';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v27';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -808,185 +808,19 @@ function dailyStatusFetch(){
     return r;
   });
 }
-function dailyStatusConfigFetch(){
-  return keyCfgFetch().then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    return r.json();
-  });
-}
 function loadDailyStatus(force){
   var body=document.getElementById('daily-status-body');
   if(dailyStatusLoading)return;
   dailyStatusLoading=true;
   if(force&&body&&!body.querySelector('.ds-grid'))body.innerHTML='<div class="empty-state small">读取中...</div>';
   dailyStatusFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
-    return dailyStatusConfigFetch().then(function(cfg){
-      d.__apiConfig=cfg;
-      renderDailyStatus(d);
-    },function(e){
-      d.__apiConfigError=e;
-      renderDailyStatus(d);
-    });
-  }).catch(function(e){
-    renderDailyStatusError(e,force);
+    renderDailyStatus(d);
+  }).catch(function(){
+    if(body&&(force||!body.querySelector('.ds-grid')))body.innerHTML='<div class="entity-error">读不到状态。检查网关是否在线、key 是否正确（点刷新会让你重新输 key）。</div>';
   }).then(function(){dailyStatusLoading=false});
 }
 function dsTile(ok,title,date,doneLabel,waitLabel){
   return '<div class="ds-tile '+(ok?'ds-ok':'ds-wait')+'"><div class="ds-tile-icon">'+(ok?'✅':'⏳')+'</div><div class="ds-tile-body"><div class="ds-tile-title">'+esc(title)+'</div><div class="ds-tile-sub">'+esc(date||'')+' · '+(ok?esc(doneLabel):esc(waitLabel))+'</div></div></div>';
-}
-function dsErrorMessage(e){
-  return String((e&&e.message)||e||'未知错误');
-}
-function dsMaskKey(key){
-  key=String(key||'');
-  return key?'已填写（末尾 '+key.slice(-4)+'）':'缺失';
-}
-function dsDateNum(v){
-  var s=String(v||'').replace(/[^0-9]/g,'');
-  return s?parseInt(s,10):0;
-}
-function dsProvidersRoot(cfg){
-  cfg=cfg||{};
-  var p=(cfg.providers&&typeof cfg.providers==='object'&&!Array.isArray(cfg.providers))?cfg.providers:cfg;
-  return (p&&typeof p==='object'&&!Array.isArray(p))?p:{};
-}
-function dsFindProvider(root,id){
-  var lib=root.provider_library&&Array.isArray(root.provider_library.providers)?root.provider_library.providers:[];
-  for(var i=0;i<lib.length;i++){if(String(lib[i].id||'')===String(id||''))return lib[i]}
-  return null;
-}
-function dsConfigLines(cfg,cfgErr,groupKey,label){
-  var lines=[];
-  if(cfgErr){
-    lines.push('🚨 配置读取失败｜'+dsErrorMessage(cfgErr));
-    lines.push('🔑 可能原因｜面板 Key 不正确、网关 /config 不在线，或网络被拦截。');
-    return {ok:false,lines:lines};
-  }
-  if(!cfg){
-    lines.push('🚨 配置读取失败｜没有拿到 /config 返回。');
-    return {ok:false,lines:lines};
-  }
-  var root=dsProvidersRoot(cfg),slot=root[groupKey]||{},pid=String(slot.current||'');
-  var p=dsFindProvider(root,pid);
-  var model=String(slot.model||(p&&p.model)||'');
-  lines.push('🧭 配置项｜'+label+'（'+groupKey+'）');
-  if(!pid){
-    lines.push('🚨 未绑定供应商｜请到 API 配置 → 对应功能页选择供应商。');
-    return {ok:false,lines:lines};
-  }
-  if(!p){
-    lines.push('🚨 找不到供应商｜已绑定 ID：'+pid+'，但供应商库里没有这个条目。');
-    return {ok:false,lines:lines};
-  }
-  lines.push('🏷️ 供应商｜'+providerDisplayName(p));
-  lines.push('🌐 API URL｜'+(p.url?'已填写：'+providerHost(p.url):'缺失'));
-  lines.push('🔐 API Key｜'+dsMaskKey(p.key));
-  lines.push('🤖 模型｜'+(model||'缺失'));
-  var ok=!!(p.url&&p.key&&model);
-  lines.push(ok?'✅ 配置检查｜URL / Key / 模型齐全':'🚨 配置检查｜URL / Key / 模型至少缺一项。');
-  return {ok:ok,lines:lines};
-}
-function dsPushKnownFields(lines,obj,map){
-  obj=obj||{};
-  map.forEach(function(row){
-    var k=row[0],label=row[1],icon=row[2]||'ℹ️';
-    if(obj[k]!==undefined&&obj[k]!==null&&obj[k]!==''){
-      var v=obj[k];
-      if(typeof v==='object')v=JSON.stringify(v);
-      lines.push(icon+' '+label+'｜'+String(v));
-    }
-  });
-}
-function dsPushErrors(lines,obj){
-  obj=obj||{};
-  ['error','last_error','err','exception','traceback'].forEach(function(k){
-    if(obj[k])lines.push('🚨 报错｜'+String(typeof obj[k]==='object'?JSON.stringify(obj[k]):obj[k]));
-  });
-  ['warning','warnings','warn'].forEach(function(k){
-    if(obj[k])lines.push('⚠️ 警告｜'+String(typeof obj[k]==='object'?JSON.stringify(obj[k]):obj[k]));
-  });
-  ['reason','message','detail','details'].forEach(function(k){
-    if(obj[k])lines.push('📝 说明｜'+String(typeof obj[k]==='object'?JSON.stringify(obj[k]):obj[k]));
-  });
-  ['debug','logs','steps'].forEach(function(k){
-    if(obj[k])lines.push('🔎 网关调试｜'+String(typeof obj[k]==='object'?JSON.stringify(obj[k]):obj[k]));
-  });
-}
-function dsVectorDebugLines(d){
-  d=d||{};var c=d.chatlog||{},lines=[];
-  var cfg=dsConfigLines(d.__apiConfig,d.__apiConfigError,'recall_vector','向量化');
-  lines=lines.concat(cfg.lines);
-  lines.push('——');
-  lines.push(c.yesterday_vectorized?'✅ 昨天结果｜'+(d.yesterday||'-')+' 已向量化':'🚨 昨天结果｜'+(d.yesterday||'-')+' 还没有向量化');
-  lines.push(c.today_vectorized?'✅ 今天状态｜今天已向量化':'🕒 今天状态｜今天显示未完成通常正常，离线任务一般处理昨天以前的数据。');
-  dsPushKnownFields(lines,c,[
-    ['last_vectorized','最近向量化到','📅'],
-    ['vectorized_days','已向量化天数','📦'],
-    ['pending_days','待处理天数','🧺'],
-    ['missing_days','缺失天数','🕳️'],
-    ['skipped_days','跳过天数','⏭️'],
-    ['chunks','切片数','🧩'],
-    ['vectors','向量数','🧬'],
-    ['records','记录数','📚'],
-    ['updated','更新时间','🕰️']
-  ]);
-  dsPushErrors(lines,c);
-  if(!c.yesterday_vectorized){
-    if(!cfg.ok)lines.push('🎯 优先排查｜先修复上面的 API 配置问题。');
-    else if(!c.last_vectorized)lines.push('📭 可能原因｜还没有任何已向量化日期：可能没有 chatlog、任务没触发，或首次处理失败。');
-    else if(d.yesterday&&dsDateNum(c.last_vectorized)<dsDateNum(d.yesterday))lines.push('⏳ 可能原因｜处理进度停在 '+c.last_vectorized+'，还没跑到 '+d.yesterday+'。');
-    else lines.push('🧠 可能原因｜配置齐全但仍未完成：可能昨天没有聊天记录、离线任务还没触发，或网关内部处理失败。');
-    if(!c.error&&!c.last_error&&!c.reason&&!c.debug)lines.push('🔍 额外提示｜接口没有返回更具体错误；如果仍不向量化，需要看网关日志里的 embedding / chatlog 任务。');
-  }else{
-    lines.push('🎉 判断｜向量化链路已完成，召回问题应继续看检索命中和注入数量。');
-  }
-  return lines;
-}
-function dsEntityDebugLines(d){
-  d=d||{};var e=d.entity||{},lines=[];
-  var cfg=dsConfigLines(d.__apiConfig,d.__apiConfigError,'mem_profile','小档案整理');
-  lines=lines.concat(cfg.lines);
-  lines.push('——');
-  lines.push(e.yesterday_done?'✅ 昨天结果｜'+(d.yesterday||'-')+' 小档案已整理':'🚨 昨天结果｜'+(d.yesterday||'-')+' 小档案还没整理');
-  lines.push(e.today_done?'✅ 今天状态｜今天已整理':'🕒 今天状态｜今天未整理通常正常，当天内容多在第二天处理。');
-  dsPushKnownFields(lines,e,[
-    ['last_processed','最近整理到','📅'],
-    ['updated','档案最近更新','🕰️'],
-    ['nodes','小档案数量','🗂️'],
-    ['relations','关系数量','🔗'],
-    ['processed_days','已整理天数','📦'],
-    ['pending_days','待整理天数','🧺'],
-    ['missing_days','缺失天数','🕳️'],
-    ['skipped_days','跳过天数','⏭️']
-  ]);
-  if((e.recent_processed||[]).length)lines.push('🧾 最近整理｜'+e.recent_processed.slice().reverse().join('、'));
-  dsPushErrors(lines,e);
-  if(!e.yesterday_done){
-    if(!cfg.ok)lines.push('🎯 优先排查｜先修复上面的小档案 API 配置问题。');
-    else if(!e.last_processed)lines.push('📭 可能原因｜还没有任何已整理日期：可能没有聊天记录、整理任务没触发，或首次处理失败。');
-    else if(d.yesterday&&dsDateNum(e.last_processed)<dsDateNum(d.yesterday))lines.push('⏳ 可能原因｜整理进度停在 '+e.last_processed+'，还没跑到 '+d.yesterday+'。');
-    else lines.push('🧠 可能原因｜配置齐全但仍未完成：可能昨天无可整理聊天、离线任务未触发，或网关整理失败。');
-    if(!e.error&&!e.last_error&&!e.reason&&!e.debug)lines.push('🔍 额外提示｜接口没有返回更具体错误；如果持续不整理，需要看网关日志里的 entity/profile 任务。');
-  }else{
-    lines.push('🎉 判断｜小档案整理已完成，可去“关系网 · 小档案”查看节点和关系。');
-  }
-  return lines;
-}
-function dsDebugPanel(kind,title,ok,lines){
-  return '<div class="ds-debug-card '+(ok?'ok':'warn')+'">'+
-    '<div class="ds-debug-head"><strong>'+esc(title)+'</strong><span>'+(ok?'✅ 正常':'🚨 需要排查')+'</span></div>'+
-    '<pre class="ds-debug-log">'+esc((lines||[]).join('\n'))+'</pre>'+
-  '</div>';
-}
-function renderDailyStatusError(e,force){
-  var body=document.getElementById('daily-status-body');
-  if(!body)return;
-  var msg=dsErrorMessage(e);
-  body.innerHTML='<div class="entity-error">🚨 读不到每日状态：'+esc(msg)+'。请检查网关是否在线、面板 Key 是否正确，或点刷新重新输入 Key。</div>'+
-    '<div class="ds-debug-grid">'+
-    dsDebugPanel('vector','🧬 向量化调试',false,['🚨 每日状态接口读取失败｜'+msg,'🔑 可能原因｜面板 Key 错误、网关 /daily-status 不在线、网络被拦截。','🧭 下一步｜确认网关可访问后再刷新本页。'])+
-    dsDebugPanel('entity','🗂️ 小档案整理调试',false,['🚨 每日状态接口读取失败｜'+msg,'🔑 可能原因｜面板 Key 错误、网关 /daily-status 不在线、网络被拦截。','🧭 下一步｜确认网关可访问后再刷新本页。'])+
-    '</div>';
 }
 function renderDailyStatus(d){
   var body=document.getElementById('daily-status-body');
@@ -1008,10 +842,6 @@ function renderDailyStatus(d){
   html+='<div class="ds-meta-row"><span>档案最近更新</span><b>'+esc(e.updated||e.last_processed||'-')+'</b></div>';
   html+='<div class="ds-meta-row"><span>最近向量化到</span><b>'+esc(c.last_vectorized||'-')+'</b></div>';
   if((e.recent_processed||[]).length)html+='<div class="ds-meta-row ds-meta-list"><span>最近整理的日子</span><div class="ds-day-chips">'+e.recent_processed.slice().reverse().map(function(x){return '<i>'+esc(x)+'</i>'}).join('')+'</div></div>';
-  html+='</div>';
-  html+='<div class="ds-debug-grid">';
-  html+=dsDebugPanel('vector','🧬 向量化调试',!!c.yesterday_vectorized,dsVectorDebugLines(d));
-  html+=dsDebugPanel('entity','🗂️ 小档案整理调试',!!e.yesterday_done,dsEntityDebugLines(d));
   html+='</div>';
   body.innerHTML=html;
 }
@@ -3234,8 +3064,6 @@ async function chatSubmitPendingMessages(){
   if(btn){btn.disabled=false;btn.textContent='■';btn.title='停止';btn.classList.add('chat-stop-btn')}
   chatSetStatus('正在请求网关...');
   chatUpdateRuntime(cfg);
-  // 缓存命中锁定点（2026-06-29 已验证）：不要在面板侧重新拼 history。
-  // 网关按 session_id 管理上下文和缓存；面板只发送本轮 text，否则会导致网关反复创建缓存。
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
