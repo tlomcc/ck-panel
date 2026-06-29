@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v27';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v29';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -3064,6 +3064,8 @@ async function chatSubmitPendingMessages(){
   if(btn){btn.disabled=false;btn.textContent='■';btn.title='停止';btn.classList.add('chat-stop-btn')}
   chatSetStatus('正在请求网关...');
   chatUpdateRuntime(cfg);
+  // 缓存命中锁定点（2026-06-29 已验证）：不要在面板侧重新拼 history。
+  // 网关按 session_id 管理上下文和缓存；面板只发送本轮 text，否则会导致网关反复创建缓存。
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
