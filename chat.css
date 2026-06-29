@@ -1696,3 +1696,64 @@ body.dark.chat-active .chat-settings textarea{
   from{opacity:0;transform:translateY(6px)}
   to{opacity:1;transform:translateY(0)}
 }
+
+/* Chat bubble final override: no avatars, no tails. */
+body.chat-active .chat-msg-row.assistant,
+body.chat-active .chat-msg-row.user{
+  padding-left:0!important;
+  padding-right:0!important;
+}
+
+body.chat-active .chat-msg-row.assistant::before,
+body.chat-active .chat-msg-row.user::before,
+body.chat-active .chat-bubble.assistant::before,
+body.chat-active .chat-bubble.user::before,
+body.chat-active .chat-bubble.assistant::after,
+body.chat-active .chat-bubble.user::after{
+  display:none!important;
+  content:none!important;
+}
+
+body.chat-active .chat-bubble{
+  border-radius:16px!important;
+  padding:10px 13px!important;
+  box-shadow:0 3px 10px rgba(15,23,42,.06)!important;
+  transform:none!important;
+}
+
+body.chat-active .chat-bubble:hover{
+  transform:none!important;
+  box-shadow:0 5px 14px rgba(15,23,42,.08)!important;
+}
+
+body.chat-active .chat-bubble.user{
+  max-width:min(620px,76%)!important;
+  padding:9px 42px 18px 13px!important;
+  border-radius:16px 16px 6px 16px!important;
+  background:var(--chat5-green)!important;
+  border-color:var(--chat5-green-line)!important;
+}
+
+body.chat-active .chat-bubble.assistant{
+  max-width:min(700px,82%)!important;
+  border-radius:16px 16px 16px 6px!important;
+  background:#fff!important;
+  border-color:#e2e6ea!important;
+}
+
+body.dark.chat-active .chat-bubble.assistant{
+  background:#1a2028!important;
+  border-color:#283240!important;
+}
+
+@media(max-width:760px){
+  body.chat-active .chat-msg-row.assistant,
+  body.chat-active .chat-msg-row.user{
+    padding-left:0!important;
+    padding-right:0!important;
+  }
+  body.chat-active .chat-bubble.assistant,
+  body.chat-active .chat-bubble.user{
+    max-width:86%!important;
+  }
+}
