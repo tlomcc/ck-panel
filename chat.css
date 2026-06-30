@@ -1036,6 +1036,37 @@ body.chat-active .chat-cost-card{
   margin-bottom:10px!important;
 }
 
+body.chat-active .chat-cost-card summary{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:10px!important;
+  cursor:pointer!important;
+  list-style:none!important;
+}
+
+body.chat-active .chat-cost-card summary::-webkit-details-marker{
+  display:none!important;
+}
+
+body.chat-active .chat-cost-card summary span{
+  color:var(--chat5-muted)!important;
+  font-size:11px!important;
+  font-weight:600!important;
+}
+
+body.chat-active .chat-cost-card summary span::after{
+  content:' +';
+}
+
+body.chat-active .chat-cost-card[open] summary span::after{
+  content:' -';
+}
+
+body.chat-active .chat-cost-card:not([open]){
+  padding-bottom:10px!important;
+}
+
 body.chat-active .chat-cost-grid{
   display:grid!important;
   grid-template-columns:repeat(auto-fit,minmax(120px,1fr))!important;
@@ -1083,13 +1114,9 @@ body.chat-active .chat-debug-empty{
   color:#475569!important;
 }
 
-body.chat-active .chat-debug-record.cost{
-  border:2px solid #f59e0b!important;
-  background:linear-gradient(135deg,#fff7cc 0%,#ffedd5 100%)!important;
-  color:#111827!important;
-  box-shadow:0 10px 26px rgba(245,158,11,.22)!important;
-  font-size:12px!important;
+body.chat-active .chat-cost-amount{
   font-weight:800!important;
+  color:#0f172a!important;
 }
 
 body.chat-active .chat-worldbook-head{
@@ -1261,11 +1288,8 @@ body.dark.chat-active .chat-debug-empty{
   color:#aeb6c0!important;
 }
 
-body.dark.chat-active .chat-debug-record.cost{
-  background:linear-gradient(135deg,#3a2a08 0%,#2d1f12 100%)!important;
-  border-color:#f59e0b!important;
-  color:#fff7d6!important;
-  box-shadow:0 10px 26px rgba(245,158,11,.18)!important;
+body.dark.chat-active .chat-cost-amount{
+  color:#f8fafc!important;
 }
 
 body.chat-active .toast{

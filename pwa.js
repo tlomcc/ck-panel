@@ -74,7 +74,7 @@
             else location.reload();
           });
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v47').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v48').then(function(reg) {
         if (reg && reg.update) reg.update();
       }).catch(function() {});
     }
