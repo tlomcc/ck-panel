@@ -1741,6 +1741,19 @@ body.chat-active .chat-bubble.assistant{
   border-color:#e2e6ea!important;
 }
 
+body.chat-active .chat-bubble.assistant.streaming-empty{
+  min-width:0!important;
+  min-height:0!important;
+  padding:0!important;
+  border-color:transparent!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+
+body.chat-active .chat-msg-row.assistant.streaming-empty-row .chat-msg-time{
+  display:none!important;
+}
+
 body.dark.chat-active .chat-bubble.assistant{
   background:#1a2028!important;
   border-color:#283240!important;

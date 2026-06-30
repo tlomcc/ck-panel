@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v38';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v39';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2812,19 +2812,24 @@ function chatRenderMarkdown(src){
   }
   return out.join('\n');
 }
-function chatSplitThinkingText(src){
+function chatSplitThinkingText(src,opts){
+  opts=opts||{};
   var text=String(src||'');
   var thoughts=[];
+  var suppressThinking=opts.suppressThinking===true;
   text=text.replace(/<(ck_thinking|thinking|think)\b[^>]*>([\s\S]*?)<\/\1>/gi,function(_all,_tag,body){
     var clean=String(body||'').trim();
-    if(clean)thoughts.push(clean);
+    if(clean&&!suppressThinking)thoughts.push(clean);
     return '\n';
   });
+  if(opts.hideUnclosedThinking===true){
+    text=text.replace(/<(ck_thinking|thinking|think)\b[^>]*>[\s\S]*$/i,'\n');
+  }
   if(/<\/(?:ck_thinking|thinking|think)>/i.test(text)&&!/<(?:ck_thinking|thinking|think)\b[^>]*>/i.test(text)){
     var parts=text.split(/<\/(?:ck_thinking|thinking|think)>/i);
     var before=(parts.shift()||'').trim();
     var after=parts.join('\n').trim();
-    if(before)thoughts.push(before);
+    if(before&&!suppressThinking)thoughts.push(before);
     text=after||'';
   }
   text=text
@@ -2836,12 +2841,16 @@ function chatSplitThinkingText(src){
 function chatCleanAssistantTextForHistory(rawText){
   return chatSplitThinkingText(rawText).text || String(rawText||'').replace(/<\/?(?:ck_thinking|thinking|think)\b[^>]*>/gi,'').trim();
 }
+function chatAssistantStreamingVisibleText(rawText){
+  return chatSplitThinkingText(rawText,{suppressThinking:true,hideUnclosedThinking:true}).text;
+}
 function chatRenderAssistantContent(rawText,streaming){
-  var split=chatSplitThinkingText(rawText);
+  var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
   var thinking=split.thinking?(
     '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
-  return thinking+'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'+(streaming?'<span class="chat-caret"></span>':'');
+  var body=split.text?('<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
+  return thinking+body+(streaming?'<span class="chat-caret"></span>':'');
 }
 function chatNaturalTextLen(text){
   var len=String(text||'').replace(/\s+/g,'').length;
@@ -3276,12 +3285,14 @@ function chatAddBubble(role,text,persist){
   var ts=Date.now();
   var row=document.createElement('div');
   row.className='chat-msg-row '+role;
+  if(role==='assistant'&&!text)row.classList.add('streaming-empty-row');
   var el=document.createElement('div');
   el.className='chat-bubble '+role;
   if(role==='user'){
     el.innerHTML='<span class="chat-user-text">'+esc(text||'')+'</span>'+chatCacheTickHtml({cacheHit:false});
   }else{
     el.textContent=text||'';
+    if(role==='assistant'&&!text)el.classList.add('streaming-empty');
   }
   var time=document.createElement('div');
   time.className='chat-msg-time';
@@ -3529,6 +3540,9 @@ async function chatSubmitPendingMessages(){
         buffer=chatParseSse(buffer,function(ev,data){
           if(ev==='delta'){
             assistantText+=data.text||'';
+            var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText);
+            out.classList.toggle('streaming-empty',streamingEmpty);
+            if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',streamingEmpty);
             out.innerHTML=chatRenderAssistantContent(assistantText,true);
             var box=document.getElementById('chat-messages');
             if(box)box.scrollTop=box.scrollHeight;
