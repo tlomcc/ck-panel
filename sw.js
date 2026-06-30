@@ -1,14 +1,14 @@
-const CACHE_NAME = 'ck-panel-shell-v70-chat-v50';
+const CACHE_NAME = 'ck-panel-shell-v71-chat-v51';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v50',
-  './polish.css?v=chat-v50',
-  './chat.css?v=chat-v50',
-  './script.js?v=chat-v50',
-  './script-extra.js?v=chat-v50',
-  './pwa.js?v=chat-v50',
+  './style.css?v=chat-v51',
+  './polish.css?v=chat-v51',
+  './chat.css?v=chat-v51',
+  './script.js?v=chat-v51',
+  './script-extra.js?v=chat-v51',
+  './pwa.js?v=chat-v51',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
@@ -43,9 +43,33 @@ self.addEventListener('fetch', function(event) {
   var url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
+  var isVersionCheck = url.pathname.endsWith('/version.json') ||
+    url.searchParams.has('__ck_version_check') ||
+    url.searchParams.has('__ck_sw_version_check') ||
+    url.searchParams.has('ck_reload');
+
+  if (isVersionCheck) {
+    event.respondWith(
+      fetch(request, { cache: 'reload' }).then(function(response) {
+        if (!response || response.status !== 200) return response;
+        if (url.pathname.endsWith('/version.json')) {
+          var copy = response.clone();
+          caches.open(CACHE_NAME).then(function(cache) {
+            cache.put('./version.json', copy);
+          });
+        }
+        return response;
+      }).catch(function() {
+        if (url.pathname.endsWith('/version.json')) return caches.match('./version.json');
+        return Response.error();
+      })
+    );
+    return;
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).then(function(response) {
+      fetch(request, { cache: 'reload' }).then(function(response) {
         var copy = response.clone();
         caches.open(CACHE_NAME).then(function(cache) {
           cache.put('./index.html', copy);

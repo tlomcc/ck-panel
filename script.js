@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v50';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v51';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -62,7 +62,7 @@ function showPanelUpdateModal(latest){
   try{sessionStorage.setItem('ck_panel_pending_reload',latest)}catch(e){}
   var modal=document.getElementById('panel-update-modal');
   if(!modal){
-    try{location.reload()}catch(e){}
+    ckPanelForceReload(latest);
     return;
   }
   var cur=document.getElementById('panel-update-current');
@@ -79,6 +79,49 @@ function showPanelUpdateModal(latest){
     },30);
   }
 }
+function ckPanelReloadUrl(latest){
+  var hash=location.hash||'';
+  var base=location.origin+location.pathname;
+  var params=new URLSearchParams(location.search||'');
+  params.set('ck_reload',String(Date.now()));
+  if(latest)params.set('ck_target',String(latest));
+  return base+'?'+params.toString()+hash;
+}
+function ckPanelClearUpdateCaches(){
+  var jobs=[];
+  if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistrations){
+    jobs.push(navigator.serviceWorker.getRegistrations().then(function(regs){
+      return Promise.all((regs||[]).map(function(reg){
+        try{
+          var scopePath=new URL(reg.scope).pathname;
+          if(scopePath.indexOf('/ck-panel/')<0)return null;
+        }catch(e){}
+        return reg.unregister().catch(function(){});
+      }));
+    }));
+  }
+  if(window.caches&&caches.keys){
+    jobs.push(caches.keys().then(function(keys){
+      return Promise.all((keys||[]).map(function(key){
+        key=String(key||'');
+        if(key.indexOf('ck-panel')>=0)return caches.delete(key).catch(function(){});
+        return null;
+      }));
+    }));
+  }
+  return Promise.all(jobs).catch(function(){});
+}
+function ckPanelForceReload(latest){
+  var url=ckPanelReloadUrl(latest);
+  var done=false;
+  function go(){
+    if(done)return;
+    done=true;
+    location.replace(url);
+  }
+  ckPanelClearUpdateCaches().then(go,go);
+  setTimeout(go,2500);
+}
 function confirmPanelUpdate(){
   var latest=ckPanelUpdateTarget;
   try{
@@ -88,8 +131,12 @@ function confirmPanelUpdate(){
   }catch(e){}
   try{if(latest)sessionStorage.setItem('ck_panel_reloaded_to',latest)}catch(e){}
   try{sessionStorage.removeItem('ck_panel_pending_reload')}catch(e){}
-  var sep=location.href.indexOf('?')>=0?'&':'?';
-  location.replace(location.href.split('#')[0]+sep+'ck_reload='+Date.now()+(location.hash||''));
+  var btn=document.getElementById('panel-update-confirm');
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='正在更新...';
+  }
+  ckPanelForceReload(latest);
 }
 function initApiKeyFromUrl(){
   try{
@@ -3308,13 +3355,18 @@ function chatRenderToolTrace(tools){
     var isError=!!(t.is_error||status==='error');
     var input=chatToolJsonPreview(t.input||{});
     var result=String(t.result_preview||'');
-    var seconds=t.seconds!==undefined?(' · '+Number(t.seconds||0).toFixed(2)+'s'):'';
-    var chars=t.result_chars?(' · '+t.result_chars+'字'):'';
+    var meta=[];
+    if(t.source)meta.push(String(t.source).toUpperCase());
+    if(t.seconds!==undefined)meta.push(Number(t.seconds||0).toFixed(2)+'s');
+    if(t.result_chars)meta.push(t.result_chars+'字');
+    var subtitle=isError?'工具调用失败':(status==='done'?'工具调用完成':'正在调用工具');
+    var statusClass=isError?'error':(status==='done'?'done':'running');
+    var open=(status==='running'||isError)?' open':'';
     var body='';
-    if(input)body+='<div class="chat-tool-section"><b>参数</b><pre>'+esc(input)+'</pre></div>';
-    if(result)body+='<div class="chat-tool-section"><b>结果</b><pre>'+esc(result)+'</pre></div>';
-    if(!body&&status==='running')body='<div class="chat-tool-empty">等待工具返回...</div>';
-    return '<details class="chat-tool-card '+(isError?'error':(status==='done'?'done':'running'))+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"><summary><span class="chat-tool-dot"></span><b>'+esc(chatToolShortName(t.name))+'</b><em>'+esc(chatToolStatusLabel(status,isError)+seconds+chars)+'</em></summary>'+body+'</details>';
+    if(input)body+='<div class="chat-tool-section"><b>输入参数</b><pre>'+esc(input)+'</pre></div>';
+    if(result)body+='<div class="chat-tool-section"><b>'+esc(isError?'错误结果':'返回结果')+'</b><pre>'+esc(result)+'</pre></div>';
+    if(!body)body='<div class="chat-tool-empty">'+(status==='running'?'等待工具返回...':'没有返回详情')+'</div>';
+    return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
 function chatRenderAssistantContent(rawText,streaming,tools){
