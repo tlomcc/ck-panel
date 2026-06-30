@@ -75,6 +75,8 @@ The panel displays this so cache misses can be traced to a changed system/tools 
 
 When the gateway performs multiple upstream rounds for tools, the final `usage` and `done.usage` should be the aggregate across all upstream rounds. `done.last_usage` may contain the final upstream round, and `done.round_usages` may contain per-round diagnostics. The panel should use aggregate usage to mark a user message as cache-hit, so a tiny final tool-followup request does not make the whole message look like a prompt-cache miss.
 
+For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text block to the latest real user message in the upstream request copy. This block repeats the current user text and tells the model to answer only the latest message; it must not be written back into `transport_messages` or visible history.
+
 `session_anchor` is also allowed. It is a small stable anchor for the window's first user message, used so the model can still answer questions about the start of the window after recent-history trimming.
 
 `cache_strategy` is allowed and should be one of:

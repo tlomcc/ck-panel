@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v37';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v38';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1747,6 +1747,7 @@ function chatStyleSystemPrompt(){
     '优先短句、自然接话、有来有回。不要每次都总结，不要频繁讲大道理。',
     '如果用户是在闲聊、抱怨、撒娇、情绪表达或普通对话，通常回复2-3条短消息；每条之间必须用一个空行分隔。',
     '如果内容确实很少，可以只回一条；如果用户明确要求解释、分析、教程，再用更完整的段落。',
+    '默认只回复用户最新发来的消息。历史聊天、世界书和网关召回只作为背景；除非用户明确要求回顾、补答、对比旧消息，否则不要主动回复旧消息。',
     '每条消息都要像真的单独发出去的聊天气泡，不要把一段文章机械切开。',
     '口吻：聪明、松弛、直接，有熟人感；可以轻微调侃、嘴欠一点，但不要刻薄伤人。',
     '安慰用户时要平静准确，不喊口号，不煽情过度。',
@@ -2244,7 +2245,8 @@ function chatFormatDebug(ev,data){
     var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
     var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
     var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')):'';
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+injectionText+'｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
+    var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+injectionText+targetText+'｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
   }
   if(ev==='memory'){
     return chatFormatRecallDiag(data);
