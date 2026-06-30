@@ -503,13 +503,12 @@ body.chat-active .chat-compose-row{
   min-width:0!important;
   flex:0 0 auto!important;
   display:grid!important;
-  grid-template-columns:36px minmax(0,1fr) 34px 36px!important;
+  grid-template-columns:36px minmax(0,1fr) 36px!important;
   align-items:end!important;
   gap:7px!important;
 }
 
 body.chat-active .chat-plus-btn,
-body.chat-active .chat-store-btn,
 body.chat-active .chat-send{
   position:static!important;
   inset:auto!important;
@@ -527,8 +526,7 @@ body.chat-active .chat-send{
   cursor:pointer!important;
 }
 
-body.chat-active .chat-plus-btn,
-body.chat-active .chat-store-btn{
+body.chat-active .chat-plus-btn{
   border:1px solid #cfd7dc!important;
   background:#fff!important;
   color:#4b5563!important;
@@ -554,18 +552,6 @@ body.chat-active .chat-plus-btn.open{
 body.chat-active .chat-plus-btn.open::before{
   content:"x"!important;
   font-size:18px!important;
-}
-
-body.chat-active .chat-store-btn{
-  min-width:34px!important;
-  width:34px!important;
-  font-size:17px!important;
-}
-
-body.chat-active .chat-store-btn:hover{
-  background:#eefaf3!important;
-  border-color:#aedcc0!important;
-  color:#128c4c!important;
 }
 
 body.chat-active .chat-send{
@@ -1164,7 +1150,6 @@ body.dark.chat-active .chat-bubble.assistant{background:var(--chat5-panel)!impor
 body.dark.chat-active .chat-compose{background:#121820!important;border-color:var(--chat5-line)!important}
 body.dark.chat-active #chat-input,
 body.dark.chat-active .chat-plus-btn,
-body.dark.chat-active .chat-store-btn,
 body.dark.chat-active .chat-settings input,
 body.dark.chat-active .chat-settings textarea{
   background:#10161d!important;
@@ -1210,10 +1195,10 @@ body.chat-active .toast{
 }
 
 body.dark.chat-active .toast{
-  background:rgba(23,28,34,.96)!important;
-  color:#eef3f6!important;
-  border-color:#2d3742!important;
-  box-shadow:0 12px 28px rgba(0,0,0,.34)!important;
+  background:rgba(255,255,255,.96)!important;
+  color:#24312d!important;
+  border-color:#dfe8e3!important;
+  box-shadow:0 12px 28px rgba(15,23,42,.16)!important;
 }
 
 @media(min-width:560px){
@@ -1243,7 +1228,7 @@ body.dark.chat-active .toast{
     padding:6px 8px calc(7px + env(safe-area-inset-bottom))!important;
   }
   body.chat-active .chat-compose-row{
-    grid-template-columns:34px minmax(0,1fr) 32px 34px!important;
+    grid-template-columns:34px minmax(0,1fr) 34px!important;
     gap:6px!important;
   }
   body.chat-active .chat-plus-btn,
@@ -1251,13 +1236,6 @@ body.dark.chat-active .toast{
     width:34px!important;
     height:34px!important;
     min-width:34px!important;
-    min-height:34px!important;
-    border-radius:9px!important;
-  }
-  body.chat-active .chat-store-btn{
-    width:32px!important;
-    height:34px!important;
-    min-width:32px!important;
     min-height:34px!important;
     border-radius:9px!important;
   }
@@ -1306,8 +1284,7 @@ body.chat-active .chat-compose-row > #chat-input{
   max-width:100%!important;
   justify-self:stretch!important;
 }
-body.chat-active .chat-compose-row > .chat-store-btn{grid-column:3!important}
-body.chat-active .chat-compose-row > .chat-send{grid-column:4!important}
+body.chat-active .chat-compose-row > .chat-send{grid-column:3!important}
 
 /* CK chat visual uplift: borrowed layout ideas, kept on CK's existing DOM and logic. */
 body.chat-active{
@@ -1472,15 +1449,13 @@ body.chat-active #chat-input{
   transition:border-color .16s ease,box-shadow .16s ease,background .16s ease!important;
 }
 
-body.chat-active .chat-plus-btn,
-body.chat-active .chat-store-btn{
+body.chat-active .chat-plus-btn{
   border-color:#cbd6db!important;
   box-shadow:0 1px 2px rgba(15,23,42,.06)!important;
   transition:background .16s ease,border-color .16s ease,color .16s ease,transform .14s ease!important;
 }
 
-body.chat-active .chat-plus-btn:hover,
-body.chat-active .chat-store-btn:hover{
+body.chat-active .chat-plus-btn:hover{
   transform:translateY(-1px)!important;
 }
 

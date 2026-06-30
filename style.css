@@ -184,7 +184,7 @@ body{font-family:-apple-system,'PingFang SC',sans-serif;background:#f1f8e9;color
 .confirm-box{background:#fff;border-radius:16px;padding:20px;width:260px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.15)}
 .confirm-box p{color:#1c2028;margin-bottom:18px;font-weight:500}
 .confirm-box-btns{display:flex;gap:10px;justify-content:center}
-.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1c2028;color:#fff;padding:11px 24px;border-radius:20px;font-size:12px;display:none;z-index:200}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#fff;color:#1f2a28;border:1px solid #dfe8e3;box-shadow:0 14px 34px rgba(15,23,42,.16);padding:11px 24px;border-radius:14px;font-size:12px;display:none;z-index:200}
 .toast.show{display:block;animation:slideup .3s}
 @keyframes slideup{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes entrySlideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
@@ -542,8 +542,9 @@ body.dark .menu-popup-item.danger {
   color: #ef5350;
 }
 body.dark .toast {
-  background: #3a3a4e;
-  color: #e0e0e0;
+  background:#fff;
+  color:#1f2a28;
+  border-color:#dfe8e3;
 }
 body.dark .loading-bar {
   background: #3a3a4e;
@@ -1417,7 +1418,12 @@ body:not(.dark) .back-btn{
   width:min(340px,calc(100vw - 34px));
 }
 
-.toast,
+.toast{
+  background:#fff;
+  border:1px solid #dfe8e3;
+  color:#1f2a28;
+  box-shadow:var(--ck-shadow);
+}
 .score-popup{
   background:var(--ck-surface-2);
   border:1px solid var(--ck-border);

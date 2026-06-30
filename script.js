@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v42';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v43';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -25,7 +25,10 @@ function startPanelVersionWatcher(){
         if(latest&&latest!==CK_PANEL_VERSION){
           var input=document.getElementById('chat-input');
           if(input&&(document.activeElement===input||String(input.value||'').trim())){
+            var oldPending='';
+            try{oldPending=sessionStorage.getItem('ck_panel_pending_reload')||''}catch(e){}
             try{sessionStorage.setItem('ck_panel_pending_reload',latest)}catch(e){}
+            if(oldPending!==latest)toast('检测到新版本，输入结束后刷新');
             return;
           }
           try{sessionStorage.setItem('ck_panel_reloaded_to',latest)}catch(e){}
@@ -1678,6 +1681,7 @@ var chatLastBlurAt=0;
 var chatLastPointerOutsideInputAt=0;
 var chatViewportRaf=0;
 var chatLastLayoutHeight=0;
+var chatPlusDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null};
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
@@ -3240,8 +3244,82 @@ function chatTogglePlus(force){
   var btn=document.getElementById('chat-plus-btn');
   if(!panel)return;
   var open=typeof force==='boolean'?force:!panel.classList.contains('open');
+  if(!open){
+    panel.style.removeProperty('transition');
+    panel.style.removeProperty('transform');
+  }
   panel.classList.toggle('open',open);
   if(btn)btn.classList.toggle('open',open);
+}
+function chatClosePlusOnOutside(e){
+  var panel=document.getElementById('chat-plus-panel');
+  if(!panel||!panel.classList.contains('open')||!e||!e.target||!e.target.closest)return;
+  if(e.target.closest('.chat-plus-btn')||e.target.closest('.chat-plus-panel'))return;
+  chatTogglePlus(false);
+}
+function chatPlusTouchStart(e){
+  var panel=document.getElementById('chat-plus-panel');
+  if(!panel||!panel.classList.contains('open')){chatPlusDrag.active=false;return}
+  var t=e.touches?e.touches[0]:e;
+  chatPlusDrag.active=true;
+  chatPlusDrag.committed=false;
+  chatPlusDrag.startY=t.clientY;
+  chatPlusDrag.startT=Date.now();
+  chatPlusDrag.dy=0;
+  chatPlusDrag.panel=panel;
+}
+function chatPlusTouchMove(e){
+  if(!chatPlusDrag.active)return;
+  var t=e.touches?e.touches[0]:e;
+  var dy=t.clientY-chatPlusDrag.startY;
+  if(!chatPlusDrag.committed){
+    if(dy>8){
+      chatPlusDrag.committed=true;
+      chatPlusDrag.panel.style.transition='none';
+    }else if(dy<-10){
+      chatPlusDrag.active=false;
+      return;
+    }else return;
+  }
+  if(dy<0)dy=0;
+  chatPlusDrag.dy=dy;
+  chatPlusDrag.panel.style.setProperty('transform','translateY('+dy+'px)','important');
+  if(e.cancelable)e.preventDefault();
+}
+function chatPlusTouchEnd(){
+  if(!chatPlusDrag.active)return;
+  var panel=chatPlusDrag.panel,dy=chatPlusDrag.dy,dt=Date.now()-chatPlusDrag.startT;
+  chatPlusDrag.active=false;
+  chatPlusDrag.committed=false;
+  if(!panel)return;
+  var flick=dt<300&&dy>22;
+  if(dy>48||flick){
+    panel.style.transition='transform .18s ease, opacity .16s ease';
+    panel.style.setProperty('transform','translateY(22px)','important');
+    panel.style.opacity='0';
+    setTimeout(function(){
+      chatTogglePlus(false);
+      panel.style.removeProperty('transition');
+      panel.style.removeProperty('transform');
+      panel.style.removeProperty('opacity');
+    },160);
+  }else{
+    panel.style.transition='transform .18s ease';
+    panel.style.setProperty('transform','translateY(0)','important');
+    setTimeout(function(){
+      panel.style.removeProperty('transition');
+      panel.style.removeProperty('transform');
+    },190);
+  }
+}
+function chatAttachPlusGesture(){
+  var panel=document.getElementById('chat-plus-panel');
+  if(!panel||panel.__chatPlusGestureAttached)return;
+  panel.__chatPlusGestureAttached=true;
+  panel.addEventListener('touchstart',chatPlusTouchStart,{passive:true});
+  panel.addEventListener('touchmove',chatPlusTouchMove,{passive:false});
+  panel.addEventListener('touchend',chatPlusTouchEnd,{passive:true});
+  panel.addEventListener('touchcancel',chatPlusTouchEnd,{passive:true});
 }
 function chatSettingTitle(tab){
   return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',debug:'调试记录'})[tab]||'聊天设置';
@@ -3599,8 +3677,11 @@ function chatInit(){
   if(chatInitialized)return;
   chatInitialized=true;
   chatAttachSettingsGesture();
+  chatAttachPlusGesture();
   document.addEventListener('pointerdown',chatTrackPointerIntent,{passive:true});
   document.addEventListener('touchstart',chatTrackPointerIntent,{passive:true});
+  document.addEventListener('pointerdown',chatClosePlusOnOutside,{passive:true});
+  document.addEventListener('touchstart',chatClosePlusOnOutside,{passive:true});
   chatLoadDebugRecords();
   chatLoadLocalMessages();
   chatWriteForm(chatLoadConfig());
@@ -3613,7 +3694,6 @@ function chatInit(){
   chatRenderSessions();
   chatRenderMessages();
   var input=document.getElementById('chat-input');
-  var storeBtn=document.getElementById('chat-store-btn');
   chatLayoutCompose();
   window.addEventListener('resize',chatHandleViewportChange);
   if(window.visualViewport){
@@ -3655,20 +3735,6 @@ function chatInit(){
         chatStoreDraftMessage({keepFocus:true});
       }
     });
-  }
-  if(storeBtn){
-    storeBtn.onpointerdown=function(e){e.preventDefault()};
-    storeBtn.onpointerup=function(e){
-      e.preventDefault();
-      chatStoreDraftMessage({keepFocus:true});
-      return false;
-    };
-    storeBtn.onmousedown=function(e){e.preventDefault()};
-    storeBtn.onclick=function(e){
-      if(e)e.preventDefault();
-      chatStoreDraftMessage({keepFocus:true});
-      return false;
-    };
   }
 }
 async function chatSendMessage(){
