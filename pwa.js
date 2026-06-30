@@ -19,6 +19,42 @@
     if (typeof window.toast === 'function') window.toast(message);
   }
 
+  function fetchPanelVersion() {
+    var stamp = Date.now();
+    return fetch('version.json?__ck_sw_version_check=' + stamp, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        var version = data && (data.version || data.CK_PANEL_VERSION);
+        if (version) return String(version);
+        return '';
+      })
+      .catch(function() { return ''; })
+      .then(function(version) {
+        if (version) return version;
+        return fetch('index.html?__ck_sw_version_check=' + stamp, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+          .then(function(r) { return r.ok ? r.text() : ''; })
+          .then(function(html) {
+            var m = String(html || '').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
+            return (m && m[1]) || '';
+          })
+          .catch(function() { return ''; });
+      });
+  }
+
+  function promptPanelUpdate(fallback) {
+    fetchPanelVersion().then(function(latest) {
+      latest = latest || fallback || '新版本';
+      if (typeof window.showPanelUpdateModal === 'function') {
+        window.showPanelUpdateModal(latest);
+      } else {
+        location.reload();
+      }
+    }).catch(function() {
+      if (typeof window.showPanelUpdateModal === 'function') window.showPanelUpdateModal(fallback || '新版本');
+      else location.reload();
+    });
+  }
+
   window.addEventListener('beforeinstallprompt', function(event) {
     event.preventDefault();
     deferredPrompt = event;
@@ -57,24 +93,18 @@
             localStorage.setItem('ckPanelAfterUpdateTab', 'chat');
           }
         } catch (e) {}
-        fetch('index.html?__ck_sw_version_check='+Date.now(), { cache: 'no-store' })
-          .then(function(r) { return r.ok ? r.text() : ''; })
-          .then(function(html) {
-            var m = String(html || '').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
-            var latest = m && m[1];
-            if (typeof window.showPanelUpdateModal === 'function' && latest && latest !== window.CK_PANEL_VERSION) {
-              window.showPanelUpdateModal(latest);
-            } else if (!latest && typeof window.showPanelUpdateModal === 'function') {
-              window.showPanelUpdateModal('新版本');
-            } else if (!latest) {
-              location.reload();
-            }
-          }).catch(function() {
-            if (typeof window.showPanelUpdateModal === 'function') window.showPanelUpdateModal('新版本');
-            else location.reload();
-          });
+        promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v48').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v49').then(function(reg) {
+        reg.addEventListener('updatefound', function() {
+          var worker = reg.installing;
+          if (!worker) return;
+          worker.addEventListener('statechange', function() {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+              promptPanelUpdate('新版本');
+            }
+          });
+        });
         if (reg && reg.update) reg.update();
       }).catch(function() {});
     }

@@ -292,6 +292,12 @@ body.chat-active .chat-bubble.system{
   font-size:11px!important;
 }
 
+body.chat-active input[readonly]{
+  cursor:text!important;
+  background:#f8fafc!important;
+  color:#334155!important;
+}
+
 body.chat-active .chat-user-text{white-space:pre-wrap!important}
 
 body.chat-active .chat-msg-time{
@@ -415,6 +421,102 @@ body.chat-active .chat-recall-body{
 }
 
 body.chat-active .chat-recall.open .chat-recall-body{display:block!important}
+
+body.chat-active .chat-tool-trace{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:6px!important;
+  margin:0 0 8px!important;
+}
+
+body.chat-active .chat-tool-card{
+  border:1px solid #dbe5df!important;
+  border-left:3px solid #7aa889!important;
+  border-radius:8px!important;
+  background:#f8fbf9!important;
+  overflow:hidden!important;
+}
+
+body.chat-active .chat-tool-card.running{
+  border-left-color:#6b9ad6!important;
+}
+
+body.chat-active .chat-tool-card.error{
+  border-left-color:#d86b6b!important;
+  background:#fff8f8!important;
+}
+
+body.chat-active .chat-tool-card summary{
+  display:flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  padding:6px 8px!important;
+  cursor:pointer!important;
+  list-style:none!important;
+  font-size:12px!important;
+  color:#395244!important;
+}
+
+body.chat-active .chat-tool-card summary::-webkit-details-marker{
+  display:none!important;
+}
+
+body.chat-active .chat-tool-card summary b{
+  font-weight:700!important;
+}
+
+body.chat-active .chat-tool-card summary em{
+  margin-left:auto!important;
+  color:#64748b!important;
+  font-style:normal!important;
+  font-size:11px!important;
+}
+
+body.chat-active .chat-tool-dot{
+  width:7px!important;
+  height:7px!important;
+  border-radius:50%!important;
+  background:#7aa889!important;
+  flex:0 0 auto!important;
+}
+
+body.chat-active .chat-tool-card.running .chat-tool-dot{
+  background:#6b9ad6!important;
+  box-shadow:0 0 0 3px rgba(107,154,214,.16)!important;
+}
+
+body.chat-active .chat-tool-card.error .chat-tool-dot{
+  background:#d86b6b!important;
+}
+
+body.chat-active .chat-tool-section{
+  padding:0 8px 8px!important;
+}
+
+body.chat-active .chat-tool-section b,
+body.chat-active .chat-tool-empty{
+  display:block!important;
+  margin:0 0 4px!important;
+  color:#64748b!important;
+  font-size:11px!important;
+  font-weight:700!important;
+}
+
+body.chat-active .chat-tool-section pre{
+  margin:0!important;
+  padding:7px!important;
+  max-height:150px!important;
+  overflow:auto!important;
+  border-radius:6px!important;
+  background:#eef4f0!important;
+  color:#334155!important;
+  font:11px/1.45 ui-monospace,Menlo,Consolas,monospace!important;
+  white-space:pre-wrap!important;
+}
+
+body.chat-active .chat-tool-empty{
+  padding:0 8px 8px!important;
+}
 
 body.chat-active .chat-msg-tools{
   position:static!important;
@@ -1256,6 +1358,26 @@ body.dark.chat-active .chat-bubble.user{background:#2f6f43!important;border-colo
 body.dark.chat-active .chat-recall{border-color:#2f3b37!important;background:#121b18!important}
 body.dark.chat-active .chat-recall-head{color:#a7c1b7!important}
 body.dark.chat-active .chat-recall-body{color:#91a29a!important}
+body.dark.chat-active input[readonly]{background:#111827!important;color:#cbd5e1!important}
+body.dark.chat-active .chat-tool-card{
+  border-color:#2f3b37!important;
+  background:#121b18!important;
+}
+body.dark.chat-active .chat-tool-card.error{
+  background:#241717!important;
+}
+body.dark.chat-active .chat-tool-card summary{
+  color:#b9d0c2!important;
+}
+body.dark.chat-active .chat-tool-card summary em,
+body.dark.chat-active .chat-tool-section b,
+body.dark.chat-active .chat-tool-empty{
+  color:#94a3b8!important;
+}
+body.dark.chat-active .chat-tool-section pre{
+  background:#0f1720!important;
+  color:#cbd5e1!important;
+}
 body.dark.chat-active .chat-settings-mask{background:rgba(0,0,0,.58)!important}
 body.dark.chat-active .chat-settings::before{background:#3a4150!important}
 body.dark.chat-active .chat-settings-head .chat-icon-btn{background:#2a2f3a!important;color:#aeb6c0!important}
