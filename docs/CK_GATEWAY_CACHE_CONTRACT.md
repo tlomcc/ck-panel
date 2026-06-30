@@ -73,6 +73,13 @@ When the gateway performs multiple upstream rounds for tools, the final `usage` 
 
 `session_anchor` is also allowed. It is a small stable anchor for the window's first user message, used so the model can still answer questions about the start of the window after recent-history trimming.
 
+`cache_strategy` is allowed and should be one of:
+
+- `single_5m`: preserve injected historical user messages while the previous turn is still within the short prompt-cache TTL; when idle time exceeds `recall_history_retention_seconds`, the gateway strips old `<ck_gateway_context>` blocks and rebuilds from clean chat history.
+- `prefix_24h`: optimize for long-lived prefix cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message.
+
+`recall_history_retention_seconds` defaults to `300` for `single_5m` and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
+
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
 
 `window_messages` is the dedicated same-window full-context field. It is different from forbidden `history` / `messages`:

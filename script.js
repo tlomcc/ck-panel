@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v34';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v35';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1712,6 +1712,8 @@ function chatDefaultConfig(){
     recall:true,
     useMcp:false,
     mcpUrl:API_BASE,
+    cacheStrategy:'single_5m',
+    recallHistoryRetentionSeconds:300,
     promptCacheTtl:'1h',
     fullWindowContext:true,
     settingsOpen:false,
@@ -1782,6 +1784,7 @@ function chatNormalizeSession(s){
     updated:updated,
     messages:Array.isArray(s.messages)?s.messages.slice():[],
     transportMessages:Array.isArray(s.transportMessages)?s.transportMessages.slice():[],
+    transportUpdated:Number(s.transportUpdated||0)||0,
     firstUserText:String(s.firstUserText||'').slice(0,3000),
     firstUserTs:Number(s.firstUserTs||0)||0
   };
@@ -1885,6 +1888,8 @@ function chatReadForm(){
     recall:document.getElementById('chat-recall').checked,
     useMcp:document.getElementById('chat-use-mcp')?document.getElementById('chat-use-mcp').checked:false,
     mcpUrl:document.getElementById('chat-mcp-url')?(document.getElementById('chat-mcp-url').value||API_BASE).trim():API_BASE,
+    cacheStrategy:document.getElementById('chat-cache-strategy')?(document.getElementById('chat-cache-strategy').value||'single_5m'):(chatLoadConfig().cacheStrategy||'single_5m'),
+    recallHistoryRetentionSeconds:document.getElementById('chat-recall-retention-seconds')?Math.max(0,Number(document.getElementById('chat-recall-retention-seconds').value||0)):((chatLoadConfig().recallHistoryRetentionSeconds===0)?0:(chatLoadConfig().recallHistoryRetentionSeconds||300)),
     promptCacheTtl:chatLoadConfig().promptCacheTtl||'1h',
     fullWindowContext:document.getElementById('chat-full-window-context')?document.getElementById('chat-full-window-context').checked:true,
     settingsOpen:document.querySelector('.chat-settings')?document.querySelector('.chat-settings').classList.contains('open'):false,
@@ -1905,11 +1910,25 @@ function chatWriteForm(cfg){
   document.getElementById('chat-recall').checked=cfg.recall!==false;
   if(document.getElementById('chat-use-mcp'))document.getElementById('chat-use-mcp').checked=cfg.useMcp===true;
   if(document.getElementById('chat-mcp-url'))document.getElementById('chat-mcp-url').value=cfg.mcpUrl||API_BASE;
+  if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
+  if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String((cfg.recallHistoryRetentionSeconds===0)?0:(cfg.recallHistoryRetentionSeconds||300));
+  chatSyncCacheStrategyFields(true);
   if(document.getElementById('chat-full-window-context'))document.getElementById('chat-full-window-context').checked=cfg.fullWindowContext!==false;
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
   chatRenderWorldbooks(cfg);
   chatUpdateRuntime(cfg);
+}
+function chatSyncCacheStrategyFields(silent){
+  var strategy=document.getElementById('chat-cache-strategy');
+  var retention=document.getElementById('chat-recall-retention-seconds');
+  if(!strategy||!retention)return;
+  if(strategy.value==='prefix_24h'){
+    retention.value='0';
+  }else if(!retention.value||Number(retention.value)<=0){
+    retention.value='300';
+  }
+  if(!silent)chatSaveConfig(true);
 }
 function chatSaveConfig(silent){
   var cfg=chatReadForm();
@@ -2169,7 +2188,11 @@ function chatFormatDebug(ev,data){
     var mcpCache=data.mcp_cache?('｜MCP缓存：'+data.mcp_cache+(data.mcp_cache_age_seconds?(' '+data.mcp_cache_age_seconds+'s'):'')):'';
     var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+mcpCache):'｜MCP：关闭';
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+mcpText;
+    var strategy=data.effective_cache_strategy||data.cache_strategy||'single_5m';
+    var strategyText=strategy==='prefix_24h'?'24h前缀':'5min严格';
+    var cleanText=data.strip_old_recall?('｜清旧召回：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字'):'';
+    var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
   }
   if(ev==='memory'){
     return chatFormatRecallDiag(data);
@@ -2387,6 +2410,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       updated:s.updated,
       messages:chatLimitArray(s.messages,maxVisible),
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
+      transportUpdated:Number(s.transportUpdated||0)||0,
       firstUserText:String(s.firstUserText||'').slice(0,3000),
       firstUserTs:s.firstUserTs||0
     };
@@ -3391,6 +3415,9 @@ async function chatSubmitPendingMessages(){
   var currentSession=chatCurrentSession();
   var anchorText=chatEnsureSessionAnchor(text);
   currentSession=chatCurrentSession();
+  var recallRetention=Math.max(0,Number(cfg.recallHistoryRetentionSeconds||0));
+  if((cfg.cacheStrategy||'single_5m')==='prefix_24h')recallRetention=0;
+  if((cfg.cacheStrategy||'single_5m')==='single_5m'&&!recallRetention)recallRetention=300;
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
@@ -3402,6 +3429,8 @@ async function chatSubmitPendingMessages(){
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall,
     use_mcp:cfg.useMcp===true,
+    cache_strategy:cfg.cacheStrategy||'single_5m',
+    recall_history_retention_seconds:recallRetention,
     prompt_cache_ttl:cfg.promptCacheTtl||'1h',
     session_anchor:{
       first_user_text:anchorText,
@@ -3410,6 +3439,7 @@ async function chatSubmitPendingMessages(){
   };
   var transportForRequest=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
   if(transportForRequest.length)body.transport_messages=transportForRequest;
+  if(currentSession.transportUpdated)body.transport_updated_at=currentSession.transportUpdated;
   if(cfg.useMcp===true&&cfg.mcpUrl)body.mcp_url=cfg.mcpUrl;
   if(cfg.fullWindowContext!==false)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
@@ -3452,6 +3482,7 @@ async function chatSubmitPendingMessages(){
             if(data&&Array.isArray(data.messages)){
               var ts=chatCurrentSession();
               ts.transportMessages=chatLimitArray(data.messages,CHAT_MAX_TRANSPORT_MESSAGES);
+              ts.transportUpdated=Date.now();
               ts.updated=Date.now();
               chatSaveSessions();
             }
@@ -3467,6 +3498,7 @@ async function chatSubmitPendingMessages(){
               if(data&&Array.isArray(data.transport_messages)){
                 var s=chatCurrentSession();
                 s.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
+                s.transportUpdated=Date.now();
                 s.updated=Date.now();
                 chatSaveSessions();
               }
