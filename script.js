@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v46';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v47';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -1875,7 +1875,8 @@ function chatDefaultConfig(){
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:'system_after_anchor',
-    useMcp:false,
+    useMcp:true,
+    mcpDefaultMigrated:true,
     mcpUrl:API_BASE,
     cacheStrategy:'single_5m',
     recallHistoryRetentionSeconds:300,
@@ -2047,13 +2048,18 @@ function chatHandleMainRouteNotReady(route){
 }
 function chatLoadConfig(){
   var cfg=chatDefaultConfig();
+  var saved=null;
   try{
     var raw=localStorage.getItem(CHAT_CONFIG_KEY);
     if(raw){
-      var saved=JSON.parse(raw);
+      saved=JSON.parse(raw);
       Object.keys(saved||{}).forEach(function(k){cfg[k]=saved[k]});
     }
   }catch(e){}
+  if(saved&&saved.mcpDefaultMigrated!==true){
+    cfg.useMcp=true;
+    cfg.mcpDefaultMigrated=true;
+  }
   if(!cfg.sessionId)cfg.sessionId=chatSessionId();
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
   cfg.fakeThinking=cfg.fakeThinking===true;
@@ -2233,6 +2239,7 @@ function chatReadForm(){
     fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
     useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
+    mcpDefaultMigrated:true,
     mcpUrl:String(chatFieldValue('chat-mcp-url',saved.mcpUrl||API_BASE)||API_BASE).trim(),
     cacheStrategy:chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m')||'single_5m',
     recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
@@ -2560,7 +2567,9 @@ function chatFormatDebug(ev,data){
     var source=data.history_source||'';
     var sourceText=source.indexOf('client_transport:')===0?'面板隐藏缓存历史':(source.indexOf('client_window:')===0?'同窗口全量上下文':(source==='client_history'?'面板当前窗口':'网关会话'));
     var mcpCache=data.mcp_cache?('｜MCP缓存：'+data.mcp_cache+(data.mcp_cache_age_seconds?(' '+data.mcp_cache_age_seconds+'s'):'')):'';
-    var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+mcpCache):'｜MCP：关闭';
+    var requestTools=data.mcp_tools_in_request;
+    var requestToolsText=requestTools!==undefined?('｜本轮上游tools：'+(requestTools||0)):'';
+    var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+requestToolsText+mcpCache):'｜MCP：关闭';
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
     var strategy=data.effective_cache_strategy||data.cache_strategy||'single_5m';
     var strategyText=strategy==='prefix_24h'?'24h前缀':'5min严格';
