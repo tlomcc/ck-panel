@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v33';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v34';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -2156,7 +2156,12 @@ function chatFormatDebug(ev,data){
     var changeText=changes.length?'｜变化：'+changes.slice(0,4).join('；'):'';
     var stableText=stable.length?'｜稳定：'+stable.slice(0,4).join('，'):'';
     var bps=Array.isArray(fp.breakpoint_summary)?fp.breakpoint_summary:[];
-    return '｜'+status+stableText+changeText+'｜请求 '+(fp.request_hash||'-')+'/'+(fp.request_bytes||0)+'B｜断点 '+(bps.join('，')||'-');
+    var details=Array.isArray(fp.breakpoints)?fp.breakpoints:[];
+    var sizes=details.map(function(x){
+      return String(x.label||'-')+':'+(x.prefix_bytes||0)+'B/~'+(x.prefix_token_estimate||0)+'t';
+    });
+    var sizeText=sizes.length?'｜断点累计 '+sizes.slice(0,4).join('，'):'';
+    return '｜'+status+stableText+changeText+'｜请求 '+(fp.request_hash||'-')+'/'+(fp.request_bytes||0)+'B｜断点 '+(bps.join('，')||'-')+sizeText;
   }
   if(ev==='meta'){
     var source=data.history_source||'';
@@ -2172,11 +2177,13 @@ function chatFormatDebug(ev,data){
   if(ev==='usage'){
     var read=data.cache_read_input_tokens||data.cache_read||0;
     var create=data.cache_creation_input_tokens||data.cache_creation||0;
-    return '📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0);
+    var rounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
+    return '📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0)+rounds;
   }
   if(ev==='done'){
     var u=data.usage||{};
-    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字｜缓存读取：'+(u.cache_read_input_tokens||u.cache_read||0)+'｜缓存创建：'+(u.cache_creation_input_tokens||u.cache_creation||0)+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
+    var doneRounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
+    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字｜缓存读取：'+(u.cache_read_input_tokens||u.cache_read||0)+'｜缓存创建：'+(u.cache_creation_input_tokens||u.cache_creation||0)+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
   }
   if(ev==='error'){
     return '❌ 请求错误｜'+(data.error||data.message||JSON.stringify(data));

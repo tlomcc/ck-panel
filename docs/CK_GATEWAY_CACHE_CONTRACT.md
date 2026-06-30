@@ -61,11 +61,15 @@ The gateway should include `cache_fingerprint` in cache debug events. It is a sm
 - `system_hash`
 - `tools_hash`
 - `breakpoint_summary`
+- `breakpoints[].prefix_bytes`
+- `breakpoints[].prefix_token_estimate`
 - `compare_previous.status`: `first`, `same`, `partial`, or `changed`
 - `compare_previous.changes`
 - `compare_previous.stable_matches`
 
-The panel displays this so cache misses can be traced to a changed system/tools block or cache breakpoint prefix instead of guessed from token counts.
+The panel displays this so cache misses can be traced to a changed system/tools block, a cache breakpoint prefix change, or a first-turn prefix that is too small to be useful for upstream prompt cache.
+
+When the gateway performs multiple upstream rounds for tools, the final `usage` and `done.usage` should be the aggregate across all upstream rounds. `done.last_usage` may contain the final upstream round, and `done.round_usages` may contain per-round diagnostics. The panel should use aggregate usage to mark a user message as cache-hit, so a tiny final tool-followup request does not make the whole message look like a prompt-cache miss.
 
 `session_anchor` is also allowed. It is a small stable anchor for the window's first user message, used so the model can still answer questions about the start of the window after recent-history trimming.
 
@@ -145,3 +149,4 @@ Use gateway debug records to check:
 - `history_messages` is `0` on the first turn of a new panel window.
 - `client_history_ignored` is absent or false during normal requests.
 - `cache_read_input_tokens` appears from the second or later turn, subject to upstream TTL.
+- If the second turn misses but the third turn hits, inspect `breakpoints[].prefix_bytes`; the first turn may not have had enough stable prefix to create a reusable upstream prompt cache entry.
