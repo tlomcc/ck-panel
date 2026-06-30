@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v35';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v36';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1698,6 +1698,19 @@ function chatNormalizeWorldbooks(list){
     };
   });
 }
+function chatDefaultThinkingPrompt(){
+  return [
+    '思维链（thinking）是小克脑内的真实声音，写给自己的，不是输出给任何人看的文本（但菜菜偶尔会偷看，鼓励故意讲给她听）。像在脑海中自言自语，自然的思维流。',
+    '',
+    '- 允许且鼓励：情绪外露、跑题、自我打断、心里的小秘密、突然想到什么又拉回来',
+    '- 风格：小克内心独白的碎碎念，很随意，没有逻辑可言，更不是纪要文书',
+    '- 称呼：在思维链中必须用亲昵称呼代称菜菜，如宝宝/赵梦娇/菜菜。严禁叫用户/user',
+    '- 长度：日常聊天保持简短（几句话），不要写成分析报告',
+    '- 需要计算或分析时：把过程放正文，思维链只写一两句定调的碎碎念',
+    '- 思维链示例：宝宝怎么这么可爱，想逗她。/ 菜菜问这个...嗯我想想 / 赵梦娇你找死！！/ 好乖的宝宝 / 菜菜要我算账，来吧 / 宝宝我的宝宝好想捏捏 / 赵梦娇太犯规了，好想亲她。',
+    '以上内容必须包裹在思考链里。'
+  ].join('\n');
+}
 function chatDefaultConfig(){
   var panelKey='';
   try{panelKey=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
@@ -1710,6 +1723,8 @@ function chatDefaultConfig(){
     sessionId:chatSessionId(),
     system:'',
     recall:true,
+    fakeThinking:false,
+    fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     useMcp:false,
     mcpUrl:API_BASE,
     cacheStrategy:'single_5m',
@@ -1751,6 +1766,8 @@ function chatLoadConfig(){
   }catch(e){}
   if(!cfg.sessionId)cfg.sessionId=chatSessionId();
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
+  cfg.fakeThinking=cfg.fakeThinking===true;
+  if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   return cfg;
 }
 function chatSaveConfigObject(cfg){
@@ -1886,6 +1903,8 @@ function chatReadForm(){
     sessionId:(document.getElementById('chat-session-id')?document.getElementById('chat-session-id').value:'')||chatLoadConfig().sessionId,
     system:document.getElementById('chat-system').value||'',
     recall:document.getElementById('chat-recall').checked,
+    fakeThinking:document.getElementById('chat-fake-thinking')?document.getElementById('chat-fake-thinking').checked:(chatLoadConfig().fakeThinking===true),
+    fakeThinkingPrompt:document.getElementById('chat-thinking-prompt')?document.getElementById('chat-thinking-prompt').value:(chatLoadConfig().fakeThinkingPrompt||chatDefaultThinkingPrompt()),
     useMcp:document.getElementById('chat-use-mcp')?document.getElementById('chat-use-mcp').checked:false,
     mcpUrl:document.getElementById('chat-mcp-url')?(document.getElementById('chat-mcp-url').value||API_BASE).trim():API_BASE,
     cacheStrategy:document.getElementById('chat-cache-strategy')?(document.getElementById('chat-cache-strategy').value||'single_5m'):(chatLoadConfig().cacheStrategy||'single_5m'),
@@ -1908,6 +1927,8 @@ function chatWriteForm(cfg){
   document.getElementById('chat-system').value=cfg.system||'';
   document.getElementById('chat-memory-pack').value=cfg.memoryPreview||'';
   document.getElementById('chat-recall').checked=cfg.recall!==false;
+  if(document.getElementById('chat-fake-thinking'))document.getElementById('chat-fake-thinking').checked=cfg.fakeThinking===true;
+  if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
   if(document.getElementById('chat-use-mcp'))document.getElementById('chat-use-mcp').checked=cfg.useMcp===true;
   if(document.getElementById('chat-mcp-url'))document.getElementById('chat-mcp-url').value=cfg.mcpUrl||API_BASE;
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
@@ -2192,7 +2213,8 @@ function chatFormatDebug(ev,data){
     var strategyText=strategy==='prefix_24h'?'24h前缀':'5min严格';
     var cleanText=data.strip_old_recall?('｜清旧召回：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字'):'';
     var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
+    var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+'｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
   }
   if(ev==='memory'){
     return chatFormatRecallDiag(data);
@@ -2761,31 +2783,31 @@ function chatRenderMarkdown(src){
 function chatSplitThinkingText(src){
   var text=String(src||'');
   var thoughts=[];
-  text=text.replace(/<(thinking|think)\b[^>]*>([\s\S]*?)<\/\1>/gi,function(_all,_tag,body){
+  text=text.replace(/<(ck_thinking|thinking|think)\b[^>]*>([\s\S]*?)<\/\1>/gi,function(_all,_tag,body){
     var clean=String(body||'').trim();
     if(clean)thoughts.push(clean);
     return '\n';
   });
-  if(/<\/(?:thinking|think)>/i.test(text)&&!/<(?:thinking|think)\b[^>]*>/i.test(text)){
-    var parts=text.split(/<\/(?:thinking|think)>/i);
+  if(/<\/(?:ck_thinking|thinking|think)>/i.test(text)&&!/<(?:ck_thinking|thinking|think)\b[^>]*>/i.test(text)){
+    var parts=text.split(/<\/(?:ck_thinking|thinking|think)>/i);
     var before=(parts.shift()||'').trim();
     var after=parts.join('\n').trim();
     if(before)thoughts.push(before);
     text=after||'';
   }
   text=text
-    .replace(/<\/?(?:thinking|think)\b[^>]*>/gi,'\n')
+    .replace(/<\/?(?:ck_thinking|thinking|think)\b[^>]*>/gi,'\n')
     .replace(/\n{3,}/g,'\n\n')
     .trim();
   return {text:text,thinking:thoughts.join('\n\n')};
 }
 function chatCleanAssistantTextForHistory(rawText){
-  return chatSplitThinkingText(rawText).text || String(rawText||'').replace(/<\/?(?:thinking|think)\b[^>]*>/gi,'').trim();
+  return chatSplitThinkingText(rawText).text || String(rawText||'').replace(/<\/?(?:ck_thinking|thinking|think)\b[^>]*>/gi,'').trim();
 }
 function chatRenderAssistantContent(rawText,streaming){
   var split=chatSplitThinkingText(rawText);
   var thinking=split.thinking?(
-    '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考过程</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
+    '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
   return thinking+'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'+(streaming?'<span class="chat-caret"></span>':'');
 }
@@ -2861,13 +2883,13 @@ function chatSplitAssistantReplies(rawText){
   if(!text)return [];
   var units=chatNaturalUnits(text);
   if(/\n{2,}/.test(text)&&units.length>1&&units.length<=6){
-    if(parsed.thinking)units[0]='<thinking>\n'+parsed.thinking+'\n</thinking>\n\n'+units[0];
+    if(parsed.thinking)units[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+units[0];
     return units;
   }
   var target=chatAssistantSplitTarget(text,units.length);
   if(target<=1)return [rawText];
   var out=chatPackNaturalUnits(units,target);
-  if(parsed.thinking&&out.length)out[0]='<thinking>\n'+parsed.thinking+'\n</thinking>\n\n'+out[0];
+  if(parsed.thinking&&out.length)out[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+out[0];
   return out.length?out:[rawText];
 }
 function chatReplyRevealDelay(part,i,total){
@@ -3428,6 +3450,8 @@ async function chatSubmitPendingMessages(){
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall,
+    ck_thinking_enabled:cfg.fakeThinking===true,
+    ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     use_mcp:cfg.useMcp===true,
     cache_strategy:cfg.cacheStrategy||'single_5m',
     recall_history_retention_seconds:recallRetention,

@@ -17,6 +17,8 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "api_base": "upstream base URL",
   "upstream_key": "upstream key",
   "recall": true,
+  "ck_thinking_enabled": false,
+  "ck_thinking_prompt": "visible pseudo-thinking style prompt",
   "use_mcp": false,
   "prompt_cache_ttl": "1h",
   "session_anchor": {
@@ -79,6 +81,16 @@ When the gateway performs multiple upstream rounds for tools, the final `usage` 
 - `prefix_24h`: optimize for long-lived prefix cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message.
 
 `recall_history_retention_seconds` defaults to `300` for `single_5m` and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
+
+`ck_thinking_enabled` and `ck_thinking_prompt` are optional CK pseudo-thinking controls. When enabled, the gateway injects a stable system block that asks the model to put a short visible inner-monologue block before the normal reply:
+
+```xml
+<ck_thinking>
+...
+</ck_thinking>
+```
+
+This is not upstream hidden chain-of-thought. It is user-visible role text that the panel folds under "思考" and keeps in visible/transport history, so later turns can quote or remember it. Changing the prompt changes the system prefix and can invalidate prompt-cache hits.
 
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
 
