@@ -3,7 +3,8 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v44';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v45';
+var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -23,22 +24,53 @@ function startPanelVersionWatcher(){
         var m=String(html||'').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
         var latest=m&&m[1];
         if(latest&&latest!==CK_PANEL_VERSION){
-          var input=document.getElementById('chat-input');
-          if(input&&(document.activeElement===input||String(input.value||'').trim())){
-            var oldPending='';
-            try{oldPending=sessionStorage.getItem('ck_panel_pending_reload')||''}catch(e){}
-            try{sessionStorage.setItem('ck_panel_pending_reload',latest)}catch(e){}
-            if(oldPending!==latest)toast('检测到新版本，输入结束后刷新');
-            return;
-          }
-          try{sessionStorage.setItem('ck_panel_reloaded_to',latest)}catch(e){}
-          toast('检测到新版本，正在刷新页面');
-          setTimeout(function(){location.reload()},600);
+          showPanelUpdateModal(latest);
         }
       }).catch(function(){});
   }
   setTimeout(check,5000);
   setInterval(check,120000);
+}
+function syncPanelVersionBadge(){
+  var el=document.getElementById('panel-version-badge');
+  if(!el)return;
+  el.textContent=CK_PANEL_VERSION;
+  el.title='当前版本 '+CK_PANEL_VERSION;
+}
+function showPanelUpdateModal(latest){
+  latest=String(latest||'').trim();
+  if(!latest||latest===CK_PANEL_VERSION)return;
+  ckPanelUpdateTarget=latest;
+  try{sessionStorage.setItem('ck_panel_pending_reload',latest)}catch(e){}
+  var modal=document.getElementById('panel-update-modal');
+  if(!modal){
+    try{location.reload()}catch(e){}
+    return;
+  }
+  var cur=document.getElementById('panel-update-current');
+  var next=document.getElementById('panel-update-next');
+  if(cur)cur.textContent=CK_PANEL_VERSION;
+  if(next)next.textContent=latest;
+  document.body.classList.add('panel-update-blocked');
+  modal.classList.add('show');
+  modal.setAttribute('aria-hidden','false');
+  var btn=document.getElementById('panel-update-confirm');
+  if(btn){
+    setTimeout(function(){
+      try{btn.focus({preventScroll:true})}catch(e){try{btn.focus()}catch(_e){}}
+    },30);
+  }
+}
+function confirmPanelUpdate(){
+  var latest=ckPanelUpdateTarget;
+  try{
+    if(document.body&&document.body.classList.contains('chat-active')){
+      localStorage.setItem('ckPanelAfterUpdateTab','chat');
+    }
+  }catch(e){}
+  try{if(latest)sessionStorage.setItem('ck_panel_reloaded_to',latest)}catch(e){}
+  try{sessionStorage.removeItem('ck_panel_pending_reload')}catch(e){}
+  location.reload();
 }
 function initApiKeyFromUrl(){
   try{
@@ -195,8 +227,14 @@ function compareEntryTime(ea,eb,a,b,dir){
   return dir==='asc'?cmp:-cmp;
 }
 function init(){
+  syncPanelVersionBadge();
   startPanelVersionWatcher();
   initApiKeyFromUrl();
+  try{
+    var pending=sessionStorage.getItem('ck_panel_pending_reload')||'';
+    if(pending&&pending!==CK_PANEL_VERSION)setTimeout(function(){showPanelUpdateModal(pending)},0);
+    else if(pending===CK_PANEL_VERSION)sessionStorage.removeItem('ck_panel_pending_reload');
+  }catch(e){}
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
@@ -3764,10 +3802,7 @@ function chatInit(){
         var pending='';
         try{pending=sessionStorage.getItem('ck_panel_pending_reload')||''}catch(e){}
         if(pending&&!String(input.value||'').trim()){
-          try{sessionStorage.removeItem('ck_panel_pending_reload')}catch(e){}
-          try{sessionStorage.setItem('ck_panel_reloaded_to',pending)}catch(e){}
-          toast('检测到新版本，正在刷新页面');
-          setTimeout(function(){location.reload()},600);
+          showPanelUpdateModal(pending);
         }
       },250);
     });

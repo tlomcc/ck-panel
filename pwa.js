@@ -57,9 +57,24 @@
             localStorage.setItem('ckPanelAfterUpdateTab', 'chat');
           }
         } catch (e) {}
-        location.reload();
+        fetch('index.html?__ck_sw_version_check='+Date.now(), { cache: 'no-store' })
+          .then(function(r) { return r.ok ? r.text() : ''; })
+          .then(function(html) {
+            var m = String(html || '').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
+            var latest = m && m[1];
+            if (typeof window.showPanelUpdateModal === 'function' && latest && latest !== window.CK_PANEL_VERSION) {
+              window.showPanelUpdateModal(latest);
+            } else if (!latest && typeof window.showPanelUpdateModal === 'function') {
+              window.showPanelUpdateModal('新版本');
+            } else if (!latest) {
+              location.reload();
+            }
+          }).catch(function() {
+            if (typeof window.showPanelUpdateModal === 'function') window.showPanelUpdateModal('新版本');
+            else location.reload();
+          });
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v44').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v45').then(function(reg) {
         if (reg && reg.update) reg.update();
       }).catch(function() {});
     }

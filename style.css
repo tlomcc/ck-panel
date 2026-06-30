@@ -3183,6 +3183,116 @@ body.dark .install-app-btn{
   background:rgba(var(--ck-accent-rgb),.16);
 }
 
+.panel-version-badge{
+  height:30px;
+  min-width:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 9px;
+  border:1px solid rgba(var(--ck-accent-rgb),.24);
+  border-radius:8px;
+  background:rgba(var(--ck-accent-rgb),.08);
+  color:var(--ck-accent);
+  font-size:11px;
+  font-weight:850;
+  line-height:1;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+
+.panel-update-modal{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  background:rgba(15,23,42,.5);
+  backdrop-filter:blur(10px);
+}
+
+.panel-update-modal.show{
+  display:flex;
+}
+
+.panel-update-card{
+  width:min(420px,100%);
+  border:1px solid rgba(15,23,42,.12);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 24px 72px rgba(15,23,42,.28);
+  padding:22px;
+  text-align:left;
+}
+
+.panel-update-card h3{
+  margin:0;
+  color:#111827;
+  font-size:20px;
+  line-height:1.25;
+  letter-spacing:0;
+}
+
+.panel-update-card p{
+  margin:12px 0 18px;
+  color:#4b5563;
+  font-size:14px;
+  line-height:1.6;
+}
+
+.panel-update-card b{
+  color:#111827;
+  font-weight:850;
+}
+
+.panel-update-confirm{
+  width:100%;
+  height:44px;
+  border:0;
+  border-radius:9px;
+  background:#111827;
+  color:#fff;
+  font-family:inherit;
+  font-size:15px;
+  font-weight:850;
+  cursor:pointer;
+}
+
+.panel-update-confirm:active{
+  transform:scale(.99);
+}
+
+body.panel-update-blocked{
+  overflow:hidden;
+}
+
+body.dark .panel-version-badge{
+  background:rgba(var(--ck-accent-rgb),.14);
+  border-color:rgba(var(--ck-accent-rgb),.28);
+  color:#7fd18a;
+}
+
+body.dark .panel-update-card{
+  background:#1b1f28;
+  border-color:#2b303c;
+}
+
+body.dark .panel-update-card h3,
+body.dark .panel-update-card b{
+  color:#e9edf2;
+}
+
+body.dark .panel-update-card p{
+  color:#aeb6c0;
+}
+
+body.dark .panel-update-confirm{
+  background:#e9edf2;
+  color:#111827;
+}
+
 @media (max-width:420px){
   .install-app-btn{
     width:42px;
