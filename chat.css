@@ -1032,6 +1032,26 @@ body.chat-active .chat-debug-toolbar{
   margin:0 0 8px!important;
 }
 
+body.chat-active .chat-cost-card{
+  margin-bottom:10px!important;
+}
+
+body.chat-active .chat-cost-grid{
+  display:grid!important;
+  grid-template-columns:repeat(auto-fit,minmax(120px,1fr))!important;
+  gap:8px!important;
+  margin:10px 0!important;
+}
+
+body.chat-active .chat-cost-grid label{
+  margin:0!important;
+  padding:8px!important;
+}
+
+body.chat-active .chat-cost-grid input{
+  margin-top:5px!important;
+}
+
 body.chat-active .chat-debug{
   flex:1 1 auto!important;
   min-height:220px!important;
@@ -1045,8 +1065,31 @@ body.chat-active .chat-debug{
   font-family:ui-monospace,Menlo,Consolas,monospace!important;
   font-size:11px!important;
   line-height:1.55!important;
+  white-space:normal!important;
+  word-break:normal!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:8px!important;
+}
+
+body.chat-active .chat-debug-record,
+body.chat-active .chat-debug-empty{
   white-space:pre-wrap!important;
   word-break:break-word!important;
+  border:1px solid rgba(148,163,184,.24)!important;
+  border-radius:10px!important;
+  background:rgba(255,255,255,.7)!important;
+  padding:8px 9px!important;
+  color:#475569!important;
+}
+
+body.chat-active .chat-debug-record.cost{
+  border:2px solid #f59e0b!important;
+  background:linear-gradient(135deg,#fff7cc 0%,#ffedd5 100%)!important;
+  color:#111827!important;
+  box-shadow:0 10px 26px rgba(245,158,11,.22)!important;
+  font-size:12px!important;
+  font-weight:800!important;
 }
 
 body.chat-active .chat-worldbook-head{
@@ -1210,6 +1253,20 @@ body.dark.chat-active .chat-pending-bar{
   color:#a8dfbd!important;
 }
 body.dark.chat-active .chat-pending-bar button.muted{color:#9fc8ae!important}
+
+body.dark.chat-active .chat-debug-record,
+body.dark.chat-active .chat-debug-empty{
+  background:#121820!important;
+  border-color:#2a3440!important;
+  color:#aeb6c0!important;
+}
+
+body.dark.chat-active .chat-debug-record.cost{
+  background:linear-gradient(135deg,#3a2a08 0%,#2d1f12 100%)!important;
+  border-color:#f59e0b!important;
+  color:#fff7d6!important;
+  box-shadow:0 10px 26px rgba(245,158,11,.18)!important;
+}
 
 body.chat-active .toast{
   background:rgba(255,255,255,.96)!important;

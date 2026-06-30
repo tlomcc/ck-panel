@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v45';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v46';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -1766,6 +1766,99 @@ function chatDefaultThinkingPrompt(){
     '以上内容必须包裹在思考链里。'
   ].join('\n');
 }
+function chatDefaultCostPricing(){
+  return {
+    currency:'¥',
+    inputPerMTokens:5,
+    outputPerMTokens:0,
+    cacheReadPerMTokens:.5,
+    cacheCreatePerMTokens:6.25,
+    multiplier:.2
+  };
+}
+function chatNumberOrDefault(value,fallback){
+  var n=Number(value);
+  return isFinite(n)?n:fallback;
+}
+function chatNormalizeCostPricing(raw){
+  raw=(raw&&typeof raw==='object')?raw:{};
+  var d=chatDefaultCostPricing();
+  return {
+    currency:String(raw.currency||d.currency||'¥').trim()||'¥',
+    inputPerMTokens:Math.max(0,chatNumberOrDefault(raw.inputPerMTokens!==undefined?raw.inputPerMTokens:raw.input,d.inputPerMTokens)),
+    outputPerMTokens:Math.max(0,chatNumberOrDefault(raw.outputPerMTokens!==undefined?raw.outputPerMTokens:raw.output,d.outputPerMTokens)),
+    cacheReadPerMTokens:Math.max(0,chatNumberOrDefault(raw.cacheReadPerMTokens!==undefined?raw.cacheReadPerMTokens:raw.cacheRead,d.cacheReadPerMTokens)),
+    cacheCreatePerMTokens:Math.max(0,chatNumberOrDefault(raw.cacheCreatePerMTokens!==undefined?raw.cacheCreatePerMTokens:raw.cacheCreate,d.cacheCreatePerMTokens)),
+    multiplier:Math.max(0,chatNumberOrDefault(raw.multiplier,d.multiplier))
+  };
+}
+function chatCurrentCostPricing(){
+  try{
+    var raw=JSON.parse(localStorage.getItem(CHAT_CONFIG_KEY)||'{}');
+    return chatNormalizeCostPricing(raw.costPricing);
+  }catch(e){
+    return chatDefaultCostPricing();
+  }
+}
+function chatReadCostPricing(saved){
+  var base=chatNormalizeCostPricing(saved);
+  return chatNormalizeCostPricing({
+    currency:chatFieldValue('chat-cost-currency',base.currency),
+    inputPerMTokens:chatFieldValue('chat-cost-input-price',base.inputPerMTokens),
+    outputPerMTokens:chatFieldValue('chat-cost-output-price',base.outputPerMTokens),
+    cacheReadPerMTokens:chatFieldValue('chat-cost-cache-read-price',base.cacheReadPerMTokens),
+    cacheCreatePerMTokens:chatFieldValue('chat-cost-cache-create-price',base.cacheCreatePerMTokens),
+    multiplier:chatFieldValue('chat-cost-multiplier',base.multiplier)
+  });
+}
+function chatUsageNumber(usage,key,fallbackKey){
+  usage=usage||{};
+  return Number(usage[key]!==undefined?usage[key]:(fallbackKey?usage[fallbackKey]:0))||0;
+}
+function chatMoney(value,currency){
+  var n=Number(value)||0;
+  var digits=n>=1?4:(n>=.01?5:6);
+  return String(currency||'¥')+n.toFixed(digits);
+}
+function chatUsageCost(usage){
+  usage=usage&&usage.usage?usage.usage:(usage||{});
+  var pricing=chatCurrentCostPricing();
+  var input=chatUsageNumber(usage,'input_tokens');
+  var output=chatUsageNumber(usage,'output_tokens');
+  var read=chatUsageNumber(usage,'cache_read_input_tokens','cache_read');
+  var create=chatUsageNumber(usage,'cache_creation_input_tokens','cache_creation');
+  var inputCost=input*pricing.inputPerMTokens/1000000;
+  var outputCost=output*pricing.outputPerMTokens/1000000;
+  var readCost=read*pricing.cacheReadPerMTokens/1000000;
+  var createCost=create*pricing.cacheCreatePerMTokens/1000000;
+  var raw=inputCost+outputCost+readCost+createCost;
+  var total=raw*pricing.multiplier;
+  return {
+    pricing:pricing,
+    input:input,
+    output:output,
+    read:read,
+    create:create,
+    inputCost:inputCost,
+    outputCost:outputCost,
+    readCost:readCost,
+    createCost:createCost,
+    raw:raw,
+    total:total,
+    hasUsage:!!(input||output||read||create)
+  };
+}
+function chatFormatUsageCost(usage){
+  var cost=chatUsageCost(usage);
+  if(!cost.hasUsage)return '';
+  var p=cost.pricing;
+  var c=p.currency||'¥';
+  return '💰 本条费用｜'+chatMoney(cost.total,c)+'（原价 '+chatMoney(cost.raw,c)+' × 分组倍率 '+p.multiplier+'）\n'
+    +'💳 计费明细｜输入 '+cost.input+'t × '+chatMoney(p.inputPerMTokens,c)+'/1M = '+chatMoney(cost.inputCost,c)
+    +'｜输出 '+cost.output+'t × '+chatMoney(p.outputPerMTokens,c)+'/1M = '+chatMoney(cost.outputCost,c)
+    +'｜缓存读 '+cost.read+'t × '+chatMoney(p.cacheReadPerMTokens,c)+'/1M = '+chatMoney(cost.readCost,c)
+    +'｜缓存建 '+cost.create+'t × '+chatMoney(p.cacheCreatePerMTokens,c)+'/1M = '+chatMoney(cost.createCost,c);
+}
 function chatDefaultConfig(){
   var panelKey='';
   try{panelKey=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
@@ -1792,6 +1885,7 @@ function chatDefaultConfig(){
     chatSideTab:'model',
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
+    costPricing:chatDefaultCostPricing(),
     worldbooks:[]
   };
 }
@@ -2148,6 +2242,7 @@ function chatReadForm(){
     chatSideTab:(activeTab&&activeTab.getAttribute)?activeTab.getAttribute('data-chat-side'):'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
+    costPricing:chatReadCostPricing(saved.costPricing),
     worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
   return chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
@@ -2167,6 +2262,13 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-mcp-url',cfg.mcpUrl||API_BASE);
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String((cfg.recallHistoryRetentionSeconds===0)?0:(cfg.recallHistoryRetentionSeconds||300));
+  var costPricing=chatNormalizeCostPricing(cfg.costPricing);
+  chatSetFieldValue('chat-cost-currency',costPricing.currency);
+  chatSetFieldValue('chat-cost-input-price',costPricing.inputPerMTokens);
+  chatSetFieldValue('chat-cost-output-price',costPricing.outputPerMTokens);
+  chatSetFieldValue('chat-cost-cache-read-price',costPricing.cacheReadPerMTokens);
+  chatSetFieldValue('chat-cost-cache-create-price',costPricing.cacheCreatePerMTokens);
+  chatSetFieldValue('chat-cost-multiplier',costPricing.multiplier);
   chatSyncCacheStrategyFields(true);
   chatSetFieldChecked('chat-full-window-context',cfg.fullWindowContext!==false);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
@@ -2193,6 +2295,7 @@ function chatSaveConfig(silent){
   if(!apiProvidersLoaded&&String(cfg.panelKey||'').trim())loadApiProviders({silentAuth:true});
   chatRenderMainRouteSummary();
   chatUpdateRuntime(cfg);
+  chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
   return cfg;
 }
@@ -2363,18 +2466,30 @@ function chatSaveDebugRecords(){
 function chatDebugLine(record){
   var d=new Date(record.ts||Date.now());
   var tm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
-  return '['+tm+'] '+(record.text||'');
+  var text=record.text||'';
+  if(record&&record.event&&record.event!=='gateway'&&record.data&&typeof record.data==='object'){
+    try{text=chatFormatDebug(record.event,record.data)}catch(e){}
+  }
+  return '['+tm+'] '+text;
+}
+function chatDebugRecordHtml(record){
+  var cls='chat-debug-record';
+  if(record&&(record.event==='usage'||record.event==='done')){
+    var usage=record.event==='done'&&record.data?record.data.usage:record.data;
+    if(chatUsageCost(usage).hasUsage)cls+=' cost';
+  }
+  return '<div class="'+cls+'">'+esc(chatDebugLine(record))+'</div>';
 }
 function chatRenderDebugRecords(){
   var el=document.getElementById('chat-debug');
   if(!el)return;
   chatDebugRecords=chatDebugPrune(chatDebugRecords);
   if(!chatDebugRecords.length){
-    el.textContent='暂无调试记录。这里会保留最近一天的聊天调试信息。';
+    el.innerHTML='<div class="chat-debug-empty">暂无调试记录。这里会保留最近一天的聊天调试信息。</div>';
     chatScrollDebugBottom();
     return;
   }
-  el.textContent=chatDebugRecords.map(chatDebugLine).join('\n\n');
+  el.innerHTML=chatDebugRecords.map(chatDebugRecordHtml).join('');
   chatScrollDebugBottom();
 }
 function chatScrollDebugBottom(){
@@ -2463,12 +2578,14 @@ function chatFormatDebug(ev,data){
     var read=data.cache_read_input_tokens||data.cache_read||0;
     var create=data.cache_creation_input_tokens||data.cache_creation||0;
     var rounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
-    return '📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0)+rounds;
+    var costText=chatFormatUsageCost(data);
+    return (costText?costText+'\n':'')+'📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0)+rounds;
   }
   if(ev==='done'){
     var u=data.usage||{};
     var doneRounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
-    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字｜缓存读取：'+(u.cache_read_input_tokens||u.cache_read||0)+'｜缓存创建：'+(u.cache_creation_input_tokens||u.cache_creation||0)+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
+    var doneCostText=chatFormatUsageCost(u);
+    return (doneCostText?doneCostText+'\n':'')+'✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字｜缓存读取：'+(u.cache_read_input_tokens||u.cache_read||0)+'｜缓存创建：'+(u.cache_creation_input_tokens||u.cache_creation||0)+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
   }
   if(ev==='error'){
     return '❌ 请求错误｜'+(data.error||data.message||JSON.stringify(data));
