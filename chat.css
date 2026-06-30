@@ -954,7 +954,7 @@ body.chat-active .chat-settings{
   width:auto!important;
   max-width:none!important;
   height:auto!important;
-  max-height:88vh!important;
+  max-height:94vh!important;
   min-height:0!important;
   display:none!important;
   flex-direction:column!important;
@@ -1016,7 +1016,7 @@ body.chat-active .chat-side-tabs{display:none!important}
 body.chat-active .chat-side-panel{
   flex:1 1 auto!important;
   min-height:0!important;
-  max-height:calc(88vh - 78px)!important;
+  max-height:calc(94vh - 78px)!important;
   display:none!important;
   flex-direction:column!important;
   gap:10px!important;
@@ -1134,6 +1134,10 @@ body.chat-active .chat-debug-toolbar{
   margin:0 0 8px!important;
 }
 
+body.chat-active #chat-side-debug{
+  overflow:hidden!important;
+}
+
 body.chat-active .chat-cost-card{
   margin-bottom:10px!important;
 }
@@ -1186,9 +1190,10 @@ body.chat-active .chat-cost-grid input{
 }
 
 body.chat-active .chat-debug{
-  flex:1 1 auto!important;
-  min-height:220px!important;
-  max-height:min(46vh,420px)!important;
+  flex:1 1 62vh!important;
+  min-height:min(420px,58vh)!important;
+  max-height:none!important;
+  height:auto!important;
   margin:0!important;
   border-radius:8px!important;
   overflow:auto!important;
