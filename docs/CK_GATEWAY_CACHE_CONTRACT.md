@@ -14,11 +14,13 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "model": "model name",
   "system": "stable system prompt",
   "worldbook_pack": "stable worldbook text",
+  "worldbook_injection_position": "system_tail",
   "api_base": "upstream base URL",
   "upstream_key": "upstream key",
   "recall": true,
   "ck_thinking_enabled": false,
   "ck_thinking_prompt": "visible pseudo-thinking style prompt",
+  "ck_thinking_injection_position": "system_after_anchor",
   "use_mcp": false,
   "prompt_cache_ttl": "1h",
   "session_anchor": {
@@ -91,6 +93,16 @@ When the gateway performs multiple upstream rounds for tools, the final `usage` 
 ```
 
 This is not upstream hidden chain-of-thought. It is user-visible role text that the panel folds under "思考" and keeps in visible/transport history, so later turns can quote or remember it. Changing the prompt changes the system prefix and can invalidate prompt-cache hits.
+
+`worldbook_injection_position`, `ck_thinking_injection_position`, and `memory_pack_injection_position` may use these values:
+
+- `system_after_main`: as a system block immediately after the main system prompt.
+- `system_after_anchor`: as a system block after the CK session anchor.
+- `system_tail`: as the last stable system block.
+- `latest_user_prefix`: prepended to the latest real user message.
+- `latest_user_suffix`: appended to the latest real user message.
+
+Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor`; worldbook and memory pack use `system_tail`. Use `latest_user_*` only for compatibility testing, because those positions sit near the dynamic recall context and usually give weaker prompt-cache reuse than stable system positions.
 
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
 

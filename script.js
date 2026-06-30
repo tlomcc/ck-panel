@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v36';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v37';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1722,9 +1722,11 @@ function chatDefaultConfig(){
     model:'claude-opus-4-6',
     sessionId:chatSessionId(),
     system:'',
+    systemPromptPosition:'before_style',
     recall:true,
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
+    thinkingInjectionPosition:'system_after_anchor',
     useMcp:false,
     mcpUrl:API_BASE,
     cacheStrategy:'single_5m',
@@ -1734,6 +1736,7 @@ function chatDefaultConfig(){
     settingsOpen:false,
     chatSideTab:'model',
     memoryPreview:'',
+    worldbookInjectionPosition:'system_tail',
     worldbooks:[]
   };
 }
@@ -1753,7 +1756,24 @@ function chatStyleSystemPrompt(){
 function chatComposeSystemPrompt(cfg){
   var userSystem=String((cfg&&cfg.system)||'').trim();
   var style=chatStyleSystemPrompt();
-  return userSystem ? (userSystem+'\n\n'+style) : style;
+  if(!userSystem)return style;
+  return (cfg&&cfg.systemPromptPosition)==='after_style'
+    ? (style+'\n\n'+userSystem)
+    : (userSystem+'\n\n'+style);
+}
+function chatNormalizeInjectionPosition(value,fallback){
+  var raw=String(value||'').trim();
+  var allowed={
+    system_after_main:1,
+    system_after_anchor:1,
+    system_tail:1,
+    latest_user_prefix:1,
+    latest_user_suffix:1
+  };
+  return allowed[raw]?raw:fallback;
+}
+function chatNormalizeSystemPromptPosition(value){
+  return String(value||'').trim()==='after_style'?'after_style':'before_style';
 }
 function chatLoadConfig(){
   var cfg=chatDefaultConfig();
@@ -1768,6 +1788,9 @@ function chatLoadConfig(){
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
   cfg.fakeThinking=cfg.fakeThinking===true;
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
+  cfg.systemPromptPosition=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
+  cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
+  cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   return cfg;
 }
 function chatSaveConfigObject(cfg){
@@ -1902,9 +1925,11 @@ function chatReadForm(){
     model:(document.getElementById('chat-model').value||'claude-opus-4-6').trim(),
     sessionId:(document.getElementById('chat-session-id')?document.getElementById('chat-session-id').value:'')||chatLoadConfig().sessionId,
     system:document.getElementById('chat-system').value||'',
+    systemPromptPosition:document.getElementById('chat-system-prompt-position')?chatNormalizeSystemPromptPosition(document.getElementById('chat-system-prompt-position').value):chatNormalizeSystemPromptPosition(chatLoadConfig().systemPromptPosition),
     recall:document.getElementById('chat-recall').checked,
     fakeThinking:document.getElementById('chat-fake-thinking')?document.getElementById('chat-fake-thinking').checked:(chatLoadConfig().fakeThinking===true),
     fakeThinkingPrompt:document.getElementById('chat-thinking-prompt')?document.getElementById('chat-thinking-prompt').value:(chatLoadConfig().fakeThinkingPrompt||chatDefaultThinkingPrompt()),
+    thinkingInjectionPosition:document.getElementById('chat-thinking-injection-position')?chatNormalizeInjectionPosition(document.getElementById('chat-thinking-injection-position').value,'system_after_anchor'):chatNormalizeInjectionPosition(chatLoadConfig().thinkingInjectionPosition,'system_after_anchor'),
     useMcp:document.getElementById('chat-use-mcp')?document.getElementById('chat-use-mcp').checked:false,
     mcpUrl:document.getElementById('chat-mcp-url')?(document.getElementById('chat-mcp-url').value||API_BASE).trim():API_BASE,
     cacheStrategy:document.getElementById('chat-cache-strategy')?(document.getElementById('chat-cache-strategy').value||'single_5m'):(chatLoadConfig().cacheStrategy||'single_5m'),
@@ -1914,6 +1939,7 @@ function chatReadForm(){
     settingsOpen:document.querySelector('.chat-settings')?document.querySelector('.chat-settings').classList.contains('open'):false,
     chatSideTab:(document.querySelector('.chat-side-tabs button.active')||{}).getAttribute?document.querySelector('.chat-side-tabs button.active').getAttribute('data-chat-side'):'model',
     memoryPreview:document.getElementById('chat-memory-pack')?document.getElementById('chat-memory-pack').value:'',
+    worldbookInjectionPosition:document.getElementById('chat-worldbook-injection-position')?chatNormalizeInjectionPosition(document.getElementById('chat-worldbook-injection-position').value,'system_tail'):chatNormalizeInjectionPosition(chatLoadConfig().worldbookInjectionPosition,'system_tail'),
     worldbooks:chatNormalizeWorldbooks(chatLoadConfig().worldbooks)
   };
 }
@@ -1925,16 +1951,19 @@ function chatWriteForm(cfg){
   document.getElementById('chat-model').value=cfg.model||'claude-opus-4-6';
   document.getElementById('chat-session-id').value=cfg.sessionId||chatSessionId();
   document.getElementById('chat-system').value=cfg.system||'';
+  if(document.getElementById('chat-system-prompt-position'))document.getElementById('chat-system-prompt-position').value=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
   document.getElementById('chat-memory-pack').value=cfg.memoryPreview||'';
   document.getElementById('chat-recall').checked=cfg.recall!==false;
   if(document.getElementById('chat-fake-thinking'))document.getElementById('chat-fake-thinking').checked=cfg.fakeThinking===true;
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
+  if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   if(document.getElementById('chat-use-mcp'))document.getElementById('chat-use-mcp').checked=cfg.useMcp===true;
   if(document.getElementById('chat-mcp-url'))document.getElementById('chat-mcp-url').value=cfg.mcpUrl||API_BASE;
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String((cfg.recallHistoryRetentionSeconds===0)?0:(cfg.recallHistoryRetentionSeconds||300));
   chatSyncCacheStrategyFields(true);
   if(document.getElementById('chat-full-window-context'))document.getElementById('chat-full-window-context').checked=cfg.fullWindowContext!==false;
+  if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
   chatRenderWorldbooks(cfg);
@@ -2214,7 +2243,8 @@ function chatFormatDebug(ev,data){
     var cleanText=data.strip_old_recall?('｜清旧召回：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字'):'';
     var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
     var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+'｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
+    var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')):'';
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+injectionText+'｜缓存策略：'+strategyText+idleText+cleanText+mcpText;
   }
   if(ev==='memory'){
     return chatFormatRecallDiag(data);
@@ -3447,11 +3477,14 @@ async function chatSubmitPendingMessages(){
     model:cfg.model,
     system:chatComposeSystemPrompt(cfg),
     worldbook_pack:chatWorldbookPack(cfg),
+    system_prompt_position:chatNormalizeSystemPromptPosition(cfg.systemPromptPosition),
+    worldbook_injection_position:chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail'),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall,
     ck_thinking_enabled:cfg.fakeThinking===true,
     ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
+    ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
     use_mcp:cfg.useMcp===true,
     cache_strategy:cfg.cacheStrategy||'single_5m',
     recall_history_retention_seconds:recallRetention,
