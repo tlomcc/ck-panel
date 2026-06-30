@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v41';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v42';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -1674,6 +1674,8 @@ var chatIndexedDbFailed=false;
 var chatDeletedSessionIds={};
 var chatInputFocused=false;
 var chatLastInputAt=0;
+var chatLastBlurAt=0;
+var chatLastPointerOutsideInputAt=0;
 var chatViewportRaf=0;
 var chatLastLayoutHeight=0;
 function chatSessionId(){
@@ -2868,6 +2870,30 @@ function chatRefocusChatInput(){
   if(!input)return;
   try{input.focus({preventScroll:true})}catch(e){input.focus()}
 }
+function chatVisualKeyboardOpen(){
+  var vv=window.visualViewport;
+  if(!vv||!window.innerHeight)return false;
+  return (window.innerHeight-vv.height)>90;
+}
+function chatMaybeRecoverInputFocus(){
+  var input=document.getElementById('chat-input');
+  if(!input||document.activeElement===input)return;
+  if(currentPanelTab!=='chat'||chatSending||chatEditingIndex>=0)return;
+  if(!chatVisualKeyboardOpen())return;
+  if(Date.now()-chatLastInputAt>5000)return;
+  if(Date.now()-chatLastPointerOutsideInputAt<900)return;
+  if(document.querySelector('.chat-settings.open')||document.querySelector('.chat-shell.chat-sessions-open'))return;
+  chatInputFocused=true;
+  chatRefocusChatInput();
+  chatKeepLatestVisible({soft:true});
+}
+function chatTrackPointerIntent(e){
+  if(currentPanelTab!=='chat'||!e||!e.target)return;
+  var input=document.getElementById('chat-input');
+  if(!input||e.target===input)return;
+  if(input.contains&&input.contains(e.target))return;
+  chatLastPointerOutsideInputAt=Date.now();
+}
 function chatKeepLatestVisible(opts){
   opts=opts||{};
   chatLayoutCompose();
@@ -2987,6 +3013,9 @@ function chatSplitThinkingText(src,opts){
   var text=String(src||'');
   var thoughts=[];
   var suppressThinking=opts.suppressThinking===true;
+  if(opts.hideUnclosedThinking===true&&chatLooksLikePartialThinkingTag(text)){
+    return {text:'',thinking:''};
+  }
   text=text.replace(/<(ck_thinking|thinking|think)\b[^>]*>([\s\S]*?)<\/\1>/gi,function(_all,_tag,body){
     var clean=String(body||'').trim();
     if(clean&&!suppressThinking)thoughts.push(clean);
@@ -3008,6 +3037,17 @@ function chatSplitThinkingText(src,opts){
     .trim();
   return {text:text,thinking:thoughts.join('\n\n')};
 }
+function chatLooksLikePartialThinkingTag(text){
+  var t=String(text||'').trim().toLowerCase();
+  if(!t||t.charAt(0)!=='<'||t.indexOf('>')>=0)return false;
+  var compact=t.replace(/\s+/g,'');
+  if(compact==='<')return true;
+  var targets=['<ck_thinking','<thinking','<think'];
+  for(var i=0;i<targets.length;i++){
+    if(targets[i].indexOf(compact)===0||compact.indexOf(targets[i])===0)return true;
+  }
+  return false;
+}
 function chatCleanAssistantTextForHistory(rawText){
   return chatSplitThinkingText(rawText).text || String(rawText||'').replace(/<\/?(?:ck_thinking|thinking|think)\b[^>]*>/gi,'').trim();
 }
@@ -3020,7 +3060,8 @@ function chatRenderAssistantContent(rawText,streaming){
     '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
   var body=split.text?('<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
-  return thinking+body+(streaming?'<span class="chat-caret"></span>':'');
+  var caret=(streaming&&split.text)?'<span class="chat-caret"></span>':'';
+  return thinking+body+caret;
 }
 function chatNaturalTextLen(text){
   var len=String(text||'').replace(/\s+/g,'').length;
@@ -3148,7 +3189,7 @@ function chatIsInputActive(){
   return !!(input&&(document.activeElement===input||chatInputFocused));
 }
 function chatKeyboardProtectActive(){
-  return chatIsInputActive()&&(Date.now()-chatLastInputAt<1800);
+  return chatIsInputActive()&&(Date.now()-chatLastInputAt<5000);
 }
 function chatLayoutCompose(opts){
   opts=opts||{};
@@ -3157,8 +3198,9 @@ function chatLayoutCompose(opts){
   if(h&&document.documentElement){
     var next=Math.max(320,Math.floor(h));
     var delta=chatLastLayoutHeight?Math.abs(next-chatLastLayoutHeight):9999;
-    if(opts.force||!chatKeyboardProtectActive()||!chatLastLayoutHeight||delta>=72){
+    if(opts.force||vv||!chatKeyboardProtectActive()||!chatLastLayoutHeight||delta>=72){
       document.documentElement.style.setProperty('--ck-chat-vh',next+'px');
+      document.documentElement.style.setProperty('--ck-chat-vv-top',Math.max(0,Math.floor((vv&&vv.offsetTop)||0))+'px');
       chatLastLayoutHeight=next;
     }
   }
@@ -3185,7 +3227,12 @@ function chatHandleViewportChange(){
   chatViewportRaf=requestAnimationFrame(function(){
     chatViewportRaf=0;
     chatLayoutCompose();
-    if(chatIsInputActive()&&!chatKeyboardProtectActive())chatKeepLatestVisible({soft:true});
+    if(chatIsInputActive()){
+      chatKeepLatestVisible({soft:true});
+      [120,280,520].forEach(function(ms){setTimeout(function(){chatKeepLatestVisible({soft:true})},ms)});
+    }else if(Date.now()-chatLastBlurAt<800){
+      setTimeout(chatMaybeRecoverInputFocus,80);
+    }
   });
 }
 function chatTogglePlus(force){
@@ -3552,6 +3599,8 @@ function chatInit(){
   if(chatInitialized)return;
   chatInitialized=true;
   chatAttachSettingsGesture();
+  document.addEventListener('pointerdown',chatTrackPointerIntent,{passive:true});
+  document.addEventListener('touchstart',chatTrackPointerIntent,{passive:true});
   chatLoadDebugRecords();
   chatLoadLocalMessages();
   chatWriteForm(chatLoadConfig());
@@ -3577,14 +3626,17 @@ function chatInit(){
     input.addEventListener('input',function(){
       chatLastInputAt=Date.now();
       chatAutosizeInput(input);
+      chatKeepLatestVisible({soft:true});
     });
     input.addEventListener('focus',function(){
       chatInputFocused=true;
       chatLastInputAt=Date.now();
-      chatKeepLatestVisible({soft:true});
+      chatKeepLatestVisible();
     });
     input.addEventListener('blur',function(){
+      chatLastBlurAt=Date.now();
       chatInputFocused=false;
+      setTimeout(chatMaybeRecoverInputFocus,120);
       setTimeout(function(){
         if(document.activeElement===input)return;
         var pending='';
