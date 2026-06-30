@@ -591,6 +591,7 @@ body.chat-active #chat-input:focus{
 }
 
 body.chat-active .chat-plus-panel{
+  position:relative!important;
   order:2!important;
   width:100%!important;
   min-width:0!important;
@@ -610,6 +611,8 @@ body.chat-active .chat-plus-panel{
   border-radius:0!important;
   background:transparent!important;
   box-shadow:none!important;
+  touch-action:pan-y!important;
+  overscroll-behavior:contain!important;
   transform:translateY(8px)!important;
   transition:max-height .18s ease,opacity .16s ease,margin-top .18s ease,padding .18s ease,transform .18s ease!important;
 }
@@ -621,6 +624,28 @@ body.chat-active .chat-plus-panel.open{
   margin-top:8px!important;
   padding:10px 2px 2px!important;
   transform:translateY(0)!important;
+}
+
+body.chat-active .chat-plus-panel::before{
+  content:""!important;
+  position:absolute!important;
+  left:50%!important;
+  top:2px!important;
+  width:36px!important;
+  height:4px!important;
+  border-radius:999px!important;
+  background:rgba(15,23,42,.14)!important;
+  transform:translateX(-50%)!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+
+body.chat-active .chat-plus-panel.open::before{
+  opacity:1!important;
+}
+
+body.chat-active .chat-plus-panel.dragging{
+  transition:none!important;
 }
 
 body.chat-active .chat-plus-panel button{
@@ -637,6 +662,7 @@ body.chat-active .chat-plus-panel button{
   color:var(--chat5-text)!important;
   box-shadow:none!important;
   cursor:pointer!important;
+  touch-action:pan-y!important;
 }
 
 body.chat-active .chat-plus-panel button:hover{background:rgba(7,193,96,.06)!important}
