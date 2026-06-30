@@ -995,6 +995,15 @@ body.chat-active .chat-memory-card p{
   line-height:1.65!important;
 }
 
+body.chat-active .chat-main-route-summary{
+  margin-top:6px!important;
+  color:var(--chat5-text)!important;
+}
+
+body.chat-active .chat-main-route-summary.empty{
+  color:var(--chat5-muted)!important;
+}
+
 body.chat-active .chat-field-hint{
   display:block!important;
   margin-top:6px!important;

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v40';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v41';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -860,10 +860,11 @@ function stopDailyStatusRealtime(){
 
 /* ===== 网关配置读写助手（供 API 配置页使用） ===== */
 var KEY_CONFIG_URL=GRAPH_API_BASE+'/config';
-function keyCfgFetch(init){
+function keyCfgFetch(init,opts){
+  opts=opts||{};
   var u=function(){return addStoredKey(KEY_CONFIG_URL+'?_t='+Date.now())};
   return fetch(u(),init).then(function(r){
-    if(r.status===403&&requestApiKey())return fetch(u(),init);
+    if(r.status===403&&!opts.silentAuth&&requestApiKey())return fetch(u(),init);
     return r;
   });
 }
@@ -1726,9 +1727,9 @@ function chatDefaultConfig(){
   return {
     gatewayUrl:GRAPH_API_BASE,
     panelKey:panelKey,
-    apiBase:'https://nowcoding.ai/v1',
+    apiBase:'',
     upstreamKey:'',
-    model:'claude-opus-4-6',
+    model:'',
     sessionId:chatSessionId(),
     system:'',
     systemPromptPosition:'before_style',
@@ -1785,6 +1786,126 @@ function chatNormalizeInjectionPosition(value,fallback){
 function chatNormalizeSystemPromptPosition(value){
   return String(value||'').trim()==='after_style'?'after_style':'before_style';
 }
+function chatMainRouteConfig(){
+  if(!apiProvidersLoaded){
+    return {
+      ok:false,
+      provider:null,
+      providerName:'',
+      providerHost:'',
+      apiBase:'',
+      upstreamKey:'',
+      model:'',
+      source:'api_config_main_io',
+      reason:'API 配置尚未读取'
+    };
+  }
+  var slot=null,p=null,model='';
+  try{
+    slot=apiGroupSlot('main_io');
+    p=findLibraryProvider(slot.current);
+    model=String((slot&&slot.model)||(p&&p.model)||'').trim();
+  }catch(e){}
+  var route={
+    ok:false,
+    provider:p||null,
+    providerName:p?providerDisplayName(p):'',
+    providerHost:p?providerHost(p.url):'',
+    apiBase:p?String(p.url||'').trim():'',
+    upstreamKey:p?String(p.key||'').trim():'',
+    model:model,
+    source:'api_config_main_io',
+    reason:''
+  };
+  if(!p)route.reason='主链路未选择供应商';
+  else if(!route.apiBase)route.reason='主链路供应商缺少 API URL';
+  else if(!route.upstreamKey)route.reason='主链路供应商缺少 API Key';
+  else if(!route.model)route.reason='主链路未选择模型';
+  else route.ok=true;
+  return route;
+}
+function chatApplyMainRouteToConfig(cfg,route){
+  cfg=cfg||chatDefaultConfig();
+  route=route||chatMainRouteConfig();
+  cfg.apiBase='';
+  cfg.upstreamKey='';
+  cfg.model='';
+  cfg.mainRouteProvider='';
+  cfg.mainRouteHost='';
+  if(route.ok){
+    cfg.apiBase=route.apiBase;
+    cfg.upstreamKey=route.upstreamKey;
+    cfg.model=route.model;
+    cfg.mainRouteProvider=route.providerName;
+    cfg.mainRouteHost=route.providerHost;
+  }
+  cfg.chatApiSource='api_config_main_io';
+  cfg.mainRouteReady=route.ok===true;
+  cfg.mainRouteReason=route.reason||'';
+  cfg.recall=true;
+  return cfg;
+}
+function chatSyncPanelKeyToApiStorage(key){
+  var raw=key;
+  if(raw===undefined){
+    var el=document.getElementById('chat-panel-key');
+    raw=el?el.value:'';
+  }
+  raw=String(raw||'').trim();
+  if(raw){
+    try{localStorage.setItem(API_KEY_STORAGE,raw)}catch(e){}
+  }
+  return raw;
+}
+function chatRenderMainRouteSummary(){
+  var el=document.getElementById('chat-main-route-summary');
+  if(!el)return;
+  if(!apiProvidersLoaded){
+    var hasKey=false;
+    try{hasKey=!!localStorage.getItem(API_KEY_STORAGE)}catch(e){}
+    var panelKeyEl=document.getElementById('chat-panel-key');
+    if(panelKeyEl&&String(panelKeyEl.value||'').trim())hasKey=true;
+    el.textContent=hasKey?'正在读取 API 配置的主链路...':'未读取 API 配置；请填写面板 Key，或打开 API 配置 -> 主链路。';
+    el.classList.add('empty');
+    return;
+  }
+  var route=chatMainRouteConfig();
+  if(route.ok){
+    el.textContent='已同步：'+route.providerName+' · '+route.model+' · '+route.providerHost+'；聊天仍通过 CK 网关并强制召回。';
+    el.classList.remove('empty');
+  }else{
+    el.textContent='未就绪：'+route.reason+'。请到 API 配置 -> 主链路设置。';
+    el.classList.add('empty');
+  }
+}
+function chatOpenMainApiConfig(){
+  chatTogglePlus(false);
+  chatToggleSettings(false,true);
+  switchPanelTab('apiconfig');
+  switchApiTab('main');
+}
+function chatEnsureMainRouteReady(){
+  chatSyncPanelKeyToApiStorage();
+  var p=apiProvidersLoaded?Promise.resolve(true):loadApiProviders();
+  return Promise.resolve(p).then(function(ok){
+    if(ok===false){
+      chatRenderMainRouteSummary();
+      return {ok:false,reason:'API 配置读取失败'};
+    }
+    var route=chatMainRouteConfig();
+    chatRenderMainRouteSummary();
+    return route;
+  }).catch(function(){
+    chatRenderMainRouteSummary();
+    return {ok:false,reason:'API 配置读取失败'};
+  });
+}
+function chatHandleMainRouteNotReady(route){
+  var reason=(route&&route.reason)||'主链路未配置';
+  chatSetStatus('主链路未配置');
+  toast('主链路未配置：'+reason);
+  chatOpenMainApiConfig();
+}
 function chatLoadConfig(){
   var cfg=chatDefaultConfig();
   try{
@@ -1801,9 +1922,21 @@ function chatLoadConfig(){
   cfg.systemPromptPosition=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
+  cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   return cfg;
 }
 function chatSaveConfigObject(cfg){
+  cfg=cfg&&typeof cfg==='object'?Object.assign({},cfg):{};
+  chatSyncPanelKeyToApiStorage(cfg.panelKey);
+  delete cfg.apiBase;
+  delete cfg.upstreamKey;
+  delete cfg.model;
+  delete cfg.mainRouteProvider;
+  delete cfg.mainRouteHost;
+  delete cfg.mainRouteReady;
+  delete cfg.mainRouteReason;
+  delete cfg.chatApiSource;
+  cfg.recall=true;
   try{localStorage.setItem(CHAT_CONFIG_KEY,JSON.stringify(cfg))}catch(e){}
 }
 function chatStoreJson(key,value){
@@ -1926,57 +2059,76 @@ function chatSaveSessionsToIndexedDb(snapshot){
     if(window.console&&console.warn)console.warn('[CK chat] IndexedDB save failed:',e);
   });
 }
+function chatFieldValue(id,fallback){
+  var el=document.getElementById(id);
+  return el?el.value:fallback;
+}
+function chatFieldChecked(id,fallback){
+  var el=document.getElementById(id);
+  return el?el.checked:!!fallback;
+}
+function chatSetFieldValue(id,value){
+  var el=document.getElementById(id);
+  if(el)el.value=value;
+}
+function chatSetFieldChecked(id,value){
+  var el=document.getElementById(id);
+  if(el)el.checked=!!value;
+}
 function chatReadForm(){
-  return {
-    gatewayUrl:(document.getElementById('chat-gateway-url').value||GRAPH_API_BASE).trim(),
-    panelKey:(document.getElementById('chat-panel-key').value||'').trim(),
-    apiBase:(document.getElementById('chat-api-base').value||'https://nowcoding.ai/v1').trim(),
-    upstreamKey:(document.getElementById('chat-upstream-key').value||'').trim(),
-    model:(document.getElementById('chat-model').value||'claude-opus-4-6').trim(),
-    sessionId:(document.getElementById('chat-session-id')?document.getElementById('chat-session-id').value:'')||chatLoadConfig().sessionId,
-    system:document.getElementById('chat-system').value||'',
-    systemPromptPosition:document.getElementById('chat-system-prompt-position')?chatNormalizeSystemPromptPosition(document.getElementById('chat-system-prompt-position').value):chatNormalizeSystemPromptPosition(chatLoadConfig().systemPromptPosition),
-    recall:document.getElementById('chat-recall').checked,
-    fakeThinking:document.getElementById('chat-fake-thinking')?document.getElementById('chat-fake-thinking').checked:(chatLoadConfig().fakeThinking===true),
-    fakeThinkingPrompt:document.getElementById('chat-thinking-prompt')?document.getElementById('chat-thinking-prompt').value:(chatLoadConfig().fakeThinkingPrompt||chatDefaultThinkingPrompt()),
-    thinkingInjectionPosition:document.getElementById('chat-thinking-injection-position')?chatNormalizeInjectionPosition(document.getElementById('chat-thinking-injection-position').value,'system_after_anchor'):chatNormalizeInjectionPosition(chatLoadConfig().thinkingInjectionPosition,'system_after_anchor'),
-    useMcp:document.getElementById('chat-use-mcp')?document.getElementById('chat-use-mcp').checked:false,
-    mcpUrl:document.getElementById('chat-mcp-url')?(document.getElementById('chat-mcp-url').value||API_BASE).trim():API_BASE,
-    cacheStrategy:document.getElementById('chat-cache-strategy')?(document.getElementById('chat-cache-strategy').value||'single_5m'):(chatLoadConfig().cacheStrategy||'single_5m'),
-    recallHistoryRetentionSeconds:document.getElementById('chat-recall-retention-seconds')?Math.max(0,Number(document.getElementById('chat-recall-retention-seconds').value||0)):((chatLoadConfig().recallHistoryRetentionSeconds===0)?0:(chatLoadConfig().recallHistoryRetentionSeconds||300)),
-    promptCacheTtl:chatLoadConfig().promptCacheTtl||'1h',
-    fullWindowContext:document.getElementById('chat-full-window-context')?document.getElementById('chat-full-window-context').checked:true,
-    settingsOpen:document.querySelector('.chat-settings')?document.querySelector('.chat-settings').classList.contains('open'):false,
-    chatSideTab:(document.querySelector('.chat-side-tabs button.active')||{}).getAttribute?document.querySelector('.chat-side-tabs button.active').getAttribute('data-chat-side'):'model',
-    memoryPreview:document.getElementById('chat-memory-pack')?document.getElementById('chat-memory-pack').value:'',
-    worldbookInjectionPosition:document.getElementById('chat-worldbook-injection-position')?chatNormalizeInjectionPosition(document.getElementById('chat-worldbook-injection-position').value,'system_tail'):chatNormalizeInjectionPosition(chatLoadConfig().worldbookInjectionPosition,'system_tail'),
-    worldbooks:chatNormalizeWorldbooks(chatLoadConfig().worldbooks)
+  var saved=chatLoadConfig();
+  var settings=document.querySelector('.chat-settings');
+  var activeTab=document.querySelector('.chat-side-tabs button.active');
+  var retentionEl=document.getElementById('chat-recall-retention-seconds');
+  var cfg={
+    gatewayUrl:String(chatFieldValue('chat-gateway-url',saved.gatewayUrl||GRAPH_API_BASE)||GRAPH_API_BASE).trim(),
+    panelKey:String(chatFieldValue('chat-panel-key',saved.panelKey||'')||'').trim(),
+    apiBase:'',
+    upstreamKey:'',
+    model:'',
+    sessionId:String(chatFieldValue('chat-session-id',saved.sessionId||chatSessionId())||saved.sessionId||chatSessionId()),
+    system:chatFieldValue('chat-system',saved.system||'')||'',
+    systemPromptPosition:chatNormalizeSystemPromptPosition(chatFieldValue('chat-system-prompt-position',saved.systemPromptPosition)),
+    recall:true,
+    fakeThinking:chatFieldChecked('chat-fake-thinking',saved.fakeThinking===true),
+    fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
+    thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
+    useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
+    mcpUrl:String(chatFieldValue('chat-mcp-url',saved.mcpUrl||API_BASE)||API_BASE).trim(),
+    cacheStrategy:chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m')||'single_5m',
+    recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
+    promptCacheTtl:saved.promptCacheTtl||'1h',
+    fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
+    settingsOpen:settings?settings.classList.contains('open'):false,
+    chatSideTab:(activeTab&&activeTab.getAttribute)?activeTab.getAttribute('data-chat-side'):'model',
+    memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
+    worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
+    worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
+  return chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
 }
 function chatWriteForm(cfg){
-  document.getElementById('chat-gateway-url').value=cfg.gatewayUrl||GRAPH_API_BASE;
-  document.getElementById('chat-panel-key').value=cfg.panelKey||'';
-  document.getElementById('chat-api-base').value=cfg.apiBase||'https://nowcoding.ai/v1';
-  document.getElementById('chat-upstream-key').value=cfg.upstreamKey||'';
-  document.getElementById('chat-model').value=cfg.model||'claude-opus-4-6';
-  document.getElementById('chat-session-id').value=cfg.sessionId||chatSessionId();
-  document.getElementById('chat-system').value=cfg.system||'';
+  cfg=chatApplyMainRouteToConfig(cfg||chatLoadConfig(),chatMainRouteConfig());
+  chatSetFieldValue('chat-gateway-url',cfg.gatewayUrl||GRAPH_API_BASE);
+  chatSetFieldValue('chat-panel-key',cfg.panelKey||'');
+  chatSetFieldValue('chat-session-id',cfg.sessionId||chatSessionId());
+  chatSetFieldValue('chat-system',cfg.system||'');
   if(document.getElementById('chat-system-prompt-position'))document.getElementById('chat-system-prompt-position').value=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
-  document.getElementById('chat-memory-pack').value=cfg.memoryPreview||'';
-  document.getElementById('chat-recall').checked=cfg.recall!==false;
-  if(document.getElementById('chat-fake-thinking'))document.getElementById('chat-fake-thinking').checked=cfg.fakeThinking===true;
+  chatSetFieldValue('chat-memory-pack',cfg.memoryPreview||'');
+  chatSetFieldChecked('chat-fake-thinking',cfg.fakeThinking===true);
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
-  if(document.getElementById('chat-use-mcp'))document.getElementById('chat-use-mcp').checked=cfg.useMcp===true;
-  if(document.getElementById('chat-mcp-url'))document.getElementById('chat-mcp-url').value=cfg.mcpUrl||API_BASE;
+  chatSetFieldChecked('chat-use-mcp',cfg.useMcp===true);
+  chatSetFieldValue('chat-mcp-url',cfg.mcpUrl||API_BASE);
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String((cfg.recallHistoryRetentionSeconds===0)?0:(cfg.recallHistoryRetentionSeconds||300));
   chatSyncCacheStrategyFields(true);
-  if(document.getElementById('chat-full-window-context'))document.getElementById('chat-full-window-context').checked=cfg.fullWindowContext!==false;
+  chatSetFieldChecked('chat-full-window-context',cfg.fullWindowContext!==false);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
   chatRenderWorldbooks(cfg);
+  chatRenderMainRouteSummary();
   chatUpdateRuntime(cfg);
 }
 function chatSyncCacheStrategyFields(silent){
@@ -1993,6 +2145,8 @@ function chatSyncCacheStrategyFields(silent){
 function chatSaveConfig(silent){
   var cfg=chatReadForm();
   chatSaveConfigObject(cfg);
+  if(!apiProvidersLoaded&&String(cfg.panelKey||'').trim())loadApiProviders({silentAuth:true});
+  chatRenderMainRouteSummary();
   chatUpdateRuntime(cfg);
   if(!silent)toast('聊天配置已保存');
   return cfg;
@@ -2362,13 +2516,13 @@ function chatFriendlyError(err){
   }
   var upstream=(parsed&&parsed.error&&(parsed.error.message||parsed.error.type))||'';
   if(/Insufficient account balance/i.test(msg)||/Insufficient account balance/i.test(upstream)){
-    return '请求失败：上游模型账号余额不足。请更换“上游模型 API Key”，或到对应模型平台充值/换有额度的 key。';
+    return '请求失败：上游模型账号余额不足。请检查 API 配置 -> 主链路里的供应商账号额度，或更换有额度的 API Key。';
   }
   if(/Upstream HTTP 401|unauthorized|invalid api key/i.test(msg)){
-    return '请求失败：上游模型 API Key 无效或没有权限。请检查聊天设置里的“上游模型 API Key”。';
+    return '请求失败：上游模型 API Key 无效或没有权限。请检查 API 配置 -> 主链路里的 API Key。';
   }
   if(/Upstream HTTP 403/i.test(msg)){
-    return '请求失败：上游模型服务拒绝了请求。请检查上游模型 API Key、账号额度和 API Base。' + (upstream?('\n'+upstream):'');
+    return '请求失败：上游模型服务拒绝了请求。请检查 API 配置 -> 主链路里的供应商、模型、API Key 和 API URL。' + (upstream?('\n'+upstream):'');
   }
   return '请求失败：'+msg;
 }
@@ -2392,8 +2546,13 @@ function chatUpdateRuntime(cfg,usage){
   var model=document.getElementById('chat-runtime-model');
   var cache=document.getElementById('chat-runtime-cache');
   var recall=document.getElementById('chat-runtime-recall');
-  if(model)model.textContent=(cfg.model||'模型未配置')+' · '+chatShortSession(cfg.sessionId);
-  if(recall)recall.textContent=(cfg.recall===false?'召回关闭':'召回开启')+(cfg.useMcp===true?' · MCP':''); 
+  var route=apiProvidersLoaded?chatMainRouteConfig():null;
+  if(model){
+    if(route&&route.ok)model.textContent=route.providerName+' · '+route.model+' · '+chatShortSession(cfg.sessionId);
+    else if(!apiProvidersLoaded)model.textContent='主链路读取中 · '+chatShortSession(cfg.sessionId);
+    else model.textContent='主链路未配置 · '+chatShortSession(cfg.sessionId);
+  }
+  if(recall)recall.textContent='网关召回固定开启'+(cfg.useMcp===true?' · MCP':'');
   if(cache){
     var u=usage||{};
     var read=u.cache_read_input_tokens||u.cache_read||0;
@@ -3038,7 +3197,7 @@ function chatTogglePlus(force){
   if(btn)btn.classList.toggle('open',open);
 }
 function chatSettingTitle(tab){
-  return ({model:'模型设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',debug:'调试记录'})[tab]||'聊天设置';
+  return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',debug:'调试记录'})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
@@ -3396,6 +3555,11 @@ function chatInit(){
   chatLoadDebugRecords();
   chatLoadLocalMessages();
   chatWriteForm(chatLoadConfig());
+  if(!apiProvidersLoaded){
+    try{
+      if(localStorage.getItem(API_KEY_STORAGE))loadApiProviders({silentAuth:true});
+    }catch(e){}
+  }
   chatLoadWorldbooksRemote(true);
   chatRenderSessions();
   chatRenderMessages();
@@ -3465,12 +3629,7 @@ async function chatSendMessage(){
   await chatEnsureSessionsReady();
   var input=document.getElementById('chat-input');
   var text=(input.value||'').trim();
-  if(text){
-    chatMessages.push({role:'pending_user',text:text,ts:Date.now()});
-    input.value='';
-    chatAutosizeInput(input);
-  }
-  if(chatPendingMessages().length)await chatSubmitPendingMessages();
+  if(text||chatPendingMessages().length)await chatSubmitPendingMessages();
 }
 function chatRegenerateFromUser(i){
   if(chatSending)return;
@@ -3491,15 +3650,25 @@ async function chatSubmitPendingMessages(){
   await chatEnsureSessionsReady();
   var input=document.getElementById('chat-input');
   var extra=(input&&input.value||'').trim();
+  var pending=chatPendingMessages();
+  var planned=pending.map(function(m){return String(m.text||'').trim()}).filter(Boolean);
+  if(extra)planned.push(extra);
+  if(!planned.length)return;
+  var route=await chatEnsureMainRouteReady();
+  if(!route||!route.ok){
+    chatHandleMainRouteNotReady(route);
+    return;
+  }
   if(extra){
     input.value='';
     chatAutosizeInput(input);
     chatMessages.push({role:'pending_user',text:extra,ts:Date.now()});
   }
-  var pending=chatPendingMessages();
+  pending=chatPendingMessages();
   var text=pending.map(function(m){return String(m.text||'').trim()}).filter(Boolean).join('\n\n');
   if(!text)return;
   var cfg=chatSaveConfig(true);
+  cfg=chatApplyMainRouteToConfig(cfg,route);
   chatActiveSessionId=cfg.sessionId;
   chatTogglePlus(false);
   cfg.memoryPreview='';
@@ -3541,7 +3710,7 @@ async function chatSubmitPendingMessages(){
     worldbook_injection_position:chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail'),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
-    recall:cfg.recall,
+    recall:true,
     ck_thinking_enabled:cfg.fakeThinking===true,
     ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
@@ -4403,6 +4572,8 @@ function renderApiConfig(){
   var tab=findApiTab(currentApiTab);
   body.innerHTML=tab.kind==='providers'?renderProviderLibrary():renderApiAssignments(tab);
   body.scrollTop=0;
+  chatRenderMainRouteSummary();
+  chatUpdateRuntime(chatLoadConfig());
 }
 function renderApiIntro(tab){
   return '<div class="api-info-row"><button class="api-info-btn" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button><div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info||'')+'</div></div></div>';
@@ -4577,15 +4748,22 @@ function fetchAssignmentModels(btn){
     .catch(function(e){toast((e&&e.message)?e.message:'拉取模型失败')})
     .finally(function(){btn.disabled=false;btn.textContent=old});
 }
-function loadApiProviders(){
-  keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+function loadApiProviders(opts){
+  return keyCfgFetch(undefined,opts||{}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
     var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
     normalizeApiProviders(prov);
     apiProvidersLoaded=true;
     renderApiConfig();
+    chatRenderMainRouteSummary();
+    chatUpdateRuntime(chatLoadConfig());
+    return true;
   }).catch(function(){
+    apiProvidersLoaded=false;
     var body=document.getElementById('api-config-body');
     if(body)body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署、面板 key 正确。</div><button class="prov-add" type="button" style="margin-top:14px" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>';
+    chatRenderMainRouteSummary();
+    chatUpdateRuntime(chatLoadConfig());
+    return false;
   });
 }
 
