@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v61';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v62';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -271,6 +271,45 @@ function entityGraphFetch(full,force){
     return r;
   });
 }
+var MCP_TOOL_ALIASES={
+  recall_memory:'mcp__memory__recall_memory',
+  search_memory:'mcp__memory__search_memory',
+  list_memories:'mcp__memory__list_memories',
+  read_memory:'mcp__memory__read_memory',
+  read_repo:'mcp__memory__read_repo',
+  append_memory:'mcp__memory__append_memory',
+  write_memory:'mcp__memory__write_memory',
+  update_entry:'mcp__memory__update_entry',
+  touch_memory:'mcp__memory__touch_memory',
+  cleanup:'mcp__memory__cleanup',
+  delete_repo:'mcp__memory__delete_repo'
+};
+function mcpToolName(tool){
+  tool=String(tool||'').trim();
+  return MCP_TOOL_ALIASES[tool]||tool;
+}
+function mcpUnwrapStructuredText(text){
+  text=String(text||'');
+  var trimmed=text.trim();
+  if(!trimmed||!/^[\[{]/.test(trimmed))return text;
+  try{
+    var data=JSON.parse(trimmed);
+    if(data&&typeof data==='object'&&!Array.isArray(data)){
+      if(typeof data.content==='string')return data.content;
+      if(Array.isArray(data.items)){
+        var items=data.items.filter(function(item){return item&&typeof item==='object'&&item.name});
+        var memoryItems=items.filter(function(item){
+          var source=String(item.source||'');
+          var path=String(item.path||'');
+          return source==='memory'||source==='memory-index'||path.indexOf('memories/')===0;
+        });
+        if(memoryItems.length)items=memoryItems;
+        return items.map(function(item){return String(item.name||'').trim()}).filter(Boolean).join('\n');
+      }
+    }
+  }catch(e){}
+  return text;
+}
 function mcpResultText(d){
   if(!d||typeof d!=='object')throw new Error('MCP 返回空响应');
   if(d.error)throw new Error(d.error.message||JSON.stringify(d.error));
@@ -278,10 +317,10 @@ function mcpResultText(d){
   var text=content&&content[0]?String(content[0].text||''):'';
   if(result.isError)throw new Error(text||'MCP 工具执行失败');
   if(/^FAILED:|^Unknown tool:/i.test(text))throw new Error(text);
-  return text;
+  return mcpUnwrapStructuredText(text);
 }
-function rpc(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(mcpResultText).catch(function(e){console.warn('[MCP]',tool,e);return ''})}
-function rpcStrict(tool,args){return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:tool,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(mcpResultText)}
+function rpc(tool,args){var name=mcpToolName(tool);return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:name,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(mcpResultText).catch(function(e){console.warn('[MCP]',name,e);return ''})}
+function rpcStrict(tool,args){var name=mcpToolName(tool);return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:name,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(mcpResultText)}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='chat',returnPanelTab='chat',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
