@@ -3247,6 +3247,38 @@ body.dark .install-app-btn{
   font-weight:850;
 }
 
+.panel-update-notes{
+  margin:0 0 18px;
+  padding:12px 13px;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  background:#f9fafb;
+}
+
+.panel-update-notes strong{
+  display:block;
+  margin:0 0 8px;
+  color:#111827;
+  font-size:13px;
+  font-weight:850;
+}
+
+.panel-update-notes ul{
+  margin:0;
+  padding-left:18px;
+  color:#374151;
+  font-size:13px;
+  line-height:1.55;
+}
+
+.panel-update-notes li+li{
+  margin-top:5px;
+}
+
+.panel-update-notes.empty{
+  background:#fff;
+}
+
 .panel-update-confirm{
   width:100%;
   height:44px;
@@ -3286,6 +3318,19 @@ body.dark .panel-update-card b{
 
 body.dark .panel-update-card p{
   color:#aeb6c0;
+}
+
+body.dark .panel-update-notes{
+  background:#151922;
+  border-color:#2b303c;
+}
+
+body.dark .panel-update-notes strong{
+  color:#e9edf2;
+}
+
+body.dark .panel-update-notes ul{
+  color:#c8d0da;
 }
 
 body.dark .panel-update-confirm{

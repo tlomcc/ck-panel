@@ -19,33 +19,53 @@
     if (typeof window.toast === 'function') window.toast(message);
   }
 
+  function normalizeUpdateNotes(notes) {
+    if (Array.isArray(notes)) {
+      return notes.map(function(x) { return String(x || '').trim(); }).filter(Boolean).slice(0, 12);
+    }
+    if (typeof notes === 'string') {
+      return notes.split(/\r?\n+/).map(function(x) { return x.replace(/^[-*]\s*/, '').trim(); }).filter(Boolean).slice(0, 12);
+    }
+    return [];
+  }
+
+  function normalizeVersionInfo(data, fallbackVersion) {
+    var info = { version: String(fallbackVersion || '').trim(), notes: [] };
+    if (typeof data === 'string') {
+      info.version = String(data || fallbackVersion || '').trim();
+      return info;
+    }
+    if (data && typeof data === 'object') {
+      info.version = String(data.version || data.CK_PANEL_VERSION || fallbackVersion || '').trim();
+      info.notes = normalizeUpdateNotes(data.notes || data.changelog || data.changes || data.release_notes);
+    }
+    return info;
+  }
+
   function fetchPanelVersion() {
     var stamp = Date.now();
     return fetch('version.json?__ck_sw_version_check=' + stamp, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
       .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(data) {
-        var version = data && (data.version || data.CK_PANEL_VERSION);
-        if (version) return String(version);
-        return '';
-      })
-      .catch(function() { return ''; })
-      .then(function(version) {
-        if (version) return version;
+      .then(function(data) { return normalizeVersionInfo(data); })
+      .catch(function() { return normalizeVersionInfo(null); })
+      .then(function(info) {
+        if (info.version) return info;
         return fetch('index.html?__ck_sw_version_check=' + stamp, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
           .then(function(r) { return r.ok ? r.text() : ''; })
           .then(function(html) {
             var m = String(html || '').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
-            return (m && m[1]) || '';
+            return normalizeVersionInfo(m && m[1]);
           })
-          .catch(function() { return ''; });
+          .catch(function() { return normalizeVersionInfo(null); });
       });
   }
 
   function promptPanelUpdate(fallback) {
-    fetchPanelVersion().then(function(latest) {
-      latest = latest || fallback || '新版本';
+    fetchPanelVersion().then(function(info) {
+      info = info || normalizeVersionInfo(null, fallback || '新版本');
+      if (!info.version) info.version = fallback || '新版本';
       if (typeof window.showPanelUpdateModal === 'function') {
-        window.showPanelUpdateModal(latest);
+        window.showPanelUpdateModal(info);
       } else {
         location.reload();
       }
@@ -95,7 +115,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v55').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v56').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

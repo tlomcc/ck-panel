@@ -3,8 +3,9 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v55';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v56';
 var ckPanelUpdateTarget='';
+var ckPanelUpdateMode='update';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
   if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
@@ -14,35 +15,53 @@ try{
   }
 }catch(e){}
 var PANEL_CACHE_KEY='ckPanelCacheV3';
+function ckPanelNormalizeNotes(notes){
+  if(Array.isArray(notes)){
+    return notes.map(function(x){return String(x||'').trim()}).filter(Boolean).slice(0,12);
+  }
+  if(typeof notes==='string'){
+    return notes.split(/\r?\n+/).map(function(x){return x.replace(/^[-*]\s*/,'').trim()}).filter(Boolean).slice(0,12);
+  }
+  return [];
+}
+function ckPanelVersionInfo(data,fallbackVersion){
+  var info={version:String(fallbackVersion||'').trim(),notes:[]};
+  if(typeof data==='string'){
+    info.version=String(data||fallbackVersion||'').trim();
+    return info;
+  }
+  if(data&&typeof data==='object'){
+    info.version=String(data.version||data.CK_PANEL_VERSION||fallbackVersion||'').trim();
+    info.notes=ckPanelNormalizeNotes(data.notes||data.changelog||data.changes||data.release_notes);
+  }
+  return info;
+}
+function fetchPanelVersionInfo(flag){
+  var stamp=Date.now();
+  var key=flag||'__ck_version_check';
+  return fetch('version.json?'+key+'='+stamp,{cache:'no-store',headers:{'Cache-Control':'no-cache'}})
+    .then(function(r){return r.ok?r.json():null})
+    .then(function(data){return ckPanelVersionInfo(data)})
+    .catch(function(){return ckPanelVersionInfo(null)})
+    .then(function(info){
+      if(info.version)return info;
+      return fetch('index.html?'+key+'='+stamp,{cache:'no-store',headers:{'Cache-Control':'no-cache'}})
+        .then(function(r){return r.ok?r.text():''})
+        .then(function(html){
+          var m=String(html||'').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
+          return ckPanelVersionInfo(m&&m[1]);
+        })
+        .catch(function(){return ckPanelVersionInfo(null)});
+    });
+}
 function startPanelVersionWatcher(){
   if(window.__ckPanelVersionWatcher||location.protocol==='file:')return;
   window.__ckPanelVersionWatcher=true;
-  function fetchLatestVersion(){
-    var stamp=Date.now();
-    return fetch('version.json?__ck_version_check='+stamp,{cache:'no-store',headers:{'Cache-Control':'no-cache'}})
-      .then(function(r){return r.ok?r.json():null})
-      .then(function(data){
-        var version=data&&(data.version||data.CK_PANEL_VERSION);
-        if(version)return String(version);
-        return '';
-      })
-      .catch(function(){return ''})
-      .then(function(version){
-        if(version)return version;
-        return fetch('index.html?__ck_version_check='+stamp,{cache:'no-store',headers:{'Cache-Control':'no-cache'}})
-          .then(function(r){return r.ok?r.text():''})
-          .then(function(html){
-            var m=String(html||'').match(/CK_PANEL_VERSION=['"]([^'"]+)/);
-            return (m&&m[1])||'';
-          })
-          .catch(function(){return ''});
-      });
-  }
   function check(){
-    fetchLatestVersion()
-      .then(function(latest){
-        if(latest&&latest!==CK_PANEL_VERSION){
-          showPanelUpdateModal(latest);
+    fetchPanelVersionInfo('__ck_version_check')
+      .then(function(info){
+        if(info.version&&info.version!==CK_PANEL_VERSION){
+          showPanelUpdateModal(info);
         }
       }).catch(function(){});
   }
@@ -55,9 +74,25 @@ function syncPanelVersionBadge(){
   el.textContent=CK_PANEL_VERSION;
   el.title='当前版本 '+CK_PANEL_VERSION;
 }
-function showPanelUpdateModal(latest){
-  latest=String(latest||'').trim();
+function chatRenderPanelUpdateNotes(notes){
+  var wrap=document.getElementById('panel-update-notes');
+  var list=document.getElementById('panel-update-notes-list');
+  notes=ckPanelNormalizeNotes(notes);
+  if(!wrap||!list)return;
+  if(!notes.length){
+    wrap.classList.add('empty');
+    list.innerHTML='<li>这次更新没有写明细。</li>';
+    return;
+  }
+  wrap.classList.remove('empty');
+  list.innerHTML=notes.map(function(x){return '<li>'+esc(x)+'</li>'}).join('');
+}
+function showPanelUpdateModal(latest,notes){
+  var info=ckPanelVersionInfo(latest);
+  if(notes)info.notes=ckPanelNormalizeNotes(notes);
+  latest=String(info.version||'').trim();
   if(!latest||latest===CK_PANEL_VERSION)return;
+  ckPanelUpdateMode='update';
   ckPanelUpdateTarget=latest;
   try{sessionStorage.setItem('ck_panel_pending_reload',latest)}catch(e){}
   var modal=document.getElementById('panel-update-modal');
@@ -65,10 +100,17 @@ function showPanelUpdateModal(latest){
     ckPanelForceReload(latest);
     return;
   }
+  var title=document.getElementById('panel-update-title');
+  var msg=document.getElementById('panel-update-message');
+  if(title)title.textContent='检测到 CK 面板新版本';
+  if(msg)msg.innerHTML='当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。';
   var cur=document.getElementById('panel-update-current');
   var next=document.getElementById('panel-update-next');
   if(cur)cur.textContent=CK_PANEL_VERSION;
   if(next)next.textContent=latest;
+  chatRenderPanelUpdateNotes(info.notes);
+  var confirm=document.getElementById('panel-update-confirm');
+  if(confirm)confirm.textContent='确定更新';
   document.body.classList.add('panel-update-blocked');
   modal.classList.add('show');
   modal.setAttribute('aria-hidden','false');
@@ -78,6 +120,28 @@ function showPanelUpdateModal(latest){
       try{btn.focus({preventScroll:true})}catch(e){try{btn.focus()}catch(_e){}}
     },30);
   }
+}
+function showPanelUpdatedModal(info){
+  info=ckPanelVersionInfo(info,CK_PANEL_VERSION);
+  ckPanelUpdateMode='notes';
+  ckPanelUpdateTarget='';
+  var modal=document.getElementById('panel-update-modal');
+  if(!modal)return;
+  var title=document.getElementById('panel-update-title');
+  var msg=document.getElementById('panel-update-message');
+  if(title)title.textContent='CK 面板已更新';
+  if(msg)msg.innerHTML='已更新到 <b id="panel-update-next">-</b>。本次更新内容如下。';
+  var next=document.getElementById('panel-update-next');
+  if(next)next.textContent=info.version||CK_PANEL_VERSION;
+  chatRenderPanelUpdateNotes(info.notes);
+  var btn=document.getElementById('panel-update-confirm');
+  if(btn){
+    btn.disabled=false;
+    btn.textContent='知道了';
+  }
+  document.body.classList.add('panel-update-blocked');
+  modal.classList.add('show');
+  modal.setAttribute('aria-hidden','false');
 }
 function ckPanelReloadUrl(latest){
   var hash=location.hash||'';
@@ -123,6 +187,16 @@ function ckPanelForceReload(latest){
   setTimeout(go,2500);
 }
 function confirmPanelUpdate(){
+  if(ckPanelUpdateMode==='notes'){
+    var modal=document.getElementById('panel-update-modal');
+    if(modal){
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden','true');
+    }
+    document.body.classList.remove('panel-update-blocked');
+    ckPanelUpdateMode='update';
+    return;
+  }
   var latest=ckPanelUpdateTarget;
   try{
     if(document.body&&document.body.classList.contains('chat-active')){
@@ -298,8 +372,18 @@ function init(){
   initApiKeyFromUrl();
   try{
     var pending=sessionStorage.getItem('ck_panel_pending_reload')||'';
+    var reloaded=sessionStorage.getItem('ck_panel_reloaded_to')||'';
     if(pending&&pending!==CK_PANEL_VERSION)setTimeout(function(){showPanelUpdateModal(pending)},0);
     else if(pending===CK_PANEL_VERSION)sessionStorage.removeItem('ck_panel_pending_reload');
+    if(reloaded===CK_PANEL_VERSION){
+      sessionStorage.removeItem('ck_panel_reloaded_to');
+      setTimeout(function(){
+        fetchPanelVersionInfo('__ck_version_check').then(function(info){
+          if(!info.version)info.version=CK_PANEL_VERSION;
+          showPanelUpdatedModal(info);
+        }).catch(function(){showPanelUpdatedModal({version:CK_PANEL_VERSION,notes:[]})});
+      },350);
+    }
   }catch(e){}
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
@@ -3385,6 +3469,13 @@ function chatRenderMarkdown(src){
   }
   return out.join('\n');
 }
+var CHAT_THINKING_TAG_NAME='(?:ck_thinking|ck:thinking|thinking|think)';
+var CHAT_THINKING_TAG_RE=new RegExp('<'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>([\\s\\S]*?)<\\/(?:ck_thinking|ck:thinking|thinking|think)>','gi');
+var CHAT_THINKING_OPEN_RE=new RegExp('<'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>','i');
+var CHAT_THINKING_OPEN_TO_END_RE=new RegExp('<'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>[\\s\\S]*$','i');
+var CHAT_THINKING_CLOSE_RE=new RegExp('<\\/(?:ck_thinking|ck:thinking|thinking|think)>','i');
+var CHAT_THINKING_CLOSE_SPLIT_RE=new RegExp('<\\/(?:ck_thinking|ck:thinking|thinking|think)>','i');
+var CHAT_THINKING_TAG_CLEAN_RE=new RegExp('<\\/?'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>','gi');
 function chatSplitThinkingText(src,opts){
   opts=opts||{};
   var text=String(src||'');
@@ -3393,23 +3484,23 @@ function chatSplitThinkingText(src,opts){
   if(opts.hideUnclosedThinking===true&&chatLooksLikePartialThinkingTag(text)){
     return {text:'',thinking:''};
   }
-  text=text.replace(/<(ck_thinking|thinking|think)\b[^>]*>([\s\S]*?)<\/\1>/gi,function(_all,_tag,body){
+  text=text.replace(CHAT_THINKING_TAG_RE,function(_all,body){
     var clean=String(body||'').trim();
     if(clean&&!suppressThinking)thoughts.push(clean);
     return '\n';
   });
   if(opts.hideUnclosedThinking===true){
-    text=text.replace(/<(ck_thinking|thinking|think)\b[^>]*>[\s\S]*$/i,'\n');
+    text=text.replace(CHAT_THINKING_OPEN_TO_END_RE,'\n');
   }
-  if(/<\/(?:ck_thinking|thinking|think)>/i.test(text)&&!/<(?:ck_thinking|thinking|think)\b[^>]*>/i.test(text)){
-    var parts=text.split(/<\/(?:ck_thinking|thinking|think)>/i);
+  if(CHAT_THINKING_CLOSE_RE.test(text)&&!CHAT_THINKING_OPEN_RE.test(text)){
+    var parts=text.split(CHAT_THINKING_CLOSE_SPLIT_RE);
     var before=(parts.shift()||'').trim();
     var after=parts.join('\n').trim();
     if(before&&!suppressThinking)thoughts.push(before);
     text=after||'';
   }
   text=text
-    .replace(/<\/?(?:ck_thinking|thinking|think)\b[^>]*>/gi,'\n')
+    .replace(CHAT_THINKING_TAG_CLEAN_RE,'\n')
     .replace(/\n{3,}/g,'\n\n')
     .trim();
   return {text:text,thinking:thoughts.join('\n\n')};
@@ -3419,14 +3510,14 @@ function chatLooksLikePartialThinkingTag(text){
   if(!t||t.charAt(0)!=='<'||t.indexOf('>')>=0)return false;
   var compact=t.replace(/\s+/g,'');
   if(compact==='<')return true;
-  var targets=['<ck_thinking','<thinking','<think'];
+  var targets=['<ck_thinking','<ck:thinking','<thinking','<think'];
   for(var i=0;i<targets.length;i++){
     if(targets[i].indexOf(compact)===0||compact.indexOf(targets[i])===0)return true;
   }
   return false;
 }
 function chatCleanAssistantTextForHistory(rawText){
-  return chatSplitThinkingText(rawText).text || String(rawText||'').replace(/<\/?(?:ck_thinking|thinking|think)\b[^>]*>/gi,'').trim();
+  return chatSplitThinkingText(rawText).text || String(rawText||'').replace(CHAT_THINKING_TAG_CLEAN_RE,'').trim();
 }
 function chatAssistantStreamingVisibleText(rawText){
   return chatSplitThinkingText(rawText,{suppressThinking:true,hideUnclosedThinking:true}).text;
