@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v65';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v66';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1914,6 +1914,7 @@ var chatCacheTimer=null;
 var chatWorldbookActiveId='';
 var chatEditingIndex=-1;
 var chatEditingDraftText='';
+var chatEditingImages=[];
 var chatDb=null;
 var chatDbOpenPromise=null;
 var chatSessionsLoadPromise=null;
@@ -2472,11 +2473,15 @@ function chatRenderImageGrid(images,opts){
   images=chatNormalizeImageList(images);
   if(!images.length)return '';
   opts=opts||{};
-  var cls='chat-image-grid'+(opts.draft?' draft':'');
+  var mode=opts.edit?'edit':(opts.draft?'draft':'');
+  var cls='chat-image-grid count-'+images.length+(mode?' '+mode:'');
   return '<div class="'+cls+'">'+images.map(function(img){
     var title=img.name||'图片';
-    var remove=opts.draft?'<button class="chat-draft-image-remove" type="button" onclick="chatRemoveDraftImage(\''+escAttr(img.id)+'\')" title="移除图片">×</button>':'';
-    return '<div class="chat-image-thumb" title="'+escAttr(title)+'"><img src="'+escAttr(img.dataUrl)+'" alt="'+escAttr(title)+'" loading="lazy">'+remove+'</div>';
+    var remove='';
+    if(opts.draft)remove='<button class="chat-draft-image-remove" type="button" onclick="chatRemoveDraftImage(\''+escAttr(img.id)+'\')" title="移除图片">×</button>';
+    if(opts.edit)remove='<button class="chat-edit-image-remove" type="button" onclick="chatRemoveEditImage(\''+escAttr(img.id)+'\')" title="删除图片">×</button>';
+    var ratio=(img.width>0&&img.height>0)?(' style="--ck-image-ratio:'+img.width+'/'+img.height+'"'):'';
+    return '<div class="chat-image-thumb"'+ratio+' title="'+escAttr(title)+'"><img src="'+escAttr(img.dataUrl)+'" alt="'+escAttr(title)+'" loading="lazy">'+remove+'</div>';
   }).join('')+'</div>';
 }
 function chatRenderUserMessageContent(m){
@@ -2505,6 +2510,26 @@ function chatRemoveDraftImage(id){
   id=String(id||'');
   chatDraftImages=chatNormalizeImageList(chatDraftImages).filter(function(img){return img.id!==id});
   chatRenderDraftImages();
+}
+function chatRenderEditImages(){
+  var wrap=document.getElementById('chat-edit-images');
+  if(!wrap)return;
+  var images=chatNormalizeImageList(chatEditingImages);
+  chatEditingImages=images;
+  if(chatEditingIndex<0||!images.length){
+    wrap.hidden=true;
+    wrap.innerHTML='';
+  }else{
+    wrap.hidden=false;
+    wrap.innerHTML=chatRenderImageGrid(images,{edit:true});
+  }
+  chatLayoutCompose({force:true});
+}
+function chatRemoveEditImage(id){
+  id=String(id||'');
+  if(chatEditingIndex<0)return;
+  chatEditingImages=chatNormalizeImageList(chatEditingImages).filter(function(img){return img.id!==id});
+  chatRenderEditImages();
 }
 function chatTakeDraftImages(){
   var images=chatNormalizeImageList(chatDraftImages);
@@ -3747,11 +3772,13 @@ function chatStartEditMessage(i){
   if(chatEditingIndex>=0)chatCancelEdit();
   chatEditingDraftText=String(input.value||'');
   chatEditingIndex=i;
+  chatEditingImages=chatMessageImages(m);
   input.value=String(m.text||'');
   chatAutosizeInput(input);
   input.focus();
   if(btn){btn.textContent='✓';btn.title='保存编辑'}
   chatSetEditActionsVisible(true);
+  chatRenderEditImages();
   chatSetStatus('编辑中');
   chatScrollMessagesBottom(true);
 }
@@ -3763,9 +3790,11 @@ function chatSetEditActionsVisible(show){
 function chatExitEditMode(){
   chatEditingIndex=-1;
   chatEditingDraftText='';
+  chatEditingImages=[];
   var btn=document.getElementById('chat-send-btn');
   if(btn){btn.textContent='↑';btn.title='发送'}
   chatSetEditActionsVisible(false);
+  chatRenderEditImages();
   chatSetStatus();
 }
 function chatCancelEdit(){
@@ -3784,8 +3813,14 @@ function chatSaveEditedMessage(){
   var m=chatMessages[chatEditingIndex];
   if(!m)return false;
   var text=String(input.value||'').trim();
-  if(!text&&!chatMessageImages(m).length)return false;
+  var images=chatNormalizeImageList(chatEditingImages);
+  if(!text&&!images.length){
+    toast('消息不能为空');
+    return false;
+  }
   m.text=text;
+  if(images.length)m.images=images;
+  else delete m.images;
   m.edited=true;
   m.updated=Date.now();
   if(m.role==='user'){
@@ -4467,7 +4502,7 @@ document.addEventListener('dblclick',function(e){
 });
 function chatEditPointerInside(target){
   if(!target||!target.closest)return false;
-  return !!target.closest('#chat-input,#chat-edit-actions,#chat-send-btn');
+  return !!target.closest('#chat-input,#chat-edit-actions,#chat-edit-images,#chat-send-btn');
 }
 document.addEventListener('pointerdown',function(e){
   if(chatEditingIndex<0||!e.target)return;
@@ -4634,7 +4669,9 @@ function chatRenderMessageRow(m,i){
   if(role==='user'&&!pending)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
   var tools=toolButtons.length?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
   var time=role==='user'?'':'<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
-  var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+'</div>';
+  var imageCount=chatMessageImages(m).length;
+  var bubbleState=(imageCount?' has-images':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
+  var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
   var fresh=chatFreshMessageKeys.has(chatMessageAnimKey(m))?' chat-fresh':'';
   return '<div class="chat-msg-row '+role+(pending?' pending':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+tools+time+'</div>';
 }
