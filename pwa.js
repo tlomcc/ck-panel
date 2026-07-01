@@ -115,7 +115,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v64').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v65').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
