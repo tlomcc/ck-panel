@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v59';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v60';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -938,14 +938,24 @@ function closeEntityDetail(){
   document.body.classList.remove('eg-sheet-open');
 }
 
+var CK_SHEET_DISMISS_DISTANCE=100;
+function ckSheetDragTargetIsTextEdit(target){
+  if(!target)return false;
+  if(target.nodeType===3)target=target.parentElement;
+  if(!target||!target.closest)return false;
+  return !!target.closest('input,textarea,select,[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]');
+}
+
 /* ===== 实体详情底部卡片：下滑关闭手势 ===== */
 var egSheetDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null,wide:false};
 function egSheetBaseTransform(){return egSheetDrag.wide?'translateX(-50%)':''}
 function egSheetTouchStart(e){
   var sheet=document.getElementById('eg-detail-sheet');
   if(!sheet||!sheet.classList.contains('show')){egSheetDrag.active=false;return}
+  var target=e.target;
+  if(ckSheetDragTargetIsTextEdit(target)){egSheetDrag.active=false;return}
   var body=document.getElementById('eg-detail-body');
-  if(body&&body.scrollTop>0){egSheetDrag.active=false;return}   // 内容没滚到顶 → 先让它正常滚
+  if(body&&body.scrollTop>0&&body.contains(target)){egSheetDrag.active=false;return}   // 内容没滚到顶 → 先让它正常滚
   var panel=sheet.querySelector('.eg-detail-panel');
   if(!panel){egSheetDrag.active=false;return}
   var t=e.touches?e.touches[0]:e;
@@ -969,11 +979,10 @@ function egSheetTouchMove(e){
 }
 function egSheetTouchEnd(){
   if(!egSheetDrag.active)return;
-  var panel=egSheetDrag.panel,dy=egSheetDrag.dy,dt=Date.now()-egSheetDrag.startT;
+  var panel=egSheetDrag.panel,dy=egSheetDrag.dy;
   egSheetDrag.active=false;egSheetDrag.committed=false;
   if(!panel)return;
-  var flick=dt<300&&dy>24;                                       // 快速轻滑也算
-  if(dy>60||flick){
+  if(dy>CK_SHEET_DISMISS_DISTANCE){
     panel.style.transition='transform .2s ease';
     panel.style.transform=egSheetBaseTransform()+' translateY(100%)';
     setTimeout(function(){closeEntityDetail();panel.style.transition='';panel.style.transform=egSheetBaseTransform();},190);
@@ -4008,12 +4017,9 @@ function chatSettingsTouchStart(e){
   var panel=document.querySelector('.chat-settings.open');
   if(!panel){chatSettingsDrag.active=false;return}
   var target=e.target;
-  if(!target||!target.closest||!target.closest('.chat-settings-head')){
-    chatSettingsDrag.active=false;
-    return;
-  }
+  if(ckSheetDragTargetIsTextEdit(target)){chatSettingsDrag.active=false;return}
   var active=panel.querySelector('.chat-side-panel.active');
-  if(active&&active.scrollTop>0){chatSettingsDrag.active=false;return}
+  if(active&&active.scrollTop>0&&active.contains(target)){chatSettingsDrag.active=false;return}
   var t=e.touches?e.touches[0]:e;
   chatSettingsDrag.active=true;
   chatSettingsDrag.committed=false;
@@ -4043,12 +4049,11 @@ function chatSettingsTouchMove(e){
 }
 function chatSettingsTouchEnd(){
   if(!chatSettingsDrag.active)return;
-  var panel=chatSettingsDrag.panel,dy=chatSettingsDrag.dy,dt=Date.now()-chatSettingsDrag.startT;
+  var panel=chatSettingsDrag.panel,dy=chatSettingsDrag.dy;
   chatSettingsDrag.active=false;
   chatSettingsDrag.committed=false;
   if(!panel)return;
-  var flick=dt<300&&dy>24;
-  if(dy>60||flick){
+  if(dy>CK_SHEET_DISMISS_DISTANCE){
     panel.style.transition='transform .2s ease';
     panel.style.setProperty('transform',chatSettingsBaseTransform()+' translateY(100%)','important');
     setTimeout(function(){chatToggleSettings(false);panel.style.removeProperty('transition');panel.style.removeProperty('transform');},190);
