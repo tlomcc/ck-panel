@@ -7043,3 +7043,60 @@ body.dark.chat-active .chat-bubble.assistant{
     max-width:86%!important;
   }
 }
+/* 2026-07-02 memory content cards: render parsed memory instead of raw JSON. */
+.entry-card-main{
+  flex:1;
+  min-width:0;
+}
+
+.entry-summary-title,
+.pinned-card-title,
+.search-result-title,
+.mini-title{
+  margin:0 0 7px;
+  color:#1f2f28;
+  font-weight:800;
+  line-height:1.45;
+  word-break:break-word;
+}
+
+.entry-summary-title{
+  font-size:14px;
+}
+
+.pinned-card-title,
+.search-result-title{
+  font-size:13px;
+}
+
+.mini-title{
+  font-size:12px;
+  color:#314038;
+}
+
+.entry-card-main .entry-text.collapsed{
+  max-height:44px;
+  color:#5c6a63;
+}
+
+.entry-card-main .entry-badge,
+.search-entry-meta span,
+.pinned-card-meta span{
+  border-radius:999px;
+}
+
+.entry-date-badge{
+  background:#f3f6f5!important;
+  color:#8b9892!important;
+}
+
+body.dark .entry-summary-title,
+body.dark .pinned-card-title,
+body.dark .search-result-title,
+body.dark .mini-title{
+  color:#e6ece8;
+}
+
+body.dark .entry-card-main .entry-text.collapsed{
+  color:#aab6b0;
+}
