@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v56';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v57';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2054,6 +2054,7 @@ function chatDefaultConfig(){
     recallHistoryRetentionSeconds:300,
     promptCacheTtl:'1h',
     fullWindowContext:true,
+    splitAssistantReplies:true,
     autoTrimEnabled:true,
     autoTrimThreshold:CHAT_AUTO_TRIM_THRESHOLD,
     autoTrimDrop:CHAT_AUTO_TRIM_DROP,
@@ -2239,6 +2240,7 @@ function chatLoadConfig(){
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
   cfg.fakeThinking=cfg.fakeThinking===true;
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
+  cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   cfg.systemPromptPosition=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
@@ -2263,6 +2265,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.mainRouteReason;
   delete cfg.chatApiSource;
   cfg.recall=true;
+  cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimThreshold=trim.threshold;
@@ -2441,6 +2444,7 @@ function chatReadForm(){
     recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
     promptCacheTtl:saved.promptCacheTtl||'1h',
     fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
+    splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
     autoTrimThreshold:trimCfg.threshold,
     autoTrimDrop:trimCfg.drop,
@@ -2481,6 +2485,7 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-cost-multiplier',costPricing.multiplier);
   chatSyncCacheStrategyFields(true);
   chatSetFieldChecked('chat-full-window-context',cfg.fullWindowContext!==false);
+  chatUpdateSplitReplyButton(cfg);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
@@ -2506,6 +2511,7 @@ function chatSaveConfig(silent){
   if(!apiProvidersLoaded&&String(cfg.panelKey||'').trim())loadApiProviders({silentAuth:true});
   chatRenderMainRouteSummary();
   chatRenderTrimState(cfg);
+  chatUpdateSplitReplyButton(cfg);
   chatUpdateRuntime(cfg);
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
@@ -2518,6 +2524,25 @@ function chatOnMcpToggle(){
   chatSaveConfigObject(cfg);
   chatUpdateRuntime(cfg);
   chatRenderDebugRecords();
+}
+function chatUpdateSplitReplyButton(cfg){
+  var btn=document.getElementById('chat-split-replies-btn');
+  if(!btn)return;
+  cfg=cfg||chatLoadConfig();
+  var on=cfg.splitAssistantReplies!==false;
+  btn.classList.toggle('chat-toggle-on',on);
+  btn.classList.toggle('chat-toggle-off',!on);
+  btn.setAttribute('aria-pressed',on?'true':'false');
+  btn.title='分条回复：'+(on?'开':'关');
+  var label=btn.querySelector('b');
+  if(label)label.textContent=on?'分条':'整段';
+}
+function chatToggleSplitReplies(){
+  var cfg=chatMergeLiveToggleState(chatLoadConfig());
+  cfg.splitAssistantReplies=cfg.splitAssistantReplies===false;
+  chatSaveConfigObject(cfg);
+  chatUpdateSplitReplyButton(cfg);
+  toast('小克回复：'+(cfg.splitAssistantReplies!==false?'分条':'一段式'));
 }
 function chatEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
@@ -3691,10 +3716,11 @@ function chatPackNaturalUnits(units,target){
   }
   return out.filter(Boolean);
 }
-function chatSplitAssistantReplies(rawText){
+function chatSplitAssistantReplies(rawText,splitEnabled){
   var parsed=chatSplitThinkingText(rawText);
   var text=parsed.text.trim();
-  if(!text)return [];
+  if(!text)return parsed.thinking?[rawText]:[];
+  if(splitEnabled===false)return [rawText];
   var units=chatNaturalUnits(text);
   if(/\n{2,}/.test(text)&&units.length>1&&units.length<=6){
     if(parsed.thinking)units[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+units[0];
@@ -3720,7 +3746,7 @@ function chatReplaceStreamingBubble(anchorEl,message,index){
   return true;
 }
 async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
-  var parts=chatSplitAssistantReplies(rawText);
+  var parts=chatSplitAssistantReplies(rawText,!(opts&&opts.splitAssistantReplies===false));
   var tools=chatCloneToolEvents(toolEvents);
   if(!parts.length&&tools.length)parts=[''];
   var now=Date.now();
@@ -4564,7 +4590,7 @@ async function chatSubmitPendingMessages(){
       }
     }
     chatSetStatus('正在显示回复...');
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false});
     if(out&&out.parentNode)out.parentNode.remove();
     chatSetStatus('完成');
   }catch(e){

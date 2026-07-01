@@ -776,7 +776,7 @@ body.chat-active .chat-plus-panel{
   align-self:stretch!important;
   box-sizing:border-box!important;
   display:grid!important;
-  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  grid-template-columns:repeat(auto-fit,minmax(58px,1fr))!important;
   gap:10px!important;
   max-height:0!important;
   opacity:0!important;
@@ -795,7 +795,7 @@ body.chat-active .chat-plus-panel{
 }
 
 body.chat-active .chat-plus-panel.open{
-  max-height:176px!important;
+  max-height:240px!important;
   opacity:1!important;
   pointer-events:auto!important;
   margin-top:8px!important;
@@ -843,6 +843,21 @@ body.chat-active .chat-plus-panel button{
 }
 
 body.chat-active .chat-plus-panel button:hover{background:rgba(7,193,96,.06)!important}
+
+body.chat-active .chat-plus-panel button.chat-toggle-on span{
+  background:#07c160!important;
+  color:#fff!important;
+  border-color:rgba(7,193,96,.72)!important;
+}
+
+body.chat-active .chat-plus-panel button.chat-toggle-off span{
+  background:#eef2f3!important;
+  color:#8a949c!important;
+}
+
+body.chat-active .chat-plus-panel button.chat-toggle-off b{
+  color:#8a949c!important;
+}
 
 body.chat-active .chat-plus-panel span{
   width:42px!important;
@@ -1493,6 +1508,9 @@ body.dark.chat-active .chat-settings::before{background:#3a4150!important}
 body.dark.chat-active .chat-settings-head .chat-icon-btn{background:#2a2f3a!important;color:#aeb6c0!important}
 body.dark.chat-active .chat-plus-panel span{background:#10161d!important;color:#57c78c!important}
 body.dark.chat-active .chat-plus-panel b{color:#aab3bd!important}
+body.dark.chat-active .chat-plus-panel button.chat-toggle-on span{background:#07a853!important;color:#fff!important;border-color:rgba(7,193,96,.62)!important}
+body.dark.chat-active .chat-plus-panel button.chat-toggle-off span{background:#202732!important;color:#697480!important}
+body.dark.chat-active .chat-plus-panel button.chat-toggle-off b{color:#697480!important}
 body.dark.chat-active .chat-msg-tools .chat-msg-act,
 body.dark.chat-active .chat-msg-tools .chat-user-regen{
   border-color:rgba(255,255,255,.08)!important;
@@ -1590,7 +1608,7 @@ body.dark.chat-active .toast{
     gap:8px 6px!important;
   }
   body.chat-active .chat-plus-panel.open{
-    max-height:188px!important;
+    max-height:236px!important;
     margin-top:7px!important;
     padding-top:9px!important;
   }
