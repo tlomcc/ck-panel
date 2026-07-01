@@ -6953,7 +6953,9 @@ body.chat-active .chat-switch input{
   pointer-events:none!important;
 }
 body.chat-active .chat-switch span{
+  position:relative!important;
   width:100%!important;
+  min-height:24px!important;
   display:flex!important;
   align-items:center!important;
   justify-content:space-between!important;
@@ -6975,21 +6977,23 @@ body.chat-active .chat-switch span::after{
 body.chat-active .chat-switch span::before{
   content:""!important;
   position:absolute!important;
-  right:28px!important;
+  top:50%!important;
+  left:calc(100% - 40px)!important;
   width:20px!important;
   height:20px!important;
   border-radius:999px!important;
   background:#fff!important;
   box-shadow:0 1px 3px rgba(15,23,42,.22)!important;
-  transform:translateX(-18px)!important;
-  transition:transform .16s ease!important;
+  transform:translateY(-50%)!important;
+  transition:left .16s ease!important;
   z-index:1!important;
 }
 body.chat-active .chat-switch input:checked+span::after{
   background:#07c160!important;
 }
 body.chat-active .chat-switch input:checked+span::before{
-  transform:translateX(0)!important;
+  left:calc(100% - 22px)!important;
+  transform:translateY(-50%)!important;
 }
 body.dark.chat-active .chat-bubble.user{
   background:#78d957!important;
