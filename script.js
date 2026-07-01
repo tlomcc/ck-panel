@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v62';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v63';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1913,6 +1913,7 @@ var chatDebugRecords=[];
 var chatCacheTimer=null;
 var chatWorldbookActiveId='';
 var chatEditingIndex=-1;
+var chatEditingDraftText='';
 var chatDb=null;
 var chatDbOpenPromise=null;
 var chatSessionsLoadPromise=null;
@@ -3700,19 +3701,39 @@ function chatStartEditMessage(i){
   var input=document.getElementById('chat-input');
   var btn=document.getElementById('chat-send-btn');
   if(!input)return;
+  if(chatEditingIndex>=0)chatCancelEdit();
+  chatEditingDraftText=String(input.value||'');
   chatEditingIndex=i;
   input.value=String(m.text||'');
   chatAutosizeInput(input);
   input.focus();
   if(btn){btn.textContent='✓';btn.title='保存编辑'}
+  chatSetEditActionsVisible(true);
   chatSetStatus('编辑中');
   chatScrollMessagesBottom(true);
 }
-function chatCancelEdit(){
+function chatSetEditActionsVisible(show){
+  var actions=document.getElementById('chat-edit-actions');
+  if(actions)actions.hidden=!show;
+  document.body.classList.toggle('chat-editing',!!show);
+}
+function chatExitEditMode(){
   chatEditingIndex=-1;
+  chatEditingDraftText='';
   var btn=document.getElementById('chat-send-btn');
   if(btn){btn.textContent='↑';btn.title='发送'}
+  chatSetEditActionsVisible(false);
   chatSetStatus();
+}
+function chatCancelEdit(){
+  if(chatEditingIndex<0)return false;
+  var input=document.getElementById('chat-input');
+  if(input){
+    input.value=chatEditingDraftText||'';
+    chatAutosizeInput(input);
+  }
+  chatExitEditMode();
+  return true;
 }
 function chatSaveEditedMessage(){
   var input=document.getElementById('chat-input');
@@ -3731,7 +3752,7 @@ function chatSaveEditedMessage(){
   }
   input.value='';
   chatAutosizeInput(input);
-  chatCancelEdit();
+  chatExitEditMode();
   chatSaveLocalMessages();
   chatRenderMessages();
   toast('已保存编辑');
@@ -4401,12 +4422,22 @@ document.addEventListener('dblclick',function(e){
   var i=parseInt(bubble.getAttribute('data-i'),10);
   chatStartEditMessage(i);
 });
+function chatEditPointerInside(target){
+  if(!target||!target.closest)return false;
+  return !!target.closest('#chat-input,#chat-edit-actions,#chat-send-btn');
+}
+document.addEventListener('pointerdown',function(e){
+  if(chatEditingIndex<0||!e.target)return;
+  if(chatEditPointerInside(e.target))return;
+  chatCancelEdit();
+},true);
 document.addEventListener('keydown',function(e){
   if(e.key!=='Escape')return;
   if(chatEditingIndex>=0){
+    e.preventDefault();
+    e.stopPropagation();
     chatCancelEdit();
-    var input=document.getElementById('chat-input');
-    if(input){input.value='';chatAutosizeInput(input)}
+    return;
   }
   chatToggleSessions(false,true);
   chatToggleSettings(false,true);
