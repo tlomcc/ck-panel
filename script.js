@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v51';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v52';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -1941,8 +1941,7 @@ function chatDefaultConfig(){
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:'system_after_anchor',
-    useMcp:true,
-    mcpDefaultMigrated:true,
+    useMcp:false,
     mcpUrl:API_BASE,
     cacheStrategy:'single_5m',
     recallHistoryRetentionSeconds:300,
@@ -2124,10 +2123,6 @@ function chatLoadConfig(){
       Object.keys(saved||{}).forEach(function(k){cfg[k]=saved[k]});
     }
   }catch(e){}
-  if(saved&&saved.mcpDefaultMigrated!==true){
-    cfg.useMcp=true;
-    cfg.mcpDefaultMigrated=true;
-  }
   cfg.gatewayUrl=GRAPH_API_BASE;
   cfg.mcpUrl=API_BASE;
   if(!cfg.sessionId)cfg.sessionId=chatSessionId();
@@ -2155,6 +2150,12 @@ function chatSaveConfigObject(cfg){
   delete cfg.chatApiSource;
   cfg.recall=true;
   try{localStorage.setItem(CHAT_CONFIG_KEY,JSON.stringify(cfg))}catch(e){}
+}
+function chatMergeLiveToggleState(cfg){
+  cfg=cfg&&typeof cfg==='object'?cfg:chatLoadConfig();
+  var mcp=document.getElementById('chat-use-mcp');
+  if(mcp)cfg.useMcp=mcp.checked===true;
+  return cfg;
 }
 function chatStoreJson(key,value){
   try{
@@ -2311,7 +2312,7 @@ function chatReadForm(){
     fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
     useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
-    mcpDefaultMigrated:true,
+    mcpUserSet:true,
     mcpUrl:API_BASE,
     cacheStrategy:chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m')||'single_5m',
     recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
@@ -2377,6 +2378,14 @@ function chatSaveConfig(silent){
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
   return cfg;
+}
+function chatOnMcpToggle(){
+  var cfg=chatReadForm();
+  cfg.useMcp=cfg.useMcp===true;
+  cfg.mcpUserSet=true;
+  chatSaveConfigObject(cfg);
+  chatUpdateRuntime(cfg);
+  chatRenderDebugRecords();
 }
 function chatEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
@@ -3704,7 +3713,7 @@ function chatToggleSettings(force,silent){
   var shell=document.querySelector('.chat-shell');
   if(shell)shell.classList.toggle('chat-settings-open',open);
   if(!silent){
-    var cfg=chatLoadConfig();
+    var cfg=chatMergeLiveToggleState(chatLoadConfig());
     cfg.settingsOpen=open;
     chatSaveConfigObject(cfg);
   }
@@ -3781,7 +3790,7 @@ function chatSwitchSideTab(tab,silent){
   document.querySelectorAll('.chat-side-tabs button').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-chat-side')===tab)});
   document.querySelectorAll('.chat-side-panel').forEach(function(p){p.classList.toggle('active',p.id==='chat-side-'+tab)});
   if(!silent){
-    var cfg=chatLoadConfig();
+    var cfg=chatMergeLiveToggleState(chatLoadConfig());
     cfg.chatSideTab=tab;
     chatSaveConfigObject(cfg);
   }
