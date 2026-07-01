@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v66';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v67';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2430,6 +2430,93 @@ function chatNormalizeImageList(list){
 function chatMessageImages(m){
   return chatNormalizeImageList(m&&m.images);
 }
+function chatCloneImageListForVersion(list){
+  return chatNormalizeImageList(list).map(function(img){
+    return {
+      id:img.id,
+      name:img.name,
+      mime:img.mime,
+      dataUrl:img.dataUrl,
+      width:img.width,
+      height:img.height,
+      size:img.size
+    };
+  });
+}
+function chatNormalizeMessageVersion(v){
+  v=v&&typeof v==='object'?v:{};
+  return {
+    text:String(v.text||''),
+    images:chatCloneImageListForVersion(v.images),
+    ts:Number(v.ts||v.updated||v.editedAt||0)||0
+  };
+}
+function chatMessageVersionHasContent(v){
+  return !!(v&&(String(v.text||'').trim()||chatNormalizeImageList(v.images).length));
+}
+function chatMessageVersionFromMessage(m){
+  return {
+    text:String((m&&m.text)||''),
+    images:chatCloneImageListForVersion(m&&m.images),
+    ts:Number((m&&(m.updated||m.ts))||Date.now())||Date.now()
+  };
+}
+function chatMessageVersionEqual(a,b){
+  a=chatNormalizeMessageVersion(a);
+  b=chatNormalizeMessageVersion(b);
+  return a.text===b.text&&JSON.stringify(a.images)===JSON.stringify(b.images);
+}
+function chatStoredMessageVersions(m){
+  return (Array.isArray(m&&m.versions)?m.versions:[]).map(chatNormalizeMessageVersion).filter(chatMessageVersionHasContent);
+}
+function chatPrepareMessageVersions(m){
+  var versions=chatStoredMessageVersions(m);
+  var current=chatMessageVersionFromMessage(m);
+  if(!versions.length)versions=[current];
+  var idx=Math.floor(Number(m&&m.versionIndex));
+  if(idx<0||idx>=versions.length||!chatMessageVersionEqual(versions[idx],current)){
+    var found=-1;
+    for(var i=0;i<versions.length;i++){
+      if(chatMessageVersionEqual(versions[i],current)){found=i;break;}
+    }
+    if(found>=0)idx=found;
+    else{
+      versions.push(current);
+      idx=versions.length-1;
+    }
+  }
+  return {versions:versions,index:idx};
+}
+function chatMessageVersionInfo(m){
+  var versions=chatStoredMessageVersions(m);
+  if(versions.length<=1)return {versions:versions,index:0,total:versions.length};
+  var idx=Math.floor(Number(m&&m.versionIndex));
+  if(idx<0||idx>=versions.length){
+    var current=chatMessageVersionFromMessage(m);
+    idx=versions.findIndex(function(v){return chatMessageVersionEqual(v,current)});
+  }
+  if(idx<0)idx=versions.length-1;
+  return {versions:versions,index:idx,total:versions.length};
+}
+function chatApplyMessageVersion(m,versions,index){
+  if(!m)return;
+  versions=(versions||[]).map(chatNormalizeMessageVersion).filter(chatMessageVersionHasContent);
+  if(!versions.length)return;
+  index=Math.max(0,Math.min(versions.length-1,Math.floor(Number(index)||0)));
+  var v=versions[index];
+  m.versions=versions;
+  m.versionIndex=index;
+  m.text=String(v.text||'');
+  if(v.images&&v.images.length)m.images=chatCloneImageListForVersion(v.images);
+  else delete m.images;
+  m.edited=versions.length>1||!!m.edited;
+}
+function chatResetUserMessageCacheState(m){
+  if(!m||m.role!=='user')return;
+  m.cacheHit=false;
+  delete m.cacheRead;
+  delete m.cacheCreate;
+}
 function chatMessageHasContent(m){
   if(!m||typeof m!=='object')return false;
   return !!String(m.text||'').trim()||chatMessageImages(m).length>0;
@@ -2606,12 +2693,21 @@ function chatPickImages(){
   chatTogglePlus(false);
   input.click();
 }
+function chatTakePhoto(){
+  if(chatSending)return;
+  var input=document.getElementById('chat-camera-input');
+  if(!input)return;
+  chatTogglePlus(false);
+  input.click();
+}
 async function chatOnImageFilesSelected(e){
   var input=e&&e.target;
   var files=Array.prototype.slice.call((input&&input.files)||[]);
   if(input)input.value='';
   if(!files.length)return;
-  var room=CHAT_IMAGE_MAX_COUNT-chatNormalizeImageList(chatDraftImages).length;
+  var editing=chatEditingIndex>=0;
+  var targetImages=editing?chatEditingImages:chatDraftImages;
+  var room=CHAT_IMAGE_MAX_COUNT-chatNormalizeImageList(targetImages).length;
   if(room<=0){
     toast('最多选择 '+CHAT_IMAGE_MAX_COUNT+' 张图片');
     return;
@@ -2628,16 +2724,19 @@ async function chatOnImageFilesSelected(e){
     try{
       var img=await chatEncodeImageFile(files[i]);
       if(img){
-        chatDraftImages.push(img);
+        if(editing)chatEditingImages.push(img);
+        else chatDraftImages.push(img);
         added+=1;
-        chatRenderDraftImages();
+        if(editing)chatRenderEditImages();
+        else chatRenderDraftImages();
       }
     }catch(err){
       toast((files[i]&&files[i].name?files[i].name+'：':'')+((err&&err.message)||'图片处理失败'));
     }
   }
   chatImageEncodingCount=Math.max(0,chatImageEncodingCount-1);
-  chatRenderDraftImages();
+  if(editing)chatRenderEditImages();
+  else chatRenderDraftImages();
   chatSetStatus();
   if(added)toast('已添加 '+added+' 张图片');
 }
@@ -3810,6 +3909,10 @@ function chatCancelEdit(){
 function chatSaveEditedMessage(){
   var input=document.getElementById('chat-input');
   if(chatEditingIndex<0||!input)return false;
+  if(chatImageEncodingCount>0){
+    toast('图片处理中');
+    return false;
+  }
   var m=chatMessages[chatEditingIndex];
   if(!m)return false;
   var text=String(input.value||'').trim();
@@ -3818,16 +3921,15 @@ function chatSaveEditedMessage(){
     toast('消息不能为空');
     return false;
   }
-  m.text=text;
-  if(images.length)m.images=images;
-  else delete m.images;
-  m.edited=true;
-  m.updated=Date.now();
-  if(m.role==='user'){
-    m.cacheHit=false;
-    delete m.cacheRead;
-    delete m.cacheCreate;
+  var prepared=chatPrepareMessageVersions(m);
+  var newVersion={text:text,images:chatCloneImageListForVersion(images),ts:Date.now()};
+  if(!chatMessageVersionEqual(prepared.versions[prepared.index],newVersion)){
+    prepared.versions.push(newVersion);
+    prepared.index=prepared.versions.length-1;
   }
+  chatApplyMessageVersion(m,prepared.versions,prepared.index);
+  m.updated=Date.now();
+  chatResetUserMessageCacheState(m);
   input.value='';
   chatAutosizeInput(input);
   chatExitEditMode();
@@ -4483,6 +4585,13 @@ document.addEventListener('click',function(e){
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
   var th=e.target.closest('.chat-thinking-head');
   if(th&&th.parentNode){th.parentNode.classList.toggle('open');return;}
+  var vb=e.target.closest('.chat-version-btn');
+  if(vb){
+    var vi=parseInt(vb.getAttribute('data-i'),10);
+    var dir=Number(vb.getAttribute('data-dir')||0)||0;
+    chatSwitchMessageVersion(vi,dir);
+    return;
+  }
   var act=e.target.closest('.chat-msg-act,.chat-user-regen');
   if(act){
     var i=parseInt(act.getAttribute('data-i'),10);
@@ -4502,7 +4611,7 @@ document.addEventListener('dblclick',function(e){
 });
 function chatEditPointerInside(target){
   if(!target||!target.closest)return false;
-  return !!target.closest('#chat-input,#chat-edit-actions,#chat-edit-images,#chat-send-btn');
+  return !!target.closest('#chat-input,#chat-edit-actions,#chat-edit-images,#chat-send-btn,#chat-plus-btn,#chat-plus-panel,#chat-image-input,#chat-camera-input');
 }
 document.addEventListener('pointerdown',function(e){
   if(chatEditingIndex<0||!e.target)return;
@@ -4652,6 +4761,32 @@ function chatUpdateCacheExpiryHint(keepScroll){
   if(old)old.remove();
   if(chatEnsureCacheExpiryNotice())chatRenderMessages({respectUserScroll:true});
 }
+function chatVersionNavHtml(m,i,role){
+  var info=chatMessageVersionInfo(m);
+  if(!info.total||info.total<=1)return '';
+  var prevDisabled=info.index<=0?' disabled aria-disabled="true"':'';
+  var nextDisabled=info.index>=info.total-1?' disabled aria-disabled="true"':'';
+  return '<div class="chat-version-nav '+role+'" aria-label="消息历史版本">'+
+    '<button class="chat-version-btn" type="button" data-i="'+i+'" data-dir="-1" title="上一版"'+prevDisabled+'>◂</button>'+
+    '<span>'+esc(String(info.index+1))+'/'+esc(String(info.total))+'</span>'+
+    '<button class="chat-version-btn" type="button" data-i="'+i+'" data-dir="1" title="下一版"'+nextDisabled+'>▸</button>'+
+    '</div>';
+}
+function chatSwitchMessageVersion(i,dir){
+  if(chatSending)return;
+  if(chatEditingIndex>=0)chatCancelEdit();
+  var m=chatMessages[i];
+  if(!m||m.role==='notice')return;
+  var info=chatMessageVersionInfo(m);
+  if(!info.total||info.total<=1)return;
+  var next=info.index+(Number(dir)||0);
+  next=Math.max(0,Math.min(info.total-1,next));
+  if(next===info.index)return;
+  chatApplyMessageVersion(m,info.versions,next);
+  chatResetUserMessageCacheState(m);
+  chatSaveLocalMessages();
+  chatRenderMessages({respectUserScroll:true});
+}
 function chatRenderMessageRow(m,i){
   if(m&&m.role==='notice'){
     var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
@@ -4672,8 +4807,9 @@ function chatRenderMessageRow(m,i){
   var imageCount=chatMessageImages(m).length;
   var bubbleState=(imageCount?' has-images':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
+  var versionNav=pending?'':chatVersionNavHtml(m,i,role);
   var fresh=chatFreshMessageKeys.has(chatMessageAnimKey(m))?' chat-fresh':'';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+tools+time+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+versionNav+tools+time+'</div>';
 }
 function chatUserMessageMetaHtml(m){
   var pending=m&&m.role==='pending_user';
