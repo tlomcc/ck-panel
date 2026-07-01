@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v53';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v54';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -1785,6 +1785,7 @@ var chatLastBlurAt=0;
 var chatLastPointerOutsideInputAt=0;
 var chatViewportRaf=0;
 var chatLastLayoutHeight=0;
+var chatFreshMessageKeys=new Set();
 var chatPlusDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null,pointerId:null};
 var chatPlusSuppressClickUntil=0;
 function chatSessionId(){
@@ -3106,9 +3107,11 @@ function chatRenderPendingBar(){
 function chatStageUserMessage(text){
   text=String(text||'').trim();
   if(!text)return;
-  chatMessages.push({role:'pending_user',text:text,ts:Date.now()});
+  var msg={role:'pending_user',text:text,ts:Date.now()};
+  chatMessages.push(msg);
+  chatMarkMessageFresh(msg);
   chatSaveLocalMessages();
-  chatRenderMessages();
+  chatRenderMessages({smooth:true});
   chatRenderPendingBar();
   chatSetStatus();
 }
@@ -3494,19 +3497,32 @@ function chatSplitAssistantReplies(rawText){
 function chatReplyRevealDelay(part,i,total){
   if(i>=total-1)return 0;
   var len=String(part||'').replace(/\s+/g,'').length;
-  return Math.max(180,Math.min(620,220+len*6));
+  return Math.max(260,Math.min(980,260+len*10));
 }
 function chatSleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
-async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents){
+function chatReplaceStreamingBubble(anchorEl,message,index){
+  if(!anchorEl||!anchorEl.parentNode||!message)return false;
+  var row=anchorEl.parentNode;
+  row.outerHTML=chatRenderMessageRow(message,index);
+  chatScrollMessagesBottom(false);
+  return true;
+}
+async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   var parts=chatSplitAssistantReplies(rawText);
   var tools=chatCloneToolEvents(toolEvents);
   if(!parts.length&&tools.length)parts=[''];
   var now=Date.now();
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
-    chatMessages.push({role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:now+i});
+    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:now+i};
+    chatMessages.push(msg);
+    chatMarkMessageFresh(msg);
     chatSaveLocalMessages();
-    chatRenderMessages();
+    if(i===0&&opts&&chatReplaceStreamingBubble(opts.anchorEl,msg,chatMessages.length-1)){
+      chatRenderPendingBar();
+    }else{
+      chatRenderMessages({smooth:true});
+    }
     var wait=chatReplyRevealDelay(part,i,parts.length);
     if(wait)await chatSleep(wait);
   }
@@ -3867,7 +3883,8 @@ document.addEventListener('keydown',function(e){
 document.addEventListener('visibilitychange',function(){
   if(!document.hidden&&currentPanelTab==='chat')chatUpdateCacheExpiryHint(true);
 });
-function chatRenderMessages(){
+function chatRenderMessages(opts){
+  opts=opts||{};
   var box=document.getElementById('chat-messages');
   if(!box)return;
   var title=document.getElementById('chat-title');
@@ -3881,17 +3898,40 @@ function chatRenderMessages(){
   chatEnsureCacheExpiryNotice();
   box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
   chatRenderPendingBar();
-  chatScrollMessagesBottom(true);
+  chatScrollMessagesBottom(opts.smooth!==true);
+}
+function chatMessageAnimKey(m){
+  if(!m)return '';
+  return String(m.role||'')+'|'+String(m.ts||0)+'|'+String(m.text||'').slice(0,48);
+}
+function chatMarkMessageFresh(m){
+  var key=chatMessageAnimKey(m);
+  if(!key)return;
+  chatFreshMessageKeys.add(key);
+  setTimeout(function(){chatFreshMessageKeys.delete(key)},1200);
 }
 function chatScrollMessagesBottom(instant){
   var box=document.getElementById('chat-messages');
   if(!box)return;
   var old=box.style.scrollBehavior;
-  if(instant)box.style.scrollBehavior='auto';
+  if(instant)box.style.setProperty('scroll-behavior','auto','important');
+  if(!instant&&box.scrollTo){
+    try{
+      box.scrollTo({top:box.scrollHeight,behavior:'smooth'});
+      requestAnimationFrame(function(){
+        try{box.scrollTo({top:box.scrollHeight,behavior:'smooth'});}
+        catch(e){box.scrollTop=box.scrollHeight}
+      });
+      return;
+    }catch(e){}
+  }
   box.scrollTop=box.scrollHeight;
   requestAnimationFrame(function(){
     box.scrollTop=box.scrollHeight;
-    if(instant)box.style.scrollBehavior=old;
+    if(instant){
+      if(old)box.style.scrollBehavior=old;
+      else box.style.removeProperty('scroll-behavior');
+    }
   });
 }
 function chatIsRealMessage(m){
@@ -3942,7 +3982,8 @@ function chatRenderMessageRow(m,i){
   var tools=toolButtons.length?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
   var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+(pending?' · 待发送':'')+'</div>';
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+'" data-i="'+i+'">'+inner+'</div>';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+'">'+(role==='assistant'?recall:'')+bubble+tools+time+'</div>';
+  var fresh=chatFreshMessageKeys.has(chatMessageAnimKey(m))?' chat-fresh':'';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+tools+time+'</div>';
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -3983,7 +4024,7 @@ function chatAddBubble(role,text,persist){
   if(tip)tip.remove();
   var ts=Date.now();
   var row=document.createElement('div');
-  row.className='chat-msg-row '+role;
+  row.className='chat-msg-row '+role+' chat-fresh';
   if(role==='assistant'&&!text)row.classList.add('streaming-empty-row');
   var el=document.createElement('div');
   el.className='chat-bubble '+role;
@@ -4182,6 +4223,7 @@ async function chatSubmitPendingMessages(){
     if(m&&m.role==='pending_user'){
       m.role='user';
       m.cacheHit=false;
+      chatMarkMessageFresh(m);
       userMessageIndexes.push(i);
     }
   });
@@ -4261,8 +4303,7 @@ async function chatSubmitPendingMessages(){
             out.classList.toggle('streaming-empty',streamingEmpty);
             if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',streamingEmpty);
             out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
-            var box=document.getElementById('chat-messages');
-            if(box)box.scrollTop=box.scrollHeight;
+            chatScrollMessagesBottom(true);
           }else if(ev==='memory'){
             recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
             document.getElementById('chat-memory-pack').value=recallInfo.preview||'';
@@ -4284,8 +4325,7 @@ async function chatSubmitPendingMessages(){
               out.classList.toggle('streaming-empty',stillEmpty);
               if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',stillEmpty);
               out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
-              var toolBox=document.getElementById('chat-messages');
-              if(toolBox)toolBox.scrollTop=toolBox.scrollHeight;
+              chatScrollMessagesBottom(true);
             }
             if(ev==='usage'){
               chatUpdateRuntime(cfg,data||{});
@@ -4309,9 +4349,9 @@ async function chatSubmitPendingMessages(){
         });
       }
     }
-    if(out&&out.parentNode)out.parentNode.remove();
     chatSetStatus('正在显示回复...');
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents);
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out});
+    if(out&&out.parentNode)out.parentNode.remove();
     chatSetStatus('完成');
   }catch(e){
     if(e&&e.name==='AbortError'){
