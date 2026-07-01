@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v54';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v55';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -1759,6 +1759,8 @@ var CHAT_MAX_VISIBLE_MESSAGES=0;
 var CHAT_MAX_TRANSPORT_MESSAGES=0;
 var CHAT_LOCAL_SUMMARY_VISIBLE_MESSAGES=40;
 var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
+var CHAT_AUTO_TRIM_THRESHOLD=500;
+var CHAT_AUTO_TRIM_DROP=400;
 var CHAT_INDEXEDDB_NAME='ckPanelChatStoreV1';
 var CHAT_INDEXEDDB_VERSION=1;
 var CHAT_INDEXEDDB_SESSION_STORE='sessions';
@@ -1847,6 +1849,10 @@ function chatNumberOrDefault(value,fallback){
   var n=Number(value);
   return isFinite(n)?n:fallback;
 }
+function chatPositiveIntOrDefault(value,fallback){
+  var n=Math.floor(Number(value));
+  return isFinite(n)&&n>0?n:fallback;
+}
 function chatNormalizeCostPricing(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
   var d=chatDefaultCostPricing();
@@ -1858,6 +1864,22 @@ function chatNormalizeCostPricing(raw){
     cacheCreatePerMTokens:Math.max(0,chatNumberOrDefault(raw.cacheCreatePerMTokens!==undefined?raw.cacheCreatePerMTokens:raw.cacheCreate,d.cacheCreatePerMTokens)),
     multiplier:Math.max(0,chatNumberOrDefault(raw.multiplier,d.multiplier))
   };
+}
+function chatNormalizeAutoTrimConfig(raw){
+  raw=(raw&&typeof raw==='object')?raw:{};
+  return {
+    enabled:raw.enabled!==false,
+    threshold:Math.max(1,chatPositiveIntOrDefault(raw.threshold,CHAT_AUTO_TRIM_THRESHOLD)),
+    drop:Math.max(1,chatPositiveIntOrDefault(raw.drop,CHAT_AUTO_TRIM_DROP))
+  };
+}
+function chatAutoTrimConfigFrom(cfg){
+  cfg=cfg||{};
+  return chatNormalizeAutoTrimConfig({
+    enabled:cfg.autoTrimEnabled,
+    threshold:cfg.autoTrimThreshold,
+    drop:cfg.autoTrimDrop
+  });
 }
 function chatCurrentCostPricing(){
   try{
@@ -1948,6 +1970,9 @@ function chatDefaultConfig(){
     recallHistoryRetentionSeconds:300,
     promptCacheTtl:'1h',
     fullWindowContext:true,
+    autoTrimEnabled:true,
+    autoTrimThreshold:CHAT_AUTO_TRIM_THRESHOLD,
+    autoTrimDrop:CHAT_AUTO_TRIM_DROP,
     settingsOpen:false,
     chatSideTab:'model',
     memoryPreview:'',
@@ -2133,6 +2158,10 @@ function chatLoadConfig(){
   cfg.systemPromptPosition=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
+  var trim=chatAutoTrimConfigFrom(cfg);
+  cfg.autoTrimEnabled=trim.enabled;
+  cfg.autoTrimThreshold=trim.threshold;
+  cfg.autoTrimDrop=trim.drop;
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   return cfg;
 }
@@ -2150,6 +2179,10 @@ function chatSaveConfigObject(cfg){
   delete cfg.mainRouteReason;
   delete cfg.chatApiSource;
   cfg.recall=true;
+  var trim=chatAutoTrimConfigFrom(cfg);
+  cfg.autoTrimEnabled=trim.enabled;
+  cfg.autoTrimThreshold=trim.threshold;
+  cfg.autoTrimDrop=trim.drop;
   try{localStorage.setItem(CHAT_CONFIG_KEY,JSON.stringify(cfg))}catch(e){}
 }
 function chatMergeLiveToggleState(cfg){
@@ -2299,6 +2332,11 @@ function chatReadForm(){
   var settings=document.querySelector('.chat-settings');
   var activeTab=document.querySelector('.chat-side-tabs button.active');
   var retentionEl=document.getElementById('chat-recall-retention-seconds');
+  var trimCfg=chatNormalizeAutoTrimConfig({
+    enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
+    threshold:chatFieldValue('chat-auto-trim-threshold',saved.autoTrimThreshold||CHAT_AUTO_TRIM_THRESHOLD),
+    drop:chatFieldValue('chat-auto-trim-drop',saved.autoTrimDrop||CHAT_AUTO_TRIM_DROP)
+  });
   var cfg={
     gatewayUrl:GRAPH_API_BASE,
     panelKey:String(chatFieldValue('chat-panel-key',saved.panelKey||'')||'').trim(),
@@ -2319,6 +2357,9 @@ function chatReadForm(){
     recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
     promptCacheTtl:saved.promptCacheTtl||'1h',
     fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
+    autoTrimEnabled:trimCfg.enabled,
+    autoTrimThreshold:trimCfg.threshold,
+    autoTrimDrop:trimCfg.drop,
     settingsOpen:settings?settings.classList.contains('open'):false,
     chatSideTab:(activeTab&&activeTab.getAttribute)?activeTab.getAttribute('data-chat-side'):'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
@@ -2343,6 +2384,10 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-mcp-url',API_BASE);
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String((cfg.recallHistoryRetentionSeconds===0)?0:(cfg.recallHistoryRetentionSeconds||300));
+  var trimCfg=chatAutoTrimConfigFrom(cfg);
+  chatSetFieldChecked('chat-auto-trim-enabled',trimCfg.enabled);
+  chatSetFieldValue('chat-auto-trim-threshold',trimCfg.threshold);
+  chatSetFieldValue('chat-auto-trim-drop',trimCfg.drop);
   var costPricing=chatNormalizeCostPricing(cfg.costPricing);
   chatSetFieldValue('chat-cost-currency',costPricing.currency);
   chatSetFieldValue('chat-cost-input-price',costPricing.inputPerMTokens);
@@ -2357,6 +2402,7 @@ function chatWriteForm(cfg){
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
   chatRenderWorldbooks(cfg);
   chatRenderMainRouteSummary();
+  chatRenderTrimState(cfg);
   chatUpdateRuntime(cfg);
 }
 function chatSyncCacheStrategyFields(silent){
@@ -2375,6 +2421,7 @@ function chatSaveConfig(silent){
   chatSaveConfigObject(cfg);
   if(!apiProvidersLoaded&&String(cfg.panelKey||'').trim())loadApiProviders({silentAuth:true});
   chatRenderMainRouteSummary();
+  chatRenderTrimState(cfg);
   chatUpdateRuntime(cfg);
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
@@ -2817,6 +2864,22 @@ function chatUpdateRuntime(cfg,usage){
     else cache.textContent='网关 session 历史';
   }
 }
+function chatRenderTrimState(cfg){
+  var current=document.getElementById('chat-trim-current');
+  var next=document.getElementById('chat-trim-next');
+  if(!current&&!next)return;
+  var trim=chatAutoTrimConfigFrom(cfg||chatLoadConfig());
+  var count=chatAutoTrimRoundCount(chatMessages);
+  if(current)current.textContent='当前 '+count+' 轮';
+  if(!next)return;
+  if(!trim.enabled){
+    next.textContent='自动截断已关闭。';
+  }else if(count>trim.threshold){
+    next.textContent='下一次发送前会删除最早 '+Math.min(trim.drop,Math.max(0,count-1))+' 轮。';
+  }else{
+    next.textContent='超过 '+trim.threshold+' 轮后删除最早 '+trim.drop+' 轮。';
+  }
+}
 function chatNowTitle(){
   var d=new Date();
   return '新对话 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
@@ -3081,6 +3144,64 @@ function chatSaveLocalMessages(){
   s.updated=Date.now();
   chatSaveSessions();
   chatRenderSessions();
+  chatRenderTrimState();
+}
+function chatIsAutoTrimTurn(m){
+  if(!m||typeof m!=='object')return false;
+  if(m.role!=='user'&&m.role!=='pending_user')return false;
+  return !!String(m.text||'').trim();
+}
+function chatAutoTrimRoundCount(list){
+  return (Array.isArray(list)?list:[]).filter(chatIsAutoTrimTurn).length;
+}
+function chatDropFirstAutoTrimRounds(list,drop){
+  list=Array.isArray(list)?list:[];
+  drop=Math.max(0,Math.floor(Number(drop)||0));
+  if(!drop)return list.slice();
+  var dropped=0;
+  for(var i=0;i<list.length;i++){
+    if(chatIsAutoTrimTurn(list[i])){
+      dropped++;
+      if(dropped>drop)return list.slice(i);
+    }
+  }
+  return list.length?list.slice(-1):[];
+}
+function chatResetSessionAnchorFromMessages(s){
+  s=s||chatCurrentSession();
+  var first=(s.messages||[]).find(function(m){
+    return m&&(m.role==='user'||m.role==='pending_user')&&String(m.text||'').trim();
+  });
+  if(first){
+    s.firstUserText=String(first.text||'').trim().slice(0,3000);
+    s.firstUserTs=Number(first.ts||0)||Date.now();
+  }else{
+    s.firstUserText='';
+    s.firstUserTs=0;
+  }
+}
+function chatApplyAutoTrimBeforeRequest(cfg){
+  var trim=chatAutoTrimConfigFrom(cfg||chatLoadConfig());
+  var before=chatAutoTrimRoundCount(chatMessages);
+  if(!trim.enabled||before<=trim.threshold){
+    chatRenderTrimState(cfg);
+    return {trimmed:false,before:before,after:before,dropped:0};
+  }
+  var drop=Math.min(trim.drop,Math.max(0,before-1));
+  if(drop<=0)return {trimmed:false,before:before,after:before,dropped:0};
+  var s=chatCurrentSession();
+  var oldTransport=(s.transportMessages||[]).length;
+  chatMessages=chatDropFirstAutoTrimRounds(chatMessages,drop);
+  var after=chatAutoTrimRoundCount(chatMessages);
+  s.messages=chatMessages;
+  s.transportMessages=[];
+  s.transportUpdated=0;
+  chatResetSessionAnchorFromMessages(s);
+  s.updated=Date.now();
+  chatSaveSessions();
+  chatRenderSessions();
+  chatRenderTrimState(cfg);
+  return {trimmed:true,before:before,after:after,dropped:before-after,transportCleared:oldTransport};
 }
 function chatWindowContextMessages(){
   return (chatMessages||[]).filter(function(m){
@@ -3724,7 +3845,7 @@ function chatAttachPlusGesture(){
   document.addEventListener('touchcancel',chatPlusTouchEnd,{passive:true});
 }
 function chatSettingTitle(tab){
-  return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',debug:'调试记录'})[tab]||'聊天设置';
+  return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
@@ -3836,6 +3957,7 @@ function chatSwitchSideTab(tab,silent){
     chatRenderDebugRecords();
     chatScrollDebugBottom();
   }
+  if(tab==='trim')chatRenderTrimState();
 }
 document.addEventListener('click',function(e){
   if(!e.target||!e.target.closest)return;
@@ -4217,6 +4339,7 @@ async function chatSubmitPendingMessages(){
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
+  var trimResult=chatApplyAutoTrimBeforeRequest(cfg);
   var windowMessagesForRequest=chatWindowContextMessages();
   var userMessageIndexes=[];
   chatMessages.forEach(function(m,i){
@@ -4270,7 +4393,7 @@ async function chatSubmitPendingMessages(){
   if(transportForRequest.length)body.transport_messages=transportForRequest;
   if(currentSession.transportUpdated)body.transport_updated_at=currentSession.transportUpdated;
   if(cfg.useMcp===true&&cfg.mcpUrl)body.mcp_url=cfg.mcpUrl;
-  if(cfg.fullWindowContext!==false)body.window_messages=windowMessagesForRequest;
+  if(cfg.fullWindowContext!==false||trimResult.trimmed)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
   var assistantText='',recallInfo=null,toolEvents=[];
   try{
