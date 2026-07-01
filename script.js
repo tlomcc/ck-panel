@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v52';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v53';
 var ckPanelUpdateTarget='';
 try{
   var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
@@ -3388,6 +3388,28 @@ function chatRenderAssistantContent(rawText,streaming,tools){
   var caret=(streaming&&split.text)?'<span class="chat-caret"></span>':'';
   return thinking+toolTrace+body+caret;
 }
+function chatStreamingAssistantPreviewText(rawText){
+  var parsed=chatSplitThinkingText(rawText,{suppressThinking:true,hideUnclosedThinking:true});
+  var text=String(parsed.text||'').trim();
+  if(!text)return '';
+  var paragraphs=text.split(/\n{2,}/).map(function(x){return x.trim()}).filter(Boolean);
+  if(paragraphs.length>1)return paragraphs[0];
+  var units=chatNaturalUnits(text);
+  if(units.length>1&&chatNaturalTextLen(text)>=70){
+    var target=Math.min(units.length,text.length<260?2:3);
+    var preview=[],len=0;
+    for(var i=0;i<units.length&&preview.length<target;i++){
+      preview.push(units[i]);
+      len+=chatNaturalTextLen(units[i]);
+      if(len>=56)break;
+    }
+    return chatNaturalJoin(preview);
+  }
+  return text;
+}
+function chatRenderStreamingAssistantContent(rawText,tools){
+  return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools);
+}
 function chatNaturalTextLen(text){
   var len=String(text||'').replace(/\s+/g,'').length;
   return len;
@@ -4223,7 +4245,7 @@ async function chatSubmitPendingMessages(){
     if(!resp.body){
       var plain=await resp.text();
       assistantText=plain;
-      out.innerHTML=chatRenderAssistantContent(plain,false);
+      out.innerHTML=chatRenderStreamingAssistantContent(plain,toolEvents);
     }else{
       var reader=resp.body.getReader();
       var decoder=new TextDecoder();
@@ -4238,7 +4260,7 @@ async function chatSubmitPendingMessages(){
             var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
             out.classList.toggle('streaming-empty',streamingEmpty);
             if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',streamingEmpty);
-            out.innerHTML=chatRenderAssistantContent(assistantText,true,toolEvents);
+            out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
             var box=document.getElementById('chat-messages');
             if(box)box.scrollTop=box.scrollHeight;
           }else if(ev==='memory'){
@@ -4261,7 +4283,7 @@ async function chatSubmitPendingMessages(){
               var stillEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
               out.classList.toggle('streaming-empty',stillEmpty);
               if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',stillEmpty);
-              out.innerHTML=chatRenderAssistantContent(assistantText,true,toolEvents);
+              out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
               var toolBox=document.getElementById('chat-messages');
               if(toolBox)toolBox.scrollTop=toolBox.scrollHeight;
             }
