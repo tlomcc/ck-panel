@@ -44,6 +44,10 @@ Do not send these fields:
 
 `prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` sends `1h`. The gateway maps it to Anthropic `cache_control.ttl`; when it is `1h`, the gateway adds the extended cache TTL beta header for upstream requests. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
 
+`recall` controls only gateway memory recall. `true` means the gateway may query memory and inject a `<ck_gateway_context>` block when recall returns content. `false` still routes through the gateway, but must not query memory, must not inject `<ck_gateway_context>`, and should strip old gateway recall blocks from hidden history so stale recall does not leak into the no-recall mode.
+
+The gateway must not inject a changing current-time block just because recall is enabled. If memory recall returns no content, the gateway should skip `<ck_gateway_context>` entirely. Dynamic recall, if present, must stay after a stable user cache anchor and must not itself carry `cache_control`.
+
 `transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts. The panel should omit this field when it has no hidden transport yet, and the gateway should ignore empty transport arrays so `window_messages` or gateway session history can still be used.
 
 The gateway should send hidden history through a dedicated `transport` SSE event:
@@ -108,6 +112,8 @@ This is not upstream hidden chain-of-thought. It is user-visible role text that 
 Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor`; worldbook and memory pack use `system_tail`. Use `latest_user_*` only for compatibility testing, because those positions sit near the dynamic recall context and usually give weaker prompt-cache reuse than stable system positions.
 
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
+
+For the Claude-compatible `/v1/messages` gateway route used by RikkaHub, prompt cache must follow the same rule: do not add current time, and if gateway context is present while the client did not provide a stable message breakpoint, add `cache_control` to stable real user text blocks before the gateway context. When there are at least two real user messages, keep the previous real user anchor and create the latest real user anchor so the second and later turns can reuse the prior cache while preparing the next one.
 
 `window_messages` is the dedicated same-window full-context field. It is different from forbidden `history` / `messages`:
 

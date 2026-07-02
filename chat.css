@@ -3308,13 +3308,13 @@ body.chat-active.chat-editing .chat-edit-image-remove{
   }
 }
 
-/* Keep user bubble width driven by message text, not the timestamp line. */
+/* User metadata lives below the action buttons, outside the bubble. */
 body.chat-active .chat-bubble.user:not(.has-images){
   display:inline-block!important;
   width:fit-content!important;
   max-width:min(620px,76%)!important;
   min-width:0!important;
-  padding:9px 13px 22px 13px!important;
+  padding:9px 13px!important;
   overflow:visible!important;
 }
 
@@ -3324,47 +3324,84 @@ body.chat-active .chat-bubble.user:not(.has-images) .chat-user-text{
   max-width:100%!important;
 }
 
-body.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta{
-  position:absolute!important;
-  left:13px!important;
-  right:13px!important;
-  bottom:6px!important;
+body.chat-active .chat-bubble.user .chat-msg-meta{
+  display:none!important;
+}
+
+body.chat-active .chat-msg-row.user>.chat-msg-meta{
+  position:static!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
   float:none!important;
+  align-self:flex-end!important;
   display:flex!important;
   align-items:center!important;
   justify-content:flex-end!important;
   gap:3px!important;
   width:auto!important;
-  max-width:none!important;
-  height:10px!important;
-  margin:0!important;
+  max-width:min(620px,82%)!important;
+  min-width:0!important;
+  height:auto!important;
+  margin:0 8px 0 0!important;
+  padding:0!important;
   color:rgba(91,105,98,.58)!important;
-  font-size:9px!important;
-  line-height:1!important;
+  font-size:10px!important;
+  line-height:1.15!important;
   white-space:nowrap!important;
   pointer-events:none!important;
   user-select:none!important;
+  opacity:.9!important;
 }
 
-body.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta-time,
-body.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta-pending{
-  flex:0 0 auto!important;
+body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-msg-meta-time,
+body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-msg-meta-pending{
+  flex:0 1 auto!important;
   min-width:0!important;
-  line-height:1!important;
+  overflow:hidden!important;
+  text-overflow:clip!important;
+  line-height:1.15!important;
 }
 
-body.chat-active .chat-bubble.user:not(.has-images) .chat-cache-tick{
+body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-cache-tick{
   flex:0 0 auto!important;
   transform:scale(.82)!important;
   transform-origin:right center!important;
 }
 
-body.dark.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta{
+body.dark.chat-active .chat-msg-row.user>.chat-msg-meta{
   color:rgba(230,246,235,.58)!important;
+}
+
+body.chat-active .chat-recall-mode-card{
+  border-color:rgba(18,140,76,.18)!important;
+  background:linear-gradient(180deg,#f5fff8,#ffffff)!important;
+}
+
+body.chat-active .chat-recall-switch{
+  margin:8px 0 10px!important;
+  padding:10px 11px!important;
+  border:1px solid rgba(18,140,76,.16)!important;
+  border-radius:8px!important;
+  background:rgba(244,255,248,.86)!important;
+}
+
+body.chat-active #chat-side-debug{
+  overflow-y:auto!important;
+  overscroll-behavior:contain!important;
+  touch-action:pan-y!important;
+}
+
+body.chat-active #chat-side-debug .chat-debug{
+  min-height:0!important;
+  overscroll-behavior:contain!important;
 }
 
 @media(max-width:760px){
   body.chat-active .chat-bubble.user:not(.has-images){
     max-width:min(300px,82%)!important;
+  }
+  body.chat-active .chat-msg-row.user>.chat-msg-meta{
+    max-width:min(300px,88%)!important;
   }
 }
