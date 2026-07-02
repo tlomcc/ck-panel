@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v74';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v75';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2215,10 +2215,11 @@ function chatCacheStrategyMeta(value){
       value:'prefix_24h',
       label:'24h 共同缓存',
       shortLabel:'24h',
-      ttl:'1h',
+      ttl:'',
+      ttlLabel:'NC 自动',
       retentionSeconds:0,
-      sendText:'NC 24h 共同内容缓存；全量历史发送，但旧召回和旧图片每轮剔除',
-      debugText:'共同内容可命中 + 清旧召回/旧图片'
+      sendText:'NC 24h 共同内容缓存；不发送显式 cache_control，旧召回和旧图片每轮剔除',
+      debugText:'共同内容自动缓存 + 清旧召回/旧图片'
     };
   }
   if(strategy==='assistant_latest'){
@@ -2227,6 +2228,7 @@ function chatCacheStrategyMeta(value){
       label:'助手断点',
       shortLabel:'助手',
       ttl:'5m',
+      ttlLabel:'5m',
       retentionSeconds:300,
       sendText:'缓存断点放在最新助手消息后面；改删最新助手或插话会让该断点失效',
       debugText:'最新助手消息后断点'
@@ -2237,10 +2239,18 @@ function chatCacheStrategyMeta(value){
     label:'5min 用户断点',
     shortLabel:'5min',
     ttl:'5m',
+    ttlLabel:'5m',
     retentionSeconds:300,
     sendText:'缓存断点放在最新用户消息下面；5 分钟内必须一字不差，超过 5 分钟会重建',
     debugText:'最新用户消息下断点'
   };
+}
+function chatCacheStrategyTtlLabel(meta){
+  return (meta&&meta.ttlLabel)||(meta&&meta.ttl)||'NC 自动';
+}
+function chatCacheStrategyTtlDetail(meta){
+  if(meta&&meta.value==='prefix_24h')return '不发送显式 cache_control；由 NC 共同内容缓存自动处理';
+  return 'cache_control TTL：'+chatCacheStrategyTtlLabel(meta)+'（只影响上游缓存有效期，不截断历史）';
 }
 function chatRecallMeta(enabled){
   var on=enabled!==false;
@@ -2273,11 +2283,11 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   var savedMeta=chatCacheStrategyMeta(savedCfg.cacheStrategy);
   var recallMeta=chatRecallMeta(savedCfg.recall!==false);
   var savedEl=document.getElementById('chat-cache-saved-mode');
-  if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+savedMeta.ttl;
+  if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(savedMeta);
   var debugMode=document.getElementById('chat-debug-cache-mode');
-  if(debugMode)debugMode.textContent='当前缓存模式：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜cache TTL：'+savedMeta.ttl+'｜记忆召回：'+recallMeta.label;
+  if(debugMode)debugMode.textContent='【缓存模式】'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+'｜记忆召回：'+recallMeta.label;
   var detail=document.getElementById('chat-cache-mode-detail');
-  if(detail)detail.textContent='当前选择：'+meta.label+'｜发送：'+meta.sendText+'｜cache_control TTL：'+meta.ttl+'（只影响上游缓存有效期，不截断历史）';
+  if(detail)detail.textContent='当前选择：'+meta.label+'｜发送：'+meta.sendText+'｜'+chatCacheStrategyTtlDetail(meta);
   var status=document.getElementById('chat-cache-save-status');
   if(status){
     status.textContent=statusText||'点击模式会立即保存，也可点按钮确认。';
@@ -3155,7 +3165,7 @@ function chatSaveCacheStrategy(auto){
   var retention=document.getElementById('chat-recall-retention-seconds');
   if(retention)retention.value=String(meta.retentionSeconds);
   var cfg=chatSaveConfig(true);
-  chatRenderCacheStrategyState('已保存成功：'+meta.label+'｜发送：'+meta.debugText+'｜TTL：'+meta.ttl,'ok');
+  chatRenderCacheStrategyState('已保存成功：'+meta.label+'｜发送：'+meta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(meta),'ok');
   if(!auto)toast('缓存模式已保存：'+meta.label);
   return cfg;
 }
@@ -3502,7 +3512,7 @@ function chatFormatDebug(ev,data){
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
     var strategy=data.effective_cache_strategy||data.cache_strategy||'single_5m';
     var strategyMeta=chatCacheStrategyMeta(strategy);
-    var ttl=data.prompt_cache_ttl||data.cache_control_ttl||strategyMeta.ttl;
+    var ttl=data.prompt_cache_ttl||data.cache_control_ttl||chatCacheStrategyTtlLabel(strategyMeta);
     var strategyText=strategyMeta.label+'｜发送：'+strategyMeta.debugText+'｜TTL：'+ttl;
     var recallMeta=chatRecallMeta(data.recall_enabled!==false);
     var injectText=data.gateway_context_injected===true
@@ -3548,7 +3558,7 @@ function chatFormatDebug(ev,data){
       var changes=(data.canonical_changes||[]).join('；')||'无';
       changes=changes.replace(/canonical inject: session=/g,'会话=').replace(/ users=/g,'｜用户消息数=').replace(/ restored_past=/g,'｜已恢复旧消息=');
       var diagMeta=data.cache_strategy?chatCacheStrategyMeta(data.cache_strategy):null;
-      var diagMode=diagMeta?('｜模式：'+diagMeta.label+'｜发送：'+diagMeta.debugText+'｜TTL：'+(data.prompt_cache_ttl||diagMeta.ttl)):'';
+      var diagMode=diagMeta?('｜模式：'+diagMeta.label+'｜发送：'+diagMeta.debugText+'｜TTL：'+(data.prompt_cache_ttl||chatCacheStrategyTtlLabel(diagMeta))):'';
       var diagRecall=data.recall_enabled===false?'｜召回关闭':(data.gateway_context_injected?'｜召回已注入':'｜无召回注入');
       return '🧊 缓存诊断'+diagMode+diagRecall+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint);
     }
@@ -3672,7 +3682,7 @@ function chatUpdateRuntime(cfg,usage){
     var read=chatUsageCacheRead(usage||{});
     var create=chatUsageCacheCreate(usage||{});
     var meta=chatCacheStrategyMeta(cfg.cacheStrategy);
-    var modeText=meta.label+'｜'+meta.debugText+'｜TTL '+meta.ttl;
+    var modeText=meta.label+'｜'+meta.debugText+'｜TTL '+chatCacheStrategyTtlLabel(meta);
     if(read||create)cache.textContent=modeText+'｜读取 '+read+' / 创建 '+create;
     else cache.textContent=modeText;
   }
@@ -5467,12 +5477,12 @@ async function chatSubmitPendingMessages(){
     use_mcp:cfg.useMcp===true,
     cache_strategy:cacheStrategy,
     recall_history_retention_seconds:recallRetention,
-    prompt_cache_ttl:promptCacheTtl,
     session_anchor:{
       first_user_text:anchorText,
       first_user_ts:currentSession.firstUserTs||0
     }
   };
+  if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
   var transportForRequest=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
   if(transportForRequest.length)body.transport_messages=transportForRequest;
   if(currentSession.transportUpdated)body.transport_updated_at=currentSession.transportUpdated;

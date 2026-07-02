@@ -22,7 +22,8 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "ck_thinking_prompt": "visible pseudo-thinking style prompt",
   "ck_thinking_injection_position": "system_after_anchor",
   "use_mcp": false,
-  "prompt_cache_ttl": "5m or 1h",
+  "cache_strategy": "single_5m | prefix_24h | assistant_latest",
+  "prompt_cache_ttl": "5m for strict breakpoint modes only; omit for prefix_24h",
   "session_anchor": {
     "first_user_text": "first visible user message in this CK window",
     "first_user_ts": 1760000000000
@@ -42,7 +43,7 @@ Do not send these fields:
 
 `script.js` has a request-body lock that removes those fields before sending, but new code should not add them in the first place.
 
-`prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` sends `1h`. The gateway maps it to Anthropic `cache_control.ttl`; when it is `1h`, the gateway adds the extended cache TTL beta header for upstream requests. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
+`prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` omits `prompt_cache_ttl` and does not request explicit Anthropic-style `cache_control`. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
 
 `recall` controls only gateway memory recall. `true` means the gateway may query memory and inject a `<ck_gateway_context>` block when recall returns content. `false` still routes through the gateway, but must not query memory, must not inject `<ck_gateway_context>`, and should strip old gateway recall blocks from hidden history so stale recall does not leak into the no-recall mode.
 
@@ -86,7 +87,7 @@ For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text bloc
 `cache_strategy` is allowed and should be one of:
 
 - `single_5m`: place the cache breakpoint under the latest user message. It is strict: the cached prefix must match byte-for-byte within the 5 minute TTL. The gateway preserves injected historical user messages while the previous turn is still within the short prompt-cache TTL; when idle time exceeds `recall_history_retention_seconds`, it strips old `<ck_gateway_context>` blocks and rebuilds from clean chat history.
-- `prefix_24h`: optimize for long-lived prefix cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message. The strategy name describes the NC prefix-cache mode; the explicit Anthropic-compatible cache TTL currently sent by the panel is `1h`.
+- `prefix_24h`: optimize for NC long-lived common-content cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message. This mode must not add explicit `cache_control` anchors and must not send `prompt_cache_ttl: "1h"`; the strategy name describes NC's common-content cache behavior, not a one-hour history window.
 - `assistant_latest`: place the cache breakpoint after the latest assistant message. Editing/deleting the latest assistant reply or inserting a message after it can invalidate that breakpoint.
 
 `recall_history_retention_seconds` defaults to `300` for `single_5m` and `assistant_latest`, and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
@@ -113,7 +114,7 @@ Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor
 
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
 
-For the Claude-compatible `/v1/messages` gateway route used by RikkaHub, prompt cache must follow the same rule: do not add current time, and if gateway context is present while the client did not provide a stable message breakpoint, add `cache_control` to stable real user text blocks before the gateway context. When there are at least two real user messages, keep the previous real user anchor and create the latest real user anchor so the second and later turns can reuse the prior cache while preparing the next one.
+For the Claude-compatible `/v1/messages` gateway route used by RikkaHub, prompt-cache-off traffic must be a near pass-through: default to no memory recall injection, do not add current time, do not add gateway-owned `cache_control` when the client did not send one, and keep forwarding headers limited to stable AI-provider headers. If RikkaHub-compatible recall is explicitly enabled by key/header/body, the gateway must freeze and restore old injected user messages before adding the latest recall block; otherwise a serverless instance switch can make the next turn's prefix differ from the previous turn. If the client did send `cache_control`, the gateway may strip and relocate anchors away from dynamic `<ck_gateway_context>` blocks, but it must not invent anchors for RikkaHub promptCaching=false requests. This matches RikkaHub direct-to-NC behavior, where promptCaching=false sends no explicit message `cache_control` but NC can still reuse stable common prefixes.
 
 `window_messages` is the dedicated same-window full-context field. It is different from forbidden `history` / `messages`:
 
