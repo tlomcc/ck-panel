@@ -22,7 +22,7 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "ck_thinking_prompt": "visible pseudo-thinking style prompt",
   "ck_thinking_injection_position": "system_after_anchor",
   "use_mcp": false,
-  "prompt_cache_ttl": "1h",
+  "prompt_cache_ttl": "5m or 1h",
   "session_anchor": {
     "first_user_text": "first visible user message in this CK window",
     "first_user_ts": 1760000000000
@@ -42,7 +42,7 @@ Do not send these fields:
 
 `script.js` has a request-body lock that removes those fields before sending, but new code should not add them in the first place.
 
-`prompt_cache_ttl` defaults to `1h` for CK panel requests. The gateway maps this to Anthropic `cache_control.ttl = "1h"` and adds the extended cache TTL beta header for upstream requests. This reduces false instability from the default short prompt-cache lifetime.
+`prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `prefix_24h` sends `1h`. The gateway maps it to Anthropic `cache_control.ttl`; when it is `1h`, the gateway adds the extended cache TTL beta header for upstream requests. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
 
 `transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts. The panel should omit this field when it has no hidden transport yet, and the gateway should ignore empty transport arrays so `window_messages` or gateway session history can still be used.
 
@@ -82,7 +82,7 @@ For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text bloc
 `cache_strategy` is allowed and should be one of:
 
 - `single_5m`: preserve injected historical user messages while the previous turn is still within the short prompt-cache TTL; when idle time exceeds `recall_history_retention_seconds`, the gateway strips old `<ck_gateway_context>` blocks and rebuilds from clean chat history.
-- `prefix_24h`: optimize for long-lived prefix cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message.
+- `prefix_24h`: optimize for long-lived prefix cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message. The strategy name describes the NC prefix-cache mode; the explicit Anthropic-compatible cache TTL currently sent by the panel is `1h`.
 
 `recall_history_retention_seconds` defaults to `300` for `single_5m` and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
 

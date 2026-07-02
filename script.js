@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v69';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v70';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2188,7 +2188,7 @@ function chatDefaultConfig(){
     mcpUrl:API_BASE,
     cacheStrategy:'single_5m',
     recallHistoryRetentionSeconds:300,
-    promptCacheTtl:'1h',
+    promptCacheTtl:'5m',
     fullWindowContext:true,
     splitAssistantReplies:true,
     autoTrimEnabled:true,
@@ -2201,6 +2201,55 @@ function chatDefaultConfig(){
     costPricing:chatDefaultCostPricing(),
     worldbooks:[]
   };
+}
+function chatNormalizeCacheStrategy(value){
+  return String(value||'').trim()==='prefix_24h'?'prefix_24h':'single_5m';
+}
+function chatCacheStrategyMeta(value){
+  var strategy=chatNormalizeCacheStrategy(value);
+  if(strategy==='prefix_24h'){
+    return {
+      value:'prefix_24h',
+      label:'24h 前缀缓存',
+      shortLabel:'24h',
+      ttl:'1h',
+      retentionSeconds:0,
+      sendText:'全量历史发送，旧召回和旧图片每轮剔除，只保留稳定文字',
+      debugText:'全量历史 + 清旧召回/旧图片'
+    };
+  }
+  return {
+    value:'single_5m',
+    label:'5min 严格断点',
+    shortLabel:'5min',
+    ttl:'5m',
+    retentionSeconds:300,
+    sendText:'5 分钟内历史原样保留，超过 5 分钟后剔除旧召回和旧图片',
+    debugText:'5 分钟内历史原样'
+  };
+}
+function chatRenderCacheStrategyState(statusText,statusKind){
+  var strategy=document.getElementById('chat-cache-strategy');
+  var selected=chatNormalizeCacheStrategy(strategy?strategy.value:(chatLoadConfig().cacheStrategy||'single_5m'));
+  var meta=chatCacheStrategyMeta(selected);
+  var retention=document.getElementById('chat-recall-retention-seconds');
+  if(strategy)strategy.value=meta.value;
+  if(retention)retention.value=String(meta.retentionSeconds);
+  document.querySelectorAll('[data-cache-strategy]').forEach(function(btn){
+    btn.classList.toggle('active',btn.getAttribute('data-cache-strategy')===meta.value);
+  });
+  var savedMeta=chatCacheStrategyMeta((chatLoadConfig()||{}).cacheStrategy);
+  var savedEl=document.getElementById('chat-cache-saved-mode');
+  if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+savedMeta.ttl;
+  var debugMode=document.getElementById('chat-debug-cache-mode');
+  if(debugMode)debugMode.textContent='当前缓存模式：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜cache TTL：'+savedMeta.ttl;
+  var detail=document.getElementById('chat-cache-mode-detail');
+  if(detail)detail.textContent='当前选择：'+meta.label+'｜发送：'+meta.sendText+'｜cache_control TTL：'+meta.ttl+'（只影响上游缓存有效期，不截断历史）';
+  var status=document.getElementById('chat-cache-save-status');
+  if(status){
+    status.textContent=statusText||'点击模式会立即保存，也可点按钮确认。';
+    status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
+  }
 }
 function chatStyleSystemPrompt(){
   return [
@@ -2970,10 +3019,8 @@ function chatReadForm(){
   var saved=chatLoadConfig();
   var settings=document.querySelector('.chat-settings');
   var activeTab=document.querySelector('.chat-side-tabs button.active');
-  var retentionEl=document.getElementById('chat-recall-retention-seconds');
-  var cacheStrategyValue=chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m')||'single_5m';
-  cacheStrategyValue=cacheStrategyValue==='prefix_24h'?'prefix_24h':'single_5m';
-  var promptCacheTtlValue=cacheStrategyValue==='single_5m'?'5m':'1h';
+  var cacheStrategyValue=chatNormalizeCacheStrategy(chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m'));
+  var cacheMeta=chatCacheStrategyMeta(cacheStrategyValue);
   var trimCfg=chatNormalizeAutoTrimConfig({
     enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
     threshold:chatFieldValue('chat-auto-trim-threshold',saved.autoTrimThreshold||CHAT_AUTO_TRIM_THRESHOLD),
@@ -2996,8 +3043,8 @@ function chatReadForm(){
     mcpUserSet:true,
     mcpUrl:API_BASE,
     cacheStrategy:cacheStrategyValue,
-    recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
-    promptCacheTtl:promptCacheTtlValue,
+    recallHistoryRetentionSeconds:cacheMeta.retentionSeconds,
+    promptCacheTtl:cacheMeta.ttl,
     fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
     splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
@@ -3025,8 +3072,9 @@ function chatWriteForm(cfg){
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   chatSetFieldChecked('chat-use-mcp',cfg.useMcp===true);
   chatSetFieldValue('chat-mcp-url',API_BASE);
-  if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cfg.cacheStrategy||'single_5m';
-  if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String((cfg.recallHistoryRetentionSeconds===0)?0:(cfg.recallHistoryRetentionSeconds||300));
+  var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
+  if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cacheMeta.value;
+  if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String(cacheMeta.retentionSeconds);
   var trimCfg=chatAutoTrimConfigFrom(cfg);
   chatSetFieldChecked('chat-auto-trim-enabled',trimCfg.enabled);
   chatSetFieldValue('chat-auto-trim-threshold',trimCfg.threshold);
@@ -3052,23 +3100,30 @@ function chatWriteForm(cfg){
 function chatSyncCacheStrategyFields(silent){
   var strategy=document.getElementById('chat-cache-strategy');
   var retention=document.getElementById('chat-recall-retention-seconds');
-  if(!strategy||!retention)return;
-  if(strategy.value==='prefix_24h'){
-    retention.value='0';
-  }else{
-    retention.value='300';
-  }
-  document.querySelectorAll('[data-cache-strategy]').forEach(function(btn){
-    btn.classList.toggle('active',btn.getAttribute('data-cache-strategy')===strategy.value);
-  });
-  if(!silent)chatSaveConfig(true);
+  if(!strategy||!retention){chatRenderCacheStrategyState();return}
+  var meta=chatCacheStrategyMeta(strategy.value);
+  strategy.value=meta.value;
+  retention.value=String(meta.retentionSeconds);
+  chatRenderCacheStrategyState();
+  if(!silent)chatSaveCacheStrategy(true);
 }
 function chatSetCacheStrategy(value){
   var strategy=document.getElementById('chat-cache-strategy');
   if(!strategy)return;
-  strategy.value=value==='prefix_24h'?'prefix_24h':'single_5m';
+  strategy.value=chatNormalizeCacheStrategy(value);
   chatSyncCacheStrategyFields(false);
   chatUpdateRuntime(chatLoadConfig());
+}
+function chatSaveCacheStrategy(auto){
+  var strategy=document.getElementById('chat-cache-strategy');
+  var meta=chatCacheStrategyMeta(strategy?strategy.value:'single_5m');
+  if(strategy)strategy.value=meta.value;
+  var retention=document.getElementById('chat-recall-retention-seconds');
+  if(retention)retention.value=String(meta.retentionSeconds);
+  var cfg=chatSaveConfig(true);
+  chatRenderCacheStrategyState('已保存成功：'+meta.label+'｜发送：'+meta.debugText+'｜TTL：'+meta.ttl,'ok');
+  if(!auto)toast('缓存模式已保存：'+meta.label);
+  return cfg;
 }
 function chatSaveConfig(silent){
   var cfg=chatReadForm();
@@ -3078,6 +3133,7 @@ function chatSaveConfig(silent){
   chatRenderTrimState(cfg);
   chatUpdateSplitReplyButton(cfg);
   chatUpdateRuntime(cfg);
+  chatRenderCacheStrategyState();
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
   return cfg;
@@ -3397,7 +3453,9 @@ function chatFormatDebug(ev,data){
     var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+requestToolsText+mcpCache):'｜MCP：关闭';
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
     var strategy=data.effective_cache_strategy||data.cache_strategy||'single_5m';
-    var strategyText=strategy==='prefix_24h'?'24h前缀':'5min严格';
+    var strategyMeta=chatCacheStrategyMeta(strategy);
+    var ttl=data.prompt_cache_ttl||data.cache_control_ttl||strategyMeta.ttl;
+    var strategyText=strategyMeta.label+'｜发送：'+strategyMeta.debugText+'｜TTL：'+ttl;
     var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
     var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
     var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
@@ -3436,7 +3494,9 @@ function chatFormatDebug(ev,data){
     if(data.cache_anchors||data.canonical_changes){
       var changes=(data.canonical_changes||[]).join('；')||'无';
       changes=changes.replace(/canonical inject: session=/g,'会话=').replace(/ users=/g,'｜用户消息数=').replace(/ restored_past=/g,'｜已恢复旧消息=');
-      return '🧊 缓存诊断｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint);
+      var diagMeta=data.cache_strategy?chatCacheStrategyMeta(data.cache_strategy):null;
+      var diagMode=diagMeta?('｜模式：'+diagMeta.label+'｜发送：'+diagMeta.debugText+'｜TTL：'+(data.prompt_cache_ttl||diagMeta.ttl)):'';
+      return '🧊 缓存诊断'+diagMode+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint);
     }
     if(data.recall_query||data.memory_chars!==undefined){
       return chatFormatRecallDiag(data)+'\n🔎 召回查询｜'+String(data.recall_query||'').slice(0,180);
@@ -3554,8 +3614,10 @@ function chatUpdateRuntime(cfg,usage){
   if(cache){
     var read=chatUsageCacheRead(usage||{});
     var create=chatUsageCacheCreate(usage||{});
-    if(read||create)cache.textContent='缓存读取 '+read+' / 创建 '+create;
-    else cache.textContent='网关 session 历史';
+    var meta=chatCacheStrategyMeta(cfg.cacheStrategy);
+    var modeText=meta.label+'｜'+meta.debugText+'｜TTL '+meta.ttl;
+    if(read||create)cache.textContent=modeText+'｜读取 '+read+' / 创建 '+create;
+    else cache.textContent=modeText;
   }
 }
 function chatRenderTrimState(cfg){
@@ -5313,9 +5375,10 @@ async function chatSubmitPendingMessages(){
   var imageOnlySummary=currentImages.length?('[图片'+(currentImages.length>1?'x'+currentImages.length:'')+']'):'';
   var anchorText=chatEnsureSessionAnchor(text||imageOnlySummary);
   currentSession=chatCurrentSession();
-  var cacheStrategy=(cfg.cacheStrategy||'single_5m')==='prefix_24h'?'prefix_24h':'single_5m';
-  var recallRetention=cacheStrategy==='prefix_24h'?0:300;
-  var promptCacheTtl=cacheStrategy==='single_5m'?'5m':'1h';
+  var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
+  var cacheStrategy=cacheMeta.value;
+  var recallRetention=cacheMeta.retentionSeconds;
+  var promptCacheTtl=cacheMeta.ttl;
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
