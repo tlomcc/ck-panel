@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v68';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v69';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2971,6 +2971,9 @@ function chatReadForm(){
   var settings=document.querySelector('.chat-settings');
   var activeTab=document.querySelector('.chat-side-tabs button.active');
   var retentionEl=document.getElementById('chat-recall-retention-seconds');
+  var cacheStrategyValue=chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m')||'single_5m';
+  cacheStrategyValue=cacheStrategyValue==='prefix_24h'?'prefix_24h':'single_5m';
+  var promptCacheTtlValue=cacheStrategyValue==='single_5m'?'5m':'1h';
   var trimCfg=chatNormalizeAutoTrimConfig({
     enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
     threshold:chatFieldValue('chat-auto-trim-threshold',saved.autoTrimThreshold||CHAT_AUTO_TRIM_THRESHOLD),
@@ -2992,9 +2995,9 @@ function chatReadForm(){
     useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
     mcpUserSet:true,
     mcpUrl:API_BASE,
-    cacheStrategy:chatFieldValue('chat-cache-strategy',saved.cacheStrategy||'single_5m')||'single_5m',
+    cacheStrategy:cacheStrategyValue,
     recallHistoryRetentionSeconds:retentionEl?Math.max(0,Number(retentionEl.value||0)):((saved.recallHistoryRetentionSeconds===0)?0:(saved.recallHistoryRetentionSeconds||300)),
-    promptCacheTtl:saved.promptCacheTtl||'1h',
+    promptCacheTtl:promptCacheTtlValue,
     fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
     splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
@@ -5312,6 +5315,7 @@ async function chatSubmitPendingMessages(){
   currentSession=chatCurrentSession();
   var cacheStrategy=(cfg.cacheStrategy||'single_5m')==='prefix_24h'?'prefix_24h':'single_5m';
   var recallRetention=cacheStrategy==='prefix_24h'?0:300;
+  var promptCacheTtl=cacheStrategy==='single_5m'?'5m':'1h';
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
@@ -5330,7 +5334,7 @@ async function chatSubmitPendingMessages(){
     use_mcp:cfg.useMcp===true,
     cache_strategy:cacheStrategy,
     recall_history_retention_seconds:recallRetention,
-    prompt_cache_ttl:cfg.promptCacheTtl||'1h',
+    prompt_cache_ttl:promptCacheTtl,
     session_anchor:{
       first_user_text:anchorText,
       first_user_ts:currentSession.firstUserTs||0
