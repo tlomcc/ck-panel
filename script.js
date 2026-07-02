@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v70';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v71';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2203,29 +2203,43 @@ function chatDefaultConfig(){
   };
 }
 function chatNormalizeCacheStrategy(value){
-  return String(value||'').trim()==='prefix_24h'?'prefix_24h':'single_5m';
+  var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
+  if(raw==='prefix_24h'||raw==='prefix24h'||raw==='partial_24h'||raw==='24h'||raw==='prefix')return 'prefix_24h';
+  if(raw==='assistant_latest'||raw==='latest_assistant'||raw==='assistant'||raw==='assistant_breakpoint'||raw==='assistant_5m')return 'assistant_latest';
+  return 'single_5m';
 }
 function chatCacheStrategyMeta(value){
   var strategy=chatNormalizeCacheStrategy(value);
   if(strategy==='prefix_24h'){
     return {
       value:'prefix_24h',
-      label:'24h 前缀缓存',
+      label:'24h 共同缓存',
       shortLabel:'24h',
       ttl:'1h',
       retentionSeconds:0,
-      sendText:'全量历史发送，旧召回和旧图片每轮剔除，只保留稳定文字',
-      debugText:'全量历史 + 清旧召回/旧图片'
+      sendText:'NC 24h 共同内容缓存；全量历史发送，但旧召回和旧图片每轮剔除',
+      debugText:'共同内容可命中 + 清旧召回/旧图片'
+    };
+  }
+  if(strategy==='assistant_latest'){
+    return {
+      value:'assistant_latest',
+      label:'助手断点',
+      shortLabel:'助手',
+      ttl:'5m',
+      retentionSeconds:300,
+      sendText:'缓存断点放在最新助手消息后面；改删最新助手或插话会让该断点失效',
+      debugText:'最新助手消息后断点'
     };
   }
   return {
     value:'single_5m',
-    label:'5min 严格断点',
+    label:'5min 用户断点',
     shortLabel:'5min',
     ttl:'5m',
     retentionSeconds:300,
-    sendText:'5 分钟内历史原样保留，超过 5 分钟后剔除旧召回和旧图片',
-    debugText:'5 分钟内历史原样'
+    sendText:'缓存断点放在最新用户消息下面；5 分钟内必须一字不差，超过 5 分钟会重建',
+    debugText:'最新用户消息下断点'
   };
 }
 function chatRenderCacheStrategyState(statusText,statusKind){

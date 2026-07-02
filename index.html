@@ -14,10 +14,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v70">
-<link rel="stylesheet" href="polish.css?v=chat-v70">
-<link rel="stylesheet" href="chat.css?v=chat-v70">
-<script>window.CK_PANEL_VERSION='chat-v70';</script>
+<link rel="stylesheet" href="style.css?v=chat-v71">
+<link rel="stylesheet" href="polish.css?v=chat-v71">
+<link rel="stylesheet" href="chat.css?v=chat-v71">
+<script>window.CK_PANEL_VERSION='chat-v71';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap"><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">加载中...</div></div>
@@ -26,7 +26,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge">chat-v70</span>
+<span class="panel-version-badge" id="panel-version-badge">chat-v71</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -188,8 +188,8 @@
 </div>
 <div class="chat-side-panel" id="chat-side-memory">
 <label>当前 Session<input id="chat-session-id" autocomplete="off" readonly></label>
-<div class="chat-memory-card chat-cache-mode-card"><b>NC 缓存模式</b><p>模式会保存到本机配置；24h 发送全量历史但剔除旧召回和旧图片，5min 在 5 分钟内保持历史原样。</p><div class="chat-cache-saved" id="chat-cache-saved-mode">已保存：读取中</div><div class="chat-cache-mode-options"><button type="button" data-cache-strategy="prefix_24h" onclick="chatSetCacheStrategy('prefix_24h')"><span>24h</span><strong>前缀缓存</strong><small>全量历史 + 清旧召回/旧图片</small></button><button type="button" data-cache-strategy="single_5m" onclick="chatSetCacheStrategy('single_5m')"><span>5min</span><strong>严格断点</strong><small>5 分钟内历史原样保留</small></button></div><div class="chat-cache-mode-detail" id="chat-cache-mode-detail"></div><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveCacheStrategy()">保存缓存模式</button><span class="chat-cache-save-status" id="chat-cache-save-status">点击模式会立即保存，也可点按钮确认。</span></div></div>
-<select id="chat-cache-strategy" onchange="chatSyncCacheStrategyFields()" hidden><option value="single_5m">5min 严格断点</option><option value="prefix_24h">24h 前缀缓存</option></select>
+<div class="chat-memory-card chat-cache-mode-card"><b>NC 缓存模式</b><p>模式会保存到本机配置；24h 走共同内容缓存，5min 锚最新用户，新模式锚最新助手。</p><div class="chat-cache-saved" id="chat-cache-saved-mode">已保存：读取中</div><div class="chat-cache-mode-options"><button type="button" data-cache-strategy="prefix_24h" onclick="chatSetCacheStrategy('prefix_24h')"><span>24h</span><strong>共同缓存</strong><small>共同内容可命中 + 清旧召回/图</small></button><button type="button" data-cache-strategy="single_5m" onclick="chatSetCacheStrategy('single_5m')"><span>5min</span><strong>用户断点</strong><small>最新用户下方，一字不差</small></button><button type="button" data-cache-strategy="assistant_latest" onclick="chatSetCacheStrategy('assistant_latest')"><span>助手</span><strong>助手断点</strong><small>最新助手后方，改删会断</small></button></div><div class="chat-cache-mode-detail" id="chat-cache-mode-detail"></div><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveCacheStrategy()">保存缓存模式</button><span class="chat-cache-save-status" id="chat-cache-save-status">点击模式会立即保存，也可点按钮确认。</span></div></div>
+<select id="chat-cache-strategy" onchange="chatSyncCacheStrategyFields()" hidden><option value="single_5m">5min 用户断点</option><option value="prefix_24h">24h 共同缓存</option><option value="assistant_latest">助手断点</option></select>
 <input id="chat-recall-retention-seconds" type="hidden" value="300">
 <label>本轮召回内容<textarea id="chat-memory-pack" rows="9" readonly placeholder="本轮没有召回时这里为空"></textarea></label>
 <div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatRenameCurrent()">重命名</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">新会话</button></div>
@@ -230,8 +230,8 @@
 <div class="modal-bg" id="provDelModal" onclick="closeProvDel()"><div class="modal" onclick="event.stopPropagation()"><h3>删除供应商</h3><p class="prov-del-q">确定要删除该供应商吗？</p><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="closeProvDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmProvDel()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
 <div class="toast" id="toast"></div>
-<script src="script.js?v=chat-v70"></script>
-<script src="script-extra.js?v=chat-v70"></script>
-<script src="pwa.js?v=chat-v70"></script>
+<script src="script.js?v=chat-v71"></script>
+<script src="script-extra.js?v=chat-v71"></script>
+<script src="pwa.js?v=chat-v71"></script>
 </body>
 </html>

@@ -1473,7 +1473,7 @@ body.chat-active .chat-cache-mode-card{
 
 body.chat-active .chat-cache-mode-options{
   display:grid!important;
-  grid-template-columns:1fr 1fr!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
   gap:8px!important;
   margin-top:10px!important;
 }
@@ -2535,6 +2535,10 @@ body.dark.chat-active .chat-debug-cache-mode{
 }
 
 @media(max-width:760px){
+  body.chat-active .chat-cache-mode-options{
+    grid-template-columns:1fr!important;
+  }
+
   body.chat-active .chat-cache-mode-actions{
     grid-template-columns:1fr!important;
   }
