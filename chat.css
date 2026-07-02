@@ -3307,3 +3307,64 @@ body.chat-active.chat-editing .chat-edit-image-remove{
     padding-right:0!important;
   }
 }
+
+/* Keep user bubble width driven by message text, not the timestamp line. */
+body.chat-active .chat-bubble.user:not(.has-images){
+  display:inline-block!important;
+  width:fit-content!important;
+  max-width:min(620px,76%)!important;
+  min-width:0!important;
+  padding:9px 13px 22px 13px!important;
+  overflow:visible!important;
+}
+
+body.chat-active .chat-bubble.user:not(.has-images) .chat-user-text{
+  display:block!important;
+  width:fit-content!important;
+  max-width:100%!important;
+}
+
+body.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta{
+  position:absolute!important;
+  left:13px!important;
+  right:13px!important;
+  bottom:6px!important;
+  float:none!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:3px!important;
+  width:auto!important;
+  max-width:none!important;
+  height:10px!important;
+  margin:0!important;
+  color:rgba(91,105,98,.58)!important;
+  font-size:9px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  pointer-events:none!important;
+  user-select:none!important;
+}
+
+body.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta-time,
+body.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta-pending{
+  flex:0 0 auto!important;
+  min-width:0!important;
+  line-height:1!important;
+}
+
+body.chat-active .chat-bubble.user:not(.has-images) .chat-cache-tick{
+  flex:0 0 auto!important;
+  transform:scale(.82)!important;
+  transform-origin:right center!important;
+}
+
+body.dark.chat-active .chat-bubble.user:not(.has-images) .chat-msg-meta{
+  color:rgba(230,246,235,.58)!important;
+}
+
+@media(max-width:760px){
+  body.chat-active .chat-bubble.user:not(.has-images){
+    max-width:min(300px,82%)!important;
+  }
+}
