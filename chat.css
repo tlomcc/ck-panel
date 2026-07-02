@@ -1423,9 +1423,15 @@ body.chat-active .chat-switch{
   align-items:center!important;
   gap:10px!important;
   color:var(--chat5-text)!important;
+  cursor:pointer!important;
 }
 
-body.chat-active .chat-switch input{width:auto!important}
+body.chat-active .chat-switch input{
+  width:auto!important;
+  flex:0 0 auto!important;
+  cursor:pointer!important;
+  accent-color:#128c4c!important;
+}
 
 body.chat-active .chat-wide-btn{
   height:38px!important;
@@ -3384,6 +3390,7 @@ body.chat-active .chat-recall-switch{
   border:1px solid rgba(18,140,76,.16)!important;
   border-radius:8px!important;
   background:rgba(244,255,248,.86)!important;
+  user-select:none!important;
 }
 
 body.chat-active #chat-side-debug{

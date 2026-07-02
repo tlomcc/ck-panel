@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v73';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v74';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2379,7 +2379,6 @@ function chatApplyMainRouteToConfig(cfg,route){
   cfg.chatApiSource='api_config_main_io';
   cfg.mainRouteReady=route.ok===true;
   cfg.mainRouteReason=route.reason||'';
-  cfg.recall=true;
   return cfg;
 }
 function chatSyncPanelKeyToApiStorage(key){
@@ -2408,7 +2407,7 @@ function chatRenderMainRouteSummary(){
   }
   var route=chatMainRouteConfig();
   if(route.ok){
-    el.textContent='已同步：'+route.providerName+' · '+route.model+' · '+route.providerHost+'；聊天仍通过 CK 网关并强制召回。';
+    el.textContent='已同步：'+route.providerName+' · '+route.model+' · '+route.providerHost+'；聊天仍通过 CK 网关，记忆召回按开关设置执行。';
     el.classList.remove('empty');
   }else{
     el.textContent='未就绪：'+route.reason+'。请到 API 配置 -> 主链路设置。';
@@ -2483,7 +2482,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.mainRouteReady;
   delete cfg.mainRouteReason;
   delete cfg.chatApiSource;
-  cfg.recall=true;
+  cfg.recall=cfg.recall!==false;
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
@@ -3167,6 +3166,11 @@ function chatSaveRecallSetting(auto){
   chatRenderRecallState('已保存成功：'+meta.label+'｜'+meta.debugText,'ok');
   if(!auto)toast('记忆召回已保存：'+meta.label);
   return cfg;
+}
+function chatSetRecallEnabled(enabled,auto){
+  var input=document.getElementById('chat-recall-enabled');
+  if(input)input.checked=enabled!==false;
+  return chatSaveRecallSetting(auto);
 }
 function chatSaveConfig(silent){
   var cfg=chatReadForm();
