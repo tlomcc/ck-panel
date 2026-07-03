@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v89';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v91';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3841,8 +3841,40 @@ function chatTimeLabel(ts){
   return same?hm:(String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+hm);
 }
 function chatFullTimeLabel(ts){
-  var d=new Date(ts||Date.now());
-  return String(d.getFullYear())+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  if(!ts)return '';
+  var d=new Date(ts);
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+}
+function chatAttachAssistantTiming(msg,userSentTs,replyTs){
+  if(!msg||msg.role!=='assistant')return msg;
+  replyTs=Number(replyTs||msg.ts||Date.now())||Date.now();
+  msg.ts=replyTs;
+  userSentTs=Number(userSentTs||0)||0;
+  if(userSentTs){
+    msg.userSentTs=userSentTs;
+    msg.firstReplyTs=replyTs;
+    msg.waitMs=Math.max(0,replyTs-userSentTs);
+  }
+  return msg;
+}
+function chatUpdateStreamingTiming(anchorEl,userSentTs,replyTs){
+  if(!anchorEl||!anchorEl.parentNode)return;
+  var meta=anchorEl.parentNode.querySelector('.chat-msg-time');
+  if(!meta)return;
+  var msg=chatAttachAssistantTiming({role:'assistant',ts:replyTs},userSentTs,replyTs);
+  var html=chatMessageTimingHtml(msg,'assistant');
+  if(html)meta.outerHTML=html;
+}
+function chatAssistantWaitLabel(m){
+  if(!m||m.role!=='assistant')return '';
+  var waitMs=Number(m.waitMs);
+  if(!isFinite(waitMs)||waitMs<0){
+    var userTs=Number(m.userSentTs||0)||0;
+    var replyTs=Number(m.firstReplyTs||m.ts||0)||0;
+    if(!userTs||!replyTs||replyTs<userTs)return '';
+    waitMs=replyTs-userTs;
+  }
+  return '等待 '+Math.max(0,Math.round(waitMs/1000))+'s';
 }
 function chatUpdateRuntime(cfg,usage){
   cfg=cfg||chatLoadConfig();
@@ -4719,10 +4751,13 @@ async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   var parts=chatSplitAssistantReplies(rawText,!(opts&&opts.splitAssistantReplies===false));
   var tools=chatCloneToolEvents(toolEvents);
   if(!parts.length&&tools.length)parts=[''];
-  var now=Date.now();
+  var firstReplyTs=Number(opts&&opts.firstReplyTs)||Date.now();
+  var userSentTs=Number(opts&&opts.userSentTs)||0;
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
-    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:now+i};
+    var ts=i===0?firstReplyTs:Date.now();
+    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts};
+    if(i===0)chatAttachAssistantTiming(msg,userSentTs,firstReplyTs);
     chatMessages.push(msg);
     chatMarkMessageFresh(msg);
     chatSaveLocalMessages();
@@ -5274,7 +5309,7 @@ function chatRenderMessageRow(m,i){
   if(role==='user'&&!pending)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
   var tools=toolButtons.length?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
   var userMeta=role==='user'?chatUserMessageMetaHtml(m):'';
-  var time=role==='user'?'':'<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
+  var time=role==='assistant'?chatMessageTimingHtml(m,role):'';
   var imageCount=chatMessageImages(m).length;
   var bubbleState=(imageCount?' has-images':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
@@ -5282,17 +5317,21 @@ function chatRenderMessageRow(m,i){
   var fresh=chatFreshMessageKeys.has(chatMessageAnimKey(m))?' chat-fresh':'';
   return '<div class="chat-msg-row '+role+(pending?' pending':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+versionNav+tools+userMeta+time+'</div>';
 }
-function chatUserMessageMetaHtml(m){
-  var pending=m&&m.role==='pending_user';
-  var bits=['<span class="chat-msg-meta">'];
-  bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(m&&m.ts))+'</span>');
-  if(pending){
-    bits.push('<span class="chat-msg-meta-pending">待发送</span>');
-  }else{
-    bits.push(chatCacheTickHtml(m));
+function chatMessageTimingHtml(m,role){
+  var bits=[],ts=Number(m&&m.ts)||0;
+  if(ts)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
+  if(role==='user'){
+    if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
+    else bits.push(chatCacheTickHtml(m));
+  }else if(role==='assistant'){
+    var wait=chatAssistantWaitLabel(m);
+    if(wait)bits.push('<span class="chat-msg-wait">'+esc(wait)+'</span>');
   }
-  bits.push('</span>');
-  return bits.join('');
+  if(!bits.length)return '';
+  return '<div class="chat-msg-time'+(role==='user'?' chat-msg-meta':'')+'">'+bits.join('')+'</div>';
+}
+function chatUserMessageMetaHtml(m){
+  return chatMessageTimingHtml(m,'user');
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -5373,8 +5412,8 @@ function chatApplyCacheTick(userIndex,usage,userBubble){
     (row||userBubble).querySelectorAll('.chat-cache-tick').forEach(function(old){old.remove()});
     var meta=row?row.querySelector('.chat-msg-meta'):userBubble.querySelector('.chat-msg-meta');
     if(!meta){
-      meta=document.createElement('span');
-      meta.className='chat-msg-meta';
+      meta=document.createElement('div');
+      meta.className='chat-msg-time chat-msg-meta';
       var time=document.createElement('span');
       time.className='chat-msg-meta-time';
       time.textContent=chatFullTimeLabel(chatMessages[userIndex].ts);
@@ -5411,9 +5450,9 @@ function chatAddBubble(role,text,persist){
   }
   row.appendChild(el);
   if(role==='user'){
-    var metaWrap=document.createElement('span');
+    var metaWrap=document.createElement('template');
     metaWrap.innerHTML=chatUserMessageMetaHtml({role:'user',text:text||'',images:[],cacheHit:false,ts:ts});
-    if(metaWrap.firstChild)row.appendChild(metaWrap.firstChild);
+    if(metaWrap.content&&metaWrap.content.firstChild)row.appendChild(metaWrap.content.firstChild);
   }else{
     var time=document.createElement('div');
     time.className='chat-msg-time';
@@ -5592,12 +5631,13 @@ async function chatSubmitPendingMessages(){
     chatHandleMainRouteNotReady(route);
     return;
   }
+  var submitTs=Date.now();
   if(extra||draftImages.length){
     input.value='';
     chatAutosizeInput(input);
     chatDraftImages=[];
     chatRenderDraftImages();
-    chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:Date.now()});
+    chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:submitTs});
   }
   pending=chatPendingMessages();
   var text=pending.map(function(m){return String(m.text||'').trim()}).filter(Boolean).join('\n\n');
@@ -5617,6 +5657,7 @@ async function chatSubmitPendingMessages(){
   chatMessages.forEach(function(m,i){
     if(m&&m.role==='pending_user'){
       m.role='user';
+      m.ts=submitTs;
       m.cacheHit=false;
       chatMarkMessageFresh(m);
       userMessageIndexes.push(i);
@@ -5673,6 +5714,15 @@ async function chatSubmitPendingMessages(){
   if((cfg.fullWindowContext!==false||trimResult.trimmed)&&!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
   var assistantText='',recallInfo=null,toolEvents=[];
+  var responseUserTs=submitTs;
+  var firstReplyTs=0;
+  function markFirstReplyTs(){
+    if(!firstReplyTs){
+      firstReplyTs=Date.now();
+      chatUpdateStreamingTiming(out,responseUserTs,firstReplyTs);
+    }
+    return firstReplyTs;
+  }
   try{
     var resp=await fetch(chatEndpoint(cfg),{
       method:'POST',
@@ -5687,6 +5737,7 @@ async function chatSubmitPendingMessages(){
     if(!resp.body){
       var plain=await resp.text();
       assistantText=plain;
+      markFirstReplyTs();
       var plainShouldStick=chatIsMessagesNearBottom();
       out.innerHTML=chatRenderStreamingAssistantContent(plain,toolEvents);
       chatFollowMessagesBottom(plainShouldStick,true,true);
@@ -5700,6 +5751,7 @@ async function chatSubmitPendingMessages(){
         buffer+=decoder.decode(r.value,{stream:true});
         buffer=chatParseSse(buffer,function(ev,data){
           if(ev==='delta'){
+            if(data&&data.text)markFirstReplyTs();
             assistantText+=data.text||'';
             var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
             var deltaShouldStick=chatIsMessagesNearBottom();
@@ -5723,6 +5775,7 @@ async function chatSubmitPendingMessages(){
           }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
             chatDebug(ev,data);
             if(ev==='tool'){
+              markFirstReplyTs();
               toolEvents=chatUpsertToolEvent(toolEvents,data);
               var stillEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
               var toolShouldStick=chatIsMessagesNearBottom();
@@ -5754,16 +5807,19 @@ async function chatSubmitPendingMessages(){
       }
     }
     chatSetStatus('正在显示回复...');
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false});
+    markFirstReplyTs();
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs});
     if(out&&out.parentNode)out.parentNode.remove();
     chatSetStatus('完成');
   }catch(e){
     if(e&&e.name==='AbortError'){
-      chatMessages.push({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:Date.now()});
+      var stopped=chatAttachAssistantTiming({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now());
+      chatMessages.push(stopped);
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('已停止');
     }else{
       var emsg=(assistantText?assistantText+'\n':'')+chatFriendlyError(e);
-      chatMessages.push({role:'assistant',text:emsg,recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:Date.now()});
+      var failed=chatAttachAssistantTiming({role:'assistant',text:emsg,recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now());
+      chatMessages.push(failed);
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('请求失败');
     }
   }finally{
