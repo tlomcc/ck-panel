@@ -3873,6 +3873,14 @@ body.chat-active .chat-msg-wait{
   line-height:1!important;
 }
 
+body.chat-active .chat-msg-cost{
+  display:inline-flex!important;
+  align-items:center!important;
+  color:inherit!important;
+  font-size:10px!important;
+  line-height:1!important;
+}
+
 body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-cache-tick{
   flex:0 0 auto!important;
   transform:scale(.82)!important;
@@ -3889,6 +3897,10 @@ body.dark.chat-active .chat-msg-time{
 
 body.dark.chat-active .chat-msg-wait{
   background:rgba(230,246,235,.08)!important;
+  color:rgba(230,246,235,.62)!important;
+}
+
+body.dark.chat-active .chat-msg-cost{
   color:rgba(230,246,235,.62)!important;
 }
 

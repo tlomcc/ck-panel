@@ -1,14 +1,14 @@
-const CACHE_NAME = 'ck-panel-shell-v107-chat-v92';
+const CACHE_NAME = 'ck-panel-shell-v108-chat-v93';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v92',
-  './polish.css?v=chat-v92',
-  './chat.css?v=chat-v92',
-  './script.js?v=chat-v92',
-  './script-extra.js?v=chat-v92',
-  './pwa.js?v=chat-v92',
+  './style.css?v=chat-v93',
+  './polish.css?v=chat-v93',
+  './chat.css?v=chat-v93',
+  './script.js?v=chat-v93',
+  './script-extra.js?v=chat-v93',
+  './pwa.js?v=chat-v93',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
