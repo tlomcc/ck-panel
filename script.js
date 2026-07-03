@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v87';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v88';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4049,9 +4049,13 @@ function chatRenderSessions(){
   if(count)count.textContent=String(chatSessions.length);
   if(!list)return;
   chatSessions.sort(function(a,b){return (b.updated||0)-(a.updated||0)});
-  list.innerHTML=chatSessions.map(function(s){
-    return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span>'+esc(s.title||'未命名对话')+'</span><small>'+esc(chatSessionPreview(s))+'</small><em>'+esc(chatSessionMeta(s))+'</em></button><button class="chat-session-del" type="button" onclick="chatDeleteSession(\''+escAttr(s.id)+'\',event)" title="删除对话">×</button></div>';
+  var rows=chatSessions.map(function(s){
+    return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span class="chat-session-title">'+esc(s.title||'未命名对话')+'</span><small class="chat-session-preview">'+esc(chatSessionPreview(s))+'</small><em class="chat-session-meta">'+esc(chatSessionMeta(s))+'</em></button><button class="chat-session-del" type="button" onclick="chatDeleteSession(\''+escAttr(s.id)+'\',event)" title="删除对话">×</button></div>';
   }).join('');
+  if(chatSessions.length<=3){
+    rows+='<button class="chat-session-empty-hint" type="button" onclick="chatNewSession()"><span class="chat-session-empty-plus" aria-hidden="true">+</span><span>点击 + 开始新对话</span></button>';
+  }
+  list.innerHTML=rows;
 }
 function chatDeleteSession(id,event){
   if(event){
