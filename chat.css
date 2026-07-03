@@ -1046,7 +1046,6 @@ body.chat-active .chat-plus-panel{
   border-radius:0!important;
   background:transparent!important;
   box-shadow:none!important;
-  touch-action:pan-x!important;
   overscroll-behavior:contain!important;
   transform:translateY(8px)!important;
   transition:max-height .18s ease,opacity .16s ease,margin-top .18s ease,padding .18s ease,transform .18s ease!important;
@@ -1070,6 +1069,7 @@ body.chat-active .chat-plus-pages{
   scrollbar-width:none!important;
   flex:1!important;
   min-height:0!important;
+  touch-action:pan-x!important;
 }
 
 body.chat-active .chat-plus-pages::-webkit-scrollbar{
