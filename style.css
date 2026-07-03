@@ -7050,8 +7050,6 @@ body.dark.chat-active .chat-bubble.assistant{
   min-width:0;
 }
 
-.entry-summary-title,
-.pinned-card-title,
 .search-result-title,
 .mini-title{
   margin:0 0 7px;
@@ -7061,11 +7059,6 @@ body.dark.chat-active .chat-bubble.assistant{
   word-break:break-word;
 }
 
-.entry-summary-title{
-  font-size:14px;
-}
-
-.pinned-card-title,
 .search-result-title{
   font-size:13px;
 }
@@ -7091,8 +7084,6 @@ body.dark.chat-active .chat-bubble.assistant{
   color:#8b9892!important;
 }
 
-body.dark .entry-summary-title,
-body.dark .pinned-card-title,
 body.dark .search-result-title,
 body.dark .mini-title{
   color:#e6ece8;

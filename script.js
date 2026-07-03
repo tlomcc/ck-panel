@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v88';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v89';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -403,26 +403,35 @@ function parseEntries(raw){
   for(var i=0;i<blocks.length;i++){
     var rest=blocks[i].trim();if(!rest)continue;
     var meta={imp:5,time:'',last:'',date:'',tags:'',summary:'',pin:false,resolved:false,archived:false};
-    while(rest.charAt(0)==='['){
-      var end=rest.indexOf(']');
-      if(end<=0)break;
-      var token=rest.slice(1,end);
-      var colon=token.indexOf(':');
-      var key=(colon>=0?token.slice(0,colon):token).trim().toLowerCase();
-      var val=(colon>=0?token.slice(colon+1):'').trim();
-      if(key==='pin')meta.pin=!val||/^(true|1|yes|y|on)$/i.test(val);
-      else if(key==='resolved')meta.resolved=!val||/^(true|1|yes|y|on)$/i.test(val);
-      else if(key==='archived')meta.archived=!val||/^(true|1|yes|y|on)$/i.test(val);
-      else if(key==='imp')meta.imp=parseInt(val,10)||5;
-      else if(key==='time')meta.time=val;
-      else if(key==='last')meta.last=val;
-      else if(key==='date')meta.date=val;
-      else if(key==='tags')meta.tags=val;
-      else if(key==='summary')meta.summary=val;
-      rest=rest.slice(end+1).replace(/^\s*/,'');
+    var lines=rest.split('\n');
+    var first=lines[0]||'';
+    var bodyLines=lines;
+    if(first.charAt(0)==='['){
+      var head=first;
+      var parsedHeadTokens=0;
+      while(head.charAt(0)==='['){
+        var end=head.indexOf(']');
+        if(end<=0)break;
+        var token=head.slice(1,end);
+        var colon=token.indexOf(':');
+        var key=(colon>=0?token.slice(0,colon):token).trim().toLowerCase();
+        var val=(colon>=0?token.slice(colon+1):'').trim();
+        if(key==='pin')meta.pin=!val||/^(true|1|yes|y|on)$/i.test(val);
+        else if(key==='resolved')meta.resolved=!val||/^(true|1|yes|y|on)$/i.test(val);
+        else if(key==='archived')meta.archived=!val||/^(true|1|yes|y|on)$/i.test(val);
+        else if(key==='imp')meta.imp=parseInt(val,10)||5;
+        else if(key==='time')meta.time=val;
+        else if(key==='last')meta.last=val;
+        else if(key==='tags')meta.tags=val;
+        else if(key==='summary')meta.summary=val;
+        else break;
+        parsedHeadTokens++;
+        head=head.slice(end+1).replace(/^[ \t]*/,'');
+      }
+      if(parsedHeadTokens>0)bodyLines=lines.slice(1);
     }
-    var ct=rest.trim();
-    if(ct||meta.summary)entries.push({meta:meta,content:ct});
+    var ct=bodyLines.join('\n').trim();
+    if(ct)entries.push({meta:meta,content:ct});
   }
   return entries.sort(function(a,b){return compareEntryTime(a,b,0,1,'desc')});
 }
@@ -1428,7 +1437,7 @@ function renderPinnedCard(i,e){
   var click=selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')';
   var checked=selectMode&&selected.has(i);
   var select=selectMode?'<div class="select-circle'+(checked?' checked':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
-  return '<article class="pinned-card" onclick="'+click+'">'+select+'<div class="pinned-card-main"><div class="pinned-card-title">'+esc(entryTitle(e))+'</div><div class="pinned-card-text">'+esc(shortText(e.content,120))+'</div><div class="pinned-card-meta">'+meta.map(function(m){return'<span>'+esc(m)+'</span>'}).join('')+'</div></div><button class="pinned-card-pin" onclick="event.stopPropagation();quickPin('+i+')" aria-label="取消置顶">★</button></article>';
+  return '<article class="pinned-card" onclick="'+click+'">'+select+'<div class="pinned-card-main"><div class="pinned-card-text">'+esc(e.content)+'</div><div class="pinned-card-meta">'+meta.map(function(m){return'<span>'+esc(m)+'</span>'}).join('')+'</div></div><button class="pinned-card-pin" onclick="event.stopPropagation();quickPin('+i+')" aria-label="取消置顶">★</button></article>';
 }
 function renderEntryCard(i,e,isLong,compact){
   var circle=selectMode?'<div class="select-circle'+(selected.has(i)?' checked':'')+(selectMode==='delete'?' select-danger':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
@@ -1455,7 +1464,7 @@ function renderEntryCard(i,e,isLong,compact){
   var textClick='';
   var contentHtml=(singleEntryIdx!==null&&detailHighlightQuery)?highlightText(e.content,detailHighlightQuery):esc(e.content);
   html+='<div class="entry-item" id="entry-'+i+'"'+itemAttrs+'>';
-  html+=circle+'<div class="entry-card-main"><div class="entry-summary-title">'+esc(entryTitle(e))+'</div><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'"'+textClick+'>'+contentHtml+'</div>';
+  html+=circle+'<div class="entry-card-main"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'"'+textClick+'>'+contentHtml+'</div>';
   if(isLong)html+='<div class="entry-expand" onclick="event.stopPropagation();if(!selectMode)openEntry(current,'+i+')">查看正文</div>';
   html+=metaHtml+actionHtml+'</div></div></div>';
   return html;
