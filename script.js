@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v94';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v95';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4527,6 +4527,63 @@ function chatSplitThinkingText(src,opts){
     .trim();
   return {text:text,thinking:thoughts.join('\n\n')};
 }
+function chatStripThinkingMarkupText(src){
+  return chatSplitThinkingText(src,{suppressThinking:true,hideUnclosedThinking:true}).text;
+}
+function chatStripThinkingContentValue(value){
+  if(typeof value==='string')return chatStripThinkingMarkupText(value);
+  if(Array.isArray(value)){
+    var list=[];
+    value.forEach(function(item){
+      var next=chatStripThinkingContentValue(item);
+      if(next===null||next===undefined)return;
+      if(typeof next==='string'&&!next.trim())return;
+      if(Array.isArray(next)&&!next.length)return;
+      if(next&&typeof next==='object'){
+        if(next.type==='text'&&String(next.text||'').trim()==='')return;
+        if(next.content!==undefined&&Array.isArray(next.content)&&!next.content.length&&next.type!=='tool_result')return;
+      }
+      list.push(next);
+    });
+    return list;
+  }
+  if(value&&typeof value==='object'){
+    var out={};
+    Object.keys(value).forEach(function(key){out[key]=value[key]});
+    if(Object.prototype.hasOwnProperty.call(out,'text')){
+      out.text=chatStripThinkingMarkupText(out.text);
+    }
+    if(Object.prototype.hasOwnProperty.call(out,'content')){
+      out.content=chatStripThinkingContentValue(out.content);
+    }
+    return out;
+  }
+  return value;
+}
+function chatContentValueHasPayload(value){
+  if(typeof value==='string')return !!value.trim();
+  if(Array.isArray(value))return value.some(chatContentValueHasPayload);
+  if(value&&typeof value==='object'){
+    if(Object.prototype.hasOwnProperty.call(value,'text')&&String(value.text||'').trim())return true;
+    if(Object.prototype.hasOwnProperty.call(value,'content')&&chatContentValueHasPayload(value.content))return true;
+    if(value.type&&value.type!=='text')return true;
+  }
+  return false;
+}
+function chatStripThinkingFromMessage(msg){
+  if(!msg||typeof msg!=='object')return null;
+  var out={};
+  Object.keys(msg).forEach(function(key){out[key]=msg[key]});
+  if(Object.prototype.hasOwnProperty.call(out,'text'))out.text=chatStripThinkingMarkupText(out.text);
+  if(Object.prototype.hasOwnProperty.call(out,'content'))out.content=chatStripThinkingContentValue(out.content);
+  if(String(out.text||'').trim())return out;
+  if(chatContentValueHasPayload(out.content))return out;
+  if(chatNormalizeImageList(out.images).length)return out;
+  return null;
+}
+function chatStripThinkingFromMessages(messages){
+  return (Array.isArray(messages)?messages:[]).map(chatStripThinkingFromMessage).filter(Boolean);
+}
 function chatLooksLikePartialThinkingTag(text){
   var t=String(text||'').trim().toLowerCase();
   if(!t||t.charAt(0)!=='<'||t.indexOf('>')>=0)return false;
@@ -4615,9 +4672,14 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
+function chatAssistantThinkingVisible(streaming){
+  if(streaming===true)return false;
+  try{return chatLoadConfig().fakeThinking===true}catch(e){return false}
+}
 function chatRenderAssistantContent(rawText,streaming,tools){
-  var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
-  var thinking=split.thinking?(
+  var showThinking=chatAssistantThinkingVisible(streaming);
+  var split=chatSplitThinkingText(rawText,{suppressThinking:!showThinking,hideUnclosedThinking:streaming===true||!showThinking});
+  var thinking=(showThinking&&split.thinking)?(
     '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
   var toolTrace=chatRenderToolTrace(tools);
@@ -5678,6 +5740,8 @@ async function chatSubmitPendingMessages(){
   chatSaveConfigObject(cfg);
   var trimResult=chatApplyAutoTrimBeforeRequest(cfg);
   var windowMessagesForRequest=chatWindowContextMessages();
+  var thinkingEnabled=cfg.fakeThinking===true;
+  if(!thinkingEnabled)windowMessagesForRequest=chatStripThinkingFromMessages(windowMessagesForRequest);
   var userMessageIndexes=[];
   chatMessages.forEach(function(m,i){
     if(m&&m.role==='pending_user'){
@@ -5717,9 +5781,10 @@ async function chatSubmitPendingMessages(){
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall!==false,
-    ck_thinking_enabled:cfg.fakeThinking===true,
-    ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
+    ck_thinking_enabled:thinkingEnabled,
+    ck_thinking_prompt:thinkingEnabled?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
+    ck_strip_thinking_history:!thinkingEnabled,
     use_mcp:cfg.useMcp===true,
     cache_strategy:cacheStrategy,
     recall_history_retention_seconds:recallRetention,
@@ -5730,6 +5795,7 @@ async function chatSubmitPendingMessages(){
   };
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
   var transportForRequest=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
+  if(!thinkingEnabled)transportForRequest=chatStripThinkingFromMessages(transportForRequest);
   if(transportForRequest.length)body.transport_messages=transportForRequest;
   if(currentSession.transportUpdated)body.transport_updated_at=currentSession.transportUpdated;
   if(cfg.useMcp===true&&cfg.mcpUrl)body.mcp_url=cfg.mcpUrl;
@@ -5796,7 +5862,8 @@ async function chatSubmitPendingMessages(){
           }else if(ev==='transport'){
             if(data&&Array.isArray(data.messages)){
               var ts=chatCurrentSession();
-              ts.transportMessages=chatLimitArray(data.messages,CHAT_MAX_TRANSPORT_MESSAGES);
+              var transportMessages=thinkingEnabled?data.messages:chatStripThinkingFromMessages(data.messages);
+              ts.transportMessages=chatLimitArray(transportMessages,CHAT_MAX_TRANSPORT_MESSAGES);
               ts.transportUpdated=Date.now();
               ts.updated=Date.now();
               chatSaveSessions();
@@ -5826,7 +5893,8 @@ async function chatSubmitPendingMessages(){
             if(ev==='done'){
               if(data&&Array.isArray(data.transport_messages)){
                 var s=chatCurrentSession();
-                s.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
+                var doneTransportMessages=thinkingEnabled?data.transport_messages:chatStripThinkingFromMessages(data.transport_messages);
+                s.transportMessages=chatLimitArray(doneTransportMessages,CHAT_MAX_TRANSPORT_MESSAGES);
                 s.transportUpdated=Date.now();
                 s.updated=Date.now();
                 chatSaveSessions();
@@ -5841,16 +5909,19 @@ async function chatSubmitPendingMessages(){
     }
     chatSetStatus('正在显示回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,apiCostText:assistantCostText});
+    var finalAssistantText=thinkingEnabled?assistantText:chatStripThinkingMarkupText(assistantText);
+    await chatAppendAssistantReplies(finalAssistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,apiCostText:assistantCostText});
     if(out&&out.parentNode)out.parentNode.remove();
     chatSetStatus('完成');
   }catch(e){
     if(e&&e.name==='AbortError'){
-      var stopped=chatAttachAssistantTiming({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now(),assistantCostText);
+      var stoppedText=thinkingEnabled?assistantText:chatStripThinkingMarkupText(assistantText);
+      var stopped=chatAttachAssistantTiming({role:'assistant',text:stoppedText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now(),assistantCostText);
       chatMessages.push(stopped);
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('已停止');
     }else{
-      var emsg=(assistantText?assistantText+'\n':'')+chatFriendlyError(e);
+      var errorAssistantText=thinkingEnabled?assistantText:chatStripThinkingMarkupText(assistantText);
+      var emsg=(errorAssistantText?errorAssistantText+'\n':'')+chatFriendlyError(e);
       var failed=chatAttachAssistantTiming({role:'assistant',text:emsg,recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now(),assistantCostText);
       chatMessages.push(failed);
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('请求失败');
