@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v91';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v92';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2870,8 +2870,8 @@ function chatRenderImageGrid(images,opts){
   return '<div class="'+cls+'">'+images.map(function(img){
     var title=img.name||'图片';
     var remove='';
-    if(opts.draft)remove='<button class="chat-draft-image-remove" type="button" onclick="chatRemoveDraftImage(\''+escAttr(img.id)+'\')" title="移除图片">×</button>';
-    if(opts.edit)remove='<button class="chat-edit-image-remove" type="button" onclick="chatRemoveEditImage(\''+escAttr(img.id)+'\')" title="删除图片">×</button>';
+    if(opts.draft)remove='<button class="chat-draft-image-remove" type="button" onclick="event.stopPropagation();chatRemoveDraftImage(\''+escAttr(img.id)+'\')" title="移除图片" aria-label="移除图片">×</button>';
+    if(opts.edit)remove='<button class="chat-edit-image-remove" type="button" onclick="event.stopPropagation();chatRemoveEditImage(\''+escAttr(img.id)+'\')" title="删除图片" aria-label="删除图片">×</button>';
     var ratio=(img.width>0&&img.height>0)?(' style="--ck-image-ratio:'+img.width+'/'+img.height+'"'):'';
     var viewable=opts.draft||opts.edit?'':' viewable';
     var viewAttrs=viewable?' role="button" tabindex="0" aria-label="查看原图"':'';
