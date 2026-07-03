@@ -3781,37 +3781,13 @@ body.chat-active .chat-bubble.user .chat-msg-meta{
   display:none!important;
 }
 
-body.chat-active .chat-msg-time{
-  display:flex!important;
-  align-items:center!important;
-  gap:5px!important;
-  width:auto!important;
-  max-width:min(700px,82%)!important;
-  padding:0 3px!important;
-  color:rgba(91,105,98,.58)!important;
-  font-size:10px!important;
-  line-height:1.15!important;
-  white-space:nowrap!important;
-  pointer-events:none!important;
-  user-select:none!important;
-}
-
-body.chat-active .chat-msg-row.assistant>.chat-msg-time{
-  align-self:flex-start!important;
-  margin:0 0 0 8px!important;
-}
-
-body.chat-active .chat-msg-row.user>.chat-msg-time{
-  align-self:flex-end!important;
-  margin:0 8px 0 0!important;
-}
-
 body.chat-active .chat-msg-row.user>.chat-msg-meta{
   position:static!important;
   left:auto!important;
   right:auto!important;
   bottom:auto!important;
   float:none!important;
+  align-self:flex-end!important;
   display:flex!important;
   align-items:center!important;
   justify-content:flex-end!important;
@@ -3820,7 +3796,14 @@ body.chat-active .chat-msg-row.user>.chat-msg-meta{
   max-width:min(620px,82%)!important;
   min-width:0!important;
   height:auto!important;
+  margin:0 8px 0 0!important;
   padding:0!important;
+  color:rgba(91,105,98,.58)!important;
+  font-size:10px!important;
+  line-height:1.15!important;
+  white-space:nowrap!important;
+  pointer-events:none!important;
+  user-select:none!important;
   opacity:.9!important;
 }
 
@@ -3833,18 +3816,6 @@ body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-msg-meta-pending{
   line-height:1.15!important;
 }
 
-body.chat-active .chat-msg-wait{
-  display:inline-flex!important;
-  align-items:center!important;
-  height:14px!important;
-  padding:0 5px!important;
-  border-radius:999px!important;
-  background:rgba(15,23,42,.045)!important;
-  color:rgba(91,105,98,.62)!important;
-  font-size:10px!important;
-  line-height:1!important;
-}
-
 body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-cache-tick{
   flex:0 0 auto!important;
   transform:scale(.82)!important;
@@ -3853,15 +3824,6 @@ body.chat-active .chat-msg-row.user>.chat-msg-meta .chat-cache-tick{
 
 body.dark.chat-active .chat-msg-row.user>.chat-msg-meta{
   color:rgba(230,246,235,.58)!important;
-}
-
-body.dark.chat-active .chat-msg-time{
-  color:rgba(230,246,235,.58)!important;
-}
-
-body.dark.chat-active .chat-msg-wait{
-  background:rgba(230,246,235,.08)!important;
-  color:rgba(230,246,235,.62)!important;
 }
 
 body.chat-active .chat-recall-mode-card{
