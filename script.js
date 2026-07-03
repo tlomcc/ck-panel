@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v83';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v84';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1964,7 +1964,7 @@ var chatNewMessageHintVisible=false;
 var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
-var chatPlusSwipe={currentPage:0,totalPages:0};
+var chatPlusPager={currentPage:0,totalPages:0};
 var chatCleanHistoryResolver=null;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
@@ -4761,32 +4761,52 @@ function chatTogglePlus(force){
   if(!panel)return;
   var open=typeof force==='boolean'?force:!panel.classList.contains('open');
   if(open){
-    chatPlusUpdateDots();
+    chatPlusRenderPager(chatPlusPager.currentPage||0);
   }
   panel.classList.toggle('open',open);
   if(btn)btn.classList.toggle('open',open);
 }
-function chatPlusUpdateDots(){
+function chatPlusRenderPager(pageIndex){
   var container=document.getElementById('chat-plus-pages');
   var dotsWrap=document.getElementById('chat-plus-dots');
+  var prevBtn=document.getElementById('chat-plus-prev');
+  var nextBtn=document.getElementById('chat-plus-next');
   if(!container||!dotsWrap)return;
   var pages=container.querySelectorAll('.chat-plus-page');
   var totalPages=pages.length;
+  var currentPage=Math.max(0,Math.min(totalPages-1,Number(pageIndex)||0));
+  chatPlusPager.currentPage=currentPage;
+  chatPlusPager.totalPages=totalPages;
+  pages.forEach(function(page,i){
+    var active=i===currentPage;
+    page.classList.toggle('active',i===currentPage);
+    page.classList.toggle('before',i<currentPage);
+    page.classList.toggle('after',i>currentPage);
+    page.setAttribute('aria-hidden',active?'false':'true');
+    page.querySelectorAll('button').forEach(function(btn){
+      btn.tabIndex=active?0:-1;
+    });
+  });
+  if(prevBtn)prevBtn.hidden=totalPages<=1||currentPage===0;
+  if(nextBtn)nextBtn.hidden=totalPages<=1||currentPage>=totalPages-1;
   if(totalPages<=1){
     dotsWrap.innerHTML='';
     return;
   }
-  var scrollLeft=container.scrollLeft;
-  var pageWidth=container.offsetWidth;
-  var currentPage=Math.round(scrollLeft/pageWidth);
-  currentPage=Math.max(0,Math.min(totalPages-1,currentPage));
-  chatPlusSwipe.currentPage=currentPage;
-  chatPlusSwipe.totalPages=totalPages;
   var dots=[];
   for(var i=0;i<totalPages;i++){
-    dots.push('<div class="chat-plus-dot'+(i===currentPage?' active':'')+'"></div>');
+    dots.push('<button class="chat-plus-dot'+(i===currentPage?' active':'')+'" type="button" onclick="event.stopPropagation();chatPlusSetPage('+i+')" aria-label="切换到第 '+(i+1)+' 页"'+(i===currentPage?' aria-current="page"':'')+'></button>');
   }
   dotsWrap.innerHTML=dots.join('');
+}
+function chatPlusSetPage(pageIndex){
+  chatPlusRenderPager(pageIndex);
+}
+function chatPlusPrevPage(){
+  chatPlusRenderPager((chatPlusPager.currentPage||0)-1);
+}
+function chatPlusNextPage(){
+  chatPlusRenderPager((chatPlusPager.currentPage||0)+1);
 }
 function chatClosePlusOnOutside(e){
   var panel=document.getElementById('chat-plus-panel');
@@ -4794,11 +4814,8 @@ function chatClosePlusOnOutside(e){
   if(e.target.closest('.chat-plus-btn')||e.target.closest('.chat-plus-panel'))return;
   chatTogglePlus(false);
 }
-function chatAttachPlusGesture(){
-  var container=document.getElementById('chat-plus-pages');
-  if(!container||container.__chatPlusGestureAttached)return;
-  container.__chatPlusGestureAttached=true;
-  container.addEventListener('scroll',chatPlusUpdateDots,{passive:true});
+function chatInitPlusPager(){
+  chatPlusRenderPager(chatPlusPager.currentPage||0);
 }
 function chatSettingTitle(tab){
   return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'⚙️ 调试记录'})[tab]||'聊天设置';
@@ -5315,7 +5332,7 @@ function chatParseSse(buffer,onEvent){
 function chatInit(){
   if(chatInitialized)return;
   chatInitialized=true;
-  chatAttachPlusGesture();
+  chatInitPlusPager();
   document.addEventListener('pointerdown',chatTrackPointerIntent,{passive:true});
   document.addEventListener('touchstart',chatTrackPointerIntent,{passive:true});
   document.addEventListener('pointerdown',chatClosePlusOnOutside,{passive:true});
