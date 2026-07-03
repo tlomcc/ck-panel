@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v80';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v81';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1964,7 +1964,7 @@ var chatNewMessageHintVisible=false;
 var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
-var chatPlusSwipe={active:false,startX:0,startY:0,container:null,currentPage:0,totalPages:0};
+var chatPlusSwipe={active:false,committed:false,startX:0,startY:0,startScrollLeft:0,container:null,currentPage:0,totalPages:0,suppressClickUntil:0};
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
@@ -4694,6 +4694,79 @@ function chatPlusUpdateDots(){
   }
   dotsWrap.innerHTML=dots.join('');
 }
+function chatPlusPageWidth(container){
+  return container?Math.max(1,container.clientWidth||container.offsetWidth||1):1;
+}
+function chatPlusScrollToPage(page,instant){
+  var container=document.getElementById('chat-plus-pages');
+  if(!container)return;
+  var pages=container.querySelectorAll('.chat-plus-page');
+  var totalPages=pages.length||1;
+  page=Math.max(0,Math.min(totalPages-1,page));
+  chatPlusSwipe.currentPage=page;
+  chatPlusSwipe.totalPages=totalPages;
+  var left=page*chatPlusPageWidth(container);
+  if(container.scrollTo){
+    try{container.scrollTo({left:left,behavior:instant?'auto':'smooth'});}
+    catch(e){container.scrollLeft=left;}
+  }else{
+    container.scrollLeft=left;
+  }
+  setTimeout(chatPlusUpdateDots,instant?0:220);
+}
+function chatPlusTouchStart(e){
+  var container=document.getElementById('chat-plus-pages');
+  if(!container||!e.touches||e.touches.length!==1)return;
+  var t=e.touches[0];
+  chatPlusSwipe.active=true;
+  chatPlusSwipe.committed=false;
+  chatPlusSwipe.startX=t.clientX;
+  chatPlusSwipe.startY=t.clientY;
+  chatPlusSwipe.startScrollLeft=container.scrollLeft;
+  chatPlusSwipe.container=container;
+  chatPlusUpdateDots();
+}
+function chatPlusTouchMove(e){
+  if(!chatPlusSwipe.active||!chatPlusSwipe.container||!e.touches||e.touches.length!==1)return;
+  var t=e.touches[0];
+  var dx=t.clientX-chatPlusSwipe.startX;
+  var dy=t.clientY-chatPlusSwipe.startY;
+  if(!chatPlusSwipe.committed){
+    if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
+    if(Math.abs(dx)<=Math.abs(dy)){
+      chatPlusSwipe.active=false;
+      return;
+    }
+    chatPlusSwipe.committed=true;
+  }
+  chatPlusSwipe.container.scrollLeft=chatPlusSwipe.startScrollLeft-dx;
+  if(e.cancelable)e.preventDefault();
+  if(e.stopPropagation)e.stopPropagation();
+}
+function chatPlusTouchEnd(){
+  if(!chatPlusSwipe.active)return;
+  var container=chatPlusSwipe.container;
+  var committed=chatPlusSwipe.committed;
+  chatPlusSwipe.active=false;
+  chatPlusSwipe.committed=false;
+  if(!container)return;
+  var pageWidth=chatPlusPageWidth(container);
+  var page=Math.round(container.scrollLeft/pageWidth);
+  if(committed){
+    var deltaPages=Math.round((container.scrollLeft-chatPlusSwipe.startScrollLeft)/pageWidth);
+    if(deltaPages===0&&Math.abs(container.scrollLeft-chatPlusSwipe.startScrollLeft)>pageWidth*.18){
+      deltaPages=container.scrollLeft>chatPlusSwipe.startScrollLeft?1:-1;
+    }
+    page=chatPlusSwipe.currentPage+deltaPages;
+    chatPlusSwipe.suppressClickUntil=Date.now()+360;
+  }
+  chatPlusScrollToPage(page,false);
+}
+function chatPlusSuppressSwipeClick(e){
+  if(Date.now()>chatPlusSwipe.suppressClickUntil)return;
+  if(e&&e.preventDefault)e.preventDefault();
+  if(e&&e.stopPropagation)e.stopPropagation();
+}
 function chatClosePlusOnOutside(e){
   var panel=document.getElementById('chat-plus-panel');
   if(!panel||!panel.classList.contains('open')||!e||!e.target||!e.target.closest)return;
@@ -4704,9 +4777,12 @@ function chatAttachPlusGesture(){
   var container=document.getElementById('chat-plus-pages');
   if(!container||container.__chatPlusGestureAttached)return;
   container.__chatPlusGestureAttached=true;
-  if(container){
-    container.addEventListener('scroll',chatPlusUpdateDots,{passive:true});
-  }
+  container.addEventListener('scroll',chatPlusUpdateDots,{passive:true});
+  container.addEventListener('touchstart',chatPlusTouchStart,{passive:true});
+  container.addEventListener('touchmove',chatPlusTouchMove,{passive:false});
+  container.addEventListener('touchend',chatPlusTouchEnd,{passive:true});
+  container.addEventListener('touchcancel',chatPlusTouchEnd,{passive:true});
+  container.addEventListener('click',chatPlusSuppressSwipeClick,true);
 }
 function chatSettingTitle(tab){
   return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'⚙️ 调试记录'})[tab]||'聊天设置';
@@ -4727,7 +4803,6 @@ function chatToggleSettings(force,silent){
   var el=document.querySelector('.chat-settings');
   if(!el)return;
   var open=typeof force==='boolean'?force:!el.classList.contains('open');
-  if(open)chatAttachSettingsGesture();
   if(!open){
     el.style.removeProperty('transition');
     el.style.removeProperty('transform');
@@ -4740,68 +4815,6 @@ function chatToggleSettings(force,silent){
     cfg.settingsOpen=open;
     chatSaveConfigObject(cfg);
   }
-}
-var chatSettingsDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null,wide:false};
-function chatSettingsBaseTransform(){return chatSettingsDrag.wide?'translateX(-50%)':''}
-function chatSettingsTouchStart(e){
-  var panel=document.querySelector('.chat-settings.open');
-  if(!panel){chatSettingsDrag.active=false;return}
-  var target=e.target;
-  if(ckSheetDragTargetIsTextEdit(target)){chatSettingsDrag.active=false;return}
-  if(target&&target.closest&&target.closest('#chat-side-debug')){chatSettingsDrag.active=false;return}
-  var active=panel.querySelector('.chat-side-panel.active');
-  if(active&&active.scrollTop>0&&active.contains(target)){chatSettingsDrag.active=false;return}
-  var t=e.touches?e.touches[0]:e;
-  chatSettingsDrag.active=true;
-  chatSettingsDrag.committed=false;
-  chatSettingsDrag.startY=t.clientY;
-  chatSettingsDrag.startT=Date.now();
-  chatSettingsDrag.dy=0;
-  chatSettingsDrag.panel=panel;
-  chatSettingsDrag.wide=window.matchMedia&&window.matchMedia('(min-width:560px)').matches;
-}
-function chatSettingsTouchMove(e){
-  if(!chatSettingsDrag.active)return;
-  var t=e.touches?e.touches[0]:e;
-  var dy=t.clientY-chatSettingsDrag.startY;
-  if(!chatSettingsDrag.committed){
-    if(dy>6){
-      chatSettingsDrag.committed=true;
-      chatSettingsDrag.panel.style.transition='none';
-    }else if(dy<-6){
-      chatSettingsDrag.active=false;
-      return;
-    }else return;
-  }
-  if(dy<0)dy=0;
-  chatSettingsDrag.dy=dy;
-  chatSettingsDrag.panel.style.setProperty('transform',chatSettingsBaseTransform()+' translateY('+dy+'px)','important');
-  if(e.cancelable)e.preventDefault();
-}
-function chatSettingsTouchEnd(){
-  if(!chatSettingsDrag.active)return;
-  var panel=chatSettingsDrag.panel,dy=chatSettingsDrag.dy;
-  chatSettingsDrag.active=false;
-  chatSettingsDrag.committed=false;
-  if(!panel)return;
-  if(dy>CK_SHEET_DISMISS_DISTANCE){
-    panel.style.transition='transform .2s ease';
-    panel.style.setProperty('transform',chatSettingsBaseTransform()+' translateY(100%)','important');
-    setTimeout(function(){chatToggleSettings(false);panel.style.removeProperty('transition');panel.style.removeProperty('transform');},190);
-  }else{
-    panel.style.transition='transform .2s ease';
-    panel.style.setProperty('transform',chatSettingsBaseTransform(),'important');
-    setTimeout(function(){panel.style.removeProperty('transition');panel.style.removeProperty('transform');},210);
-  }
-}
-function chatAttachSettingsGesture(){
-  var panel=document.querySelector('.chat-settings');
-  if(!panel||panel.__chatGestureAttached)return;
-  panel.__chatGestureAttached=true;
-  panel.addEventListener('touchstart',chatSettingsTouchStart,{passive:true});
-  panel.addEventListener('touchmove',chatSettingsTouchMove,{passive:false});
-  panel.addEventListener('touchend',chatSettingsTouchEnd,{passive:true});
-  panel.addEventListener('touchcancel',chatSettingsTouchEnd,{passive:true});
 }
 function chatSwitchSideTab(tab,silent){
   tab=tab||'model';
@@ -4900,7 +4913,6 @@ document.addEventListener('keydown',function(e){
     return;
   }
   chatToggleSessions(false,true);
-  chatToggleSettings(false,true);
   chatTogglePlus(false);
 });
 document.addEventListener('visibilitychange',function(){
@@ -5287,7 +5299,6 @@ function chatParseSse(buffer,onEvent){
 function chatInit(){
   if(chatInitialized)return;
   chatInitialized=true;
-  chatAttachSettingsGesture();
   chatAttachPlusGesture();
   document.addEventListener('pointerdown',chatTrackPointerIntent,{passive:true});
   document.addEventListener('touchstart',chatTrackPointerIntent,{passive:true});

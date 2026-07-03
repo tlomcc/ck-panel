@@ -1,5 +1,5 @@
 {
-  "version": "chat-v80",
+  "version": "chat-v81",
   "notes": [
     "修复加号面板横向滑动翻页被拦截的问题",
     "将 touch-action:pan-x 从 panel 移到 pages 容器",

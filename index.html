@@ -14,10 +14,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v80">
-<link rel="stylesheet" href="polish.css?v=chat-v80">
-<link rel="stylesheet" href="chat.css?v=chat-v80">
-<script>window.CK_PANEL_VERSION='chat-v80';</script>
+<link rel="stylesheet" href="style.css?v=chat-v81">
+<link rel="stylesheet" href="polish.css?v=chat-v81">
+<link rel="stylesheet" href="chat.css?v=chat-v81">
+<script>window.CK_PANEL_VERSION='chat-v81';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap"><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">加载中...</div></div>
@@ -26,7 +26,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge">chat-v80</span>
+<span class="panel-version-badge" id="panel-version-badge">chat-v81</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -162,7 +162,7 @@
 </div>
 </div>
 </div>
-<button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置"></button>
+<button class="chat-settings-mask" type="button" aria-hidden="true" tabindex="-1"></button>
 <aside class="chat-settings">
 <div class="chat-settings-head"><b id="chat-settings-title">聊天设置</b><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-tabs"><button class="active" data-chat-side="model" onclick="chatSwitchSideTab('model')">提示词</button><button data-chat-side="gateway" onclick="chatSwitchSideTab('gateway')">网关</button><button data-chat-side="worldbook" onclick="chatSwitchSideTab('worldbook')">世界书</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="trim" onclick="chatSwitchSideTab('trim')">截断</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
@@ -239,8 +239,8 @@
 <div class="modal-bg" id="provDelModal" onclick="closeProvDel()"><div class="modal" onclick="event.stopPropagation()"><h3>删除供应商</h3><p class="prov-del-q">确定要删除该供应商吗？</p><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="closeProvDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmProvDel()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
 <div class="toast" id="toast"></div>
-<script src="script.js?v=chat-v80"></script>
-<script src="script-extra.js?v=chat-v80"></script>
-<script src="pwa.js?v=chat-v80"></script>
+<script src="script.js?v=chat-v81"></script>
+<script src="script-extra.js?v=chat-v81"></script>
+<script src="pwa.js?v=chat-v81"></script>
 </body>
 </html>
