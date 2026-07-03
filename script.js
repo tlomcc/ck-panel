@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v76';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v77';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1965,6 +1965,7 @@ var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
 var chatPlusDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null,pointerId:null};
+var chatPlusSwipe={active:false,startX:0,startY:0,container:null,currentPage:0,totalPages:0};
 var chatPlusSuppressClickUntil=0;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
@@ -4638,9 +4639,33 @@ function chatTogglePlus(force){
     panel.style.removeProperty('transform');
     panel.style.removeProperty('opacity');
     panel.classList.remove('dragging');
+  }else{
+    chatPlusUpdateDots();
   }
   panel.classList.toggle('open',open);
   if(btn)btn.classList.toggle('open',open);
+}
+function chatPlusUpdateDots(){
+  var container=document.getElementById('chat-plus-pages');
+  var dotsWrap=document.getElementById('chat-plus-dots');
+  if(!container||!dotsWrap)return;
+  var pages=container.querySelectorAll('.chat-plus-page');
+  var totalPages=pages.length;
+  if(totalPages<=1){
+    dotsWrap.innerHTML='';
+    return;
+  }
+  var scrollLeft=container.scrollLeft;
+  var pageWidth=container.offsetWidth;
+  var currentPage=Math.round(scrollLeft/pageWidth);
+  currentPage=Math.max(0,Math.min(totalPages-1,currentPage));
+  chatPlusSwipe.currentPage=currentPage;
+  chatPlusSwipe.totalPages=totalPages;
+  var dots=[];
+  for(var i=0;i<totalPages;i++){
+    dots.push('<div class="chat-plus-dot'+(i===currentPage?' active':'')+'"></div>');
+  }
+  dotsWrap.innerHTML=dots.join('');
 }
 function chatClosePlusOnOutside(e){
   var panel=document.getElementById('chat-plus-panel');
@@ -4737,6 +4762,7 @@ function chatPlusPreventGhostClick(e){
 }
 function chatAttachPlusGesture(){
   var panel=document.getElementById('chat-plus-panel');
+  var container=document.getElementById('chat-plus-pages');
   if(!panel||panel.__chatPlusGestureAttached)return;
   panel.__chatPlusGestureAttached=true;
   panel.addEventListener('pointerdown',chatPlusTouchStart,{passive:true});
@@ -4748,6 +4774,9 @@ function chatAttachPlusGesture(){
   document.addEventListener('touchmove',chatPlusTouchMove,{passive:false});
   document.addEventListener('touchend',chatPlusTouchEnd,{passive:true});
   document.addEventListener('touchcancel',chatPlusTouchEnd,{passive:true});
+  if(container){
+    container.addEventListener('scroll',chatPlusUpdateDots,{passive:true});
+  }
 }
 function chatSettingTitle(tab){
   return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'⚙️ 调试记录'})[tab]||'聊天设置';
