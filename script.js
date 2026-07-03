@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v78';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v79';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1964,9 +1964,7 @@ var chatNewMessageHintVisible=false;
 var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
-var chatPlusDrag={active:false,committed:false,startY:0,startT:0,dy:0,panel:null,pointerId:null};
 var chatPlusSwipe={active:false,startX:0,startY:0,container:null,currentPage:0,totalPages:0};
-var chatPlusSuppressClickUntil=0;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
@@ -4668,14 +4666,7 @@ function chatTogglePlus(force){
   var btn=document.getElementById('chat-plus-btn');
   if(!panel)return;
   var open=typeof force==='boolean'?force:!panel.classList.contains('open');
-  if(!open){
-    chatPlusDrag.active=false;
-    chatPlusDrag.committed=false;
-    panel.style.removeProperty('transition');
-    panel.style.removeProperty('transform');
-    panel.style.removeProperty('opacity');
-    panel.classList.remove('dragging');
-  }else{
+  if(open){
     chatPlusUpdateDots();
   }
   panel.classList.toggle('open',open);
@@ -4709,107 +4700,10 @@ function chatClosePlusOnOutside(e){
   if(e.target.closest('.chat-plus-btn')||e.target.closest('.chat-plus-panel'))return;
   chatTogglePlus(false);
 }
-function chatPlusEventPoint(e){
-  if(!e)return null;
-  var t=null;
-  if(e.changedTouches&&e.changedTouches.length)t=e.changedTouches[0];
-  else if(e.touches&&e.touches.length)t=e.touches[0];
-  else t=e;
-  if(!t||t.clientY===undefined)return null;
-  return {
-    y:Number(t.clientY)||0,
-    pointerId:e.pointerId!==undefined?e.pointerId:null
-  };
-}
-function chatPlusTouchStart(e){
-  var panel=document.getElementById('chat-plus-panel');
-  if(!panel||!panel.classList.contains('open')){chatPlusDrag.active=false;return}
-  if(e&&e.button!==undefined&&e.button!==0)return;
-  var point=chatPlusEventPoint(e);
-  if(!point)return;
-  chatPlusDrag.active=true;
-  chatPlusDrag.committed=false;
-  chatPlusDrag.startY=point.y;
-  chatPlusDrag.startT=Date.now();
-  chatPlusDrag.dy=0;
-  chatPlusDrag.panel=panel;
-  chatPlusDrag.pointerId=point.pointerId;
-}
-function chatPlusTouchMove(e){
-  if(!chatPlusDrag.active)return;
-  if(e&&e.pointerId!==undefined&&chatPlusDrag.pointerId!==null&&e.pointerId!==chatPlusDrag.pointerId)return;
-  var point=chatPlusEventPoint(e);
-  if(!point)return;
-  var dy=point.y-chatPlusDrag.startY;
-  if(!chatPlusDrag.committed){
-    if(dy>8){
-      chatPlusDrag.committed=true;
-      chatPlusDrag.panel.classList.add('dragging');
-      chatPlusDrag.panel.style.setProperty('transition','none','important');
-    }else if(dy<-10){
-      chatPlusDrag.active=false;
-      return;
-    }else return;
-  }
-  if(dy<0)dy=0;
-  chatPlusDrag.dy=dy;
-  chatPlusDrag.panel.style.setProperty('transform','translateY('+dy+'px)','important');
-  chatPlusDrag.panel.style.setProperty('opacity',String(Math.max(.35,1-dy/140)),'important');
-  if(e.cancelable)e.preventDefault();
-}
-function chatPlusTouchEnd(){
-  if(!chatPlusDrag.active)return;
-  var panel=chatPlusDrag.panel,dy=chatPlusDrag.dy,dt=Date.now()-chatPlusDrag.startT;
-  var committed=chatPlusDrag.committed;
-  chatPlusDrag.active=false;
-  chatPlusDrag.committed=false;
-  chatPlusDrag.pointerId=null;
-  if(!panel)return;
-  panel.classList.remove('dragging');
-  if(committed)chatPlusSuppressClickUntil=Date.now()+500;
-  var flick=dt<300&&dy>22;
-  if(dy>48||flick){
-    panel.style.setProperty('transition','transform .18s ease, opacity .16s ease','important');
-    panel.style.setProperty('transform','translateY(22px)','important');
-    panel.style.setProperty('opacity','0','important');
-    setTimeout(function(){
-      chatTogglePlus(false);
-      panel.style.removeProperty('transition');
-      panel.style.removeProperty('transform');
-      panel.style.removeProperty('opacity');
-    },160);
-  }else{
-    panel.style.setProperty('transition','transform .18s ease, opacity .16s ease','important');
-    panel.style.setProperty('transform','translateY(0)','important');
-    panel.style.setProperty('opacity','1','important');
-    setTimeout(function(){
-      panel.style.removeProperty('transition');
-      panel.style.removeProperty('transform');
-      panel.style.removeProperty('opacity');
-    },190);
-  }
-}
-function chatPlusPreventGhostClick(e){
-  if(Date.now()>chatPlusSuppressClickUntil)return;
-  if(e&&e.target&&e.target.closest&&e.target.closest('.chat-plus-panel')){
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
 function chatAttachPlusGesture(){
-  var panel=document.getElementById('chat-plus-panel');
   var container=document.getElementById('chat-plus-pages');
-  if(!panel||panel.__chatPlusGestureAttached)return;
-  panel.__chatPlusGestureAttached=true;
-  panel.addEventListener('pointerdown',chatPlusTouchStart,{passive:true});
-  panel.addEventListener('touchstart',chatPlusTouchStart,{passive:true});
-  panel.addEventListener('click',chatPlusPreventGhostClick,true);
-  document.addEventListener('pointermove',chatPlusTouchMove,{passive:false});
-  document.addEventListener('pointerup',chatPlusTouchEnd,{passive:true});
-  document.addEventListener('pointercancel',chatPlusTouchEnd,{passive:true});
-  document.addEventListener('touchmove',chatPlusTouchMove,{passive:false});
-  document.addEventListener('touchend',chatPlusTouchEnd,{passive:true});
-  document.addEventListener('touchcancel',chatPlusTouchEnd,{passive:true});
+  if(!container||container.__chatPlusGestureAttached)return;
+  container.__chatPlusGestureAttached=true;
   if(container){
     container.addEventListener('scroll',chatPlusUpdateDots,{passive:true});
   }

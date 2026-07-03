@@ -1110,28 +1110,6 @@ body.chat-active .chat-plus-dot.active{
   transform:scale(1.2)!important;
 }
 
-body.chat-active .chat-plus-panel::before{
-  content:""!important;
-  position:absolute!important;
-  left:50%!important;
-  top:2px!important;
-  width:36px!important;
-  height:4px!important;
-  border-radius:999px!important;
-  background:rgba(15,23,42,.14)!important;
-  transform:translateX(-50%)!important;
-  opacity:0!important;
-  pointer-events:none!important;
-}
-
-body.chat-active .chat-plus-panel.open::before{
-  opacity:1!important;
-}
-
-body.chat-active .chat-plus-panel.dragging{
-  transition:none!important;
-}
-
 body.chat-active .chat-plus-panel button{
   min-width:0!important;
   height:68px!important;
