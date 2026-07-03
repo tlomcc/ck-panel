@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v95';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v89';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2310,14 +2310,6 @@ function chatMoney(value,currency){
   var digits=n>=1?4:(n>=.01?5:6);
   return String(currency||'¥')+n.toFixed(digits);
 }
-function chatMoneyCompact(value,currency){
-  var n=Number(value)||0;
-  var abs=Math.abs(n);
-  var digits=abs>=.01?2:(abs>=.0001?4:6);
-  var text=n.toFixed(digits);
-  if(abs>0&&abs<.01)text=text.replace(/0+$/,'').replace(/\.$/,'');
-  return String(currency||'¥')+text;
-}
 function chatUsageCost(usage){
   usage=usage&&usage.usage?usage.usage:(usage||{});
   var pricing=chatCurrentCostPricing();
@@ -2350,11 +2342,6 @@ function chatFormatUsageCost(usage){
   var cost=chatUsageCost(usage);
   if(!cost.hasUsage)return '';
   return '费用：'+chatMoney(cost.total,(cost.pricing&&cost.pricing.currency)||'¥');
-}
-function chatFormatBubbleUsageCost(usage){
-  var cost=chatUsageCost(usage);
-  if(!cost.hasUsage)return '';
-  return chatMoneyCompact(cost.total,(cost.pricing&&cost.pricing.currency)||'¥');
 }
 function chatDebugRecordCostAmount(record){
   if(!record||record.event!=='done'||!record.data)return '';
@@ -2883,8 +2870,8 @@ function chatRenderImageGrid(images,opts){
   return '<div class="'+cls+'">'+images.map(function(img){
     var title=img.name||'图片';
     var remove='';
-    if(opts.draft)remove='<button class="chat-draft-image-remove" type="button" onclick="event.stopPropagation();chatRemoveDraftImage(\''+escAttr(img.id)+'\')" title="移除图片" aria-label="移除图片">×</button>';
-    if(opts.edit)remove='<button class="chat-edit-image-remove" type="button" onclick="event.stopPropagation();chatRemoveEditImage(\''+escAttr(img.id)+'\')" title="删除图片" aria-label="删除图片">×</button>';
+    if(opts.draft)remove='<button class="chat-draft-image-remove" type="button" onclick="chatRemoveDraftImage(\''+escAttr(img.id)+'\')" title="移除图片">×</button>';
+    if(opts.edit)remove='<button class="chat-edit-image-remove" type="button" onclick="chatRemoveEditImage(\''+escAttr(img.id)+'\')" title="删除图片">×</button>';
     var ratio=(img.width>0&&img.height>0)?(' style="--ck-image-ratio:'+img.width+'/'+img.height+'"'):'';
     var viewable=opts.draft||opts.edit?'':' viewable';
     var viewAttrs=viewable?' role="button" tabindex="0" aria-label="查看原图"':'';
@@ -3854,49 +3841,8 @@ function chatTimeLabel(ts){
   return same?hm:(String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+hm);
 }
 function chatFullTimeLabel(ts){
-  if(!ts)return '';
-  var d=new Date(ts);
-  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
-}
-function chatAttachAssistantTiming(msg,userSentTs,replyTs,costText){
-  if(!msg||msg.role!=='assistant')return msg;
-  replyTs=Number(replyTs||msg.ts||Date.now())||Date.now();
-  msg.ts=replyTs;
-  userSentTs=Number(userSentTs||0)||0;
-  if(userSentTs){
-    msg.userSentTs=userSentTs;
-    msg.firstReplyTs=replyTs;
-    msg.waitMs=Math.max(0,replyTs-userSentTs);
-  }
-  costText=String(costText||'').trim();
-  if(costText)msg.apiCostText=costText;
-  return msg;
-}
-function chatUpdateStreamingTiming(anchorEl,userSentTs,replyTs){
-  if(!anchorEl||!anchorEl.parentNode)return;
-  var meta=anchorEl.parentNode.querySelector('.chat-msg-time');
-  if(!meta)return;
-  var msg=chatAttachAssistantTiming({role:'assistant',ts:replyTs},userSentTs,replyTs);
-  var html=chatMessageTimingHtml(msg,'assistant');
-  if(html)meta.outerHTML=html;
-}
-function chatAssistantWaitLabel(m){
-  if(!m||m.role!=='assistant')return '';
-  var waitMs=Number(m.waitMs);
-  if(!isFinite(waitMs)||waitMs<0){
-    var userTs=Number(m.userSentTs||0)||0;
-    var replyTs=Number(m.firstReplyTs||m.ts||0)||0;
-    if(!userTs||!replyTs||replyTs<userTs)return '';
-    waitMs=replyTs-userTs;
-  }
-  return '等待 '+Math.max(0,Math.round(waitMs/1000))+'s';
-}
-function chatAssistantCostLabel(m){
-  if(!m||m.role!=='assistant')return '';
-  var text=String(m.apiCostText||m.costText||'').trim();
-  if(text)return text;
-  if(m.usage)return chatFormatBubbleUsageCost(m.usage);
-  return '';
+  var d=new Date(ts||Date.now());
+  return String(d.getFullYear())+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 function chatUpdateRuntime(cfg,usage){
   cfg=cfg||chatLoadConfig();
@@ -4527,63 +4473,6 @@ function chatSplitThinkingText(src,opts){
     .trim();
   return {text:text,thinking:thoughts.join('\n\n')};
 }
-function chatStripThinkingMarkupText(src){
-  return chatSplitThinkingText(src,{suppressThinking:true,hideUnclosedThinking:true}).text;
-}
-function chatStripThinkingContentValue(value){
-  if(typeof value==='string')return chatStripThinkingMarkupText(value);
-  if(Array.isArray(value)){
-    var list=[];
-    value.forEach(function(item){
-      var next=chatStripThinkingContentValue(item);
-      if(next===null||next===undefined)return;
-      if(typeof next==='string'&&!next.trim())return;
-      if(Array.isArray(next)&&!next.length)return;
-      if(next&&typeof next==='object'){
-        if(next.type==='text'&&String(next.text||'').trim()==='')return;
-        if(next.content!==undefined&&Array.isArray(next.content)&&!next.content.length&&next.type!=='tool_result')return;
-      }
-      list.push(next);
-    });
-    return list;
-  }
-  if(value&&typeof value==='object'){
-    var out={};
-    Object.keys(value).forEach(function(key){out[key]=value[key]});
-    if(Object.prototype.hasOwnProperty.call(out,'text')){
-      out.text=chatStripThinkingMarkupText(out.text);
-    }
-    if(Object.prototype.hasOwnProperty.call(out,'content')){
-      out.content=chatStripThinkingContentValue(out.content);
-    }
-    return out;
-  }
-  return value;
-}
-function chatContentValueHasPayload(value){
-  if(typeof value==='string')return !!value.trim();
-  if(Array.isArray(value))return value.some(chatContentValueHasPayload);
-  if(value&&typeof value==='object'){
-    if(Object.prototype.hasOwnProperty.call(value,'text')&&String(value.text||'').trim())return true;
-    if(Object.prototype.hasOwnProperty.call(value,'content')&&chatContentValueHasPayload(value.content))return true;
-    if(value.type&&value.type!=='text')return true;
-  }
-  return false;
-}
-function chatStripThinkingFromMessage(msg){
-  if(!msg||typeof msg!=='object')return null;
-  var out={};
-  Object.keys(msg).forEach(function(key){out[key]=msg[key]});
-  if(Object.prototype.hasOwnProperty.call(out,'text'))out.text=chatStripThinkingMarkupText(out.text);
-  if(Object.prototype.hasOwnProperty.call(out,'content'))out.content=chatStripThinkingContentValue(out.content);
-  if(String(out.text||'').trim())return out;
-  if(chatContentValueHasPayload(out.content))return out;
-  if(chatNormalizeImageList(out.images).length)return out;
-  return null;
-}
-function chatStripThinkingFromMessages(messages){
-  return (Array.isArray(messages)?messages:[]).map(chatStripThinkingFromMessage).filter(Boolean);
-}
 function chatLooksLikePartialThinkingTag(text){
   var t=String(text||'').trim().toLowerCase();
   if(!t||t.charAt(0)!=='<'||t.indexOf('>')>=0)return false;
@@ -4672,14 +4561,9 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
-function chatAssistantThinkingVisible(streaming){
-  if(streaming===true)return false;
-  try{return chatLoadConfig().fakeThinking===true}catch(e){return false}
-}
 function chatRenderAssistantContent(rawText,streaming,tools){
-  var showThinking=chatAssistantThinkingVisible(streaming);
-  var split=chatSplitThinkingText(rawText,{suppressThinking:!showThinking,hideUnclosedThinking:streaming===true||!showThinking});
-  var thinking=(showThinking&&split.thinking)?(
+  var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
+  var thinking=split.thinking?(
     '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
   var toolTrace=chatRenderToolTrace(tools);
@@ -4835,14 +4719,10 @@ async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   var parts=chatSplitAssistantReplies(rawText,!(opts&&opts.splitAssistantReplies===false));
   var tools=chatCloneToolEvents(toolEvents);
   if(!parts.length&&tools.length)parts=[''];
-  var firstReplyTs=Number(opts&&opts.firstReplyTs)||Date.now();
-  var userSentTs=Number(opts&&opts.userSentTs)||0;
-  var apiCostText=String(opts&&opts.apiCostText||'').trim();
+  var now=Date.now();
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
-    var ts=i===0?firstReplyTs:Date.now();
-    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts};
-    if(i===0)chatAttachAssistantTiming(msg,userSentTs,firstReplyTs,apiCostText);
+    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:now+i};
     chatMessages.push(msg);
     chatMarkMessageFresh(msg);
     chatSaveLocalMessages();
@@ -5394,7 +5274,7 @@ function chatRenderMessageRow(m,i){
   if(role==='user'&&!pending)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
   var tools=toolButtons.length?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
   var userMeta=role==='user'?chatUserMessageMetaHtml(m):'';
-  var time=role==='assistant'?chatMessageTimingHtml(m,role):'';
+  var time=role==='user'?'':'<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
   var imageCount=chatMessageImages(m).length;
   var bubbleState=(imageCount?' has-images':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
@@ -5402,23 +5282,17 @@ function chatRenderMessageRow(m,i){
   var fresh=chatFreshMessageKeys.has(chatMessageAnimKey(m))?' chat-fresh':'';
   return '<div class="chat-msg-row '+role+(pending?' pending':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+versionNav+tools+userMeta+time+'</div>';
 }
-function chatMessageTimingHtml(m,role){
-  var bits=[],ts=Number(m&&m.ts)||0;
-  if(ts)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
-  if(role==='user'){
-    if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
-    else bits.push(chatCacheTickHtml(m));
-  }else if(role==='assistant'){
-    var wait=chatAssistantWaitLabel(m);
-    if(wait)bits.push('<span class="chat-msg-wait">'+esc(wait)+'</span>');
-    var cost=chatAssistantCostLabel(m);
-    if(cost)bits.push('<span class="chat-msg-cost">'+esc((wait?'· ':'')+cost)+'</span>');
-  }
-  if(!bits.length)return '';
-  return '<div class="chat-msg-time'+(role==='user'?' chat-msg-meta':'')+'">'+bits.join('')+'</div>';
-}
 function chatUserMessageMetaHtml(m){
-  return chatMessageTimingHtml(m,'user');
+  var pending=m&&m.role==='pending_user';
+  var bits=['<span class="chat-msg-meta">'];
+  bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(m&&m.ts))+'</span>');
+  if(pending){
+    bits.push('<span class="chat-msg-meta-pending">待发送</span>');
+  }else{
+    bits.push(chatCacheTickHtml(m));
+  }
+  bits.push('</span>');
+  return bits.join('');
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -5499,8 +5373,8 @@ function chatApplyCacheTick(userIndex,usage,userBubble){
     (row||userBubble).querySelectorAll('.chat-cache-tick').forEach(function(old){old.remove()});
     var meta=row?row.querySelector('.chat-msg-meta'):userBubble.querySelector('.chat-msg-meta');
     if(!meta){
-      meta=document.createElement('div');
-      meta.className='chat-msg-time chat-msg-meta';
+      meta=document.createElement('span');
+      meta.className='chat-msg-meta';
       var time=document.createElement('span');
       time.className='chat-msg-meta-time';
       time.textContent=chatFullTimeLabel(chatMessages[userIndex].ts);
@@ -5537,9 +5411,9 @@ function chatAddBubble(role,text,persist){
   }
   row.appendChild(el);
   if(role==='user'){
-    var metaWrap=document.createElement('template');
+    var metaWrap=document.createElement('span');
     metaWrap.innerHTML=chatUserMessageMetaHtml({role:'user',text:text||'',images:[],cacheHit:false,ts:ts});
-    if(metaWrap.content&&metaWrap.content.firstChild)row.appendChild(metaWrap.content.firstChild);
+    if(metaWrap.firstChild)row.appendChild(metaWrap.firstChild);
   }else{
     var time=document.createElement('div');
     time.className='chat-msg-time';
@@ -5718,13 +5592,12 @@ async function chatSubmitPendingMessages(){
     chatHandleMainRouteNotReady(route);
     return;
   }
-  var submitTs=Date.now();
   if(extra||draftImages.length){
     input.value='';
     chatAutosizeInput(input);
     chatDraftImages=[];
     chatRenderDraftImages();
-    chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:submitTs});
+    chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:Date.now()});
   }
   pending=chatPendingMessages();
   var text=pending.map(function(m){return String(m.text||'').trim()}).filter(Boolean).join('\n\n');
@@ -5740,13 +5613,10 @@ async function chatSubmitPendingMessages(){
   chatSaveConfigObject(cfg);
   var trimResult=chatApplyAutoTrimBeforeRequest(cfg);
   var windowMessagesForRequest=chatWindowContextMessages();
-  var thinkingEnabled=cfg.fakeThinking===true;
-  if(!thinkingEnabled)windowMessagesForRequest=chatStripThinkingFromMessages(windowMessagesForRequest);
   var userMessageIndexes=[];
   chatMessages.forEach(function(m,i){
     if(m&&m.role==='pending_user'){
       m.role='user';
-      m.ts=submitTs;
       m.cacheHit=false;
       chatMarkMessageFresh(m);
       userMessageIndexes.push(i);
@@ -5781,10 +5651,9 @@ async function chatSubmitPendingMessages(){
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     recall:cfg.recall!==false,
-    ck_thinking_enabled:thinkingEnabled,
-    ck_thinking_prompt:thinkingEnabled?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
+    ck_thinking_enabled:cfg.fakeThinking===true,
+    ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
-    ck_strip_thinking_history:!thinkingEnabled,
     use_mcp:cfg.useMcp===true,
     cache_strategy:cacheStrategy,
     recall_history_retention_seconds:recallRetention,
@@ -5795,7 +5664,6 @@ async function chatSubmitPendingMessages(){
   };
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
   var transportForRequest=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
-  if(!thinkingEnabled)transportForRequest=chatStripThinkingFromMessages(transportForRequest);
   if(transportForRequest.length)body.transport_messages=transportForRequest;
   if(currentSession.transportUpdated)body.transport_updated_at=currentSession.transportUpdated;
   if(cfg.useMcp===true&&cfg.mcpUrl)body.mcp_url=cfg.mcpUrl;
@@ -5804,20 +5672,7 @@ async function chatSubmitPendingMessages(){
   });
   if((cfg.fullWindowContext!==false||trimResult.trimmed)&&!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
-  var assistantText='',recallInfo=null,toolEvents=[],assistantCostText='';
-  var responseUserTs=submitTs;
-  var firstReplyTs=0;
-  function updateAssistantCostText(usage){
-    var cost=chatFormatBubbleUsageCost(usage||{});
-    if(cost)assistantCostText=cost;
-  }
-  function markFirstReplyTs(){
-    if(!firstReplyTs){
-      firstReplyTs=Date.now();
-      chatUpdateStreamingTiming(out,responseUserTs,firstReplyTs);
-    }
-    return firstReplyTs;
-  }
+  var assistantText='',recallInfo=null,toolEvents=[];
   try{
     var resp=await fetch(chatEndpoint(cfg),{
       method:'POST',
@@ -5832,7 +5687,6 @@ async function chatSubmitPendingMessages(){
     if(!resp.body){
       var plain=await resp.text();
       assistantText=plain;
-      markFirstReplyTs();
       var plainShouldStick=chatIsMessagesNearBottom();
       out.innerHTML=chatRenderStreamingAssistantContent(plain,toolEvents);
       chatFollowMessagesBottom(plainShouldStick,true,true);
@@ -5846,7 +5700,6 @@ async function chatSubmitPendingMessages(){
         buffer+=decoder.decode(r.value,{stream:true});
         buffer=chatParseSse(buffer,function(ev,data){
           if(ev==='delta'){
-            if(data&&data.text)markFirstReplyTs();
             assistantText+=data.text||'';
             var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
             var deltaShouldStick=chatIsMessagesNearBottom();
@@ -5862,8 +5715,7 @@ async function chatSubmitPendingMessages(){
           }else if(ev==='transport'){
             if(data&&Array.isArray(data.messages)){
               var ts=chatCurrentSession();
-              var transportMessages=thinkingEnabled?data.messages:chatStripThinkingFromMessages(data.messages);
-              ts.transportMessages=chatLimitArray(transportMessages,CHAT_MAX_TRANSPORT_MESSAGES);
+              ts.transportMessages=chatLimitArray(data.messages,CHAT_MAX_TRANSPORT_MESSAGES);
               ts.transportUpdated=Date.now();
               ts.updated=Date.now();
               chatSaveSessions();
@@ -5871,7 +5723,6 @@ async function chatSubmitPendingMessages(){
           }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
             chatDebug(ev,data);
             if(ev==='tool'){
-              markFirstReplyTs();
               toolEvents=chatUpsertToolEvent(toolEvents,data);
               var stillEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
               var toolShouldStick=chatIsMessagesNearBottom();
@@ -5881,20 +5732,15 @@ async function chatSubmitPendingMessages(){
               chatFollowMessagesBottom(toolShouldStick,true,true);
             }
             if(ev==='usage'){
-              updateAssistantCostText(data||{});
               chatUpdateRuntime(cfg,data||{});
               userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data||{},null)});
             }
-            if(ev==='done'&&data&&data.usage){
-              updateAssistantCostText(data.usage);
-              chatUpdateRuntime(cfg,data.usage);
-            }
+            if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
             if(ev==='done'&&data&&data.usage)userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data.usage,null)});
             if(ev==='done'){
               if(data&&Array.isArray(data.transport_messages)){
                 var s=chatCurrentSession();
-                var doneTransportMessages=thinkingEnabled?data.transport_messages:chatStripThinkingFromMessages(data.transport_messages);
-                s.transportMessages=chatLimitArray(doneTransportMessages,CHAT_MAX_TRANSPORT_MESSAGES);
+                s.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
                 s.transportUpdated=Date.now();
                 s.updated=Date.now();
                 chatSaveSessions();
@@ -5908,22 +5754,16 @@ async function chatSubmitPendingMessages(){
       }
     }
     chatSetStatus('正在显示回复...');
-    markFirstReplyTs();
-    var finalAssistantText=thinkingEnabled?assistantText:chatStripThinkingMarkupText(assistantText);
-    await chatAppendAssistantReplies(finalAssistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,apiCostText:assistantCostText});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false});
     if(out&&out.parentNode)out.parentNode.remove();
     chatSetStatus('完成');
   }catch(e){
     if(e&&e.name==='AbortError'){
-      var stoppedText=thinkingEnabled?assistantText:chatStripThinkingMarkupText(assistantText);
-      var stopped=chatAttachAssistantTiming({role:'assistant',text:stoppedText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now(),assistantCostText);
-      chatMessages.push(stopped);
+      chatMessages.push({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:Date.now()});
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('已停止');
     }else{
-      var errorAssistantText=thinkingEnabled?assistantText:chatStripThinkingMarkupText(assistantText);
-      var emsg=(errorAssistantText?errorAssistantText+'\n':'')+chatFriendlyError(e);
-      var failed=chatAttachAssistantTiming({role:'assistant',text:emsg,recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now(),assistantCostText);
-      chatMessages.push(failed);
+      var emsg=(assistantText?assistantText+'\n':'')+chatFriendlyError(e);
+      chatMessages.push({role:'assistant',text:emsg,recall:recallInfo,tools:chatCloneToolEvents(toolEvents),ts:Date.now()});
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('请求失败');
     }
   }finally{
