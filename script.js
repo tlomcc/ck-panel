@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v82';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v83';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1910,7 +1910,7 @@ function goMemory(){
   updateStats();renderGrid();renderTags();renderHomeInsights();
   switchPanelTab(target,{restoreScroll:returnScrollY});
 }
-function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show';setTimeout(function(){t.className='toast'},2000)}
+function toast(msg,duration){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show';setTimeout(function(){t.className='toast'},duration||2000)}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 var CHAT_CONFIG_KEY='ckChatConfigV2';
@@ -1965,11 +1965,81 @@ var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
 var chatPlusSwipe={currentPage:0,totalPages:0};
+var chatCleanHistoryResolver=null;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
+function chatCleanEndpoint(cfg){
+  var base=((cfg&&cfg.gatewayUrl)||GRAPH_API_BASE).trim().replace(/\/+$/,'');
+  return base+'/ck/clean-history';
+}
+function chatShowCleanHistoryConfirm(){
+  var modal=document.getElementById('chatCleanConfirm');
+  if(!modal)return Promise.resolve(confirm('确定要清理历史中的图片和召回内容吗？'));
+  modal.classList.add('show');
+  return new Promise(function(resolve){
+    chatCleanHistoryResolver=function(ok){
+      modal.classList.remove('show');
+      chatCleanHistoryResolver=null;
+      resolve(!!ok);
+    };
+  });
+}
+function chatCancelCleanHistory(){
+  if(chatCleanHistoryResolver)chatCleanHistoryResolver(false);
+}
+function chatConfirmCleanHistory(){
+  if(chatCleanHistoryResolver)chatCleanHistoryResolver(true);
+}
+function chatCleanHistoryVisibleCounts(){
+  var stats={images:0,recalls:0};
+  (chatMessages||[]).forEach(function(m){
+    if(!m||typeof m!=='object')return;
+    stats.images+=chatMessageImages(m).length;
+    (Array.isArray(m.versions)?m.versions:[]).forEach(function(v){
+      stats.images+=chatNormalizeImageList(v&&v.images).length;
+    });
+    if(m.recall)stats.recalls++;
+  });
+  return stats;
+}
+function chatStripLocalHistoryMediaAndRecall(){
+  var stats={images:0,recalls:0,changed:false};
+  (chatMessages||[]).forEach(function(m){
+    if(!m||typeof m!=='object')return;
+    var images=chatMessageImages(m);
+    if(images.length){
+      stats.images+=images.length;
+      delete m.images;
+      stats.changed=true;
+    }
+    if(Array.isArray(m.versions)){
+      m.versions=m.versions.map(function(v){
+        v=chatNormalizeMessageVersion(v);
+        var count=chatNormalizeImageList(v.images).length;
+        if(count){
+          stats.images+=count;
+          v.images=[];
+          stats.changed=true;
+        }
+        return v;
+      }).filter(chatMessageVersionHasContent);
+      if(!m.versions.length)delete m.versions;
+    }
+    if(m.recall){
+      stats.recalls++;
+      delete m.recall;
+      stats.changed=true;
+    }
+  });
+  return stats;
+}
 async function chatCleanHistory(){
-  if(!confirm('确定要清理历史中的图片和召回内容吗？'))return;
+  if(chatSending){
+    toast('正在请求中，先停止或等完成');
+    return;
+  }
+  if(!await chatShowCleanHistoryConfirm())return;
   var cfg=chatLoadConfig();
   var sessionId=cfg.sessionId||chatSessionId();
   var panelKey=cfg.panelKey||'';
@@ -1977,14 +2047,25 @@ async function chatCleanHistory(){
     toast('未配置面板 Key');
     return;
   }
-  var url=GRAPH_API_BASE+'/clean-history';
+  var currentSession=chatCurrentSession();
+  var transport=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
+  var windowMessages=chatWindowContextMessages();
+  var visibleCounts=chatCleanHistoryVisibleCounts();
+  var url=chatCleanEndpoint(cfg);
   try{
     var resp=await fetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         key:panelKey,
-        session_id:sessionId
+        session_id:sessionId,
+        model:cfg.model,
+        api_base:cfg.apiBase,
+        upstream_key:cfg.upstreamKey,
+        transport_updated_at:currentSession.transportUpdated||0,
+        transport_messages:transport,
+        window_messages:windowMessages,
+        visible_counts:visibleCounts
       })
     });
     if(!resp.ok){
@@ -1992,12 +2073,25 @@ async function chatCleanHistory(){
       return;
     }
     var data=await resp.json();
-    var imgCount=data.images_removed||0;
-    var recallCount=data.recalls_removed||0;
-    if(imgCount===0&&recallCount===0){
-      toast('没有可清理的内容');
+    if(Array.isArray(data.transport_messages)){
+      currentSession.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
+      currentSession.transportUpdated=Date.now();
     }else{
-      toast('已清理 '+imgCount+' 张图片 / '+recallCount+' 条召回');
+      currentSession.transportMessages=[];
+      currentSession.transportUpdated=0;
+    }
+    var localStats=chatStripLocalHistoryMediaAndRecall();
+    currentSession.messages=chatMessages;
+    currentSession.updated=Date.now();
+    chatSaveSessions();
+    chatRenderSessions();
+    chatRenderMessages();
+    var imgCount=Math.max(Number(data.images_removed||0)||0,localStats.images||0,visibleCounts.images||0);
+    var recallCount=Math.max(Number(data.recalls_removed||0)||0,localStats.recalls||0,visibleCounts.recalls||0);
+    if(imgCount===0&&recallCount===0){
+      toast('没有可清理的内容',3000);
+    }else{
+      toast('已清理 '+imgCount+' 张图片 / '+recallCount+' 条召回',3000);
     }
     chatTogglePlus(false);
   }catch(err){
