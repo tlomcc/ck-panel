@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v77';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v78';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1969,6 +1969,42 @@ var chatPlusSwipe={active:false,startX:0,startY:0,container:null,currentPage:0,t
 var chatPlusSuppressClickUntil=0;
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
+}
+async function chatCleanHistory(){
+  if(!confirm('确定要清理历史中的图片和召回内容吗？'))return;
+  var cfg=chatLoadConfig();
+  var sessionId=cfg.sessionId||chatSessionId();
+  var panelKey=cfg.panelKey||'';
+  if(!panelKey){
+    toast('未配置面板 Key');
+    return;
+  }
+  var url=GRAPH_API_BASE+'/clean-history';
+  try{
+    var resp=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        key:panelKey,
+        session_id:sessionId
+      })
+    });
+    if(!resp.ok){
+      toast('清理失败：'+resp.status);
+      return;
+    }
+    var data=await resp.json();
+    var imgCount=data.images_removed||0;
+    var recallCount=data.recalls_removed||0;
+    if(imgCount===0&&recallCount===0){
+      toast('没有可清理的内容');
+    }else{
+      toast('已清理 '+imgCount+' 张图片 / '+recallCount+' 条召回');
+    }
+    chatTogglePlus(false);
+  }catch(err){
+    toast('清理失败：'+err.message);
+  }
 }
 function chatWorldbookId(){
   return 'wb-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
