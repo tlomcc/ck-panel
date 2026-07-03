@@ -1058,7 +1058,6 @@ body.chat-active .chat-plus-panel.open{
   margin-top:8px!important;
   padding:10px 2px 2px!important;
   transform:translateY(0)!important;
-  touch-action:pan-x!important;
 }
 
 body.chat-active .chat-plus-pages{
@@ -1066,13 +1065,13 @@ body.chat-active .chat-plus-pages{
   overflow-x:auto!important;
   overflow-y:hidden!important;
   scroll-snap-type:x mandatory!important;
+  scroll-behavior:smooth!important;
   -webkit-overflow-scrolling:touch!important;
   scrollbar-width:none!important;
   flex:1!important;
   min-height:0!important;
-  touch-action:pan-x!important;
+  touch-action:pan-x pinch-zoom!important;
   overscroll-behavior-x:contain!important;
-  overscroll-behavior-y:none!important;
 }
 
 body.chat-active .chat-plus-pages::-webkit-scrollbar{

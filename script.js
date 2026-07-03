@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v81';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v82';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1964,7 +1964,7 @@ var chatNewMessageHintVisible=false;
 var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
-var chatPlusSwipe={active:false,committed:false,startX:0,startY:0,startScrollLeft:0,container:null,currentPage:0,totalPages:0,suppressClickUntil:0};
+var chatPlusSwipe={currentPage:0,totalPages:0};
 function chatSessionId(){
   return 'ck-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
 }
@@ -4694,79 +4694,6 @@ function chatPlusUpdateDots(){
   }
   dotsWrap.innerHTML=dots.join('');
 }
-function chatPlusPageWidth(container){
-  return container?Math.max(1,container.clientWidth||container.offsetWidth||1):1;
-}
-function chatPlusScrollToPage(page,instant){
-  var container=document.getElementById('chat-plus-pages');
-  if(!container)return;
-  var pages=container.querySelectorAll('.chat-plus-page');
-  var totalPages=pages.length||1;
-  page=Math.max(0,Math.min(totalPages-1,page));
-  chatPlusSwipe.currentPage=page;
-  chatPlusSwipe.totalPages=totalPages;
-  var left=page*chatPlusPageWidth(container);
-  if(container.scrollTo){
-    try{container.scrollTo({left:left,behavior:instant?'auto':'smooth'});}
-    catch(e){container.scrollLeft=left;}
-  }else{
-    container.scrollLeft=left;
-  }
-  setTimeout(chatPlusUpdateDots,instant?0:220);
-}
-function chatPlusTouchStart(e){
-  var container=document.getElementById('chat-plus-pages');
-  if(!container||!e.touches||e.touches.length!==1)return;
-  var t=e.touches[0];
-  chatPlusSwipe.active=true;
-  chatPlusSwipe.committed=false;
-  chatPlusSwipe.startX=t.clientX;
-  chatPlusSwipe.startY=t.clientY;
-  chatPlusSwipe.startScrollLeft=container.scrollLeft;
-  chatPlusSwipe.container=container;
-  chatPlusUpdateDots();
-}
-function chatPlusTouchMove(e){
-  if(!chatPlusSwipe.active||!chatPlusSwipe.container||!e.touches||e.touches.length!==1)return;
-  var t=e.touches[0];
-  var dx=t.clientX-chatPlusSwipe.startX;
-  var dy=t.clientY-chatPlusSwipe.startY;
-  if(!chatPlusSwipe.committed){
-    if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
-    if(Math.abs(dx)<=Math.abs(dy)){
-      chatPlusSwipe.active=false;
-      return;
-    }
-    chatPlusSwipe.committed=true;
-  }
-  chatPlusSwipe.container.scrollLeft=chatPlusSwipe.startScrollLeft-dx;
-  if(e.cancelable)e.preventDefault();
-  if(e.stopPropagation)e.stopPropagation();
-}
-function chatPlusTouchEnd(){
-  if(!chatPlusSwipe.active)return;
-  var container=chatPlusSwipe.container;
-  var committed=chatPlusSwipe.committed;
-  chatPlusSwipe.active=false;
-  chatPlusSwipe.committed=false;
-  if(!container)return;
-  var pageWidth=chatPlusPageWidth(container);
-  var page=Math.round(container.scrollLeft/pageWidth);
-  if(committed){
-    var deltaPages=Math.round((container.scrollLeft-chatPlusSwipe.startScrollLeft)/pageWidth);
-    if(deltaPages===0&&Math.abs(container.scrollLeft-chatPlusSwipe.startScrollLeft)>pageWidth*.18){
-      deltaPages=container.scrollLeft>chatPlusSwipe.startScrollLeft?1:-1;
-    }
-    page=chatPlusSwipe.currentPage+deltaPages;
-    chatPlusSwipe.suppressClickUntil=Date.now()+360;
-  }
-  chatPlusScrollToPage(page,false);
-}
-function chatPlusSuppressSwipeClick(e){
-  if(Date.now()>chatPlusSwipe.suppressClickUntil)return;
-  if(e&&e.preventDefault)e.preventDefault();
-  if(e&&e.stopPropagation)e.stopPropagation();
-}
 function chatClosePlusOnOutside(e){
   var panel=document.getElementById('chat-plus-panel');
   if(!panel||!panel.classList.contains('open')||!e||!e.target||!e.target.closest)return;
@@ -4778,11 +4705,6 @@ function chatAttachPlusGesture(){
   if(!container||container.__chatPlusGestureAttached)return;
   container.__chatPlusGestureAttached=true;
   container.addEventListener('scroll',chatPlusUpdateDots,{passive:true});
-  container.addEventListener('touchstart',chatPlusTouchStart,{passive:true});
-  container.addEventListener('touchmove',chatPlusTouchMove,{passive:false});
-  container.addEventListener('touchend',chatPlusTouchEnd,{passive:true});
-  container.addEventListener('touchcancel',chatPlusTouchEnd,{passive:true});
-  container.addEventListener('click',chatPlusSuppressSwipeClick,true);
 }
 function chatSettingTitle(tab){
   return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'⚙️ 调试记录'})[tab]||'聊天设置';
