@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v75';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v76';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4430,15 +4430,39 @@ function chatNaturalUnits(text){
     if(usable)return paragraphs;
   }
   var units=[];
-  String(text||'').split(/\n+/).forEach(function(line){
-    line=line.trim();
-    if(!line)return;
-    var parts=line.match(/[^。！？!?；;…]+[。！？!?；;…]*/g)||[line];
-    parts.forEach(function(p){
-      p=p.trim();
-      if(p)units.push(p);
-    });
-  });
+  var lines=String(text||'').split(/\n+/);
+  var i=0;
+  while(i<lines.length){
+    var line=lines[i].trim();
+    if(!line){i++;continue;}
+    var isOrderedListItem=/^\d+[.、]\s*/.test(line);
+    var isUnorderedListItem=/^[-*]\s/.test(line);
+    if(isOrderedListItem||isUnorderedListItem){
+      var listBlock=[line];
+      var j=i+1;
+      while(j<lines.length){
+        var nextLine=lines[j].trim();
+        if(!nextLine){j++;continue;}
+        var nextIsOrdered=/^\d+[.、]\s*/.test(nextLine);
+        var nextIsUnordered=/^[-*]\s/.test(nextLine);
+        if((isOrderedListItem&&nextIsOrdered)||(isUnorderedListItem&&nextIsUnordered)){
+          listBlock.push(nextLine);
+          j++;
+        }else{
+          break;
+        }
+      }
+      units.push(listBlock.join('\n'));
+      i=j;
+    }else{
+      var parts=line.match(/[^。！？!?；;…]+[。！？!?；;…]*/g)||[line];
+      parts.forEach(function(p){
+        p=p.trim();
+        if(p)units.push(p);
+      });
+      i++;
+    }
+  }
   return units.length?units:[String(text||'').trim()];
 }
 function chatNaturalJoin(list){
