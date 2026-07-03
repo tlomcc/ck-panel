@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v85';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v86';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4849,6 +4849,102 @@ function chatToggleSettings(force,silent){
     chatSaveConfigObject(cfg);
   }
 }
+var ckChatSheetDismiss={active:false,committed:false,startY:0,dy:0,panel:null,wide:false,suppressClickUntil:0};
+function ckChatSheetBaseTransform(){
+  return ckChatSheetDismiss.wide?'translateX(-50%)':'';
+}
+function ckChatSheetScrollBlocksDismiss(target,panel){
+  if(!target||!panel)return false;
+  if(target.nodeType===3)target=target.parentElement;
+  var node=target;
+  while(node&&node!==panel){
+    if(node.nodeType===1){
+      var style=window.getComputedStyle?window.getComputedStyle(node):null;
+      var overflowY=style?style.overflowY:'';
+      var canScroll=node.scrollHeight>node.clientHeight+2&&/auto|scroll|overlay/i.test(overflowY||'');
+      if(canScroll&&node.scrollTop>0)return true;
+    }
+    node=node.parentElement;
+  }
+  var active=panel.querySelector('.chat-side-panel.active');
+  return !!(active&&active.contains(target)&&active.scrollTop>0);
+}
+function ckChatSheetDismissStart(e){
+  var panel=document.querySelector('.chat-settings.open');
+  if(!panel){ckChatSheetDismiss.active=false;return}
+  if(!e.touches||e.touches.length!==1){ckChatSheetDismiss.active=false;return}
+  var target=e.target;
+  if(ckSheetDragTargetIsTextEdit(target)){ckChatSheetDismiss.active=false;return}
+  if(ckChatSheetScrollBlocksDismiss(target,panel)){ckChatSheetDismiss.active=false;return}
+  var t=e.touches[0];
+  ckChatSheetDismiss.active=true;
+  ckChatSheetDismiss.committed=false;
+  ckChatSheetDismiss.startY=t.clientY;
+  ckChatSheetDismiss.dy=0;
+  ckChatSheetDismiss.panel=panel;
+  ckChatSheetDismiss.wide=window.matchMedia&&window.matchMedia('(min-width:560px)').matches;
+}
+function ckChatSheetDismissMove(e){
+  if(!ckChatSheetDismiss.active||!e.touches||e.touches.length!==1)return;
+  var t=e.touches[0];
+  var dy=t.clientY-ckChatSheetDismiss.startY;
+  if(!ckChatSheetDismiss.committed){
+    if(dy>6){
+      ckChatSheetDismiss.committed=true;
+      ckChatSheetDismiss.panel.style.setProperty('transition','none','important');
+    }else if(dy<-6){
+      ckChatSheetDismiss.active=false;
+      return;
+    }else{
+      return;
+    }
+  }
+  if(dy<0)dy=0;
+  ckChatSheetDismiss.dy=dy;
+  ckChatSheetDismiss.panel.style.setProperty('transform',ckChatSheetBaseTransform()+' translateY('+dy+'px)','important');
+  if(e.cancelable)e.preventDefault();
+}
+function ckChatSheetDismissEnd(){
+  if(!ckChatSheetDismiss.active)return;
+  var panel=ckChatSheetDismiss.panel;
+  var dy=ckChatSheetDismiss.dy;
+  var committed=ckChatSheetDismiss.committed;
+  ckChatSheetDismiss.active=false;
+  ckChatSheetDismiss.committed=false;
+  if(committed)ckChatSheetDismiss.suppressClickUntil=Date.now()+360;
+  if(!panel)return;
+  if(dy>CK_SHEET_DISMISS_DISTANCE){
+    panel.style.setProperty('transition','transform .2s ease','important');
+    panel.style.setProperty('transform',ckChatSheetBaseTransform()+' translateY(100%)','important');
+    setTimeout(function(){
+      chatToggleSettings(false);
+      panel.style.removeProperty('transition');
+      panel.style.removeProperty('transform');
+    },190);
+  }else{
+    panel.style.setProperty('transition','transform .2s ease','important');
+    panel.style.setProperty('transform',ckChatSheetBaseTransform(),'important');
+    setTimeout(function(){
+      panel.style.removeProperty('transition');
+      panel.style.removeProperty('transform');
+    },210);
+  }
+}
+function ckAttachChatSheetDismiss(){
+  var panel=document.querySelector('.chat-settings');
+  if(!panel||panel.__ckSheetDismissAttached)return;
+  panel.__ckSheetDismissAttached=true;
+  panel.addEventListener('touchstart',ckChatSheetDismissStart,{passive:true});
+  panel.addEventListener('touchmove',ckChatSheetDismissMove,{passive:false});
+  panel.addEventListener('touchend',ckChatSheetDismissEnd,{passive:true});
+  panel.addEventListener('touchcancel',ckChatSheetDismissEnd,{passive:true});
+  document.addEventListener('click',function(e){
+    if(Date.now()>ckChatSheetDismiss.suppressClickUntil)return;
+    if(!e.target||!e.target.closest||!e.target.closest('.chat-settings'))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  },true);
+}
 function chatSwitchSideTab(tab,silent){
   tab=tab||'model';
   var title=document.getElementById('chat-settings-title');
@@ -5333,6 +5429,7 @@ function chatInit(){
   if(chatInitialized)return;
   chatInitialized=true;
   chatInitPlusPager();
+  ckAttachChatSheetDismiss();
   document.addEventListener('pointerdown',chatTrackPointerIntent,{passive:true});
   document.addEventListener('touchstart',chatTrackPointerIntent,{passive:true});
   document.addEventListener('pointerdown',chatClosePlusOnOutside,{passive:true});
