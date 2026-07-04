@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v90-config-keyfix';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v90';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -242,36 +242,10 @@ function addStoredKey(url){
     return url+(url.indexOf('?')>=0?'&':'?')+'key='+encodeURIComponent(key);
   }
 }
-function storedPanelKey(){
-  var field='';
-  try{
-    var el=document.getElementById('chat-panel-key');
-    field=el?String(el.value||'').trim():'';
-  }catch(e){}
-  if(field)return field;
-  try{return String(localStorage.getItem(API_KEY_STORAGE)||'').trim()}catch(e){}
-  return '';
-}
-function urlWithPanelKey(url,key){
-  key=String(key||storedPanelKey()||'').trim();
-  if(!key)return url;
-  try{
-    var u=new URL(url,window.location.href);
-    u.searchParams.set('key',key);
-    return u.toString();
-  }catch(e){
-    return url+(url.indexOf('?')>=0?'&':'?')+'key='+encodeURIComponent(key);
-  }
-}
-function requestApiKey(label){
-  var text=label||'CK 网关面板 Key';
-  var key=window.prompt('后端已开启访问密钥，请输入 '+text);
+function requestApiKey(){
+  var key=window.prompt('后端已开启访问密钥，请输入 memory_tools 的 AUTH_KEY');
   if(!key)return false;
   try{localStorage.setItem(API_KEY_STORAGE,key.trim())}catch(e){}
-  try{
-    var el=document.getElementById('chat-panel-key');
-    if(el)el.value=key.trim();
-  }catch(e){}
   return true;
 }
 function apiFetch(init){
@@ -1208,10 +1182,9 @@ function stopDailyStatusRealtime(){
 var KEY_CONFIG_URL=GRAPH_API_BASE+'/config';
 function keyCfgFetch(init,opts){
   opts=opts||{};
-  chatSyncPanelKeyToApiStorage();
-  var u=function(){return urlWithPanelKey(KEY_CONFIG_URL+'?_t='+Date.now())};
+  var u=function(){return addStoredKey(KEY_CONFIG_URL+'?_t='+Date.now())};
   return fetch(u(),init).then(function(r){
-    if(r.status===403&&!opts.silentAuth&&requestApiKey('CK 网关面板 Key'))return fetch(u(),init);
+    if(r.status===403&&!opts.silentAuth&&requestApiKey())return fetch(u(),init);
     return r;
   });
 }
@@ -6387,23 +6360,16 @@ function persistAndReload(okMsg){
     return reloadGatewayConfig().then(function(){toast(okMsg||'已保存并生效');return true},function(){toast('已保存，但刷新配置失败（稍后会自动生效）');return true});
   }).catch(function(){toast('保存失败，检查网络');return false});
 }
-function apiConfigErrorHtml(reason){
-  reason=String(reason||'').trim();
-  return '<div class="entity-error">读不到配置。'+esc(reason||'请确认 CK 网关面板 Key 正确。')+'</div>'+
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">'+
-    '<button class="prov-add" type="button" onclick="if(requestApiKey(&quot;CK 网关面板 Key&quot;)){apiProvidersLoaded=false;renderApiConfig()}">重新输入 Key</button>'+
-    '<button class="prov-add" type="button" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>'+
-    '</div>';
-}
 function loadApiProviders(){
   keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
     var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
     apiProviders=prov;
     apiProvidersLoaded=true;
     renderApiConfig();
-  }).catch(function(e){
+  }).catch(function(){
     var body=document.getElementById('api-config-body');
-    if(body)body.innerHTML=apiConfigErrorHtml((e&&e.message)||'请确认 CK 网关面板 Key 正确。');
+    if(body)body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署、面板 key 正确。</div>'+
+      '<button class="prov-add" type="button" style="margin-top:14px" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>';
   });
 }
 
@@ -6801,10 +6767,10 @@ function loadApiProviders(opts){
     chatRenderMainRouteSummary();
     chatUpdateRuntime(chatLoadConfig());
     return true;
-  }).catch(function(e){
+  }).catch(function(){
     apiProvidersLoaded=false;
     var body=document.getElementById('api-config-body');
-    if(body)body.innerHTML=apiConfigErrorHtml((e&&e.message)||'请确认 CK 网关面板 Key 正确。');
+    if(body)body.innerHTML='<div class="entity-error">读不到配置。确认网关已部署、面板 key 正确。</div><button class="prov-add" type="button" style="margin-top:14px" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>';
     chatRenderMainRouteSummary();
     chatUpdateRuntime(chatLoadConfig());
     return false;
