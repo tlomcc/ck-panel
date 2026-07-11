@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v90-config-keyfix2';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v90-config-keyfix3';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -6139,18 +6139,7 @@ var pendingProvDel=null;
 var RELOAD_CONFIG_URL=GRAPH_API_BASE+'/reload-config';
 var PROVIDER_MODELS_URL=GRAPH_API_BASE+'/provider-models';
 function newProvId(){apiProvIdSeq++;return 'p'+Date.now().toString(36)+apiProvIdSeq}
-function apiGroupSlot(g){
-  if(!apiProviders[g]||typeof apiProviders[g]!=='object')apiProviders[g]={providers:[],current:''};
-  if(!Array.isArray(apiProviders[g].providers))apiProviders[g].providers=[];
-  if(typeof apiProviders[g].current!=='string')apiProviders[g].current='';
-  return apiProviders[g];
-}
 function findApiTab(k){for(var i=0;i<API_TABS.length;i++){if(API_TABS[i].key===k)return API_TABS[i]}return API_TABS[0]}
-function findProviderObj(group,id){
-  var slot=apiGroupSlot(group);
-  for(var i=0;i<slot.providers.length;i++){if(slot.providers[i].id===id)return slot.providers[i]}
-  return null;
-}
 function cleanModelList(list,selected){
   var out=[],seen={};
   function push(v){
@@ -6168,66 +6157,6 @@ function switchApiTab(k){
   renderApiConfig();
 }
 
-function renderApiConfig(){
-  var body=document.getElementById('api-config-body');
-  if(!body)return;
-  document.querySelectorAll('.sub-tab').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-subtab')===currentApiTab)});
-  if(!apiProvidersLoaded){
-    body.innerHTML='<div class="empty-state small">读取中...</div>';
-    loadApiProviders();
-    return;
-  }
-  var tab=findApiTab(currentApiTab);
-  var html='';
-  html+='<div class="api-info-row"><button class="api-info-btn" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button>'+
-        '<div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info)+'</div></div></div>';
-  tab.groups.forEach(function(g){
-    var slot=apiGroupSlot(g.key);
-    html+='<div class="api-group" data-group="'+escAttr(g.key)+'">';
-    html+='<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span>'+
-          '<button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="说明">i</button></div>';
-    html+='<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>';
-    html+='<div class="api-group-cards">';
-    if(!slot.providers.length){
-      html+='<div class="empty-state small">还没有供应商，点下面的按钮添加。</div>';
-    }else{
-      slot.providers.forEach(function(p){html+=provCardHtml(g.key,p,slot.current===p.id)});
-    }
-    html+='</div>';
-    html+='<button class="prov-add" type="button" onclick="addProvider(\''+g.key+'\')">+ 添加供应商</button>';
-    html+='</div>';
-  });
-  body.innerHTML=html;
-  body.scrollTop=0;
-}
-
-function provCardHtml(group,p,isCurrent){
-  var name=p.name||'未命名供应商';
-  var status=isCurrent
-    ?'<span class="prov-status prov-status-on">使用中</span>'
-    :'<span class="prov-status prov-status-off">备用</span>';
-  var models=cleanModelList(p.models,p.model);
-  var modelSelect='<select class="prov-model-select" onchange="pickProvModel(this)">';
-  modelSelect+='<option value="">选择已拉取模型</option>';
-  models.forEach(function(m){
-    modelSelect+='<option value="'+escAttr(m)+'"'+(m===(p.model||'')?' selected':'')+'>'+esc(m)+'</option>';
-  });
-  modelSelect+='</select>';
-  var modelHint=models.length
-    ?'<div class="prov-model-hint">已缓存 '+models.length+' 个模型，选择后点保存生效。</div>'
-    :'<div class="prov-model-hint">先填 API URL 和 API Key，再拉取模型；也可以直接手填。</div>';
-  return '<div class="prov-card" data-group="'+escAttr(group)+'" data-id="'+escAttr(p.id)+'">'+
-    '<div class="prov-card-head" onclick="toggleProvCard(this)"><span class="prov-name">'+esc(name)+'</span>'+status+'</div>'+
-    '<div class="prov-card-body">'+
-      '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
-      '<div class="prov-row"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
-      '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
-      '<div class="prov-row"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false">'+
-        '<div class="prov-model-tools">'+modelSelect+'<button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
-      '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存</button><button class="btn btn-outline prov-setcur" type="button" onclick="setProviderCurrent(this)">设为当前使用</button></div>'+
-      '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
-    '</div></div>';
-}
 
 function toggleInfo(btn){
   var wrap=btn.nextElementSibling;
@@ -6243,131 +6172,13 @@ function toggleProvCard(head){
   var card=head.closest('.prov-card');
   if(card)card.classList.toggle('expanded');
 }
-function readProvCard(card){
-  function v(sel){var el=card.querySelector(sel);return el?el.value:''}
-  var group=card.getAttribute('data-group');
-  var id=card.getAttribute('data-id');
-  var old=findProviderObj(group,id);
-  return {
-    group:group,
-    id:id,
-    name:v('.prov-name-input'),
-    url:v('.prov-url'),
-    key:v('.prov-key'),
-    model:v('.prov-model'),
-    models:old&&Array.isArray(old.models)?old.models:[]
-  };
-}
-function upsertProvider(group,id){
-  var slot=apiGroupSlot(group);
-  for(var i=0;i<slot.providers.length;i++){if(slot.providers[i].id===id)return slot.providers[i]}
-  var np={id:id,name:'',url:'',key:'',model:'',models:[]};
-  slot.providers.push(np);
-  return np;
-}
-function addProvider(group){
-  var slot=apiGroupSlot(group);
-  var id=newProvId();
-  slot.providers.push({id:id,name:'',url:'',key:'',model:'',models:[]});
-  renderApiConfig();
-  setTimeout(function(){
-    var card=document.querySelector('.prov-card[data-id="'+id+'"]');
-    if(card){
-      card.classList.add('expanded');
-      card.scrollIntoView({behavior:'smooth',block:'center'});
-      var ni=card.querySelector('.prov-name-input');if(ni)ni.focus();
-    }
-  },30);
-}
 function pickProvModel(sel){
   var card=sel.closest('.prov-card');if(!card)return;
   var inp=card.querySelector('.prov-model');if(inp&&sel.value)inp.value=sel.value;
 }
-function fetchProviderModels(btn){
-  var card=btn.closest('.prov-card');if(!card)return;
-  var d=readProvCard(card);
-  if(!d.url.trim()){toast('先填写 API URL');return}
-  if(!d.key.trim()){toast('先填写 API Key');return}
-  var p=upsertProvider(d.group,d.id);
-  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
-  btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
-  fetch(addStoredKey(PROVIDER_MODELS_URL+'?_t='+Date.now()),{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({url:p.url,key:p.key})
-  }).then(function(r){
-    if(r.status===403&&requestApiKey()){
-      return fetch(addStoredKey(PROVIDER_MODELS_URL+'?_t='+Date.now()),{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({url:p.url,key:p.key})
-      });
-    }
-    return r;
-  }).then(function(r){
-    return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}});
-  }).then(function(res){
-    if(!res.ok||!res.j||!res.j.ok)throw new Error((res.j&&res.j.error)||'拉取失败');
-    p.models=cleanModelList(res.j.models,p.model);
-    if(!p.model&&p.models.length)p.model=p.models[0];
-    toast('已拉取 '+p.models.length+' 个模型');
-    renderApiConfig();
-    setTimeout(function(){
-      var next=document.querySelector('.prov-card[data-id="'+d.id+'"]');
-      if(next){next.classList.add('expanded');next.scrollIntoView({behavior:'smooth',block:'center'})}
-    },30);
-  }).catch(function(e){
-    toast((e&&e.message)?e.message:'拉取模型失败');
-  }).finally(function(){
-    btn.disabled=false;btn.textContent=old;
-  });
-}
-function saveProvider(btn){
-  var card=btn.closest('.prov-card');if(!card)return;
-  var d=readProvCard(card);
-  var p=upsertProvider(d.group,d.id);
-  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
-  p.models=cleanModelList(d.models,p.model);
-  btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
-  persistAndReload('已保存并生效').then(function(ok){
-    btn.disabled=false;btn.textContent=old;
-    if(ok){var nm=card.querySelector('.prov-name');if(nm)nm.textContent=p.name||'未命名供应商'}
-  });
-}
-function setProviderCurrent(btn){
-  var card=btn.closest('.prov-card');if(!card)return;
-  var d=readProvCard(card);
-  var slot=apiGroupSlot(d.group);
-  var p=upsertProvider(d.group,d.id);
-  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
-  p.models=cleanModelList(d.models,p.model);
-  slot.current=d.id;
-  btn.disabled=true;var old=btn.textContent;btn.textContent='切换中...';
-  persistAndReload('已设为当前使用').then(function(){
-    btn.disabled=false;btn.textContent=old;
-    renderApiConfig();
-  });
-}
-function deleteProvider(btn){
-  var card=btn.closest('.prov-card');if(!card)return;
-  var group=card.getAttribute('data-group'),id=card.getAttribute('data-id');
-  var slot=apiGroupSlot(group);
-  if(slot.current===id){toast('请先切换到其他供应商再删除');return}
-  pendingProvDel={group:group,id:id};
-  var m=document.getElementById('provDelModal');if(m)m.classList.add('show');
-}
 function closeProvDel(){
   pendingProvDel=null;
   var m=document.getElementById('provDelModal');if(m)m.classList.remove('show');
-}
-function confirmProvDel(){
-  if(!pendingProvDel){closeProvDel();return}
-  var group=pendingProvDel.group,id=pendingProvDel.id;
-  var slot=apiGroupSlot(group);
-  slot.providers=slot.providers.filter(function(x){return x.id!==id});
-  if(slot.current===id)slot.current='';
-  closeProvDel();
-  persistAndReload('已删除').then(function(){renderApiConfig()});
 }
 
 function persistApiProviders(){
@@ -6394,17 +6205,6 @@ function apiConfigErrorHtml(reason){
     '<button class="prov-add" type="button" onclick="if(requestApiKey(&quot;CK 网关面板 Key&quot;)){apiProvidersLoaded=false;renderApiConfig()}">重新输入 Key</button>'+
     '<button class="prov-add" type="button" onclick="apiProvidersLoaded=false;renderApiConfig()">重新读取</button>'+
     '</div>';
-}
-function loadApiProviders(){
-  keyCfgFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
-    var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
-    apiProviders=prov;
-    apiProvidersLoaded=true;
-    renderApiConfig();
-  }).catch(function(e){
-    var body=document.getElementById('api-config-body');
-    if(body)body.innerHTML=apiConfigErrorHtml((e&&e.message)||'请确认 CK 网关面板 Key 正确。');
-  });
 }
 
 /* ---- API 配置：供应商库 + 功能选择（新版） ---- */
