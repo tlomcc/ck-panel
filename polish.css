@@ -289,3 +289,114 @@ body.dark.chat-active .chat-cache-tick{
     right:7px!important;
   }
 }
+
+/* ============================================================
+   追加（2026-07-12）— 顶栏减负 · 表单统一 · API 配置修整
+   仍只覆盖视觉，不动结构/JS；回退删除本段即可。
+   ============================================================ */
+
+/* —— 顶栏右侧元信息收敛：版本徽章不再是抢眼的绿色粗药丸 —— */
+.panel-version-badge{
+  background:transparent!important;
+  color:var(--pg-ink-3)!important;
+  border:1px solid var(--pg-line)!important;
+  font-weight:500!important;
+  font-size:11px!important;
+  letter-spacing:.2px!important;
+  padding:3px 10px!important;
+  border-radius:999px!important;
+  box-shadow:none!important;
+}
+.install-app-btn{
+  font-size:12px!important;font-weight:600!important;
+  color:var(--pg-emerald-600)!important;
+  background:var(--pg-emerald-soft)!important;
+  border:none!important;border-radius:999px!important;
+  padding:5px 13px!important;box-shadow:none!important;
+}
+.theme-toggle.icon-btn{opacity:.8}
+
+/* —— 两条 header：半透明毛玻璃 + 细线分隔，读作一个整体顶区 —— */
+.app-header,
+body.chat-active .chat-titlebar{
+  background:rgba(250,253,251,.82)!important;
+  -webkit-backdrop-filter:saturate(1.5) blur(12px);
+  backdrop-filter:saturate(1.5) blur(12px);
+  border-bottom:1px solid var(--pg-line-soft)!important;
+  box-shadow:none!important;
+}
+/* 运行时元信息 → 低调小胶囊 */
+body.chat-active .chat-runtime span{
+  background:var(--pg-surface-soft)!important;
+  border:1px solid var(--pg-line-soft)!important;
+  border-radius:999px!important;
+  padding:2px 10px!important;
+  color:var(--pg-ink-2)!important;
+}
+
+/* —— 表单：设置抽屉 + API 配置里的输入/下拉/文本域 统一质感 —— */
+.chat-side-panel input:not([type=checkbox]):not([type=radio]),
+.chat-side-panel textarea,.chat-side-panel select,
+.api-config-page input:not([type=checkbox]):not([type=radio]),
+.api-config-page textarea,.api-config-page select,
+.prov-name-input,.prov-url,.prov-key,.prov-model,
+.prov-model-select,.assign-model-select{
+  border-radius:12px!important;
+  border:1.5px solid var(--pg-line)!important;
+  background-color:var(--pg-surface)!important;
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+.chat-side-panel input:not([type=checkbox]):not([type=radio]):focus,
+.chat-side-panel textarea:focus,.chat-side-panel select:focus,
+.api-config-page input:not([type=checkbox]):not([type=radio]):focus,
+.api-config-page textarea:focus,.api-config-page select:focus,
+.prov-name-input:focus,.prov-url:focus,.prov-key:focus,.prov-model:focus,
+.prov-model-select:focus,.assign-model-select:focus{
+  border-color:var(--pg-emerald-500)!important;
+  box-shadow:0 0 0 4px rgba(46,158,107,.10)!important;
+  outline:none!important;
+}
+/* 原生 select 统一自绘箭头，消灭浏览器默认外观的突兀感 */
+.api-config-page select,.prov-model-select,.assign-model-select{
+  -webkit-appearance:none!important;-moz-appearance:none!important;appearance:none!important;
+  padding-right:34px!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235d6b63' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;background-position:right 13px center!important;
+}
+
+/* —— API 配置：孤儿 “i” 收敛为低调小圆点 —— */
+.api-info-btn{
+  width:18px!important;height:18px!important;line-height:16px!important;
+  font-size:11px!important;font-style:italic;
+  color:var(--pg-ink-3)!important;
+  background:var(--pg-surface-soft)!important;
+  border:1px solid var(--pg-line)!important;
+  box-shadow:none!important;opacity:.7;
+}
+
+/* —— 深色模式守卫：别让上面的浅色表单/徽章样式在深色下变白 —— */
+body.dark .panel-version-badge{
+  color:#8ba396!important;border-color:#2a3a30!important;background:transparent!important;
+}
+body.dark .install-app-btn{background:#1d3a2c!important;color:#7fe3ad!important}
+body.dark .app-header,
+body.dark.chat-active .chat-titlebar{
+  background:rgba(16,24,20,.78)!important;border-bottom-color:#22302a!important;
+}
+body.dark.chat-active .chat-runtime span{
+  background:#18241e!important;border-color:#2a3a30!important;color:#b7c7bd!important;
+}
+body.dark .chat-side-panel input:not([type=checkbox]):not([type=radio]),
+body.dark .chat-side-panel textarea,body.dark .chat-side-panel select,
+body.dark .api-config-page input:not([type=checkbox]):not([type=radio]),
+body.dark .api-config-page textarea,body.dark .api-config-page select,
+body.dark .prov-name-input,body.dark .prov-url,body.dark .prov-key,body.dark .prov-model,
+body.dark .prov-model-select,body.dark .assign-model-select{
+  background-color:#18241e!important;border-color:#2a3a30!important;color:#e6efe9!important;
+}
+body.dark .api-config-page select,
+body.dark .prov-model-select,body.dark .assign-model-select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238ba396' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;background-position:right 13px center!important;
+}
+body.dark .api-info-btn{background:#18241e!important;border-color:#2a3a30!important;color:#8ba396!important}

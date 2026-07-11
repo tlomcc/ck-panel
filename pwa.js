@@ -115,7 +115,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v90-config-keyfix3').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v90-config-keyfix4').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
