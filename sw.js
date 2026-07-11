@@ -1,14 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v109-chat-v90-config-keyfix4';
+const CACHE_NAME = 'ck-panel-shell-v110-chat-v90-config-keyfix5';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v90-config-keyfix4',
-  './polish.css?v=chat-v90-config-keyfix4',
-  './chat.css?v=chat-v90-config-keyfix4',
-  './script.js?v=chat-v90-config-keyfix4',
-  './script-extra.js?v=chat-v90-config-keyfix4',
-  './pwa.js?v=chat-v90-config-keyfix4',
+  './style.css?v=chat-v90-config-keyfix5',
+  './polish.css?v=chat-v90-config-keyfix5',
+  './chat.css?v=chat-v90-config-keyfix5',
+  './wechat.css?v=chat-v90-config-keyfix5',
+  './script.js?v=chat-v90-config-keyfix5',
+  './script-extra.js?v=chat-v90-config-keyfix5',
+  './pwa.js?v=chat-v90-config-keyfix5',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

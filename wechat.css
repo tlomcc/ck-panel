@@ -1,0 +1,300 @@
+/* ============================================================
+   wechat.css — 微信风大改（2026-07-12）
+   在 style.css / polish.css / chat.css 之后加载，权重最高。
+   只覆盖视觉 + 用 CSS 伪元素补头像；不改渲染 JS、不碰 chatWindowContextMessages
+   与 /ck/chat 请求体，对缓存零影响。回退：删掉 index.html 里这一行 <link> 即可。
+   ============================================================ */
+
+:root{
+  --wx-bg:#ededed;            /* 微信聊天灰底 */
+  --wx-nav:#ededed;           /* 导航栏 */
+  --wx-panel:#ffffff;         /* 白卡 / 对方气泡 */
+  --wx-green:#95ec69;         /* 微信自己气泡绿 */
+  --wx-green-tail:#95ec69;
+  --wx-primary:#07c160;       /* 微信主题绿（按钮/强调）*/
+  --wx-primary-ink:#06ad56;
+  --wx-ink:#181818;
+  --wx-ink-2:#576b95;         /* 微信链接蓝 */
+  --wx-gray:#888888;
+  --wx-faint:#b2b2b2;
+  --wx-line:#e5e5e5;          /* hairline 分隔 */
+  --wx-line-soft:#f0f0f0;
+  --wx-cell:#ffffff;          /* 列表 cell */
+  --wx-group-bg:#efeff4;      /* 分组列表灰底 */
+}
+
+/* ======================= 聊天页 ======================= */
+
+/* 配色 token 重置：压过 chat.css 3317 的 soft-mint 主题 */
+body.chat-active{
+  --chat5-bg:#ededed!important;
+  --chat5-panel:#ffffff!important;
+  --chat5-line:#e3e3e3!important;
+  --chat5-line-soft:#ececec!important;
+  --chat5-text:#181818!important;
+  --chat5-muted:#8a8a8a!important;
+  --chat5-faint:#b2b2b2!important;
+  --chat5-green:#95ec69!important;
+  --chat5-green-line:#95ec69!important;
+  --chat5-accent:#07c160!important;
+  --chat5-accent-ink:#06ad56!important;
+}
+
+/* 聊天大背景 → 纯微信灰（压过 soft-mint 渐变）*/
+body.chat-active #page-memory,
+body.chat-active .chat-shell,
+body.chat-active .chat-main,
+body.chat-active .chat-messages{
+  background:var(--wx-bg)!important;
+}
+body.chat-active .chat-messages{
+  gap:3px!important;
+  padding-top:14px!important;
+  padding-bottom:14px!important;
+}
+
+/* —— 气泡：微信扁平风（无边框、小圆角、实心、带尾三角）—— */
+body.chat-active .chat-bubble{
+  border:0!important;
+  border-radius:7px!important;
+  box-shadow:none!important;
+  font-size:15px!important;
+  line-height:1.55!important;
+}
+body.chat-active .chat-bubble.user{
+  background:var(--wx-green)!important;
+  color:#0d1a12!important;
+  border-radius:7px!important;
+  padding:9px 30px 9px 13px!important;   /* 右侧留白给缓存对号 */
+  min-width:0!important;
+}
+body.chat-active .chat-bubble.assistant{
+  background:#ffffff!important;
+  color:#181818!important;
+  border-radius:7px!important;
+  padding:9px 13px!important;
+}
+/* 尾三角 */
+body.chat-active .chat-bubble.user::after{
+  content:""!important;position:absolute!important;top:12px!important;right:-4px!important;
+  width:0!important;height:0!important;
+  border-top:5px solid transparent!important;border-bottom:5px solid transparent!important;
+  border-left:6px solid var(--wx-green)!important;
+}
+body.chat-active .chat-bubble.assistant::before{
+  content:""!important;position:absolute!important;top:12px!important;left:-4px!important;
+  width:0!important;height:0!important;
+  border-top:5px solid transparent!important;border-bottom:5px solid transparent!important;
+  border-right:6px solid #ffffff!important;
+}
+
+/* —— 头像：CSS 伪元素，绝对定位在行角，气泡靠内 —— */
+body.chat-active .chat-msg-row.user,
+body.chat-active .chat-msg-row.assistant{position:relative!important}
+body.chat-active .chat-msg-row.assistant{padding-left:50px!important}
+body.chat-active .chat-msg-row.user{padding-right:50px!important}
+body.chat-active .chat-msg-row.assistant::before,
+body.chat-active .chat-msg-row.user::after{
+  position:absolute!important;top:0!important;
+  width:38px!important;height:38px!important;border-radius:7px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  font-size:12px!important;font-weight:800!important;letter-spacing:.3px!important;
+  box-shadow:0 1px 2px rgba(0,0,0,.10)!important;
+  box-sizing:border-box!important;
+}
+body.chat-active .chat-msg-row.assistant::before{
+  content:"CK"!important;left:0!important;
+  background:linear-gradient(135deg,#12995a,#43c583)!important;color:#fff!important;
+}
+body.chat-active .chat-msg-row.user::after{
+  content:"我"!important;right:0!important;
+  background:#dcdcdc!important;color:#707070!important;font-weight:700!important;font-size:15px!important;
+}
+
+/* 时间/复制/等待 等元信息更克制 */
+body.chat-active .chat-msg-time,
+body.chat-active .chat-msg-tools .chat-msg-act,
+body.chat-active .chat-msg-tools .chat-user-regen{
+  color:var(--wx-faint)!important;
+}
+
+/* —— 顶栏：两条 header 合成一个微信灰整体顶区（中间无缝，仅底部一条 hairline）—— */
+body.chat-active .app-header{
+  background:var(--wx-nav)!important;
+  border-bottom:0!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  padding-top:8px!important;padding-bottom:8px!important;
+}
+body.chat-active .chat-head,
+body.chat-active .chat-titlebar{
+  background:var(--wx-nav)!important;
+  border-bottom:1px solid var(--wx-line)!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+body.chat-active .chat-titlebar{height:48px!important}
+body.chat-active .chat-titlebar h2{font-weight:600!important;font-size:16px!important;color:#181818!important}
+body.chat-active .chat-titlebar p{font-size:11px!important;color:var(--wx-gray)!important}
+/* 顶栏图标按钮：微信黑线条、透明底 */
+body.chat-active .chat-icon-btn{color:#181818!important;background:transparent!important;border-color:transparent!important}
+body.chat-active .chat-icon-btn:hover{background:rgba(0,0,0,.05)!important}
+/* app-header 品牌 & 版本徽章在聊天页更收敛 */
+body.chat-active .app-header h1{font-size:15px!important;font-weight:600!important;color:#181818!important}
+body.chat-active .panel-version-badge{opacity:.55!important;font-size:10px!important}
+
+/* —— 输入栏：微信风（浅底、白圆角输入、绿圆发送）—— */
+body.chat-active .chat-compose,
+body.chat-active .chat-compose-row,
+body.chat-active .chat-input-bar,
+body.chat-active .chat-footer{
+  background:#f7f7f7!important;
+  border-top:1px solid var(--wx-line)!important;
+}
+body.chat-active #chat-input{
+  background:#ffffff!important;
+  border:1px solid #e3e3e3!important;
+  border-radius:8px!important;
+  font-size:15px!important;
+  color:#181818!important;
+}
+body.chat-active #chat-input:focus{
+  border-color:#c9c9c9!important;
+  box-shadow:none!important;
+}
+body.chat-active .chat-send{
+  background:var(--wx-primary)!important;
+  border:0!important;
+  box-shadow:none!important;
+  color:#fff!important;
+}
+body.chat-active .chat-plus-btn{
+  background:transparent!important;
+  border:1px solid #d2d2d2!important;
+  color:#555!important;
+  box-shadow:none!important;
+}
+
+/* ======================= 全局（非聊天视图）微信化 ======================= */
+
+/* —— 主题绿：按钮/强调统一为微信绿 #07c160 扁平（压过精致绿渐变）—— */
+.btn-blue,
+.chat-wide-btn,
+.prov-add,
+.prov-fetch-models{
+  background:var(--wx-primary)!important;
+  background-image:none!important;
+  border:0!important;
+  box-shadow:none!important;
+  color:#fff!important;
+  border-radius:8px!important;
+}
+.btn-blue:active,.chat-wide-btn:active{background:var(--wx-primary-ink)!important}
+.btn-outline{
+  background:#fff!important;
+  color:var(--wx-primary-ink)!important;
+  border:1px solid #d9e6df!important;
+  border-radius:8px!important;
+  box-shadow:none!important;
+}
+
+/* —— 卡片：白底、hairline、极浅阴影（去精致绿的厚阴影/大圆角）—— */
+.chat-memory-card,.chat-route-card,.chat-worldbook-list,
+.cat-card,.entry-item,.stat-box,.home-console,.home-insight-block,.eg-card,.mini-item{
+  border:1px solid var(--wx-line)!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+  background:#fff!important;
+}
+
+/* —— 设置抽屉：灰底 + 白卡分组（微信/iOS 分组列表观感）—— */
+.chat-settings{background:var(--wx-group-bg)!important}
+.chat-settings-head{
+  background:var(--wx-group-bg)!important;
+  border-bottom:1px solid var(--wx-line)!important;
+}
+.chat-side-panel{background:var(--wx-group-bg)!important}
+/* 分组小标题（h2/h3/label 段标题）更像 iOS 分组头 */
+.chat-side-panel > h3,.chat-side-panel > h4{
+  color:var(--wx-gray)!important;font-size:13px!important;font-weight:500!important;
+  letter-spacing:.2px!important;
+}
+
+/* —— 开关：已由 style.css 用 #07c160 微信绿轨道，勿覆盖以免染错整行 —— */
+
+/* —— API 配置页：灰底 + 白卡 + 微信绿 tab —— */
+.api-config-page{background:var(--wx-group-bg)!important}
+.api-config-page .prov-card,
+.api-config-page .api-group{
+  background:#fff!important;border:1px solid var(--wx-line)!important;
+  border-radius:10px!important;box-shadow:none!important;
+}
+/* API 配置 tab：微信分段控件 */
+.api-config-page .sub-tab.active,.sub-tab.active{
+  color:var(--wx-primary-ink)!important;border-bottom-color:var(--wx-primary)!important;
+}
+/* 统计小 chip */
+.api-config-page .prov-stat,.api-stat-chip{
+  background:#fff!important;border:1px solid var(--wx-line)!important;border-radius:999px!important;
+}
+
+/* —— 弹窗 / Toast：微信风 —— */
+.modal,.confirm-box{border-radius:14px!important;box-shadow:0 12px 40px rgba(0,0,0,.16)!important}
+.toast{background:rgba(0,0,0,.82)!important;border-radius:8px!important;box-shadow:none!important}
+.btn-blue,.btn{transition:background .15s ease!important}
+
+/* —— 侧边抽屉导航：微信绿高亮 —— */
+.side-nav-item.active{background:#e9f7ef!important;color:var(--wx-primary-ink)!important}
+.sub-tab.active{color:var(--wx-primary-ink)!important}
+
+/* —— 顶栏品牌方块（CK）用微信主题绿 —— */
+.brand-mark{background:linear-gradient(135deg,#07c160,#3fd07f)!important;box-shadow:none!important;border-radius:9px!important}
+
+/* ======================= 深色模式守卫（微信深色）======================= */
+body.dark{
+  --wx-bg:#111111;--wx-nav:#1c1c1e;--wx-panel:#1e1e1e;
+  --wx-line:#2a2a2c;--wx-line-soft:#242426;--wx-group-bg:#000000;
+  --wx-gray:#9a9a9a;--wx-faint:#6d6d70;
+}
+/* 聊天顶栏 → 深色 */
+body.dark.chat-active .app-header,
+body.dark.chat-active .chat-head,
+body.dark.chat-active .chat-titlebar{
+  background:#1c1c1e!important;border-bottom-color:#2a2a2c!important;
+}
+body.dark.chat-active .chat-titlebar h2,
+body.dark.chat-active .app-header h1{color:#eaeaea!important}
+body.dark.chat-active .chat-icon-btn{color:#cfcfcf!important}
+body.dark.chat-active .chat-icon-btn:hover{background:rgba(255,255,255,.06)!important}
+/* 聊天大背景 → 深 */
+body.dark.chat-active #page-memory,
+body.dark.chat-active .chat-shell,
+body.dark.chat-active .chat-main,
+body.dark.chat-active .chat-messages{background:#111111!important}
+/* 气泡 + 尾三角 深色 */
+body.dark.chat-active .chat-bubble.assistant{background:#262628!important;color:#e6e6e6!important}
+body.dark.chat-active .chat-bubble.assistant::before{border-right-color:#262628!important}
+body.dark.chat-active .chat-bubble.user{background:#4a8f43!important;color:#f1faf1!important}
+body.dark.chat-active .chat-bubble.user::after{border-left-color:#4a8f43!important}
+/* 头像“我”深色 */
+body.dark.chat-active .chat-msg-row.user::after{background:#3a3a3c!important;color:#cfcfcf!important}
+/* 输入栏 深色 */
+body.dark.chat-active .chat-compose,
+body.dark.chat-active .chat-compose-row,
+body.dark.chat-active .chat-input-bar,
+body.dark.chat-active .chat-footer{
+  background:#1c1c1e!important;border-top-color:#2a2a2c!important;
+}
+body.dark.chat-active #chat-input{background:#2a2a2c!important;border-color:#3a3a3c!important;color:#eaeaea!important}
+body.dark.chat-active #chat-input:focus{border-color:#4a4a4c!important}
+body.dark.chat-active .chat-plus-btn{border-color:#3a3a3c!important;color:#c0c0c0!important;background:transparent!important}
+/* 全局卡片/设置/API 配置 深色兜底 */
+body.dark .chat-memory-card,body.dark .chat-route-card,body.dark .chat-worldbook-list,
+body.dark .cat-card,body.dark .entry-item,body.dark .stat-box,body.dark .home-console,
+body.dark .home-insight-block,body.dark .eg-card,body.dark .mini-item,
+body.dark .api-config-page .prov-card,body.dark .api-config-page .api-group{
+  background:#1c1c1e!important;border-color:#2a2a2c!important;
+}
+body.dark .chat-settings,body.dark .chat-settings-head,
+body.dark .chat-side-panel,body.dark .api-config-page{background:#000000!important}
+body.dark .btn-outline{background:#1c1c1e!important;color:#7fe3ad!important;border-color:#2f5a45!important}
