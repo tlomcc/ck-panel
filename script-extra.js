@@ -4,11 +4,14 @@
   function applyTheme(theme){
     var isDark=theme==='dark';
     document.body.classList.toggle('dark',isDark);
-    var btn=document.querySelector('.theme-toggle');
-    if(btn){
-      btn.textContent=isDark?'☀️':'🌙';
+    var themeMeta=document.querySelector('meta[name="theme-color"]');
+    if(themeMeta)themeMeta.setAttribute('content',isDark?'#1c1c1e':'#f7f7f7');
+    document.querySelectorAll('.theme-toggle').forEach(function(btn){
+      btn.classList.toggle('is-dark',isDark);
+      if(!btn.classList.contains('chat-theme-toggle'))btn.textContent=isDark?'☀️':'🌙';
       btn.setAttribute('aria-label',isDark?'切换浅色模式':'切换深色模式');
-    }
+      btn.setAttribute('title',isDark?'切换浅色模式':'切换深色模式');
+    });
   }
 
   window.toggleTheme=function(){

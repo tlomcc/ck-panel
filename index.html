@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<meta name="theme-color" content="#eef7f2">
+<meta name="theme-color" content="#f7f7f7">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="CK记忆">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,11 +14,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v90-config-keyfix5">
-<link rel="stylesheet" href="polish.css?v=chat-v90-config-keyfix5">
-<link rel="stylesheet" href="chat.css?v=chat-v90-config-keyfix5">
-<link rel="stylesheet" href="wechat.css?v=chat-v90-config-keyfix5">
-<script>window.CK_PANEL_VERSION='chat-v90-config-keyfix5';</script>
+<link rel="stylesheet" href="style.css?v=chat-v91-wechat-polish">
+<link rel="stylesheet" href="polish.css?v=chat-v91-wechat-polish">
+<link rel="stylesheet" href="chat.css?v=chat-v91-wechat-polish">
+<link rel="stylesheet" href="wechat.css?v=chat-v91-wechat-polish">
+<script>window.CK_PANEL_VERSION='chat-v91-wechat-polish';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap"><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">加载中...</div></div>
@@ -27,14 +27,14 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge">chat-v90-config-keyfix5</span>
+<span class="panel-version-badge" id="panel-version-badge">chat-v91-wechat-polish</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
 <!-- 侧栏抽屉导航（替代原顶栏 tab） -->
 <div class="side-drawer-mask" id="side-drawer-mask" onclick="closeSidebar()"></div>
-<aside class="side-drawer" id="side-drawer" aria-label="导航菜单">
-<div class="side-drawer-head">菜单</div>
+<aside class="side-drawer" id="side-drawer" aria-label="导航菜单" aria-hidden="true">
+<div class="side-drawer-head"><div><b>CK 面板</b><span>导航</span></div><button type="button" onclick="closeSidebar()" aria-label="关闭导航" title="关闭">×</button></div>
 <nav class="side-nav">
 <button class="side-nav-item active" data-tab="chat" onclick="navTo('chat')">聊天</button>
 <button class="side-nav-item" data-tab="overview" onclick="navTo('overview')">总览</button>
@@ -114,14 +114,24 @@
 </section>
 <section class="panel-tab active" id="tab-chat">
 <div class="chat-shell">
-<aside class="chat-drawer">
-<div class="chat-drawer-head"><div><b>对话</b><span id="chat-session-count">0</span></div><div class="chat-drawer-actions"><button class="chat-icon-btn" type="button" onclick="chatNewSession()" title="新会话">＋</button></div></div>
+<aside class="chat-drawer" aria-label="对话列表" aria-hidden="true">
+<div class="chat-drawer-head"><div><button class="chat-icon-btn chat-drawer-close" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表" title="关闭">‹</button><b>对话</b><span id="chat-session-count">0</span></div><div class="chat-drawer-actions"><button class="chat-icon-btn" type="button" onclick="chatNewSession()" aria-label="新会话" title="新会话">＋</button></div></div>
 <div class="chat-session-list" id="chat-session-list"></div>
 </aside>
 <button class="chat-drawer-mask" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表"></button>
 <div class="chat-main">
 <div class="chat-head">
-<div class="chat-titlebar"><div class="chat-left-actions"><button class="chat-icon-btn" type="button" onclick="chatToggleSessions()" title="对话列表">☰</button></div><div class="chat-title-center" ondblclick="chatRenameCurrent()" title="双击重命名"><h2 id="chat-title">聊天</h2><p id="chat-status"><span class="chat-online-dot"></span>在线</p></div><div class="chat-head-actions"><button class="chat-icon-btn chat-debug-open" type="button" onclick="chatOpenSettingTab('debug')" title="调试">调</button></div></div>
+<div class="chat-titlebar">
+<div class="chat-left-actions">
+<button class="chat-icon-btn chat-panel-nav" type="button" onclick="openSidebar()" aria-label="面板导航" title="面板导航"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+<button class="chat-icon-btn chat-session-nav" id="chat-session-nav" type="button" onclick="chatToggleSessions()" aria-label="对话列表" aria-controls="chat-session-list" aria-expanded="false" title="对话列表"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H9l-4 3v-13Z"/><path d="M8 9h8M8 12h5"/></svg></button>
+</div>
+<div class="chat-title-center" ondblclick="chatRenameCurrent()" title="双击重命名"><h2 id="chat-title">聊天</h2><p id="chat-status"><span class="chat-online-dot"></span>在线</p></div>
+<div class="chat-head-actions">
+<button class="chat-icon-btn theme-toggle chat-theme-toggle" type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
+<button class="chat-icon-btn chat-settings-open" id="chat-settings-open" type="button" onclick="chatToggleSettings()" aria-label="聊天设置" aria-controls="chat-settings" aria-expanded="false" title="聊天设置"><span aria-hidden="true">···</span></button>
+</div>
+</div>
 <div class="chat-runtime"><span id="chat-runtime-model">模型未配置</span><span id="chat-runtime-cache">网关 session</span><span id="chat-runtime-recall">召回开启</span></div>
 </div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
@@ -140,7 +150,7 @@
 <div class="chat-compose-row">
 <button class="chat-plus-btn" id="chat-plus-btn" type="button" onclick="chatTogglePlus()" title="更多">＋</button>
 <textarea id="chat-input" rows="1" placeholder="发消息给 CK"></textarea>
-<button class="chat-send" id="chat-send-btn" onclick="chatSendMessage()" title="发送">↑</button>
+<button class="chat-send" id="chat-send-btn" onclick="chatSendMessage()" title="发送">发送</button>
 </div>
 <div class="chat-plus-panel" id="chat-plus-panel">
 <button class="chat-plus-arrow chat-plus-arrow-left" id="chat-plus-prev" type="button" onclick="event.stopPropagation();chatPlusPrevPage()" aria-label="上一页" hidden>&lt;</button>
@@ -165,8 +175,8 @@
 </div>
 </div>
 </div>
-<button class="chat-settings-mask" type="button" aria-hidden="true" tabindex="-1"></button>
-<aside class="chat-settings">
+<button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
+<aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
 <div class="chat-settings-head"><b id="chat-settings-title">聊天设置</b><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-tabs"><button class="active" data-chat-side="model" onclick="chatSwitchSideTab('model')">提示词</button><button data-chat-side="gateway" onclick="chatSwitchSideTab('gateway')">网关</button><button data-chat-side="worldbook" onclick="chatSwitchSideTab('worldbook')">世界书</button><button data-chat-side="memory" onclick="chatSwitchSideTab('memory')">记忆</button><button data-chat-side="trim" onclick="chatSwitchSideTab('trim')">截断</button><button data-chat-side="debug" onclick="chatSwitchSideTab('debug')">调试</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
@@ -241,10 +251,11 @@
 <div class="confirm-bg" id="confirmDel"><div class="confirm-box"><p>确定删除？</p><div class="confirm-box-btns"><button class="btn btn-outline btn-sm" onclick="cancelDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmDel()">删除</button></div></div></div>
 <div class="confirm-bg" id="chatCleanConfirm"><div class="confirm-box"><p>确定要清理历史中的图片和召回内容吗？</p><div class="confirm-box-btns"><button class="btn btn-outline btn-sm" onclick="chatCancelCleanHistory()">取消</button><button class="btn btn-red btn-sm" onclick="chatConfirmCleanHistory()">确认</button></div></div></div>
 <div class="modal-bg" id="provDelModal" onclick="closeProvDel()"><div class="modal" onclick="event.stopPropagation()"><h3>删除供应商</h3><p class="prov-del-q">确定要删除该供应商吗？</p><div class="modal-btns"><button class="btn btn-outline btn-sm" onclick="closeProvDel()">取消</button><button class="btn btn-red btn-sm" onclick="confirmProvDel()">确定</button></div></div></div>
+<div class="modal-bg" id="ckActionModal" aria-hidden="true" onclick="ckDialogBackdrop(event)"><div class="modal ck-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ck-action-title" aria-describedby="ck-action-message" onclick="event.stopPropagation()"><h3 id="ck-action-title">请确认</h3><p class="ck-action-message" id="ck-action-message"></p><input id="ck-action-input" autocomplete="off" hidden><div class="modal-btns"><button class="btn btn-outline btn-sm" id="ck-action-cancel" type="button" onclick="ckDialogCancel()">取消</button><button class="btn btn-blue btn-sm" id="ck-action-confirm" type="button" onclick="ckDialogSubmit()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
-<div class="toast" id="toast"></div>
-<script src="script.js?v=chat-v90-config-keyfix5"></script>
-<script src="script-extra.js?v=chat-v90-config-keyfix5"></script>
-<script src="pwa.js?v=chat-v90-config-keyfix5"></script>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<script src="script.js?v=chat-v91-wechat-polish"></script>
+<script src="script-extra.js?v=chat-v91-wechat-polish"></script>
+<script src="pwa.js?v=chat-v91-wechat-polish"></script>
 </body>
 </html>

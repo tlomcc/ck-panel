@@ -38,7 +38,7 @@ function chatNaturalUnits(text){
   while(i<lines.length){
     var line=lines[i].trim();
     if(!line){i++;continue;}
-    var isOrderedListItem=/^(\d+[.、])\s/.test(line);
+    var isOrderedListItem=/^(\d+[.、])\s*/.test(line);
     var isUnorderedListItem=/^[-*]\s/.test(line);
     if(isOrderedListItem||isUnorderedListItem){
       var listBlock=[line];
@@ -46,7 +46,7 @@ function chatNaturalUnits(text){
       while(j<lines.length){
         var nextLine=lines[j].trim();
         if(!nextLine){j++;continue;}
-        var nextIsOrdered=/^(\d+[.、])\s/.test(nextLine);
+        var nextIsOrdered=/^(\d+[.、])\s*/.test(nextLine);
         var nextIsUnordered=/^[-*]\s/.test(nextLine);
         if((isOrderedListItem&&nextIsOrdered)||(isUnorderedListItem&&nextIsUnordered)){
           listBlock.push(nextLine);

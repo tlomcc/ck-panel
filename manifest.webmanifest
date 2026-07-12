@@ -8,8 +8,8 @@
   "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#eef7f2",
-  "theme_color": "#eef7f2",
+  "background_color": "#ededed",
+  "theme_color": "#f7f7f7",
   "orientation": "portrait",
   "categories": ["productivity", "utilities"],
   "icons": [
