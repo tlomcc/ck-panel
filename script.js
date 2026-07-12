@@ -5911,7 +5911,16 @@ async function chatSubmitPendingMessages(){
   var pending=chatPendingMessages();
   var regeneratePending=pending.find(function(m){return m&&m.regenerateRequest===true});
   if(regeneratePending&&Number.isInteger(regeneratePending.regenerateCutoff)){
-    var regenerateCutoff=Math.max(0,regeneratePending.regenerateCutoff);
+    var regenerateCurrentIndex=chatMessages.indexOf(regeneratePending);
+    var regenerateRestoredIndex=chatMessages.findIndex(function(m){
+      return m&&m!==regeneratePending&&m.role==='user'&&
+        Number(m.ts||0)===Number(regeneratePending.ts||0)&&
+        String(m.text||'')===String(regeneratePending.text||'')&&
+        JSON.stringify(chatMessageImages(m))===JSON.stringify(chatMessageImages(regeneratePending));
+    });
+    var regenerateCutoff=regenerateRestoredIndex>=0
+      ? regenerateRestoredIndex
+      : (regenerateCurrentIndex>=0?regenerateCurrentIndex:Math.max(0,regeneratePending.regenerateCutoff));
     chatMessages=chatMessages.slice(0,regenerateCutoff).concat([regeneratePending]);
     pending=[regeneratePending];
   }
