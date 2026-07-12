@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v91-wechat-polish';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v92-wechat-fullscreen';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4980,7 +4980,17 @@ function chatTogglePlus(force){
     chatPlusRenderPager(chatPlusPager.currentPage||0);
   }
   panel.classList.toggle('open',open);
-  if(btn)btn.classList.toggle('open',open);
+  panel.setAttribute('aria-hidden',open?'false':'true');
+  panel.querySelectorAll('.chat-plus-page').forEach(function(page){
+    var active=open&&page.classList.contains('active');
+    page.querySelectorAll('button').forEach(function(button){button.tabIndex=active?0:-1});
+  });
+  panel.querySelectorAll('.chat-plus-dot').forEach(function(dot){dot.tabIndex=open?0:-1});
+  if(btn){
+    btn.classList.toggle('open',open);
+    btn.setAttribute('aria-expanded',open?'true':'false');
+    btn.setAttribute('aria-label',open?'收起更多功能':'更多功能');
+  }
 }
 function chatPlusRenderPager(pageIndex){
   var container=document.getElementById('chat-plus-pages');
@@ -5024,6 +5034,30 @@ function chatPlusPrevPage(){
 function chatPlusNextPage(){
   chatPlusRenderPager((chatPlusPager.currentPage||0)+1);
 }
+function chatPlusHandleTouchStart(e){
+  var touch=e&&e.touches&&e.touches[0];
+  if(!touch)return;
+  chatPlusPager.touchStartX=touch.clientX;
+  chatPlusPager.touchStartY=touch.clientY;
+}
+function chatPlusHandleTouchEnd(e){
+  var touch=e&&e.changedTouches&&e.changedTouches[0];
+  var startX=chatPlusPager.touchStartX;
+  var startY=chatPlusPager.touchStartY;
+  chatPlusPager.touchStartX=null;
+  chatPlusPager.touchStartY=null;
+  if(!touch||!Number.isFinite(startX)||!Number.isFinite(startY))return;
+  var dx=touch.clientX-startX;
+  var dy=touch.clientY-startY;
+  if(Math.abs(dx)<42||Math.abs(dx)<=Math.abs(dy)*1.2)return;
+  if(e.cancelable)e.preventDefault();
+  if(dx<0)chatPlusNextPage();
+  else chatPlusPrevPage();
+}
+function chatPlusHandleTouchCancel(){
+  chatPlusPager.touchStartX=null;
+  chatPlusPager.touchStartY=null;
+}
 function chatClosePlusOnOutside(e){
   var panel=document.getElementById('chat-plus-panel');
   if(!panel||!panel.classList.contains('open')||!e||!e.target||!e.target.closest)return;
@@ -5031,7 +5065,17 @@ function chatClosePlusOnOutside(e){
   chatTogglePlus(false);
 }
 function chatInitPlusPager(){
+  var container=document.getElementById('chat-plus-pages');
   chatPlusRenderPager(chatPlusPager.currentPage||0);
+  if(container&&!container.dataset.swipeReady){
+    container.dataset.swipeReady='1';
+    container.addEventListener('touchstart',chatPlusHandleTouchStart,{passive:true});
+    container.addEventListener('touchend',chatPlusHandleTouchEnd,{passive:false});
+    container.addEventListener('touchcancel',chatPlusHandleTouchCancel,{passive:true});
+  }
+  if(container&&!document.getElementById('chat-plus-panel').classList.contains('open')){
+    document.getElementById('chat-plus-panel').querySelectorAll('button').forEach(function(button){button.tabIndex=-1});
+  }
 }
 function chatSettingTitle(tab){
   return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';

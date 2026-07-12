@@ -1,5 +1,5 @@
 {
-  "version": "chat-v91-wechat-polish",
+  "version": "chat-v92-wechat-fullscreen",
   "notes": [
     "聊天改成克制的微信式灰底、白色对方气泡和绿色自己气泡，消息区始终不显示头像",
     "统一聊天顶栏、会话列表、更多面板、设置抽屉、输入区、明暗主题和移动端安全区",
