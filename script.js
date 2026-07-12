@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v94-wechat-premium';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v93-chat-resilience';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3979,18 +3979,8 @@ function chatTimeLabel(ts){
 }
 function chatFullTimeLabel(ts){
   if(!ts)return '';
-  var d=new Date(ts),now=new Date();
-  var startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
-  var startDate=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
-  var dayDiff=Math.round((startToday-startDate)/864e5);
-  var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  if(dayDiff===0)return '今天 '+hm;
-  if(dayDiff===1)return '昨天 '+hm;
-  if(dayDiff>1&&dayDiff<7){
-    return ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][d.getDay()]+' '+hm;
-  }
-  if(d.getFullYear()===now.getFullYear())return (d.getMonth()+1)+'月'+d.getDate()+'日 '+hm;
-  return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 '+hm;
+  var d=new Date(ts);
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
 }
 function chatAttachAssistantTiming(msg,userSentTs,replyTs){
   if(!msg||msg.role!=='assistant')return msg;
