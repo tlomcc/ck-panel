@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v113-chat-v93-chat-resilience';
+const CACHE_NAME = 'ck-panel-shell-v114-chat-v94-wechat-premium';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v93-chat-resilience',
-  './polish.css?v=chat-v93-chat-resilience',
-  './chat.css?v=chat-v93-chat-resilience',
-  './wechat.css?v=chat-v93-chat-resilience',
-  './script.js?v=chat-v93-chat-resilience',
-  './script-extra.js?v=chat-v93-chat-resilience',
-  './pwa.js?v=chat-v93-chat-resilience',
+  './style.css?v=chat-v94-wechat-premium',
+  './polish.css?v=chat-v94-wechat-premium',
+  './chat.css?v=chat-v94-wechat-premium',
+  './wechat.css?v=chat-v94-wechat-premium',
+  './script.js?v=chat-v94-wechat-premium',
+  './script-extra.js?v=chat-v94-wechat-premium',
+  './pwa.js?v=chat-v94-wechat-premium',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
