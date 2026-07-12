@@ -20,4 +20,4 @@ These files stay at the repository root because `index.html`, `sw.js`, and the d
 
 ## Cache Safety
 
-Do not add local chat history to the `/ck/chat` request body. The gateway owns chat history, recall injection, and cache anchors. The panel should send only the current user text plus stable config fields.
+Do not add ad-hoc `messages` or `history` fields to `/ck/chat`. Normal turns reuse the gateway-returned `transport_messages`, with `window_messages` as the defined same-window fallback. Regeneration clears stale transport and sends the visible window through `window_messages` after removing the assistant reply being regenerated; `text` remains the current reply target.
