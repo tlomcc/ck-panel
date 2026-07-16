@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v99-timing-inline';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v100-timing-last-bubble';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5111,7 +5111,11 @@ async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
     var part=parts[i];
     var ts=i===0?firstReplyTs:Date.now();
     var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts};
-    if(i===0)chatAttachAssistantTiming(msg,userSentTs,firstReplyTs);
+    if(i===parts.length-1&&userSentTs){
+      msg.userSentTs=userSentTs;
+      msg.firstReplyTs=firstReplyTs;
+      msg.waitMs=Math.max(0,firstReplyTs-userSentTs);
+    }
     chatMessages.push(msg);
     chatMarkMessageFresh(msg);
     chatSaveLocalMessages();
@@ -5763,7 +5767,7 @@ function chatMessageTimingHtml(m,role,showTimestamp){
   if(ts&&showTimestamp!==false)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
   if(role==='user'){
     if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
-    else bits.push(chatCacheTickHtml(m));
+    else if(showTimestamp!==false)bits.push(chatCacheTickHtml(m));
   }else if(role==='assistant'&&showTimestamp!==false){
     var wait=chatAssistantWaitLabel(m);
     if(wait)bits.push('<span class="chat-msg-wait">'+esc(wait)+'</span>');

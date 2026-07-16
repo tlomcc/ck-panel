@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v119-chat-v99-timing-inline';
+const CACHE_NAME = 'ck-panel-shell-v120-chat-v100-timing-last-bubble';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v99-timing-inline',
-  './polish.css?v=chat-v99-timing-inline',
-  './chat.css?v=chat-v99-timing-inline',
-  './wechat.css?v=chat-v99-timing-inline',
-  './script.js?v=chat-v99-timing-inline',
-  './script-extra.js?v=chat-v99-timing-inline',
-  './pwa.js?v=chat-v99-timing-inline',
+  './style.css?v=chat-v100-timing-last-bubble',
+  './polish.css?v=chat-v100-timing-last-bubble',
+  './chat.css?v=chat-v100-timing-last-bubble',
+  './wechat.css?v=chat-v100-timing-last-bubble',
+  './script.js?v=chat-v100-timing-last-bubble',
+  './script-extra.js?v=chat-v100-timing-last-bubble',
+  './pwa.js?v=chat-v100-timing-last-bubble',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
