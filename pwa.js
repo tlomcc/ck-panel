@@ -115,7 +115,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v96-context-cache-persistence').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v97-zero-lag-send').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

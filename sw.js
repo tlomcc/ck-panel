@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v116-chat-v96-context-cache-persistence';
+const CACHE_NAME = 'ck-panel-shell-v117-chat-v97-zero-lag-send';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v96-context-cache-persistence',
-  './polish.css?v=chat-v96-context-cache-persistence',
-  './chat.css?v=chat-v96-context-cache-persistence',
-  './wechat.css?v=chat-v96-context-cache-persistence',
-  './script.js?v=chat-v96-context-cache-persistence',
-  './script-extra.js?v=chat-v96-context-cache-persistence',
-  './pwa.js?v=chat-v96-context-cache-persistence',
+  './style.css?v=chat-v97-zero-lag-send',
+  './polish.css?v=chat-v97-zero-lag-send',
+  './chat.css?v=chat-v97-zero-lag-send',
+  './wechat.css?v=chat-v97-zero-lag-send',
+  './script.js?v=chat-v97-zero-lag-send',
+  './script-extra.js?v=chat-v97-zero-lag-send',
+  './pwa.js?v=chat-v97-zero-lag-send',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
