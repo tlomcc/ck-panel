@@ -20,8 +20,6 @@ body.chat-active{
   overscroll-behavior:none!important;
 }
 
-body.chat-active .loading-bar-wrap{display:none!important}
-
 body.chat-active #page-memory{
   position:fixed!important;
   inset:0!important;

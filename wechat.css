@@ -154,7 +154,36 @@ body.chat-active .chat-runtime{display:none!important}
 body.chat-active .chat-messages{
   gap:16px!important;
   padding:20px max(18px,calc((100% - var(--wx-content-width))/2)) 22px!important;
+  -webkit-overflow-scrolling:touch!important;
+  overscroll-behavior-y:contain!important;
+  overflow-anchor:none!important;
+  transform:translateZ(0)!important;
+  backface-visibility:hidden!important;
+  will-change:scroll-position!important;
 }
+body.chat-active .chat-msg-row{content-visibility:auto!important;contain:layout style paint!important;contain-intrinsic-size:auto 96px!important;transform:translateZ(0)!important}
+body.chat-active .chat-msg-row.chat-fresh,
+body.chat-active .chat-typing,
+body.chat-active .chat-caret{will-change:transform,opacity!important;backface-visibility:hidden!important}
+body.chat-active button,
+body.chat-active .chat-msg-act,
+body.chat-active .chat-user-regen,
+body.chat-active .chat-user-retry{touch-action:manipulation!important;-webkit-tap-highlight-color:transparent!important}
+body.chat-active button:active,
+body.chat-active .chat-msg-act:active,
+body.chat-active .chat-user-regen:active,
+body.chat-active .chat-user-retry:active{transform:translateZ(0) scale(.96)!important;transition:transform 45ms linear!important}
+
+body.chat-active .loading-bar-wrap{display:flex!important;position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:10000!important;align-items:center!important;justify-content:center!important;flex-direction:column!important;padding:24px!important;background:linear-gradient(155deg,#eaf8ef 0%,#f7fcf9 48%,#fff 100%)!important;transform:translateZ(0)!important;text-align:center!important}
+body.chat-active .loading-bar-wrap.done{display:flex!important;opacity:0!important;visibility:hidden!important;transition:opacity .32s ease,visibility 0s linear .32s!important}
+body.chat-active .startup-icon{display:grid!important;place-items:center!important;width:82px!important;height:82px!important;border:0!important;border-radius:24px!important;background:linear-gradient(145deg,#a9e2bd,#72c796)!important;color:#fff!important;box-shadow:0 16px 38px rgba(64,145,98,.2),inset 0 1px 0 rgba(255,255,255,.55)!important;animation:ckStartupEnter .42s cubic-bezier(.2,.8,.2,1) both!important}
+body.chat-active .startup-icon span{font-size:27px!important;font-weight:600!important;letter-spacing:1px!important}
+body.chat-active .startup-name{margin-top:18px!important;color:#315f46!important;font-size:20px!important;font-weight:500!important;letter-spacing:4px!important}
+body.chat-active .startup-subtitle{margin-top:7px!important;color:#91a99a!important;font-size:11px!important;font-weight:400!important;letter-spacing:1px!important}
+body.chat-active .loading-bar{width:148px!important;height:3px!important;margin-top:25px!important;border:0!important;border-radius:999px!important;background:rgba(79,151,105,.11)!important}
+body.chat-active .loading-bar-inner{border-radius:999px!important;background:linear-gradient(90deg,#9bddb5,#66bd8a)!important;transition:width .2s ease!important}
+body.chat-active .loading-text{margin-top:9px!important;color:#9aae9f!important;font-size:10px!important;font-weight:400!important}
+@keyframes ckStartupEnter{from{opacity:0;transform:translateZ(0) scale(.9)}to{opacity:1;transform:translateZ(0) scale(1)}}
 body.chat-active .chat-msg-row.user,
 body.chat-active .chat-msg-row.assistant{
   position:relative!important;
