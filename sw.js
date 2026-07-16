@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v121-chat-v101-native-virtual-splash';
+const CACHE_NAME = 'ck-panel-shell-v122-chat-v102-stable-list-send-frame';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v101-native-virtual-splash',
-  './polish.css?v=chat-v101-native-virtual-splash',
-  './chat.css?v=chat-v101-native-virtual-splash',
-  './wechat.css?v=chat-v101-native-virtual-splash',
-  './script.js?v=chat-v101-native-virtual-splash',
-  './script-extra.js?v=chat-v101-native-virtual-splash',
-  './pwa.js?v=chat-v101-native-virtual-splash',
+  './style.css?v=chat-v102-stable-list-send-frame',
+  './polish.css?v=chat-v102-stable-list-send-frame',
+  './chat.css?v=chat-v102-stable-list-send-frame',
+  './wechat.css?v=chat-v102-stable-list-send-frame',
+  './script.js?v=chat-v102-stable-list-send-frame',
+  './script-extra.js?v=chat-v102-stable-list-send-frame',
+  './pwa.js?v=chat-v102-stable-list-send-frame',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

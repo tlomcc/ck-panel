@@ -115,7 +115,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v101-native-virtual-splash').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v102-stable-list-send-frame').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

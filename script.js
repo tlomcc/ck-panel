@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v101-native-virtual-splash';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v102-stable-list-send-frame';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2141,14 +2141,6 @@ var chatViewportRaf=0;
 var chatLastLayoutHeight=0;
 var chatFreshMessageKeys=new Set();
 var chatMessageRenderMemo=new WeakMap();
-var chatVirtualStart=0;
-var chatVirtualEnd=0;
-var chatVirtualSessionId='';
-var chatVirtualScrollRaf=0;
-var CHAT_VIRTUAL_THRESHOLD=140;
-var CHAT_VIRTUAL_WINDOW=100;
-var CHAT_VIRTUAL_STEP=40;
-var CHAT_VIRTUAL_ESTIMATED_ROW=96;
 var chatNewMessageHintVisible=false;
 var chatDraftImages=[];
 var chatImageSeq=0;
@@ -4405,7 +4397,6 @@ function chatUpdateMessageRowOnly(index){
   var box=chatMessagesBox();
   var message=chatMessages[index];
   if(!box||!message||index<0)return null;
-  if(chatMessages.length>CHAT_VIRTUAL_THRESHOLD&&(index<chatVirtualStart||index>=chatVirtualEnd))return null;
   var row=box.querySelector('.chat-msg-row[data-chat-index="'+String(index)+'"]');
   var html=chatRenderMessageRow(message,index);
   if(row)row.outerHTML=html;
@@ -4417,6 +4408,11 @@ function chatYieldAfterVisualFeedback(){
     if(typeof requestAnimationFrame!=='function'){setTimeout(resolve,0);return}
     requestAnimationFrame(function(){setTimeout(resolve,0)});
   });
+}
+function chatDeferAfterSendPaint(fn){
+  if(typeof fn!=='function')return;
+  if(typeof requestAnimationFrame!=='function'){setTimeout(fn,0);return}
+  requestAnimationFrame(function(){setTimeout(fn,0)});
 }
 function chatBeginSendingUi(){
   var btn=document.getElementById('chat-send-btn');
@@ -5598,22 +5594,6 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
-  if(chatMessages.length<=CHAT_VIRTUAL_THRESHOLD||chatVirtualScrollRaf)return;
-  chatVirtualScrollRaf=requestAnimationFrame(function(){
-    chatVirtualScrollRaf=0;
-    var box=chatMessagesBox();
-    if(!box)return;
-    var oldStart=chatVirtualStart;
-    if(box.scrollTop<520&&chatVirtualStart>0){
-      chatVirtualStart=Math.max(0,chatVirtualStart-CHAT_VIRTUAL_STEP);
-      chatVirtualEnd=Math.min(chatMessages.length,chatVirtualStart+CHAT_VIRTUAL_WINDOW);
-      chatRenderMessages({respectUserScroll:true,keepVirtualRange:true,virtualScrollAdjust:(oldStart-chatVirtualStart)*CHAT_VIRTUAL_ESTIMATED_ROW});
-    }else if(box.scrollTop+box.clientHeight>box.scrollHeight-520&&chatVirtualEnd<chatMessages.length){
-      chatVirtualStart=Math.min(Math.max(0,chatMessages.length-CHAT_VIRTUAL_WINDOW),chatVirtualStart+CHAT_VIRTUAL_STEP);
-      chatVirtualEnd=Math.min(chatMessages.length,chatVirtualStart+CHAT_VIRTUAL_WINDOW);
-      chatRenderMessages({respectUserScroll:true,keepVirtualRange:true,virtualScrollAdjust:(oldStart-chatVirtualStart)*CHAT_VIRTUAL_ESTIMATED_ROW});
-    }
-  });
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
@@ -5649,52 +5629,25 @@ function chatRenderMessages(opts){
     return;
   }
   chatEnsureCacheExpiryNotice();
-  var sessionId=chatActiveSessionId||'';
-  var virtual=chatMessages.length>CHAT_VIRTUAL_THRESHOLD;
-  if(chatVirtualSessionId!==sessionId){chatVirtualSessionId=sessionId;chatVirtualStart=0;chatVirtualEnd=0}
-  if(!virtual){chatVirtualStart=0;chatVirtualEnd=chatMessages.length}
-  else if(opts.keepVirtualRange!==true||chatVirtualEnd<=chatVirtualStart){
-    if(shouldStick||chatVirtualEnd<=chatVirtualStart){chatVirtualEnd=chatMessages.length;chatVirtualStart=Math.max(0,chatVirtualEnd-CHAT_VIRTUAL_WINDOW)}
-    else chatVirtualEnd=Math.min(chatMessages.length,chatVirtualStart+CHAT_VIRTUAL_WINDOW);
-  }
-  var renderStart=virtual?chatVirtualStart:0;
-  var renderEnd=virtual?chatVirtualEnd:chatMessages.length;
-  var topSpace=virtual?renderStart*CHAT_VIRTUAL_ESTIMATED_ROW:0;
-  var bottomSpace=virtual?(chatMessages.length-renderEnd)*CHAT_VIRTUAL_ESTIMATED_ROW:0;
   var existing=Array.prototype.slice.call(box.children).filter(function(el){return el.classList&&el.classList.contains('chat-msg-row')});
-  var rebuildVirtualWindow=virtual&&opts.keepVirtualRange===true&&!!opts.virtualScrollAdjust;
-  if(!existing.length||rebuildVirtualWindow){
-    box.innerHTML=(virtual?'<div class="chat-virtual-spacer top" style="height:'+topSpace+'px"></div>':'')+
-      chatMessages.slice(renderStart,renderEnd).map(function(m,offset){return chatRenderMessageRow(m,renderStart+offset)}).join('')+
-      (virtual?'<div class="chat-virtual-spacer bottom" style="height:'+bottomSpace+'px"></div>':'');
+  if(!existing.length){
+    box.innerHTML=chatMessages.map(function(m,i){return chatRenderMessageRow(m,i)}).join('');
   }else{
     var rowMap={};
     existing.forEach(function(row){rowMap[row.getAttribute('data-chat-index')]=row});
-    for(var oldIndex in rowMap){if(Number(oldIndex)<renderStart||Number(oldIndex)>=renderEnd)rowMap[oldIndex].remove()}
-    for(var i=renderStart;i<renderEnd;i++){
+    for(var oldIndex in rowMap){if(Number(oldIndex)>=chatMessages.length)rowMap[oldIndex].remove()}
+    for(var i=0;i<chatMessages.length;i++){
       var m=chatMessages[i];
       var key=chatMessageRenderKey(m,i);
       var row=rowMap[String(i)];
       if(!row){
-        var bottom=box.querySelector('.chat-virtual-spacer.bottom');
-        if(bottom)bottom.insertAdjacentHTML('beforebegin',chatRenderMessageRow(m,i));
-        else box.insertAdjacentHTML('beforeend',chatRenderMessageRow(m,i));
+        box.insertAdjacentHTML('beforeend',chatRenderMessageRow(m,i));
         continue;
       }
       if(row.getAttribute('data-chat-key')!==key||row.getAttribute('data-chat-index')!==String(i))row.outerHTML=chatRenderMessageRow(m,i);
     }
-    var topSpacer=box.querySelector('.chat-virtual-spacer.top');
-    var bottomSpacer=box.querySelector('.chat-virtual-spacer.bottom');
-    if(virtual){
-      if(!topSpacer){box.insertAdjacentHTML('afterbegin','<div class="chat-virtual-spacer top"></div>');topSpacer=box.firstElementChild}
-      if(!bottomSpacer){box.insertAdjacentHTML('beforeend','<div class="chat-virtual-spacer bottom"></div>');bottomSpacer=box.lastElementChild}
-      topSpacer.style.height=topSpace+'px';bottomSpacer.style.height=bottomSpace+'px';
-    }else{
-      if(topSpacer)topSpacer.remove();if(bottomSpacer)bottomSpacer.remove();
-    }
   }
   chatRenderPendingBar();
-  if(opts.virtualScrollAdjust)box.scrollTop=Math.max(0,previousScrollTop+opts.virtualScrollAdjust);
   if(shouldStick){
     chatScrollMessagesBottom(opts.smooth!==true);
   }else{
@@ -6126,17 +6079,38 @@ async function chatSendMessage(){
     return;
   }
   if(text||chatDraftImages.length||chatPendingMessages().length){
-    var imageSnapshot=chatNormalizeImageList(chatDraftImages);
+    var imageSnapshot=Array.isArray(chatDraftImages)?chatDraftImages.slice(0,CHAT_IMAGE_MAX_COUNT):[];
+    var submitTs=Date.now();
     chatBeginSendingUi();
-    if(input){input.value='';chatAutosizeInput(input)}
+    if(input){
+      try{input.blur()}catch(e){}
+      input.value='';
+    }
     chatDraftImages=[];
-    chatRenderDraftImages();
+    if(text||imageSnapshot.length){
+      var optimistic={role:'pending_user',text:text,images:imageSnapshot,ts:submitTs};
+      chatMessages.push(optimistic);
+      chatMarkMessageFresh(optimistic);
+      var optimisticIndex=chatMessages.length-1;
+      var messageBox=chatMessagesBox();
+      if(messageBox&&(messageBox.querySelector('.chat-welcome')||messageBox.querySelector('.empty-state')))messageBox.innerHTML='';
+      if(optimisticIndex>0)chatUpdateMessageRowOnly(optimisticIndex-1);
+      chatUpdateMessageRowOnly(optimisticIndex);
+      chatRenderPendingBar();
+    }
+    chatDeferAfterSendPaint(function(){
+      if(input)chatAutosizeInput(input);
+      chatRenderDraftImages();
+      chatScrollMessagesBottom(true);
+    });
     return chatSubmitPendingMessages({
       sendingStarted:true,
       deferForPaint:true,
       inputSnapshot:true,
-      extraText:text,
-      draftImages:imageSnapshot
+      preparedPending:true,
+      submitTs:submitTs,
+      extraText:'',
+      draftImages:[]
     });
   }
 }
@@ -6204,7 +6178,7 @@ async function chatSubmitPendingMessages(options){
     toast('图片处理中');
     return;
   }
-  var submitTs=Date.now();
+  var submitTs=Number(options.submitTs)||Date.now();
   if(extra||draftImages.length){
     if(!options.inputSnapshot){
       input.value='';

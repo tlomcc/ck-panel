@@ -156,12 +156,11 @@ body.chat-active .chat-messages{
   padding:20px max(18px,calc((100% - var(--wx-content-width))/2)) 22px!important;
   -webkit-overflow-scrolling:touch!important;
   overscroll-behavior-y:contain!important;
-  overflow-anchor:none!important;
   transform:translateZ(0)!important;
   backface-visibility:hidden!important;
   will-change:scroll-position!important;
 }
-body.chat-active .chat-msg-row{content-visibility:auto!important;contain:layout style paint!important;contain-intrinsic-size:auto 96px!important;transform:translateZ(0)!important}
+body.chat-active .chat-msg-row{transform:translateZ(0)!important}
 body.chat-active .chat-msg-row.chat-fresh,
 body.chat-active .chat-typing,
 body.chat-active .chat-caret{will-change:transform,opacity!important;backface-visibility:hidden!important}
