@@ -225,6 +225,13 @@ body.chat-active .chat-bubble.assistant::before{
 body.chat-active .chat-msg-time,
 body.chat-active .chat-msg-tools .chat-msg-act,
 body.chat-active .chat-msg-tools .chat-user-regen{color:var(--wx-faint)!important}
+body.chat-active .chat-msg-row.assistant>.chat-msg-time{
+  display:inline-flex!important;
+  flex-direction:row!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  white-space:nowrap!important;
+}
 
 body.chat-active .chat-welcome{
   padding:24px!important;

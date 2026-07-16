@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v98-message-group-layout';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v99-timing-inline';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5764,7 +5764,7 @@ function chatMessageTimingHtml(m,role,showTimestamp){
   if(role==='user'){
     if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
     else bits.push(chatCacheTickHtml(m));
-  }else if(role==='assistant'){
+  }else if(role==='assistant'&&showTimestamp!==false){
     var wait=chatAssistantWaitLabel(m);
     if(wait)bits.push('<span class="chat-msg-wait">'+esc(wait)+'</span>');
   }

@@ -1,8 +1,8 @@
 {
-  "version": "chat-v98-message-group-layout",
+  "version": "chat-v99-timing-inline",
   "notes": [
-    "连续同组消息只在最后一条显示时间",
-    "重新生成按钮只显示在本轮 assistant 最后一条气泡",
-    "分条回复不拆开围栏代码块，聊天内容区域撑满屏幕"
+    "assistant 等待耗时与时间戳在同一行显示",
+    "中间分段不再单独显示等待耗时",
+    "保留消息分组、代码块保护和全宽聊天布局"
   ]
 }
