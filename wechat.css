@@ -2021,6 +2021,13 @@ body.chat-active .chat-msg-row.pending .chat-bubble.user{
   opacity:1!important;
 }
 body.chat-active .chat-msg-row.pending .chat-msg-meta-pending{color:#3d9060!important;font-weight:600!important}
+body.chat-active .chat-typing{display:inline-flex;align-items:center;gap:4px;min-width:34px;height:18px}
+body.chat-active .chat-typing i{width:5px;height:5px;border-radius:50%;background:#8b8b8b;animation:ckChatTyping 1.05s infinite ease-in-out}
+body.chat-active .chat-typing i:nth-child(2){animation-delay:.14s}
+body.chat-active .chat-typing i:nth-child(3){animation-delay:.28s}
+@keyframes ckChatTyping{0%,60%,100%{transform:translateY(0);opacity:.42}30%{transform:translateY(-3px);opacity:1}}
+body.chat-active .chat-user-retry{display:block;margin:4px 12px 0 auto;padding:0;border:0;background:transparent;color:#d65757;font-size:11px;cursor:pointer}
+body.chat-active .chat-msg-row.send-failed .chat-bubble.user{box-shadow:0 0 0 1px rgba(214,87,87,.28)}
 body.chat-active .chat-tool-trace{gap:5px!important;margin:2px 0 8px!important}
 body.chat-active .chat-tool-card{
   border-radius:8px!important;
@@ -2105,6 +2112,8 @@ body.dark.chat-active .chat-msg-row.state-error .chat-msg-time::before{backgroun
 body.dark.chat-active .chat-msg-row.state-stopped .chat-msg-time::before{background:#303033!important;color:#aaa!important}
 body.dark.chat-active .chat-msg-row.pending .chat-bubble.user{border-color:#3f8155!important;background:#183524!important;color:#bde8c9!important}
 body.dark.chat-active .chat-msg-row.pending .chat-msg-meta-pending{color:#8bd2a1!important}
+body.dark.chat-active .chat-user-retry{color:#ef8d8d}
+body.dark.chat-active .chat-typing i{background:#a9a9a9}
 body.dark.chat-active .chat-md .cb{background:#151b23!important;border-color:#2b3440!important}
 body.dark.chat-active .chat-md .cb-head{background:#1e2731!important}
 body.dark.chat-active .chat-tool-card{background:#151b23!important}

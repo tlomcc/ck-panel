@@ -21,3 +21,5 @@ These files stay at the repository root because `index.html`, `sw.js`, and the d
 ## Cache Safety
 
 Do not add ad-hoc `messages` or `history` fields to `/ck/chat`. Normal turns reuse the gateway-returned `transport_messages`, with `window_messages` as the defined same-window fallback. Regeneration clears stale transport and sends the visible window through `window_messages` after removing the assistant reply being regenerated; `text` remains the current reply target.
+
+Chat rendering is optimistic: the visible user bubble and assistant typing placeholder appear before route discovery and network response, but the request body is still assembled from the same pending-message snapshot. System prompt and active worldbook editor values are reread before every request. `nc_context_injection` enables the gateway-owned current-time and recall block; that block must remain after a stable cache anchor and must never carry `cache_control`.

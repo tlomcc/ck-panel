@@ -17,6 +17,7 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "worldbook_injection_position": "system_tail",
   "api_base": "upstream base URL",
   "upstream_key": "upstream key",
+  "nc_context_injection": true,
   "recall": true,
   "ck_thinking_enabled": false,
   "ck_thinking_prompt": "visible pseudo-thinking style prompt",
@@ -45,9 +46,13 @@ Do not send these fields:
 
 `prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` omits `prompt_cache_ttl` and does not request explicit Anthropic-style `cache_control`. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
 
-`recall` controls only gateway memory recall. `true` means the gateway may query memory and inject a `<ck_gateway_context>` block when recall returns content. `false` still routes through the gateway, but must not query memory, must not inject `<ck_gateway_context>`, and should strip old gateway recall blocks from hidden history so stale recall does not leak into the no-recall mode.
+`nc_context_injection` is the master switch for gateway-owned dynamic context. When it is `true`, the gateway may add the current Beijing time and, when `recall` is also `true`, query and append memory recall inside one `<ck_gateway_context>` block. When it is `false`, the gateway must not add time or recall context.
 
-The gateway must not inject a changing current-time block just because recall is enabled. If memory recall returns no content, the gateway should skip `<ck_gateway_context>` entirely. Dynamic recall, if present, must stay after a stable user cache anchor and must not itself carry `cache_control`.
+`recall` controls memory lookup inside the enabled NC context mode. `false` may still leave the current-time block enabled, but must not query memory. Disabling NC context should strip old gateway context blocks from hidden history so stale time or recall does not leak into later requests.
+
+The changing current-time and recall block must stay after the latest real user's stable text block and must not itself carry `cache_control`. In `single_5m`, the anchor remains on real user text before the dynamic block. In `assistant_latest`, the anchor remains on the previous assistant. In `prefix_24h`, no explicit anchor is added and the dynamic block remains at the changing tail after the reusable common prefix.
+
+Optimistic rendering must not mutate the transport contract. The panel may persist/render a `pending_user` immediately, but `window_messages` must continue to exclude that pending turn until it is represented by `text`; request serialization, retry reuse, transport selection, TTL and retention fields remain unchanged apart from explicitly added feature fields such as `nc_context_injection`.
 
 `transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts. The panel should omit this field when it has no hidden transport yet, and the gateway should ignore empty transport arrays so `window_messages` or gateway session history can still be used.
 
