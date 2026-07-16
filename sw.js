@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v115-chat-v95-optimistic-hot-context';
+const CACHE_NAME = 'ck-panel-shell-v116-chat-v96-context-cache-persistence';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v95-optimistic-hot-context',
-  './polish.css?v=chat-v95-optimistic-hot-context',
-  './chat.css?v=chat-v95-optimistic-hot-context',
-  './wechat.css?v=chat-v95-optimistic-hot-context',
-  './script.js?v=chat-v95-optimistic-hot-context',
-  './script-extra.js?v=chat-v95-optimistic-hot-context',
-  './pwa.js?v=chat-v95-optimistic-hot-context',
+  './style.css?v=chat-v96-context-cache-persistence',
+  './polish.css?v=chat-v96-context-cache-persistence',
+  './chat.css?v=chat-v96-context-cache-persistence',
+  './wechat.css?v=chat-v96-context-cache-persistence',
+  './script.js?v=chat-v96-context-cache-persistence',
+  './script-extra.js?v=chat-v96-context-cache-persistence',
+  './pwa.js?v=chat-v96-context-cache-persistence',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

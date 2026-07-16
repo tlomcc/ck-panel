@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v95-optimistic-hot-context';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v96-context-cache-persistence';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2090,6 +2090,7 @@ function toast(msg,duration){var t=document.getElementById('toast');t.textConten
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 var CHAT_CONFIG_KEY='ckChatConfigV2';
+var CHAT_CACHE_STRATEGY_KEY='ckChatCacheStrategyV1';
 var CHAT_MESSAGES_KEY='ckChatSessionsV2';
 var CHAT_DEBUG_KEY='ckChatDebugV1';
 var CHAT_DEBUG_TTL=24*60*60*1000;
@@ -2526,9 +2527,9 @@ function chatCacheStrategyMeta(value){
       label:'24h 共同缓存',
       shortLabel:'24h',
       ttl:'',
-      ttlLabel:'NC 自动',
+      ttlLabel:'自动',
       retentionSeconds:0,
-      sendText:'NC 24h 共同内容缓存；不发送显式 cache_control，旧召回和旧图片每轮剔除',
+      sendText:'24h 共同前缀缓存；不发送显式 cache_control，旧召回和旧图片每轮剔除',
       debugText:'共同内容自动缓存 + 清旧召回/旧图片'
     };
   }
@@ -2556,10 +2557,10 @@ function chatCacheStrategyMeta(value){
   };
 }
 function chatCacheStrategyTtlLabel(meta){
-  return (meta&&meta.ttlLabel)||(meta&&meta.ttl)||'NC 自动';
+  return (meta&&meta.ttlLabel)||(meta&&meta.ttl)||'自动';
 }
 function chatCacheStrategyTtlDetail(meta){
-  if(meta&&meta.value==='prefix_24h')return '不发送显式 cache_control；由 NC 共同内容缓存自动处理';
+  if(meta&&meta.value==='prefix_24h')return '不发送显式 cache_control；由上游共同前缀缓存自动处理';
   return 'cache_control TTL：'+chatCacheStrategyTtlLabel(meta)+'（只影响上游缓存有效期，不截断历史）';
 }
 function chatRecallMeta(enabled){
@@ -2586,7 +2587,7 @@ function chatRenderNcContextState(statusText,statusKind){
   if(input)input.checked=enabled;
   var status=document.getElementById('chat-nc-context-save-status');
   if(status){
-    status.textContent=statusText||('已保存：'+(enabled?'开启｜时间与召回位于缓存断点之后':'关闭｜不注入动态时间或记忆'));
+    status.textContent=statusText||('已保存：'+(enabled?'开启｜只注入当前时间':'关闭｜不注入当前时间'));
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
   }
 }
@@ -2784,6 +2785,10 @@ function chatLoadConfig(){
       Object.keys(saved||{}).forEach(function(k){cfg[k]=saved[k]});
     }
   }catch(e){}
+  try{
+    var savedCacheStrategy=localStorage.getItem(CHAT_CACHE_STRATEGY_KEY);
+    if(savedCacheStrategy)cfg.cacheStrategy=chatNormalizeCacheStrategy(savedCacheStrategy);
+  }catch(e){}
   cfg.gatewayUrl=GRAPH_API_BASE;
   cfg.mcpUrl=API_BASE;
   if(!cfg.sessionId)cfg.sessionId=chatSessionId();
@@ -2821,6 +2826,8 @@ function chatSaveConfigObject(cfg){
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimThreshold=trim.threshold;
   cfg.autoTrimDrop=trim.drop;
+  cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
+  try{localStorage.setItem(CHAT_CACHE_STRATEGY_KEY,cfg.cacheStrategy)}catch(e){}
   try{localStorage.setItem(CHAT_CONFIG_KEY,JSON.stringify(cfg))}catch(e){}
 }
 function chatMergeLiveToggleState(cfg){
@@ -3490,6 +3497,7 @@ function chatSaveCacheStrategy(auto){
   if(strategy)strategy.value=meta.value;
   var retention=document.getElementById('chat-recall-retention-seconds');
   if(retention)retention.value=String(meta.retentionSeconds);
+  try{localStorage.setItem(CHAT_CACHE_STRATEGY_KEY,meta.value)}catch(e){}
   var cfg=chatSaveConfig(true);
   chatRenderCacheStrategyState('已保存成功：'+meta.label+'｜发送：'+meta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(meta),'ok');
   if(!auto)toast('缓存模式已保存：'+meta.label);
@@ -3506,8 +3514,8 @@ function chatSaveRecallSetting(auto){
 function chatSaveNcContextInjection(auto){
   var cfg=chatSaveConfig(true);
   var enabled=cfg.ncContextInjection!==false;
-  chatRenderNcContextState('已保存成功：'+(enabled?'开启｜动态上下文只放在稳定缓存断点之后':'关闭｜不注入动态上下文'),'ok');
-  if(!auto)toast('NC 上下文注入已'+(enabled?'开启':'关闭'));
+  chatRenderNcContextState('已保存成功：'+(enabled?'开启｜只注入当前时间':'关闭｜不注入当前时间'),'ok');
+  if(!auto)toast('当前时间上下文已'+(enabled?'开启':'关闭'));
   return cfg;
 }
 function chatSetRecallEnabled(enabled,auto){
@@ -6073,7 +6081,7 @@ async function chatSubmitPendingMessages(){
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     nc_context_injection:cfg.ncContextInjection!==false,
-    recall:cfg.ncContextInjection!==false&&cfg.recall!==false,
+    recall:cfg.recall!==false,
     ck_thinking_enabled:cfg.fakeThinking===true,
     ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),

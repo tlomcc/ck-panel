@@ -46,9 +46,9 @@ Do not send these fields:
 
 `prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` omits `prompt_cache_ttl` and does not request explicit Anthropic-style `cache_control`. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
 
-`nc_context_injection` is the master switch for gateway-owned dynamic context. When it is `true`, the gateway may add the current Beijing time and, when `recall` is also `true`, query and append memory recall inside one `<ck_gateway_context>` block. When it is `false`, the gateway must not add time or recall context.
+`nc_context_injection` controls only the gateway-owned current Beijing time. It must not enable or disable memory lookup.
 
-`recall` controls memory lookup inside the enabled NC context mode. `false` may still leave the current-time block enabled, but must not query memory. Disabling NC context should strip old gateway context blocks from hidden history so stale time or recall does not leak into later requests.
+`recall` independently controls memory lookup and memory injection. The valid combinations are neither, time only, memory only, and time plus memory. Turning either switch off must remove only that dynamic component on the next rebuilt context without changing the selected cache strategy.
 
 The changing current-time and recall block must stay after the latest real user's stable text block and must not itself carry `cache_control`. In `single_5m`, the anchor remains on real user text before the dynamic block. In `assistant_latest`, the anchor remains on the previous assistant. In `prefix_24h`, no explicit anchor is added and the dynamic block remains at the changing tail after the reusable common prefix.
 
