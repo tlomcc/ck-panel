@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v97-zero-lag-send';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v98-message-group-layout';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4874,25 +4874,75 @@ function chatAssistantSplitTarget(text,unitCount){
   else n=r<0.75?5:6+Math.floor(Math.random()*3);
   return Math.max(1,Math.min(10,Math.min(n,unitCount)));
 }
+function chatSplitOutsideCodeBlocks(text){
+  var lines=String(text||'').replace(/\r\n/g,'\n').split('\n');
+  var blocks=[],buf=[],inFence=false,fence='';
+  function flush(forceCode){
+    var value=buf.join('\n').trim();
+    if(value)blocks.push({text:value,code:forceCode===true||inFence});
+    buf=[];
+  }
+  lines.forEach(function(line){
+    var mark=line.match(/^\s*(`{3,}|~{3,})/);
+    if(mark){
+      if(!inFence){
+        flush();
+        inFence=true;
+        fence=mark[1].charAt(0);
+      }
+      buf.push(line);
+      if(inFence&&mark[1].charAt(0)===fence&&buf.length>1){
+        inFence=false;
+        fence='';
+        flush(true);
+      }
+      return;
+    }
+    if(inFence){buf.push(line);return;}
+    if(!line.trim()){flush();return;}
+    buf.push(line);
+  });
+  flush();
+  return blocks;
+}
+function chatHasUnclosedCodeBlock(text){
+  var inFence=false,fence='';
+  String(text||'').replace(/\r\n/g,'\n').split('\n').forEach(function(line){
+    var mark=line.match(/^\s*(`{3,}|~{3,})/);
+    if(!mark)return;
+    var kind=mark[1].charAt(0);
+    if(!inFence){inFence=true;fence=kind;}
+    else if(kind===fence){inFence=false;fence='';}
+  });
+  return inFence;
+}
 function chatNaturalUnits(text){
-  var paragraphs=String(text||'').replace(/\r\n/g,'\n').split(/\n{2,}/).map(function(x){return x.trim()}).filter(Boolean);
+  var protectedBlocks=chatSplitOutsideCodeBlocks(text);
+  var paragraphs=protectedBlocks.map(function(x){return x.text}).filter(Boolean);
   if(paragraphs.length>1){
     var usable=paragraphs.every(function(p){var len=chatNaturalTextLen(p);return len>=8&&len<=180});
     if(usable)return paragraphs;
   }
   var units=[];
-  var lines=String(text||'').split(/\n+/);
+  var lines=[];
+  protectedBlocks.forEach(function(block){
+    if(block.code){lines.push({text:block.text,code:true});return;}
+    block.text.split(/\n+/).forEach(function(line){lines.push({text:line,code:false})});
+  });
   var i=0;
   while(i<lines.length){
-    var line=lines[i].trim();
+    var item=lines[i];
+    var line=item.text.trim();
     if(!line){i++;continue;}
+    if(item.code){units.push(line);i++;continue;}
     var isOrderedListItem=/^\d+[.、]\s*/.test(line);
     var isUnorderedListItem=/^[-*]\s/.test(line);
     if(isOrderedListItem||isUnorderedListItem){
       var listBlock=[line];
       var j=i+1;
       while(j<lines.length){
-        var nextLine=lines[j].trim();
+        if(lines[j].code)break;
+        var nextLine=lines[j].text.trim();
         if(!nextLine){j++;continue;}
         var nextIsOrdered=/^\d+[.、]\s*/.test(nextLine);
         var nextIsUnordered=/^[-*]\s/.test(nextLine);
@@ -4954,6 +5004,7 @@ function chatSplitAssistantReplies(rawText,splitEnabled){
   var text=parsed.text.trim();
   if(!text)return parsed.thinking?[rawText]:[];
   if(splitEnabled===false)return [rawText];
+  if(chatHasUnclosedCodeBlock(text))return [rawText];
   var units=chatNaturalUnits(text);
   if(/\n{2,}/.test(text)&&units.length>1&&units.length<=6){
     if(parsed.thinking)units[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+units[0];
@@ -5687,12 +5738,13 @@ function chatRenderMessageRow(m,i){
   }
   var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false,m.tools):esc(m.text||'');
   if(role==='user')inner=chatRenderUserMessageContent(m);
+  var isGroupLast=chatIsMessageGroupLast(i,role);
   var toolButtons=role==='system'?[]:['<button class="chat-msg-act" data-act="copy" data-i="'+i+'" title="复制">复制</button>'];
-  if(role==='user'&&!pending&&!m.sendFailed)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
+  if(role==='assistant'&&isGroupLast&&!assistantError&&!assistantStopped)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
   var tools=toolButtons.length?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
-  var userMeta=role==='user'?chatUserMessageMetaHtml(m):'';
+  var userMeta=role==='user'?chatUserMessageMetaHtml(m,isGroupLast):'';
   if(role==='user'&&m.sendFailed)userMeta+='<button class="chat-user-retry" type="button" data-act="retry" data-i="'+i+'">发送失败 · 点击重试</button>';
-  var time=role==='assistant'?chatMessageTimingHtml(m,role):'';
+  var time=role==='assistant'?chatMessageTimingHtml(m,role,isGroupLast):'';
   var imageCount=chatMessageImages(m).length;
   var bubbleState=(imageCount?' has-images':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
@@ -5700,9 +5752,15 @@ function chatRenderMessageRow(m,i){
   var fresh=chatFreshMessageKeys.has(chatMessageAnimKey(m))?' chat-fresh':'';
   return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+'">'+(role==='assistant'?recall:'')+bubble+versionNav+tools+userMeta+time+'</div>';
 }
-function chatMessageTimingHtml(m,role){
+function chatIsMessageGroupLast(i,role){
+  var next=chatMessages[i+1];
+  if(!next||next.role==='notice')return true;
+  var nextRole=next.role==='pending_user'?'user':(next.role==='user'?'user':(next.role==='system'?'system':'assistant'));
+  return nextRole!==role;
+}
+function chatMessageTimingHtml(m,role,showTimestamp){
   var bits=[],ts=Number(m&&m.ts)||0;
-  if(ts)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
+  if(ts&&showTimestamp!==false)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
   if(role==='user'){
     if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
     else bits.push(chatCacheTickHtml(m));
@@ -5713,8 +5771,8 @@ function chatMessageTimingHtml(m,role){
   if(!bits.length)return '';
   return '<div class="chat-msg-time'+(role==='user'?' chat-msg-meta':'')+'">'+bits.join('')+'</div>';
 }
-function chatUserMessageMetaHtml(m){
-  return chatMessageTimingHtml(m,'user');
+function chatUserMessageMetaHtml(m,showTimestamp){
+  return chatMessageTimingHtml(m,'user',showTimestamp);
 }
 function chatCacheTickHtml(m){
   var hit=!!(m&&m.cacheHit);
@@ -6000,6 +6058,11 @@ async function chatSendMessage(){
 function chatRegenerateFromUser(i){
   if(chatSending)return;
   var m=chatMessages[i];
+  if(m&&m.role==='assistant'){
+    for(i=i-1;i>=0;i--){
+      if(chatMessages[i]&&chatMessages[i].role==='user'){m=chatMessages[i];break;}
+    }
+  }
   if(!m||m.role!=='user'||!chatMessageHasContent(m))return;
   chatMessages=chatMessages.slice(0,i+1);
   chatMessages[i].role='pending_user';

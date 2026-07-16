@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v117-chat-v97-zero-lag-send';
+const CACHE_NAME = 'ck-panel-shell-v118-chat-v98-message-group-layout';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v97-zero-lag-send',
-  './polish.css?v=chat-v97-zero-lag-send',
-  './chat.css?v=chat-v97-zero-lag-send',
-  './wechat.css?v=chat-v97-zero-lag-send',
-  './script.js?v=chat-v97-zero-lag-send',
-  './script-extra.js?v=chat-v97-zero-lag-send',
-  './pwa.js?v=chat-v97-zero-lag-send',
+  './style.css?v=chat-v98-message-group-layout',
+  './polish.css?v=chat-v98-message-group-layout',
+  './chat.css?v=chat-v98-message-group-layout',
+  './wechat.css?v=chat-v98-message-group-layout',
+  './script.js?v=chat-v98-message-group-layout',
+  './script-extra.js?v=chat-v98-message-group-layout',
+  './pwa.js?v=chat-v98-message-group-layout',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

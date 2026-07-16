@@ -42,7 +42,14 @@ body.chat-active{
 body.chat-active #page-memory{
   grid-template-rows:minmax(0,1fr)!important;
   background:var(--wx-bg)!important;
+  width:100vw!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:0!important;
 }
+body.chat-active #tab-chat,
+body.chat-active .chat-shell,
+body.chat-active .chat-main{width:100%!important;max-width:none!important;margin-left:0!important;margin-right:0!important}
 body.chat-active .app-header{display:none!important}
 body.chat-active #tab-chat,
 body.chat-active .chat-shell,
