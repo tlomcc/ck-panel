@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v122-chat-v102-stable-list-send-frame';
+const CACHE_NAME = 'ck-panel-shell-v123-chat-v103-unified-key-gate';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v102-stable-list-send-frame',
-  './polish.css?v=chat-v102-stable-list-send-frame',
-  './chat.css?v=chat-v102-stable-list-send-frame',
-  './wechat.css?v=chat-v102-stable-list-send-frame',
-  './script.js?v=chat-v102-stable-list-send-frame',
-  './script-extra.js?v=chat-v102-stable-list-send-frame',
-  './pwa.js?v=chat-v102-stable-list-send-frame',
+  './style.css?v=chat-v103-unified-key-gate',
+  './polish.css?v=chat-v103-unified-key-gate',
+  './chat.css?v=chat-v103-unified-key-gate',
+  './wechat.css?v=chat-v103-unified-key-gate',
+  './script.js?v=chat-v103-unified-key-gate',
+  './script-extra.js?v=chat-v103-unified-key-gate',
+  './pwa.js?v=chat-v103-unified-key-gate',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

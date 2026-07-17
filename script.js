@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v102-stable-list-send-frame';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v103-unified-key-gate';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -15,14 +15,14 @@ try{
   }
 }catch(e){}
 var PANEL_CACHE_KEY='ckPanelCacheV4';
-var ckDialogState={resolve:null,mode:'confirm',defaultValue:'',required:false,returnFocus:null};
+var ckDialogState={resolve:null,mode:'confirm',defaultValue:'',required:false,cancelable:true,returnFocus:null};
 function ckOpenDialog(opts){
   opts=opts||{};
   var modal=document.getElementById('ckActionModal');
   if(!modal)return Promise.resolve(opts.mode==='prompt'?null:false);
   var returnFocus=ckDialogState.resolve?ckDialogState.returnFocus:document.activeElement;
   if(ckDialogState.resolve)ckDialogState.resolve(ckDialogState.mode==='prompt'?null:false);
-  ckDialogState={resolve:null,mode:opts.mode==='prompt'?'prompt':'confirm',defaultValue:String(opts.value||''),required:opts.required===true,returnFocus:returnFocus};
+  ckDialogState={resolve:null,mode:opts.mode==='prompt'?'prompt':'confirm',defaultValue:String(opts.value||''),required:opts.required===true,cancelable:opts.cancelable!==false,returnFocus:returnFocus};
   var title=document.getElementById('ck-action-title');
   var message=document.getElementById('ck-action-message');
   var input=document.getElementById('ck-action-input');
@@ -40,7 +40,8 @@ function ckOpenDialog(opts){
     confirm.textContent=opts.confirmText||'确定';
     confirm.className='btn '+(opts.danger?'btn-red':'btn-blue')+' btn-sm';
   }
-  if(cancel)cancel.textContent=opts.cancelText||'取消';
+  if(cancel){cancel.textContent=opts.cancelText||'取消';cancel.hidden=!ckDialogState.cancelable}
+  modal.classList.toggle('panel-auth-gate',opts.authGate===true);
   modal.classList.add('show');
   modal.setAttribute('aria-hidden','false');
   return new Promise(function(resolve){
@@ -64,7 +65,7 @@ function ckCloseDialog(value){
     setTimeout(function(){try{returnFocus.focus({preventScroll:true})}catch(e){try{returnFocus.focus()}catch(_e){}}},0);
   }
 }
-function ckDialogCancel(){ckCloseDialog(ckDialogState.mode==='prompt'?null:false)}
+function ckDialogCancel(){if(!ckDialogState.cancelable)return;ckCloseDialog(ckDialogState.mode==='prompt'?null:false)}
 function ckDialogSubmit(){
   if(ckDialogState.mode==='prompt'){
     var input=document.getElementById('ck-action-input');
@@ -292,44 +293,143 @@ function confirmPanelUpdate(){
   ckPanelForceReload(latest);
 }
 function initApiKeyFromUrl(){
+  var key='';
   try{
     var params=new URLSearchParams(window.location.search||'');
-    var key=params.get('key');
+    key=String(params.get('key')||'').trim();
     if(key){
-      localStorage.setItem(API_KEY_STORAGE,key);
       params.delete('key');
       var qs=params.toString();
       var clean=window.location.pathname+(qs?'?'+qs:'')+(window.location.hash||'');
       history.replaceState(null,'',clean);
     }
   }catch(e){}
+  return key;
 }
-function apiUrl(){
-  var key='';
-  try{key=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
-  return key?API_BASE+'?key='+encodeURIComponent(key):API_BASE;
+var panelAuthKey='';
+var panelAuthPromise=null;
+var panelAppStarted=false;
+function readStoredPanelKey(){
+  try{return String(localStorage.getItem(API_KEY_STORAGE)||'').trim()}catch(e){return ''}
 }
-function addStoredKey(url){
-  var key='';
-  try{key=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
-  if(!key)return url;
-  try{
-    var u=new URL(url,window.location.href);
-    if(!u.searchParams.get('key'))u.searchParams.set('key',key);
-    return u.toString();
-  }catch(e){
-    return url+(url.indexOf('?')>=0?'&':'?')+'key='+encodeURIComponent(key);
+function isPanelAuthenticated(){
+  return !!panelAuthKey&&readStoredPanelKey()===panelAuthKey;
+}
+function setPanelAuthLocked(locked,message){
+  if(document.body)document.body.classList.toggle('panel-auth-locked',!!locked);
+  var wrap=document.getElementById('loading-wrap');
+  if(locked&&wrap)wrap.classList.remove('done');
+  if(message)setLoading(locked?8:12,message);
+}
+function stopPanelDataTimers(){
+  if(typeof stopMemoryRealtime==='function')stopMemoryRealtime();
+  if(typeof stopEntityGraphRealtime==='function')stopEntityGraphRealtime();
+  if(typeof stopDailyStatusRealtime==='function')stopDailyStatusRealtime();
+}
+function resumePanelDataTimers(){
+  if(!panelAppStarted)return;
+  if(typeof startMemoryRealtime==='function')startMemoryRealtime();
+  if(currentPanelTab==='graph'&&typeof startEntityGraphRealtime==='function')startEntityGraphRealtime();
+  if(currentPanelTab==='status'&&typeof startDailyStatusRealtime==='function')startDailyStatusRealtime();
+}
+function clearPanelAuthentication(failedKey){
+  failedKey=String(failedKey||'').trim();
+  var stored=readStoredPanelKey();
+  if(!failedKey||!stored||stored===failedKey){
+    try{localStorage.removeItem(API_KEY_STORAGE)}catch(e){}
   }
+  panelAuthKey='';
+  stopPanelDataTimers();
+  setPanelAuthLocked(true,'等待 CK 网关面板 Key...');
+}
+function verifyPanelKey(key){
+  key=String(key||'').trim();
+  if(!key)return Promise.resolve(false);
+  var url=urlWithPanelKey(GRAPH_API_BASE+'/config?__ck_auth='+Date.now(),key);
+  return fetch(url,{cache:'no-store',headers:{'Cache-Control':'no-cache'}}).then(function(r){
+    return r.ok;
+  });
+}
+function promptPanelKey(label,message){
+  var text=label||'CK 网关面板 Key';
+  return ckPromptDialog(text,'',{
+    message:message||'请输入 CK 网关面板 Key。验证通过后才会加载面板数据。',
+    placeholder:text,
+    inputType:'password',
+    confirmText:'验证并进入',
+    required:true,
+    cancelable:false,
+    authGate:true
+  });
+}
+function saveVerifiedPanelKey(key){
+  if(!saveRequestedApiKey(key))return false;
+  panelAuthKey=String(key||'').trim();
+  setPanelAuthLocked(false,'验证通过，正在加载...');
+  resumePanelDataTimers();
+  return true;
+}
+function ensurePanelAuthenticated(opts){
+  opts=opts||{};
+  if(isPanelAuthenticated()&&!opts.forcePrompt)return Promise.resolve(panelAuthKey);
+  if(panelAuthPromise)return panelAuthPromise;
+  setPanelAuthLocked(true,'正在验证访问权限...');
+  var candidate=opts.forcePrompt?'':String(opts.candidate||readStoredPanelKey()||'').trim();
+  var message=opts.message||'';
+  panelAuthPromise=(async function(){
+    while(true){
+      if(!candidate){
+        candidate=String(await promptPanelKey(opts.label,message)||'').trim();
+        message='';
+      }
+      setPanelAuthLocked(true,'正在验证 Key...');
+      try{
+        if(await verifyPanelKey(candidate)){
+          saveVerifiedPanelKey(candidate);
+          return candidate;
+        }
+        clearPanelAuthentication(candidate);
+        message='Key 验证失败，未加载任何面板数据。请重新输入。';
+      }catch(e){
+        panelAuthKey='';
+        stopPanelDataTimers();
+        setPanelAuthLocked(true,'网关暂时无法连接，数据仍保持锁定。');
+        message='暂时无法连接 CK 网关，未加载任何面板数据。请检查网络后重试。';
+      }
+      candidate='';
+    }
+  })();
+  return panelAuthPromise.finally(function(){panelAuthPromise=null});
+}
+function panelDataFetch(url,init,opts){
+  opts=opts||{};
+  function run(key){
+    var target=typeof url==='function'?url(key):url;
+    if(opts.addKey!==false)target=urlWithPanelKey(target,key);
+    return fetch(target,init);
+  }
+  return ensurePanelAuthenticated().then(function(key){
+    return run(key).then(function(r){
+      if(r.status!==401&&r.status!==403)return r;
+      clearPanelAuthentication(key);
+      return ensurePanelAuthenticated({label:opts.label}).then(function(nextKey){
+        return run(nextKey).then(function(retry){
+          if(retry.status===401||retry.status===403){clearPanelAuthentication(nextKey)}
+          return retry;
+        });
+      });
+    });
+  });
 }
 function storedPanelKey(){
+  if(panelAuthKey)return panelAuthKey;
   var field='';
   try{
     var el=document.getElementById('chat-panel-key');
     field=el?String(el.value||'').trim():'';
   }catch(e){}
   if(field)return field;
-  try{return String(localStorage.getItem(API_KEY_STORAGE)||'').trim()}catch(e){}
-  return '';
+  return readStoredPanelKey();
 }
 function urlWithPanelKey(url,key){
   key=String(key||storedPanelKey()||'').trim();
@@ -354,15 +454,11 @@ function saveRequestedApiKey(key){
 }
 function requestApiKey(label){return requestApiKeyDialog(label)}
 function requestApiKeyDialog(label){
-  var text=label||'CK 网关面板 Key';
-  return ckPromptDialog(text,'',{message:'后端已开启访问密钥，请输入后继续。',placeholder:text,inputType:'password',confirmText:'保存',required:true})
-    .then(saveRequestedApiKey);
+  clearPanelAuthentication();
+  return ensurePanelAuthenticated({forcePrompt:true,label:label||'CK 网关面板 Key'}).then(function(){return true});
 }
 function apiFetch(init){
-  return fetch(apiUrl(),init).then(function(r){
-    if(r.status===403)return requestApiKeyDialog().then(function(ok){return ok?fetch(apiUrl(),init):r});
-    return r;
-  });
+  return panelDataFetch(API_BASE,init);
 }
 function addEntityGraphParam(url,key,value){
   return url+(url.indexOf('?')>=0?'&':'?')+key+'='+encodeURIComponent(value);
@@ -376,10 +472,7 @@ function entityGraphUrl(full,force){
 }
 function entityGraphFetch(full,force){
   var init=force?{cache:'no-store'}:undefined;
-  return fetch(addStoredKey(entityGraphUrl(full,force)),init).then(function(r){
-    if(r.status===403)return requestApiKeyDialog().then(function(ok){return ok?fetch(addStoredKey(entityGraphUrl(full,force)),init):r});
-    return r;
-  });
+  return panelDataFetch(entityGraphUrl(full,force),init);
 }
 var MCP_TOOL_ALIASES={
   recall_memory:'mcp__memory__recall_memory',
@@ -599,7 +692,7 @@ function compareEntryTime(ea,eb,a,b,dir){
 function init(){
   syncPanelVersionBadge();
   startPanelVersionWatcher();
-  initApiKeyFromUrl();
+  var urlKey=initApiKeyFromUrl();
   try{
     var pending=sessionStorage.getItem('ck_panel_pending_reload')||'';
     var reloaded=sessionStorage.getItem('ck_panel_reloaded_to')||'';
@@ -615,6 +708,11 @@ function init(){
       },350);
     }
   }catch(e){}
+  ensurePanelAuthenticated({candidate:urlKey}).then(startPanelDataApp);
+}
+function startPanelDataApp(){
+  if(panelAppStarted)return;
+  panelAppStarted=true;
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
@@ -664,6 +762,7 @@ function scheduleRender(){
   setTimeout(function(){renderQueued=false;renderAll()},80);
 }
 function loadPanelCache(){
+  if(!isPanelAuthenticated())return false;
   try{
     var raw=localStorage.getItem(PANEL_CACHE_KEY);
     if(!raw)return false;
@@ -1237,11 +1336,7 @@ function egSheetTouchEnd(){
 var DAILY_STATUS_URL=GRAPH_API_BASE+'/daily-status';
 var dailyStatusTimer=null,dailyStatusLoading=false;
 function dailyStatusFetch(){
-  var u=function(){return addStoredKey(DAILY_STATUS_URL+'?_t='+Date.now())};
-  return fetch(u(),{cache:'no-store'}).then(function(r){
-    if(r.status===403)return requestApiKeyDialog().then(function(ok){return ok?fetch(u(),{cache:'no-store'}):r});
-    return r;
-  });
+  return panelDataFetch(DAILY_STATUS_URL+'?_t='+Date.now(),{cache:'no-store'});
 }
 function loadDailyStatus(force){
   var body=document.getElementById('daily-status-body');
@@ -1293,11 +1388,7 @@ var KEY_CONFIG_URL=GRAPH_API_BASE+'/config';
 function keyCfgFetch(init,opts){
   opts=opts||{};
   chatSyncPanelKeyToApiStorage();
-  var u=function(){return urlWithPanelKey(KEY_CONFIG_URL+'?_t='+Date.now())};
-  return fetch(u(),init).then(function(r){
-    if(r.status===403&&!opts.silentAuth)return requestApiKeyDialog('CK 网关面板 Key').then(function(ok){return ok?fetch(u(),init):r});
-    return r;
-  });
+  return panelDataFetch(KEY_CONFIG_URL+'?_t='+Date.now(),init,{label:'CK 网关面板 Key'});
 }
 
 function renderTags(){
@@ -2236,7 +2327,7 @@ async function chatCleanHistory(){
   var visibleCounts=chatCleanHistoryVisibleCounts();
   var url=chatCleanEndpoint(cfg);
   try{
-    var resp=await fetch(url,{
+    var resp=await panelDataFetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -2481,8 +2572,7 @@ function chatDebugRecordCostAmount(record){
   return chatMoney(cost.total,(cost.pricing&&cost.pricing.currency)||'¥');
 }
 function chatDefaultConfig(){
-  var panelKey='';
-  try{panelKey=localStorage.getItem(API_KEY_STORAGE)||''}catch(e){}
+  var panelKey=storedPanelKey();
   return {
     gatewayUrl:GRAPH_API_BASE,
     panelKey:panelKey,
@@ -2723,17 +2813,16 @@ function chatSyncPanelKeyToApiStorage(key){
     raw=el?el.value:'';
   }
   raw=String(raw||'').trim();
-  if(raw){
+  if(panelAuthKey&&raw===panelAuthKey){
     try{localStorage.setItem(API_KEY_STORAGE,raw)}catch(e){}
   }
-  return raw;
+  return panelAuthKey||raw;
 }
 function chatRenderMainRouteSummary(){
   var el=document.getElementById('chat-main-route-summary');
   if(!el)return;
   if(!apiProvidersLoaded){
-    var hasKey=false;
-    try{hasKey=!!localStorage.getItem(API_KEY_STORAGE)}catch(e){}
+    var hasKey=isPanelAuthenticated();
     var panelKeyEl=document.getElementById('chat-panel-key');
     if(panelKeyEl&&String(panelKeyEl.value||'').trim())hasKey=true;
     el.textContent=hasKey?'正在读取 API 配置的主链路...':'未读取 API 配置；当前浏览器没有保存面板 Key。';
@@ -2787,6 +2876,7 @@ function chatLoadConfig(){
       Object.keys(saved||{}).forEach(function(k){cfg[k]=saved[k]});
     }
   }catch(e){}
+  cfg.panelKey=storedPanelKey();
   try{
     var savedCacheStrategy=localStorage.getItem(CHAT_CACHE_STRATEGY_KEY);
     if(savedCacheStrategy)cfg.cacheStrategy=chatNormalizeCacheStrategy(savedCacheStrategy);
@@ -2813,7 +2903,7 @@ function chatSaveConfigObject(cfg){
   cfg=cfg&&typeof cfg==='object'?Object.assign({},cfg):{};
   cfg.gatewayUrl=GRAPH_API_BASE;
   cfg.mcpUrl=API_BASE;
-  chatSyncPanelKeyToApiStorage(cfg.panelKey);
+  cfg.panelKey=chatSyncPanelKeyToApiStorage(cfg.panelKey);
   delete cfg.apiBase;
   delete cfg.upstreamKey;
   delete cfg.model;
@@ -3643,9 +3733,8 @@ async function chatLoadWorldbooksRemote(silent){
     return false;
   }
   try{
-    var resp=await fetch(chatWorldbooksEndpoint(cfg)+'?key='+encodeURIComponent(cfg.panelKey),{
-      cache:'no-store',
-      headers:{'x-api-key':cfg.panelKey}
+    var resp=await panelDataFetch(chatWorldbooksEndpoint(cfg),{
+      cache:'no-store'
     });
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var data=await resp.json();
@@ -3675,9 +3764,9 @@ async function chatSaveWorldbooksRemote(worldbooks,silent){
     return false;
   }
   try{
-    var resp=await fetch(chatWorldbooksEndpoint(cfg)+'?key='+encodeURIComponent(cfg.panelKey),{
+    var resp=await panelDataFetch(chatWorldbooksEndpoint(cfg),{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':cfg.panelKey},
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({worldbooks:cfg.worldbooks})
     });
     var data=await resp.json().catch(function(){return {}});
@@ -3986,7 +4075,7 @@ async function chatRefreshGatewayDebug(){
   var cfg=chatLoadConfig();
   var url=chatDebugEndpoint(cfg)+'?key='+encodeURIComponent(cfg.panelKey||'')+'&session_id='+encodeURIComponent(cfg.sessionId||'');
   try{
-    var resp=await fetch(url,{cache:'no-store'});
+    var resp=await panelDataFetch(url,{cache:'no-store'});
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var data=await resp.json();
     var records=Array.isArray(data.records)?data.records:[];
@@ -5072,7 +5161,7 @@ async function chatFetchWithSilentRetry(url,requestInit,consumeResponse){
     try{
       var resp;
       try{
-        resp=await fetch(url,requestInit);
+        resp=await panelDataFetch(url,requestInit);
       }catch(fetchError){
         if(chatRequestWasAborted(fetchError,signal))throw fetchError;
         throw chatMarkNetworkFailure(fetchError);
@@ -6005,6 +6094,10 @@ function chatParseSse(buffer,onEvent){
 }
 function chatInit(){
   if(chatInitialized)return;
+  if(!isPanelAuthenticated()){
+    ensurePanelAuthenticated().then(chatInit);
+    return;
+  }
   chatInitialized=true;
   chatInitPlusPager();
   ckAttachChatSheetDismiss();
@@ -6016,9 +6109,7 @@ function chatInit(){
   chatLoadLocalMessages();
   chatWriteForm(chatLoadConfig());
   if(!apiProvidersLoaded){
-    try{
-      if(localStorage.getItem(API_KEY_STORAGE))loadApiProviders({silentAuth:true});
-    }catch(e){}
+    if(isPanelAuthenticated())loadApiProviders({silentAuth:true});
   }
   chatLoadWorldbooksRemote(true);
   chatRenderSessions();
@@ -6484,6 +6575,10 @@ document.addEventListener('touchend',function(e){
 },{passive:false});
 function switchPanelTab(tab,opts) {
   opts=opts||{};
+  if(!isPanelAuthenticated()){
+    ensurePanelAuthenticated().then(function(){switchPanelTab(tab,opts)});
+    return;
+  }
   currentPanelTab=tab;
   document.body.classList.toggle('chat-active',tab==='chat');
   document.querySelectorAll('.panel-tab').forEach(function(el){el.classList.remove('active')});
@@ -6600,6 +6695,7 @@ function stopMemoryRealtime(){
 }
 function loadAll(opts){
   opts=opts||{};
+  if(!isPanelAuthenticated())return ensurePanelAuthenticated().then(function(){return loadAll(opts)});
   if(memoryLoadInFlight)return Promise.resolve(false);
   memoryLoadInFlight=true;
   var hadCache=false;
@@ -6780,11 +6876,7 @@ function persistApiProviders(){
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})});
 }
 function reloadGatewayConfig(){
-  var u=function(){return addStoredKey(RELOAD_CONFIG_URL+'?_t='+Date.now())};
-  return fetch(u(),{method:'POST'}).then(function(r){
-    if(r.status===403)return requestApiKeyDialog().then(function(ok){return ok?fetch(u(),{method:'POST'}):r});
-    return r;
-  });
+  return panelDataFetch(RELOAD_CONFIG_URL+'?_t='+Date.now(),{method:'POST'});
 }
 function persistAndReload(okMsg){
   return persistApiProviders().then(function(res){
@@ -7094,10 +7186,7 @@ function pickAssignModel(sel){
   var inp=row.querySelector('.assign-model');if(inp&&sel.value)inp.value=sel.value;
 }
 function fetchModelsForProvider(p){
-  return fetch(addStoredKey(PROVIDER_MODELS_URL+'?_t='+Date.now()),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key})}).then(function(r){
-    if(r.status===403)return requestApiKeyDialog().then(function(ok){return ok?fetch(addStoredKey(PROVIDER_MODELS_URL+'?_t='+Date.now()),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key})}):r});
-    return r;
-  }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})}).then(function(res){
+  return panelDataFetch(PROVIDER_MODELS_URL+'?_t='+Date.now(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key})}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})}).then(function(res){
     if(!res.ok||!res.j||!res.j.ok)throw new Error((res.j&&res.j.error)||'拉取失败');
     return cleanModelList(res.j.models,p.model);
   });
