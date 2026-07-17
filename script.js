@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v104-mobile-version-badge';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v105-chat-send-fix';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5170,7 +5170,7 @@ async function chatFetchWithSilentRetry(url,requestInit,consumeResponse){
     try{
       var resp;
       try{
-        resp=await panelDataFetch(url,requestInit);
+        resp=await fetch(url,requestInit);
       }catch(fetchError){
         if(chatRequestWasAborted(fetchError,signal))throw fetchError;
         throw chatMarkNetworkFailure(fetchError);

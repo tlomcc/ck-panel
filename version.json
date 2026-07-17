@@ -1,8 +1,8 @@
 {
-  "version": "chat-v104-mobile-version-badge",
+  "version": "chat-v105-chat-send-fix",
   "notes": [
-    "手机聊天页标题下新增紧凑版本号",
-    "手机总览、分类等页面恢复版本号显示",
-    "保留 v103 的统一 Key 认证门禁"
+    "修复统一 Key 门禁引起的聊天发送失败",
+    "聊天恢复原有请求链路并继续使用请求体 Key 验证",
+    "保留全部数据页面的启动级统一 Key 门禁"
   ]
 }
