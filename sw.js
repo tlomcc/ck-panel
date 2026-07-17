@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v125-chat-v105-chat-send-fix';
+const CACHE_NAME = 'ck-panel-shell-v126-chat-v106-body-key-endpoints-fix';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v105-chat-send-fix',
-  './polish.css?v=chat-v105-chat-send-fix',
-  './chat.css?v=chat-v105-chat-send-fix',
-  './wechat.css?v=chat-v105-chat-send-fix',
-  './script.js?v=chat-v105-chat-send-fix',
-  './script-extra.js?v=chat-v105-chat-send-fix',
-  './pwa.js?v=chat-v105-chat-send-fix',
+  './style.css?v=chat-v106-body-key-endpoints-fix',
+  './polish.css?v=chat-v106-body-key-endpoints-fix',
+  './chat.css?v=chat-v106-body-key-endpoints-fix',
+  './wechat.css?v=chat-v106-body-key-endpoints-fix',
+  './script.js?v=chat-v106-body-key-endpoints-fix',
+  './script-extra.js?v=chat-v106-body-key-endpoints-fix',
+  './pwa.js?v=chat-v106-body-key-endpoints-fix',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v105-chat-send-fix';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v106-body-key-endpoints-fix';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2336,7 +2336,7 @@ async function chatCleanHistory(){
   var visibleCounts=chatCleanHistoryVisibleCounts();
   var url=chatCleanEndpoint(cfg);
   try{
-    var resp=await panelDataFetch(url,{
+    var resp=await fetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({

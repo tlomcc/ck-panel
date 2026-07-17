@@ -1,8 +1,8 @@
 {
-  "version": "chat-v105-chat-send-fix",
+  "version": "chat-v106-body-key-endpoints-fix",
   "notes": [
-    "修复统一 Key 门禁引起的聊天发送失败",
-    "聊天恢复原有请求链路并继续使用请求体 Key 验证",
-    "保留全部数据页面的启动级统一 Key 门禁"
+    "修复清理聊天历史时的 Failed to fetch",
+    "聊天与清理两个请求体 Key 接口均恢复原有请求路径",
+    "完成统一门禁改动涉及接口的全量调用审计"
   ]
 }
