@@ -115,7 +115,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v103-unified-key-gate').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v104-mobile-version-badge').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

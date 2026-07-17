@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v103-unified-key-gate';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v104-mobile-version-badge';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -150,9 +150,18 @@ function startPanelVersionWatcher(){
 }
 function syncPanelVersionBadge(){
   var el=document.getElementById('panel-version-badge');
-  if(!el)return;
-  el.textContent=CK_PANEL_VERSION;
-  el.title='当前版本 '+CK_PANEL_VERSION;
+  var match=String(CK_PANEL_VERSION||'').match(/(?:^|-)v(\d+)(?:-|$)/i);
+  var shortVersion=match?('v'+match[1]):String(CK_PANEL_VERSION||'');
+  if(el){
+    el.textContent=CK_PANEL_VERSION;
+    el.setAttribute('data-short-version',shortVersion);
+    el.title='当前版本 '+CK_PANEL_VERSION;
+  }
+  var chatEl=document.getElementById('chat-version-badge');
+  if(chatEl){
+    chatEl.textContent=shortVersion;
+    chatEl.title='当前版本 '+CK_PANEL_VERSION;
+  }
 }
 function chatRenderPanelUpdateNotes(notes){
   var wrap=document.getElementById('panel-update-notes');

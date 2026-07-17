@@ -160,6 +160,30 @@ body.chat-active .chat-messages{
   backface-visibility:hidden!important;
   will-change:scroll-position!important;
 }
+body.chat-active .chat-title-meta{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  min-width:0!important;
+}
+body.chat-active .chat-title-meta #chat-status{margin:3px 0 0!important}
+body.chat-active .chat-version-badge{
+  height:17px!important;
+  margin-top:3px!important;
+  padding:0 5px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 auto!important;
+  border:1px solid #d9ddd9!important;
+  border-radius:5px!important;
+  background:#f4f5f4!important;
+  color:#7d8580!important;
+  font-size:9px!important;
+  font-weight:700!important;
+  line-height:1!important;
+}
 body.chat-active .chat-msg-row{transform:translateZ(0)!important}
 body.chat-active .chat-msg-row.chat-fresh,
 body.chat-active .chat-typing,
@@ -1222,7 +1246,16 @@ body:not(.chat-active) .btn-blue{background:var(--wx-primary)!important;box-shad
   body:not(.chat-active) .brand-mark{width:34px!important;height:34px!important}
   body:not(.chat-active) .brand-lockup h1{max-width:110px!important;overflow:hidden!important;text-overflow:ellipsis!important;font-size:16px!important}
   body:not(.chat-active) .brand-lockup p{display:none!important}
-  body:not(.chat-active) .panel-version-badge{display:none!important}
+  body:not(.chat-active) .panel-version-badge{
+    height:26px!important;
+    padding:0 7px!important;
+    display:inline-flex!important;
+    font-size:0!important;
+  }
+  body:not(.chat-active) .panel-version-badge::after{
+    content:attr(data-short-version)!important;
+    font-size:10px!important;
+  }
   body:not(.chat-active) .header-actions{gap:3px!important}
   #tab-overview .overview-grid{grid-template-columns:1fr!important}
   #tab-overview .day-card{min-height:110px!important}
@@ -1249,6 +1282,7 @@ body.dark:not(.chat-active) .theme-toggle{background:transparent!important;color
 body.dark:not(.chat-active) .hamburger-btn:hover,
 body.dark:not(.chat-active) .theme-toggle:hover{background:#303033!important;color:#fff!important}
 body.dark:not(.chat-active) .panel-version-badge{background:#303033!important;color:#999!important;border:0!important}
+body.dark.chat-active .chat-version-badge{border-color:#3b403d!important;background:#292c2a!important;color:#9ba39e!important}
 
 body.dark #tab-overview .day-card,
 body.dark #tab-overview .stat-box,

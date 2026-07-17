@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v123-chat-v103-unified-key-gate';
+const CACHE_NAME = 'ck-panel-shell-v124-chat-v104-mobile-version-badge';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v103-unified-key-gate',
-  './polish.css?v=chat-v103-unified-key-gate',
-  './chat.css?v=chat-v103-unified-key-gate',
-  './wechat.css?v=chat-v103-unified-key-gate',
-  './script.js?v=chat-v103-unified-key-gate',
-  './script-extra.js?v=chat-v103-unified-key-gate',
-  './pwa.js?v=chat-v103-unified-key-gate',
+  './style.css?v=chat-v104-mobile-version-badge',
+  './polish.css?v=chat-v104-mobile-version-badge',
+  './chat.css?v=chat-v104-mobile-version-badge',
+  './wechat.css?v=chat-v104-mobile-version-badge',
+  './script.js?v=chat-v104-mobile-version-badge',
+  './script-extra.js?v=chat-v104-mobile-version-badge',
+  './pwa.js?v=chat-v104-mobile-version-badge',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
