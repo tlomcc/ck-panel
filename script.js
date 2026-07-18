@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v107-stream-render-nonblocking';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v108-xss-hardening';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1225,6 +1225,14 @@ function renderEntityCards(){
   var box=document.getElementById('eg-cards');
   var cnt=document.getElementById('eg-count');
   if(!box)return;
+  if(!box.dataset.egDelegated){
+    box.dataset.egDelegated='1';
+    box.addEventListener('click',function(ev){
+      var card=ev.target&&ev.target.closest?ev.target.closest('.eg-card[data-eg-key]'):null;
+      if(!card||!box.contains(card))return;
+      openEntityDetail(card.getAttribute('data-eg-type')||'node',card.dataset.egKey||'');
+    });
+  }
   if(!entityGraphData){box.innerHTML='<div class="empty-state small">加载中...</div>';return}
   var rows=entityFilteredRows();
   if(cnt)cnt.textContent='显示 '+rows.length+' 张';
@@ -1243,7 +1251,7 @@ function renderEntityCard(n,key){
   var chips=facts.map(function(f){return '<span class="eg-fact-chip"><i>'+esc(f.label)+'</i>'+esc(shortText(f.text,16))+'</span>'}).join('');
   var aliases=(n.aliases||[]).filter(Boolean);
   var aliasStr=aliases.length?'<span class="eg-card-alias">'+esc(aliases.slice(0,3).join(' / '))+'</span>':'';
-  return '<button class="eg-card eg-type-'+t+'" onclick="openEntityDetail(\'node\',\''+escAttr(key)+'\')">'+
+  return '<button class="eg-card eg-type-'+t+'" data-eg-type="node" data-eg-key="'+escAttr(key)+'">'+
     '<div class="eg-card-top"><span class="eg-badge eg-badge-'+t+'">'+esc(entityTypeLabel(t))+'</span>'+
     '<span class="eg-card-name">'+esc(graphNodeName(n))+'</span>'+aliasStr+
     '<span class="eg-card-imp">★'+(n.importance||5)+'</span></div>'+
@@ -1252,7 +1260,7 @@ function renderEntityCard(n,key){
     '</button>';
 }
 function renderRelationCard(r,key){
-  return '<button class="eg-card eg-type-relation" onclick="openEntityDetail(\'relation\',\''+escAttr(key)+'\')">'+
+  return '<button class="eg-card eg-type-relation" data-eg-type="relation" data-eg-key="'+escAttr(key)+'">'+
     '<div class="eg-card-top"><span class="eg-badge eg-badge-relation">关系</span>'+
     '<span class="eg-card-name">'+esc(r.source||'')+' → '+esc(r.target||'')+'</span>'+
     '<span class="eg-card-imp">★'+(r.importance||5)+'</span></div>'+
@@ -1662,7 +1670,7 @@ function renderEntryCard(i,e,isLong,compact){
   if(!compact&&e.meta.pin)metaHtml+='<span class="entry-badge pin">★ 置顶</span>';
   if(e.meta.imp>=7)metaHtml+='<span class="entry-badge imp-high">'+e.meta.imp+'/10</span>';
   else metaHtml+='<span class="entry-badge">'+e.meta.imp+'/10</span>';
-  if(!compact&&e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)metaHtml+='<span class="entry-badge">#'+tag+'</span>'});
+  if(!compact&&e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)metaHtml+='<span class="entry-badge">#'+esc(tag)+'</span>'});
   if(entryDate(e))metaHtml+='<span class="entry-badge entry-date-badge">'+timeAgo(entryDate(e))+'</span>';
   if(!compact){
     var days=e.meta.last?Math.floor((new Date()-new Date(e.meta.last))/864e5):0;var score;if(e.meta.pin&&e.meta.imp>=10){score='∞'}else if(e.meta.pin&&e.meta.imp>=9){score=Math.max(e.meta.imp*Math.pow(0.99,days),4).toFixed(2)}else{score=(e.meta.imp*Math.pow(0.99,days)).toFixed(2)}var scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' = '+score;

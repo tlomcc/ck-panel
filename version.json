@@ -1,8 +1,8 @@
 {
-  "version": "chat-v107-stream-render-nonblocking",
+  "version": "chat-v108-xss-hardening",
   "notes": [
-    "流式回复渲染改为 requestAnimationFrame 节流，每帧最多一次全量重渲染",
-    "接收循环只累加数据，不再逐 chunk 同步重排，回复过程中页面交互不再卡死",
-    "delta 与 tool 事件统一走渲染调度器，流结束和中断均取消挂起帧"
+    "修复条目标签存储型 XSS：列表卡片标签渲染改用 HTML 转义",
+    "修复实体卡片 onclick 内嵌 JS 转义不当：改为 data-key + 事件委托，含 key 特殊字符也安全",
+    "本版为安全加固批次，后续版本继续修复竞态与渲染健壮性问题"
   ]
 }

@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v127-chat-v107-stream-render-nonblocking';
+const CACHE_NAME = 'ck-panel-shell-v128-chat-v108-xss-hardening';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v107-stream-render-nonblocking',
-  './polish.css?v=chat-v107-stream-render-nonblocking',
-  './chat.css?v=chat-v107-stream-render-nonblocking',
-  './wechat.css?v=chat-v107-stream-render-nonblocking',
-  './script.js?v=chat-v107-stream-render-nonblocking',
-  './script-extra.js?v=chat-v107-stream-render-nonblocking',
-  './pwa.js?v=chat-v107-stream-render-nonblocking',
+  './style.css?v=chat-v108-xss-hardening',
+  './polish.css?v=chat-v108-xss-hardening',
+  './chat.css?v=chat-v108-xss-hardening',
+  './wechat.css?v=chat-v108-xss-hardening',
+  './script.js?v=chat-v108-xss-hardening',
+  './script-extra.js?v=chat-v108-xss-hardening',
+  './pwa.js?v=chat-v108-xss-hardening',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
