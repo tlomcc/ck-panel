@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v132-chat-v112-first-byte-latency-probe';
+const CACHE_NAME = 'ck-panel-shell-v133-chat-v113-live-typewriter-stream';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v112-first-byte-latency-probe',
-  './polish.css?v=chat-v112-first-byte-latency-probe',
-  './chat.css?v=chat-v112-first-byte-latency-probe',
-  './wechat.css?v=chat-v112-first-byte-latency-probe',
-  './script.js?v=chat-v112-first-byte-latency-probe',
-  './script-extra.js?v=chat-v112-first-byte-latency-probe',
-  './pwa.js?v=chat-v112-first-byte-latency-probe',
+  './style.css?v=chat-v113-live-typewriter-stream',
+  './polish.css?v=chat-v113-live-typewriter-stream',
+  './chat.css?v=chat-v113-live-typewriter-stream',
+  './wechat.css?v=chat-v113-live-typewriter-stream',
+  './script.js?v=chat-v113-live-typewriter-stream',
+  './script-extra.js?v=chat-v113-live-typewriter-stream',
+  './pwa.js?v=chat-v113-live-typewriter-stream',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

@@ -1,8 +1,8 @@
 {
-  "version": "chat-v112-first-byte-latency-probe",
+  "version": "chat-v113-live-typewriter-stream",
   "notes": [
-    "新增网关首个 delta 到面板首个 delta 的链路耗时记录，可用 debug_id 关联请求",
-    "区分响应头、首个网络 chunk、首个正文 delta、流结束和页面首字符渲染时间",
-    "诊断改动不改变请求体、缓存锚点或 v111 完整回复后打字的展示行为"
+    "首个可见 SSE delta 到达后立即开始逐字显示，不再等待 Claude 完整回复",
+    "基础速度 30–50ms，标点和换行加入自然停顿，流结束后从已显示前缀继续多气泡动画",
+    "移除闪烁光标、跳动圆点和空占位动画，保留最终 Markdown、自动跟底和立即补全"
   ]
 }

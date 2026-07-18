@@ -4956,8 +4956,6 @@ body.dark .chat-checks label{color:#aeb6c0}
 .chat-md .cb-copy:hover{background:var(--ck-accent-soft,#e8f8ef);color:var(--ck-accent-strong,#24956d)}
 .chat-md .cb pre{margin:0;padding:10px 12px;overflow-x:auto}
 .chat-md .cb code{background:none;border:none;padding:0;font-size:13px;line-height:1.55;white-space:pre}
-.chat-caret{display:inline-block;width:7px;height:1em;vertical-align:text-bottom;background:var(--ck-accent-strong,#24956d);border-radius:1px;animation:chatBlink 1s steps(2,start) infinite}
-@keyframes chatBlink{50%{opacity:0}}
 .chat-recall{align-self:flex-start;max-width:88%;font-size:12px;background:var(--ck-accent-soft,#e8f8ef);border:1px solid var(--ck-border,#e2ece6);border-radius:11px;overflow:hidden}
 .chat-recall-head{display:flex;align-items:center;gap:6px;padding:6px 11px;cursor:pointer;user-select:none;font-weight:600;color:var(--ck-text-soft,#40534b)}
 .chat-recall-head .chev{margin-left:auto;font-size:10px;transition:transform .2s}
