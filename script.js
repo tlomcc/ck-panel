@@ -6741,7 +6741,7 @@ function readMemoryCategoriesLimited(cats,onProgress){
             results.push(result);
             done++;
             if(!result.ok)failed++;
-            if(onProgress)onProgress(done,cats.length,failed,result);
+            if(onProgress){try{onProgress(done,cats.length,failed,result)}catch(e){}}
           }).then(function(){
             limit++;
             if(done>=cats.length)resolve({results:results,failed:failed});
@@ -6778,6 +6778,11 @@ function loadAll(opts){
   return rpcStrictRetry('list_memories',{},3).then(function(t){
     var cats=normalizeMemoryCategories(t);
     if(!cats.length){
+      if(allData&&Object.keys(allData).length){
+        setSyncStatus('仓库返回空列表，保留本地内容');
+        if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(160)}
+        return false;
+      }
       allData={};allTags=new Set();renderAll();savePanelCache();
       setSyncStatus('仓库暂无记忆');
       if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(160)}
