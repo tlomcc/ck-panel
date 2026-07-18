@@ -459,12 +459,13 @@ function urlWithPanelKey(url,key){
 function saveRequestedApiKey(key){
   key=String(key||'').trim();
   if(!key)return false;
-  try{localStorage.setItem(API_KEY_STORAGE,key)}catch(e){}
+  var stored=false;
+  try{localStorage.setItem(API_KEY_STORAGE,key);stored=readStoredPanelKey()===key}catch(e){stored=false}
   try{
     var el=document.getElementById('chat-panel-key');
     if(el)el.value=key;
   }catch(e){}
-  return true;
+  return stored;
 }
 function requestApiKey(label){return requestApiKeyDialog(label)}
 function requestApiKeyDialog(label){
@@ -1512,7 +1513,14 @@ function clearSearch(){document.getElementById('search-input').value='';document
 function highlightText(text,query){
   if(!query)return esc(text);
   var escaped=esc(text);
-  try{var re=new RegExp('('+query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');return escaped.replace(re,'<span class="highlight">$1</span>')}catch(e){return escaped}
+  try{
+    var re=new RegExp('('+query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    // Split off HTML entities (&amp; &lt; ...) so highlighting never lands inside one and corrupts it.
+    return escaped.split(/(&[a-zA-Z]+;|&#[0-9]+;)/).map(function(seg,i){
+      if(i%2===1)return seg; // entity segment, leave untouched
+      return seg.replace(re,'<span class="highlight">$1</span>');
+    }).join('');
+  }catch(e){return escaped}
 }
 function renderGrid(){
   var keys=Object.keys(allData);
@@ -1692,7 +1700,7 @@ function renderEntries(){
     html+='</div></section>';
   }
   if(pinned.length&&normal.length)html+='<div class="entry-section-head"><span>普通记忆</span><small>'+normal.length+' 条</small></div>';
-  normal.forEach(function(i){html+=renderEntryCard(i,entries[i],singleEntryIdx===null||entries[i].content.length>100,false)});
+  normal.forEach(function(i){html+=renderEntryCard(i,entries[i],entries[i].content.length>100,false)});
   document.getElementById('d-entries').innerHTML=count?html:'<div class="empty-state">暂无条目</div>';
   updateSwitchCounts();
 }
@@ -2253,6 +2261,7 @@ function chatCleanEndpoint(cfg){
 function chatShowCleanHistoryConfirm(){
   var modal=document.getElementById('chatCleanConfirm');
   if(!modal)return ckConfirmDialog('将清理历史消息中的图片和召回内容。',{title:'清理历史',confirmText:'确认',danger:true});
+  if(chatCleanHistoryResolver){var prev=chatCleanHistoryResolver;chatCleanHistoryResolver=null;prev(false);}
   modal.classList.add('show');
   return new Promise(function(resolve){
     chatCleanHistoryResolver=function(ok){
@@ -2509,17 +2518,15 @@ function chatUsageValue(usage,key){
 function chatUsageNumber(usage,key,fallbackKey){
   var keys=Array.isArray(key)?key.slice():[key];
   if(fallbackKey!==undefined)keys=keys.concat(Array.isArray(fallbackKey)?fallbackKey:[fallbackKey]);
-  var sawNumber=false;
   for(var i=0;i<keys.length;i++){
     var v=chatUsageValue(usage,keys[i]);
     if(v===undefined||v===null||v==='')continue;
     var n=Number(v);
     if((Number.isFinite?Number.isFinite(n):isFinite(n))){
-      sawNumber=true;
       if(n>0)return n;
     }
   }
-  return sawNumber?0:0;
+  return 0;
 }
 function chatUsageFlag(usage,key){
   var keys=Array.isArray(key)?key:[key];
@@ -5174,6 +5181,21 @@ function chatReplyRevealDelay(part,i,total){
   return Math.max(260,Math.min(980,260+len*10));
 }
 function chatSleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
+function chatAbortableSleep(ms,signal){
+  return new Promise(function(resolve){
+    if(signal&&signal.aborted)return resolve(true);
+    var done=false;
+    var timer=setTimeout(function(){finish(false)},ms);
+    function finish(aborted){
+      if(done)return;done=true;
+      clearTimeout(timer);
+      if(signal&&signal.removeEventListener)signal.removeEventListener('abort',onAbort);
+      resolve(aborted);
+    }
+    function onAbort(){finish(true)}
+    if(signal&&signal.addEventListener)signal.addEventListener('abort',onAbort);
+  });
+}
 function chatCreateAbortError(){
   var err=new Error('The operation was aborted.');
   err.name='AbortError';
@@ -5277,7 +5299,11 @@ async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
       chatRenderMessages({smooth:true,respectUserScroll:true,newMessage:true});
     }
     var wait=chatReplyRevealDelay(part,i,parts.length);
-    if(wait)await chatSleep(wait);
+    if(wait){
+      var signal=chatAbort&&chatAbort.signal;
+      await chatAbortableSleep(wait,signal);
+      if(signal&&signal.aborted)break;
+    }
   }
 }
 function chatCopyText(t){
@@ -6154,12 +6180,17 @@ function chatParseSse(buffer,onEvent){
   while((idx=buffer.indexOf('\n\n'))>=0){
     var raw=buffer.slice(0,idx);
     buffer=buffer.slice(idx+2);
-    var ev='message',data='';
+    var ev='message',dataLines=[];
     raw.split('\n').forEach(function(line){
       if(line.indexOf('event:')===0)ev=line.slice(6).trim();
-      else if(line.indexOf('data:')===0)data+=line.slice(5).trim();
+      else if(line.indexOf('data:')===0){
+        var d=line.slice(5);
+        if(d.charAt(0)===' ')d=d.slice(1);
+        dataLines.push(d);
+      }
     });
-    if(data){
+    var data=dataLines.join('\n');
+    if(data.trim()){
       try{onEvent(ev,JSON.parse(data))}
       catch(e){onEvent('error',{error:String(e),raw:data})}
     }
