@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v108-xss-hardening';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v109-race-render-hardening';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
