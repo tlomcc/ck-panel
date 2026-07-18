@@ -961,6 +961,7 @@ function loadEntityGraph(showPanel,force,opts){
 function graphTerm(s){return String(s||'').trim().toLowerCase()}
 function graphNodeKey(n){return String((n&&n.key)||(n&&n.name)||'').trim()}
 function graphNodeName(n){return String((n&&n.name)||(n&&n.key)||'').trim()}
+function numOr(v,def){var n=Number(v);return isFinite(n)?n:def}
 function findGraphNode(data,key){
   var term=graphTerm(key),nodes=(data&&data.top_nodes)||[];
   for(var i=0;i<nodes.length;i++){
@@ -1068,7 +1069,7 @@ function renderEntityDetail(data,type,key){
   if(type==='relation'){
     var rel=(data.recent_relations||[])[parseInt(key,10)];
     if(!rel)return '<div class="empty-state small">没有找到这条关系</div>';
-    return '<div class="entity-detail-title">'+esc(rel.source||'')+' <span>→</span> '+esc(rel.target||'')+'</div><div class="entity-detail-sub">'+esc(rel.relation||'关系')+' · '+esc(rel.last_seen||'')+'</div><div class="entity-detail-block"><b>关系说明</b><p>'+esc(rel.detail||'暂无说明')+'</p></div><div class="entity-detail-grid"><span>重要性 '+(rel.importance||5)+'</span><span>出现 '+(rel.count||1)+' 次</span><span>首次 '+esc(rel.first_seen||'')+'</span></div>'+renderEntitySourceRefs(rel.source_refs)+rawEntityBlock(rel);
+    return '<div class="entity-detail-title">'+esc(rel.source||'')+' <span>→</span> '+esc(rel.target||'')+'</div><div class="entity-detail-sub">'+esc(rel.relation||'关系')+' · '+esc(rel.last_seen||'')+'</div><div class="entity-detail-block"><b>关系说明</b><p>'+esc(rel.detail||'暂无说明')+'</p></div><div class="entity-detail-grid"><span>重要性 '+numOr(rel.importance,5)+'</span><span>出现 '+numOr(rel.count,1)+' 次</span><span>首次 '+esc(rel.first_seen||'')+'</span></div>'+renderEntitySourceRefs(rel.source_refs)+rawEntityBlock(rel);
   }
   var node=findGraphNode(data,key)||{key:key,name:key,summary:''};
   var rels=(data.recent_relations||[]).filter(function(r){return relationTouchesNode(r,node)});
@@ -1077,7 +1078,7 @@ function renderEntityDetail(data,type,key){
   var links=(node.links||[]).filter(Boolean);
   var profile=String(node.profile||'').trim();
   var summary=String(node.summary||'').trim();
-  var html='<div class="entity-detail-title">'+esc(graphNodeName(node))+'</div><div class="entity-detail-sub">'+esc(entityTypeLabel(node.type))+' · 重要性 '+(node.importance||5)+' · 提及 '+(node.mentions||0)+'</div>';
+  var html='<div class="entity-detail-title">'+esc(graphNodeName(node))+'</div><div class="entity-detail-sub">'+esc(entityTypeLabel(node.type))+' · 重要性 '+numOr(node.importance,5)+' · 提及 '+numOr(node.mentions,0)+'</div>';
   if(aliases.length)html+='<div class="entity-chip-row">'+aliases.map(function(a){return '<span>'+esc(a)+'</span>'}).join('')+'</div>';
   html+='<div class="entity-detail-block"><b>一句话画像</b><p>'+esc(profile||summary||'暂无说明')+'</p></div>';
   html+=renderEntityFacts(node.facts);
@@ -1227,7 +1228,7 @@ function renderEntityCard(n,key){
   return '<button class="eg-card eg-type-'+t+'" data-eg-type="node" data-eg-key="'+escAttr(key)+'">'+
     '<div class="eg-card-top"><span class="eg-badge eg-badge-'+t+'">'+esc(entityTypeLabel(t))+'</span>'+
     '<span class="eg-card-name">'+esc(graphNodeName(n))+'</span>'+aliasStr+
-    '<span class="eg-card-imp">★'+(n.importance||5)+'</span></div>'+
+    '<span class="eg-card-imp">★'+numOr(n.importance,5)+'</span></div>'+
     '<div class="eg-card-profile">'+esc(shortText(preview,92))+'</div>'+
     (chips?'<div class="eg-card-facts">'+chips+'</div>':'')+
     '</button>';
@@ -1236,9 +1237,9 @@ function renderRelationCard(r,key){
   return '<button class="eg-card eg-type-relation" data-eg-type="relation" data-eg-key="'+escAttr(key)+'">'+
     '<div class="eg-card-top"><span class="eg-badge eg-badge-relation">关系</span>'+
     '<span class="eg-card-name">'+esc(r.source||'')+' → '+esc(r.target||'')+'</span>'+
-    '<span class="eg-card-imp">★'+(r.importance||5)+'</span></div>'+
+    '<span class="eg-card-imp">★'+numOr(r.importance,5)+'</span></div>'+
     '<div class="eg-card-profile"><b class="eg-rel-name">'+esc(r.relation||'关系')+'</b> '+esc(shortText(r.detail||'暂无说明',86))+'</div>'+
-    '<div class="eg-card-facts"><span class="eg-fact-chip"><i>最近</i>'+esc(r.last_seen||'-')+'</span><span class="eg-fact-chip"><i>出现</i>'+(r.count||1)+'次</span></div>'+
+    '<div class="eg-card-facts"><span class="eg-fact-chip"><i>最近</i>'+esc(r.last_seen||'-')+'</span><span class="eg-fact-chip"><i>出现</i>'+numOr(r.count,1)+'次</span></div>'+
     '</button>';
 }
 function openEntityDetail(type,key){
