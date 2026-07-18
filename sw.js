@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v129-chat-v109-race-render-hardening';
+const CACHE_NAME = 'ck-panel-shell-v130-chat-v110-hotfix-cache-notice';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v109-race-render-hardening',
-  './polish.css?v=chat-v109-race-render-hardening',
-  './chat.css?v=chat-v109-race-render-hardening',
-  './wechat.css?v=chat-v109-race-render-hardening',
-  './script.js?v=chat-v109-race-render-hardening',
-  './script-extra.js?v=chat-v109-race-render-hardening',
-  './pwa.js?v=chat-v109-race-render-hardening',
+  './style.css?v=chat-v110-hotfix-cache-notice',
+  './polish.css?v=chat-v110-hotfix-cache-notice',
+  './chat.css?v=chat-v110-hotfix-cache-notice',
+  './wechat.css?v=chat-v110-hotfix-cache-notice',
+  './script.js?v=chat-v110-hotfix-cache-notice',
+  './script-extra.js?v=chat-v110-hotfix-cache-notice',
+  './pwa.js?v=chat-v110-hotfix-cache-notice',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v109-race-render-hardening').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v110-hotfix-cache-notice').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
