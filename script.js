@@ -344,9 +344,11 @@ function resumePanelDataTimers(){
 function clearPanelAuthentication(failedKey){
   failedKey=String(failedKey||'').trim();
   var stored=readStoredPanelKey();
+  var affectsCurrent=!failedKey||!panelAuthKey||panelAuthKey===failedKey;
   if(!failedKey||!stored||stored===failedKey){
     try{localStorage.removeItem(API_KEY_STORAGE)}catch(e){}
   }
+  if(!affectsCurrent)return;
   panelAuthKey='';
   stopPanelDataTimers();
   setPanelAuthLocked(true,'等待 CK 网关面板 Key...');
@@ -423,7 +425,10 @@ function panelDataFetch(url,init,opts){
       clearPanelAuthentication(key);
       return ensurePanelAuthenticated({label:opts.label}).then(function(nextKey){
         return run(nextKey).then(function(retry){
-          if(retry.status===401||retry.status===403){clearPanelAuthentication(nextKey)}
+          if(retry.status===401||retry.status===403){
+            clearPanelAuthentication(nextKey);
+            ensurePanelAuthenticated({label:opts.label,forcePrompt:true,message:'面板 Key 已失效，请重新输入。'});
+          }
           return retry;
         });
       });
@@ -1155,6 +1160,8 @@ function renderEntityTypeChips(data){
   var chips=[{v:'all',l:'全部',n:nodes.length}];
   ENTITY_TYPE_ORDER.forEach(function(t){if(tc[t])chips.push({v:t,l:entityTypeLabel(t),n:tc[t]})});
   if(rels.length)chips.push({v:'relation',l:'关系',n:rels.length});
+  var hasCurrent=chips.some(function(c){return c.v===entityGraphType});
+  if(!hasCurrent)entityGraphType='all';
   box.innerHTML=chips.map(function(c){
     var on=entityGraphType===c.v?' active':'';
     return '<button class="eg-chip'+on+'" onclick="setEntityType(\''+escAttr(c.v)+'\')">'+esc(c.l)+'<i>'+c.n+'</i></button>';
@@ -3389,6 +3396,7 @@ async function chatOnImageFilesSelected(e){
   if(input)input.value='';
   if(!files.length)return;
   var editing=chatEditingIndex>=0;
+  var editContext=editing?chatEditingIndex:-1;
   var targetImages=editing?chatEditingImages:chatDraftImages;
   var room=CHAT_IMAGE_MAX_COUNT-chatNormalizeImageList(targetImages).length;
   if(room<=0){
@@ -3402,26 +3410,30 @@ async function chatOnImageFilesSelected(e){
   }
   chatImageEncodingCount+=1;
   chatSetStatus('正在处理图片...');
-  var added=0;
+  var added=0,dropped=0;
   for(var i=0;i<files.length;i++){
     try{
       var img=await chatEncodeImageFile(files[i]);
-      if(img){
-        if(editing)chatEditingImages.push(img);
-        else chatDraftImages.push(img);
-        added+=1;
-        if(editing)chatRenderEditImages();
-        else chatRenderDraftImages();
-      }
+      if(!img)continue;
+      // 编码是异步的：编码完成时用户可能已退出/切换编辑上下文，避免把图片塞进错误的目标。
+      var stillEditing=chatEditingIndex>=0&&chatEditingIndex===editContext;
+      if(editing&&!stillEditing){dropped+=1;continue;}
+      if(!editing&&chatEditingIndex>=0){dropped+=1;continue;}
+      if(editing)chatEditingImages.push(img);
+      else chatDraftImages.push(img);
+      added+=1;
+      if(editing)chatRenderEditImages();
+      else chatRenderDraftImages();
     }catch(err){
       toast((files[i]&&files[i].name?files[i].name+'：':'')+((err&&err.message)||'图片处理失败'));
     }
   }
   chatImageEncodingCount=Math.max(0,chatImageEncodingCount-1);
-  if(editing)chatRenderEditImages();
+  if(chatEditingIndex>=0)chatRenderEditImages();
   else chatRenderDraftImages();
   chatSetStatus();
-  if(added)toast('已添加 '+added+' 张图片');
+  if(dropped)toast(added?('已添加 '+added+' 张，'+dropped+' 张因切换已取消'):(dropped+' 张图片因切换消息已取消'));
+  else if(added)toast('已添加 '+added+' 张图片');
 }
 function chatIndexedDbSupported(){
   return typeof indexedDB!=='undefined';
@@ -3476,7 +3488,6 @@ function chatOpenIndexedDb(){
       resolve(chatDb);
     };
     req.onerror=function(){
-      chatIndexedDbFailed=true;
       reject(req.error||new Error('IndexedDB open failed'));
     };
     req.onblocked=function(){
@@ -3484,7 +3495,10 @@ function chatOpenIndexedDb(){
       reject(new Error('IndexedDB upgrade blocked'));
     };
   });
-  return chatDbOpenPromise;
+  return chatDbOpenPromise.catch(function(err){
+    chatDbOpenPromise=null;
+    throw err;
+  });
 }
 function chatLoadSessionsFromIndexedDb(){
   return chatOpenIndexedDb().then(function(db){
@@ -4145,12 +4159,23 @@ async function chatRefreshGatewayDebug(){
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var data=await resp.json();
     var records=Array.isArray(data.records)?data.records:[];
+    var seen={};
+    chatDebugRecords.forEach(function(rec){
+      if(rec&&rec.event==='gateway')seen[String(rec.ts||0)+'|'+String(rec.text||'')]=true;
+    });
+    var added=0;
     records.forEach(function(r){
-      chatDebugRecords.push({ts:Number(r.ts_ms||Date.now()),event:r.event||'gateway',text:'🗂 网关记录｜'+(r.text||JSON.stringify(r.data||{})),data:r});
+      var ts=Number(r.ts_ms||Date.now());
+      var text='🗂 网关记录｜'+(r.text||JSON.stringify(r.data||{}));
+      var sig=String(ts)+'|'+text;
+      if(seen[sig])return;
+      seen[sig]=true;
+      chatDebugRecords.push({ts:ts,event:'gateway',text:text,data:r});
+      added+=1;
     });
     chatSaveDebugRecords();
     chatRenderDebugRecords();
-    toast('已刷新网关调试记录');
+    toast(added?('已刷新网关调试记录（新增 '+added+' 条）'):'网关调试记录已是最新');
   }catch(e){
     chatDebug('error',{error:'刷新网关调试失败：'+String((e&&e.message)||e)});
   }
