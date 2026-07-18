@@ -6836,7 +6836,7 @@ async function chatSubmitPendingMessages(options){
         try{r=await reader.read()}
         catch(readError){throw chatMarkNetworkFailure(readError)}
         if(r.done)break;
-        if(!latencyTrace.panel_first_chunk_ms)latencyTrace.panel_first_chunk_ms=Date.now();
+        if(!latencyTrace.panel_first_chunk_ms&&r.value&&r.value.byteLength)latencyTrace.panel_first_chunk_ms=Date.now();
         var chunk=decoder.decode(r.value,{stream:true});
         if(!attemptState.receivedValidContent)beforeContentRaw=(beforeContentRaw+chunk).slice(-4000);
         buffer+=chunk;
