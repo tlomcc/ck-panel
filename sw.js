@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v130-chat-v110-hotfix-cache-notice';
+const CACHE_NAME = 'ck-panel-shell-v131-chat-v111-typewriter-reveal';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v110-hotfix-cache-notice',
-  './polish.css?v=chat-v110-hotfix-cache-notice',
-  './chat.css?v=chat-v110-hotfix-cache-notice',
-  './wechat.css?v=chat-v110-hotfix-cache-notice',
-  './script.js?v=chat-v110-hotfix-cache-notice',
-  './script-extra.js?v=chat-v110-hotfix-cache-notice',
-  './pwa.js?v=chat-v110-hotfix-cache-notice',
+  './style.css?v=chat-v111-typewriter-reveal',
+  './polish.css?v=chat-v111-typewriter-reveal',
+  './chat.css?v=chat-v111-typewriter-reveal',
+  './wechat.css?v=chat-v111-typewriter-reveal',
+  './script.js?v=chat-v111-typewriter-reveal',
+  './script-extra.js?v=chat-v111-typewriter-reveal',
+  './pwa.js?v=chat-v111-typewriter-reveal',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

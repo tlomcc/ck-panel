@@ -3274,6 +3274,13 @@ body.chat-active .chat-caret{
   animation:ckCaretBlink 1s steps(2,start) infinite!important;
 }
 
+body.chat-active .chat-typewriter-plain{
+  display:inline!important;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+}
+
 body.dark.chat-active .chat-bubble.assistant.streaming-empty{
   background:#1a2028!important;
   border-color:#283240!important;

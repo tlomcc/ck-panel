@@ -1,7 +1,8 @@
 {
-  "version": "chat-v110-hotfix-cache-notice",
+  "version": "chat-v111-typewriter-reveal",
   "notes": [
-    "紧急修复：v109 引入的未定义函数 chatReadCacheStrategy 导致所有用户卡在加载页无法进入面板，现改为从配置读取缓存策略",
-    "缓存过期提示按策略派生 TTL（prefix_24h→24h，其余→5min），逻辑不变"
+    "assistant 完整回复到达后以 20–40ms 随机间隔逐字显示，完成后再渲染 Markdown",
+    "多气泡回复间隔 300–500ms，打字期间自动跟随到底部且不阻塞页面交互",
+    "打字期间发送新消息会立即补全旧回复，再正常开始新请求"
   ]
 }

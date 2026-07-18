@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v110-hotfix-cache-notice';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v111-typewriter-reveal';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2226,10 +2226,15 @@ var CHAT_CACHE_NOTICE_TEXT='已超过5min，下一次会重新创建缓存';
 var CHAT_BOTTOM_THRESHOLD=50;
 var CHAT_REQUEST_RETRY_DELAYS=[500,1200,2000];
 var CHAT_PLATFORM_EXIT_ERROR='Process exited unexpectedly before completing request';
+var CHAT_TYPEWRITER_CHAR_MIN_MS=20;
+var CHAT_TYPEWRITER_CHAR_MAX_MS=40;
+var CHAT_TYPEWRITER_BUBBLE_MIN_MS=300;
+var CHAT_TYPEWRITER_BUBBLE_MAX_MS=500;
 var chatInitialized=false;
 var chatSending=false;
 var chatMessages=[];
 var chatAbort=null;
+var chatReplyTypewriter=null;
 var chatDeferredSaveHandle=0;
 var chatSessions=[];
 var chatActiveSessionId='';
@@ -4483,6 +4488,7 @@ async function chatDeleteSession(id,event){
 }
 function chatSelectSession(id){
   if(chatSending)return;
+  chatFinishReplyTypewriter();
   chatActiveSessionId=id;
   var cfg=chatLoadConfig();
   cfg.sessionId=id;
@@ -4504,6 +4510,7 @@ function chatRefreshView(){
     toast('正在请求中，先停止或等完成');
     return;
   }
+  chatFinishReplyTypewriter();
   var refreshBtn=document.getElementById('chat-refresh-btn');
   if(refreshBtn)refreshBtn.classList.add('is-spinning');
   chatSetStatus('正在刷新...');
@@ -4573,6 +4580,7 @@ function chatDeferAfterSendPaint(fn){
   requestAnimationFrame(function(){setTimeout(fn,0)});
 }
 function chatBeginSendingUi(){
+  chatFinishReplyTypewriter();
   var btn=document.getElementById('chat-send-btn');
   chatSending=true;
   chatAbort=(typeof AbortController!=='undefined')?new AbortController():null;
@@ -5190,8 +5198,132 @@ function chatSplitAssistantReplies(rawText,splitEnabled){
 }
 function chatReplyRevealDelay(part,i,total){
   if(i>=total-1)return 0;
-  var len=String(part||'').replace(/\s+/g,'').length;
-  return Math.max(260,Math.min(980,260+len*10));
+  return CHAT_TYPEWRITER_BUBBLE_MIN_MS+Math.floor(Math.random()*(CHAT_TYPEWRITER_BUBBLE_MAX_MS-CHAT_TYPEWRITER_BUBBLE_MIN_MS+1));
+}
+function chatTypewriterCharacterDelay(){
+  return CHAT_TYPEWRITER_CHAR_MIN_MS+Math.floor(Math.random()*(CHAT_TYPEWRITER_CHAR_MAX_MS-CHAT_TYPEWRITER_CHAR_MIN_MS+1));
+}
+function chatTypewriterCharacters(text){
+  text=String(text||'');
+  if(typeof Intl!=='undefined'&&Intl.Segmenter){
+    try{
+      return Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text),function(x){return x.segment});
+    }catch(e){}
+  }
+  return Array.from(text);
+}
+function chatAssistantTypewriterText(rawText){
+  return String(chatSplitThinkingText(rawText).text||'');
+}
+function chatRenderAssistantTypewriterContent(rawText,tools){
+  var split=chatSplitThinkingText(rawText);
+  var thinking=split.thinking?(
+    '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
+  ):'';
+  return thinking+chatRenderToolTrace(tools)+'<span class="chat-typewriter-plain"></span><span class="chat-caret" aria-hidden="true"></span>';
+}
+function chatTypewriterScrollBottom(){
+  var box=chatMessagesBox();
+  if(!box)return;
+  chatSetNewMessageHint(false);
+  box.scrollTop=box.scrollHeight;
+}
+function chatTypewriterPause(job,ms){
+  return new Promise(function(resolve){
+    if(!job||job.finished)return resolve();
+    var done=false;
+    function wake(){
+      if(done)return;
+      done=true;
+      if(job.timer){clearTimeout(job.timer);job.timer=0;}
+      if(job.wake===wake)job.wake=null;
+      resolve();
+    }
+    job.wake=wake;
+    job.timer=setTimeout(wake,Math.max(0,ms||0));
+  });
+}
+function chatSettleReplyTypewriter(job,renderAll){
+  if(!job||job.settled)return;
+  job.finished=true;
+  job.settled=true;
+  if(job.timer){clearTimeout(job.timer);job.timer=0;}
+  var wake=job.wake;
+  job.wake=null;
+  if(wake)wake();
+  var sameSession=chatActiveSessionId===job.sessionId;
+  if(renderAll&&sameSession){
+    var box=chatMessagesBox();
+    if(box){
+      for(var i=0;i<job.messages.length;i++){
+        var row=box.querySelector('.chat-msg-row[data-chat-index="'+String(job.startIndex+i)+'"]');
+        if(row)row.removeAttribute('data-chat-key');
+      }
+    }
+    chatRenderMessages({respectUserScroll:false,typewriterFinal:true});
+    chatTypewriterScrollBottom();
+  }
+  if(chatReplyTypewriter===job)chatReplyTypewriter=null;
+  if(!chatSending&&sameSession)chatSetStatus('完成');
+  if(job.resolve)job.resolve();
+}
+function chatFinishReplyTypewriter(){
+  var job=chatReplyTypewriter;
+  if(!job)return false;
+  chatSettleReplyTypewriter(job,true);
+  return true;
+}
+function chatPrepareTypewriterBubble(job,offset){
+  if(!job||job.finished||chatActiveSessionId!==job.sessionId)return null;
+  var index=job.startIndex+offset;
+  var msg=job.messages[offset];
+  var box=chatMessagesBox();
+  if(!box||!msg)return null;
+  if(offset===0&&job.anchorEl&&job.anchorEl.parentNode){
+    chatReplaceStreamingBubble(job.anchorEl,msg,index);
+  }else{
+    var old=box.querySelector('.chat-msg-row[data-chat-index="'+String(index)+'"]');
+    var html=chatRenderMessageRow(msg,index);
+    if(old)old.outerHTML=html;
+    else box.insertAdjacentHTML('beforeend',html);
+  }
+  var bubble=box.querySelector('.chat-bubble.assistant[data-i="'+String(index)+'"]');
+  if(!bubble)return null;
+  bubble.classList.remove('streaming-empty');
+  if(bubble.parentNode)bubble.parentNode.classList.remove('streaming-empty-row');
+  bubble.innerHTML=chatRenderAssistantTypewriterContent(msg.text||'',msg.tools);
+  chatTypewriterScrollBottom();
+  return bubble;
+}
+async function chatRunReplyTypewriter(job){
+  try{
+    for(var i=0;i<job.messages.length;i++){
+      if(job.finished)break;
+      if(chatActiveSessionId!==job.sessionId){chatSettleReplyTypewriter(job,false);break;}
+      var msg=job.messages[i];
+      var bubble=chatPrepareTypewriterBubble(job,i);
+      if(!bubble){chatSettleReplyTypewriter(job,true);break;}
+      var holder=bubble.querySelector('.chat-typewriter-plain');
+      var textNode=document.createTextNode('');
+      if(holder)holder.appendChild(textNode);
+      var chars=chatTypewriterCharacters(chatAssistantTypewriterText(msg.text||''));
+      for(var n=0;n<chars.length;n++){
+        if(job.finished)break;
+        textNode.appendData(chars[n]);
+        chatTypewriterScrollBottom();
+        await chatTypewriterPause(job,chatTypewriterCharacterDelay());
+      }
+      if(job.finished)break;
+      bubble.innerHTML=chatRenderAssistantContent(msg.text||'',false,msg.tools);
+      chatTypewriterScrollBottom();
+      var wait=chatReplyRevealDelay(msg.text||'',i,job.messages.length);
+      if(wait)await chatTypewriterPause(job,wait);
+    }
+    if(!job.finished)chatSettleReplyTypewriter(job,false);
+  }catch(e){
+    chatSettleReplyTypewriter(job,true);
+    if(window.console&&console.warn)console.warn('[CK chat] Typewriter reveal failed:',e);
+  }
 }
 function chatSleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
 function chatAbortableSleep(ms,signal){
@@ -5288,15 +5420,19 @@ function chatReplaceStreamingBubble(anchorEl,message,index){
   if(!chatFollowMessagesBottom(shouldStick,false,true)&&box)box.scrollTop=previousScrollTop;
   return true;
 }
-async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
+function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
+  chatFinishReplyTypewriter();
   var parts=chatSplitAssistantReplies(rawText,!(opts&&opts.splitAssistantReplies===false));
   var tools=chatCloneToolEvents(toolEvents);
   if(!parts.length&&tools.length)parts=[''];
+  if(!parts.length)return Promise.resolve();
   var firstReplyTs=Number(opts&&opts.firstReplyTs)||Date.now();
   var userSentTs=Number(opts&&opts.userSentTs)||0;
+  var startIndex=chatMessages.length;
+  var messages=[];
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
-    var ts=i===0?firstReplyTs:Date.now();
+    var ts=i===0?firstReplyTs:Math.max(Date.now(),firstReplyTs+i);
     var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts};
     if(i===parts.length-1&&userSentTs){
       msg.userSentTs=userSentTs;
@@ -5304,20 +5440,26 @@ async function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
       msg.waitMs=Math.max(0,firstReplyTs-userSentTs);
     }
     chatMessages.push(msg);
+    messages.push(msg);
     chatMarkMessageFresh(msg);
-    chatSaveLocalMessages();
-    if(i===0&&opts&&chatReplaceStreamingBubble(opts.anchorEl,msg,chatMessages.length-1)){
-      chatRenderPendingBar();
-    }else{
-      chatRenderMessages({smooth:true,respectUserScroll:true,newMessage:true});
-    }
-    var wait=chatReplyRevealDelay(part,i,parts.length);
-    if(wait){
-      var signal=chatAbort&&chatAbort.signal;
-      await chatAbortableSleep(wait,signal);
-      if(signal&&signal.aborted)break;
-    }
   }
+  chatSaveLocalMessages();
+  chatRenderPendingBar();
+  var job={
+    sessionId:chatActiveSessionId,
+    startIndex:startIndex,
+    messages:messages,
+    anchorEl:opts&&opts.anchorEl,
+    timer:0,
+    wake:null,
+    finished:false,
+    settled:false,
+    resolve:null
+  };
+  job.promise=new Promise(function(resolve){job.resolve=resolve});
+  chatReplyTypewriter=job;
+  chatRunReplyTypewriter(job);
+  return job.promise;
 }
 function chatCopyText(t){
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){toast('已复制')},function(){chatFallbackCopy(t)})}
@@ -5802,6 +5944,10 @@ function chatJumpToLatest(){
 }
 function chatRenderMessages(opts){
   opts=opts||{};
+  if(chatReplyTypewriter&&opts.typewriterFinal!==true){
+    chatFinishReplyTypewriter();
+    return;
+  }
   var box=chatMessagesBox();
   if(!box)return;
   var respectUserScroll=opts.respectUserScroll===true;
@@ -6158,6 +6304,7 @@ function chatClearLocalMessages(){
   chatNewSession();
 }
 function chatNewSession(){
+  chatFinishReplyTypewriter();
   var cfg=chatReadForm();
   cfg.sessionId=chatSessionId();
   cfg.memoryPreview='';
@@ -6276,6 +6423,7 @@ function chatInit(){
 }
 async function chatSendMessage(){
   chatInit();
+  chatFinishReplyTypewriter();
   if(chatSending){chatStopMessage();return;}
   if(chatEditingIndex>=0){
     chatSaveEditedMessage();
@@ -6324,6 +6472,7 @@ async function chatSendMessage(){
   }
 }
 function chatRegenerateFromUser(i){
+  chatFinishReplyTypewriter();
   if(chatSending)return;
   var m=chatMessages[i];
   if(m&&m.role==='assistant'){
@@ -6347,6 +6496,7 @@ function chatRegenerateFromUser(i){
   return chatSubmitPendingMessages();
 }
 function chatRetryFailedUser(i){
+  chatFinishReplyTypewriter();
   if(chatSending)return;
   var m=chatMessages[i];
   if(!m||m.role!=='user'||!m.sendFailed||!chatMessageHasContent(m))return;
@@ -6360,6 +6510,7 @@ function chatRetryFailedUser(i){
 async function chatSubmitPendingMessages(options){
   options=options||{};
   chatInit();
+  chatFinishReplyTypewriter();
   if(chatSending&&!options.sendingStarted){chatStopMessage();return;}
   if(options.deferForPaint)await chatYieldAfterVisualFeedback();
   var input=document.getElementById('chat-input');
@@ -6515,18 +6666,17 @@ async function chatSubmitPendingMessages(options){
     }
     return firstReplyTs;
   }
-  // 流式渲染节流：接收循环只累加数据，渲染统一交给 rAF，每帧最多一次全量重渲染，
-  // 避免高频 delta 在主线程里同步反复重排 markdown，把点击/切换/图片查看等交互挤掉。
+  // 网络阶段只收集正文；工具状态仍走 rAF 合并刷新。完整正文到达后再交给打字机，
+  // 避免提前渲染全文，也避免高频 delta 同步重排 markdown 阻塞交互。
   var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;
   function flushStreamRender(){
     if(streamRenderStopped)return;
     streamRenderDirty=false;
-    if(!out)return;
+    if(!out||!toolEvents.length)return;
     var shouldStick=chatIsMessagesNearBottom();
-    var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
-    out.classList.toggle('streaming-empty',streamingEmpty);
-    if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',streamingEmpty);
-    out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
+    out.classList.remove('streaming-empty');
+    if(out.parentNode)out.parentNode.classList.remove('streaming-empty-row');
+    out.innerHTML=chatRenderToolTrace(toolEvents)+'<span class="chat-typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>';
     chatFollowMessagesBottom(shouldStick,true,true);
   }
   function scheduleStreamRender(){
@@ -6558,9 +6708,6 @@ async function chatSubmitPendingMessages(options){
         if(plain)attemptState.receivedValidContent=true;
         assistantText=plain;
         markFirstReplyTs();
-        var plainShouldStick=chatIsMessagesNearBottom();
-        out.innerHTML=chatRenderStreamingAssistantContent(plain,toolEvents);
-        chatFollowMessagesBottom(plainShouldStick,true,true);
         return;
       }
       var reader=resp.body.getReader();
@@ -6582,7 +6729,6 @@ async function chatSubmitPendingMessages(options){
         if(ev==='delta'){
           if(data&&data.text)markFirstReplyTs();
           assistantText+=data.text||'';
-          scheduleStreamRender();
         }else if(ev==='memory'){
           recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
           var memoryPackEl=document.getElementById('chat-memory-pack');
@@ -6650,9 +6796,11 @@ async function chatSubmitPendingMessages(options){
     stopStreamRender();
     chatSetStatus('正在显示回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs});
-    if(out&&out.parentNode)out.parentNode.remove();
-    chatSetStatus('完成');
+    chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs});
+    if(!chatReplyTypewriter){
+      if(out&&out.parentNode)out.parentNode.remove();
+      chatSetStatus('完成');
+    }
   }catch(e){
     if(chatRequestWasAborted(e,chatAbort&&chatAbort.signal)){
       var stopped=chatAttachAssistantTiming({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),stopped:true,ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now());
