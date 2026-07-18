@@ -1058,6 +1058,11 @@ body.chat-active .chat-plus-panel.open{
   transform:translateY(0)!important;
 }
 
+body.chat-active.chat-plus-open .chat-compose{
+  max-height:min(520px,82vh)!important;
+  overflow:visible!important;
+}
+
 body.chat-active .chat-plus-pages{
   position:relative!important;
   display:block!important;

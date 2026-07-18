@@ -5409,6 +5409,7 @@ function chatTogglePlus(force){
     chatPlusRenderPager(chatPlusPager.currentPage||0);
   }
   panel.classList.toggle('open',open);
+  if(document.body)document.body.classList.toggle('chat-plus-open',open);
   panel.setAttribute('aria-hidden',open?'false':'true');
   panel.querySelectorAll('.chat-plus-page').forEach(function(page){
     var active=open&&page.classList.contains('active');

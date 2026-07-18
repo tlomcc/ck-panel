@@ -4589,7 +4589,7 @@ button:disabled,
 .eg-type-topic{border-left-color:#94a3b8}.eg-badge-topic{background:#eef1f5;color:#64748b}
 .eg-type-relation{border-left-color:#58bfa5}.eg-badge-relation{background:#e6f5f0;color:#3a8d78}
 
-.eg-detail-sheet{position:fixed;inset:0;z-index:1200;display:none}
+.eg-detail-sheet{position:fixed;inset:0;z-index:150;display:none}
 .eg-detail-sheet.show{display:block}
 .eg-detail-mask{position:absolute;inset:0;background:rgba(20,30,25,.42)}
 .eg-detail-panel{position:absolute;left:0;right:0;bottom:0;max-height:88vh;background:#fff;border-radius:18px 18px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-direction:column;animation:egSheetUp .22s ease}
