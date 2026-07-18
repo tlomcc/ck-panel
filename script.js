@@ -243,15 +243,20 @@ function ckPanelReloadUrl(latest){
 function ckPanelClearUpdateCaches(){
   var jobs=[];
   if('serviceWorker' in navigator&&navigator.serviceWorker.getRegistrations){
+    var appScope='';
+    try{
+      var here=window.location.pathname||'/';
+      appScope=here.slice(0,here.lastIndexOf('/')+1)||'/';
+    }catch(e){appScope=''}
     jobs.push(navigator.serviceWorker.getRegistrations().then(function(regs){
       return Promise.all((regs||[]).map(function(reg){
         try{
           var scopePath=new URL(reg.scope).pathname;
-          if(scopePath.indexOf('/ck-panel/')<0)return null;
+          if(appScope&&scopePath.indexOf(appScope)!==0&&appScope.indexOf(scopePath)!==0)return null;
         }catch(e){}
         return reg.unregister().catch(function(){});
       }));
-    }));
+    }).catch(function(){}));
   }
   if(window.caches&&caches.keys){
     jobs.push(caches.keys().then(function(keys){
@@ -1182,7 +1187,8 @@ function entityFilteredRows(){
       if(q&&entityRelSearchText(r).indexOf(q)<0)return;
       rows.push({kind:'relation',raw:r,key:String(i)});
     });
-    rows.sort(function(a,b){return entitySortVal(b.raw,'relation')-entitySortVal(a.raw,'relation')});
+    if(entityGraphSort==='name')rows.sort(function(a,b){return String((a.raw&&a.raw.source)||'').localeCompare(String((b.raw&&b.raw.source)||''))});
+    else rows.sort(function(a,b){return entitySortVal(b.raw,'relation')-entitySortVal(a.raw,'relation')});
     return rows;
   }
   (data.top_nodes||[]).forEach(function(n){
@@ -2549,8 +2555,8 @@ function chatMoney(value,currency){
 function chatUsageCost(usage){
   usage=usage&&usage.usage?usage.usage:(usage||{});
   var pricing=chatCurrentCostPricing();
-  var input=chatUsageNumber(usage,'input_tokens');
-  var output=chatUsageNumber(usage,'output_tokens');
+  var input=chatUsageNumber(usage,'input_tokens','prompt_tokens');
+  var output=chatUsageNumber(usage,'output_tokens','completion_tokens');
   var read=chatUsageCacheRead(usage);
   var create=chatUsageCacheCreate(usage);
   var inputCost=input*pricing.inputPerMTokens/1000000;
@@ -3781,10 +3787,11 @@ async function chatLoadWorldbooksRemote(silent){
       await chatSaveWorldbooksRemote(local,true);
       return true;
     }
-    cfg.worldbooks=remote;
-    chatSaveConfigObject(cfg);
-    chatRenderWorldbooks(cfg);
-    chatUpdateRuntime(cfg);
+    var fresh=chatLoadConfig();
+    fresh.worldbooks=remote;
+    chatSaveConfigObject(fresh);
+    chatRenderWorldbooks(fresh);
+    chatUpdateRuntime(fresh);
     if(!silent)toast('世界书已从网关同步');
     return true;
   }catch(e){
