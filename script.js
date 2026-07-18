@@ -1940,12 +1940,20 @@ function doRename(){
   if(!nn||nn===current){hideRename();return}
   if(allData[nn]){toast('分类已存在');return}
   var old=current,entries=cloneEntries(allData[old].entries),backup=allData[old],version=nextCategoryVersion(nn);
+  nextCategoryVersion(old);
   allData[nn]={entries:entries};delete allData[old];current=nn;
   hideRename();document.getElementById('d-title').textContent=nn;document.getElementById('d-sub').textContent=countInfo();renderAll();savePanelCache();toast('已重命名，后台同步中');
   syncingCategories[nn]=(syncingCategories[nn]||0)+1;
-  writeCategoryEntries(nn,entries).then(function(){
-    return rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+old+'.md'});
+  var priorNn=categoryWriteChains[nn]||Promise.resolve();
+  var priorOld=categoryWriteChains[old]||Promise.resolve();
+  var job=Promise.all([priorNn.catch(function(){}),priorOld.catch(function(){})]).then(function(){
+    return writeCategoryEntries(nn,cloneEntries(entries));
   }).then(function(){
+    return rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+old+'.md'});
+  });
+  categoryWriteChains[nn]=job;
+  categoryWriteChains[old]=job;
+  job.then(function(){
     toast('重命名已同步');
   }).catch(function(){
     if(categoryWriteVersions[nn]===version){
@@ -1965,12 +1973,25 @@ function delCategory(){
   var category=current;
   ckConfirmDialog('分类“'+category+'”及其中的记忆将一并删除。',{title:'删除分类',confirmText:'删除',danger:true}).then(function(ok){
     if(!ok||current!==category)return;
-    var cat=current,backup=allData[cat];
+    var cat=current,backup=allData[cat],version=nextCategoryVersion(cat);
     delete allData[cat];savePanelCache();toast('已删除分类，后台同步中');goMemory();
-    rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+cat+'.md'}).then(function(){
+    syncingCategories[cat]=(syncingCategories[cat]||0)+1;
+    var prior=categoryWriteChains[cat]||Promise.resolve();
+    var job=prior.catch(function(){}).then(function(){
+      return rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+cat+'.md'});
+    });
+    categoryWriteChains[cat]=job;
+    job.then(function(){
       toast('分类已同步删除');
     }).catch(function(){
-      allData[cat]=backup;savePanelCache();renderAll();toast('分类删除失败，已恢复');
+      if(categoryWriteVersions[cat]===version){
+        allData[cat]=backup;savePanelCache();renderAll();toast('分类删除失败，已恢复');
+      }else{
+        toast('分类删除后台同步失败，请刷新确认');
+      }
+    }).then(function(){
+      syncingCategories[cat]=Math.max(0,(syncingCategories[cat]||1)-1);
+      if(!syncingCategories[cat])delete syncingCategories[cat];
     });
   });
 }
@@ -2114,16 +2135,32 @@ function queueCategoryWrite(category,entries,opts){
   var snapshot=cloneEntries(entries);
   return queueCategoryJob(category,function(){return writeCategoryEntries(category,snapshot)},opts);
 }
+function reconcileIndexStateForReplace(category,newEntries){
+  if(category!==current)return;
+  var old=(allData[category]&&allData[category].entries)||[];
+  newEntries=newEntries||[];
+  function moved(idx){return !old[idx]||!newEntries[idx]||!sameEntryCore(old[idx],newEntries[idx])}
+  if(delIdx!==null&&moved(delIdx)){var dc=document.getElementById('confirmDel');if(dc)dc.classList.remove('show');delIdx=null}
+  if(editIdx!==null&&moved(editIdx)){var em=document.getElementById('editModal');if(em&&em.classList.contains('show')){em.classList.remove('show');toast('列表已更新，请重新编辑')}editIdx=null}
+  if(selectMode&&selected.size){
+    var desync=false;selected.forEach(function(i){if(moved(i))desync=true});
+    if(desync){
+      selected.clear();
+      var sb=document.getElementById('select-action-btn');if(sb)sb.textContent=(selectMode==='export'?'导出':'删除')+' (0)';
+    }
+  }
+  if(touchState.openIdx!==-1&&moved(touchState.openIdx))touchState.openIdx=-1;
+}
 function queueEntryUpdate(category,index,entry,opts){
   var snapshot=cloneEntries([entry])[0];
   opts=opts||{};
-  opts.applyResult=function(entries){setCategoryEntries(category,entries)};
+  opts.applyResult=function(entries){reconcileIndexStateForReplace(category,entries);setCategoryEntries(category,entries)};
   return queueCategoryJob(category,function(){return writeEntryUpdate(category,index,snapshot)},opts);
 }
 function queueEntryAppend(category,entry,opts){
   var snapshot=cloneEntries([entry])[0];
   opts=opts||{};
-  opts.applyResult=function(entries){setCategoryEntries(category,entries)};
+  opts.applyResult=function(entries){reconcileIndexStateForReplace(category,entries);setCategoryEntries(category,entries)};
   return queueCategoryJob(category,function(){return writeEntryAppend(category,snapshot)},opts);
 }
 function saveCurrentCategory(){
