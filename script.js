@@ -645,7 +645,7 @@ function parseEntries(raw){
     var ct=bodyLines.join('\n').trim();
     if(ct)entries.push({meta:meta,content:ct});
   }
-  return entries.sort(function(a,b){return compareEntryTime(a,b,0,1,'desc')});
+  return entries.sort(function(a,b){return compareEntryTime(a,b,0,0,'desc')});
 }
 function timeAgo(dateStr){if(!dateStr)return'';var d=new Date(dateStr),now=new Date(),diff=Math.floor((now-d)/864e5);if(diff<=0)return'今天';if(diff===1)return'昨天';if(diff<30)return diff+'天前';if(diff<365)return Math.floor(diff/30)+'个月前';return Math.floor(diff/365)+'年前'}
 function daysSince(){return Math.floor((new Date()-new Date(2026,2,26))/864e5)}
