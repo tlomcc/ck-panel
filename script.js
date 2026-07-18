@@ -5897,7 +5897,7 @@ function chatHasCacheNoticeAfter(ts){
   });
 }
 function chatCacheExpiryInfo(){
-  var meta=chatCacheStrategyMeta(chatReadCacheStrategy());
+  var meta=chatCacheStrategyMeta((chatLoadConfig()||{}).cacheStrategy);
   if(meta&&meta.value==='prefix_24h'){
     return {ttlMs:24*60*60*1000,text:'已超过24h，下一次会重新创建缓存'};
   }
