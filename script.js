@@ -651,7 +651,11 @@ function parseEntries(raw){
         parsedHeadTokens++;
         head=head.slice(end+1).replace(/^[ \t]*/,'');
       }
-      if(parsedHeadTokens>0)bodyLines=lines.slice(1);
+      if(parsedHeadTokens>0){
+        bodyLines=lines.slice(1);
+        var leftover=head.trim();
+        if(leftover)bodyLines=[leftover].concat(bodyLines);
+      }
     }
     var ct=bodyLines.join('\n').trim();
     if(ct)entries.push({meta:meta,content:ct});
@@ -4819,14 +4823,16 @@ function chatSaveEditedMessage(){
 function chatEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function chatMdInline(raw){
   var codes=[];
-  var t=String(raw==null?'':raw).replace(/`([^`]+)`/g,function(m,c){codes.push(c);return '@@CKCODE'+(codes.length-1)+'@@'});
+  var A=String.fromCharCode(0),B=String.fromCharCode(1);
+  // 用控制字符做占位符哨兵：用户无法在普通输入里键入，先剥除任何已存在的控制字符，避免字面量污染替换
+  var t=String(raw==null?'':raw).replace(/[\x00\x01]/g,'').replace(/`([^`]+)`/g,function(m,c){codes.push(c);return A+(codes.length-1)+B});
   t=chatEsc(t);
   t=t.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
   t=t.replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>');
   t=t.replace(/(^|[^_\w])_([^_\n]+)_/g,'$1<em>$2</em>');
   t=t.replace(/~~([^~]+)~~/g,'<del>$1</del>');
   t=t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,function(m,txt,url){if(!/^(https?:|mailto:)/i.test(url))return m;return '<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+txt+'</a>'});
-  t=t.replace(/@@CKCODE(\d+)@@/g,function(m,n){return '<code>'+chatEsc(codes[+n])+'</code>'});
+  t=t.replace(new RegExp(A+'(\d+)'+B,'g'),function(m,n){return '<code>'+chatEsc(codes[+n])+'</code>'});
   return t;
 }
 function chatCodeBlock(lang,code){
