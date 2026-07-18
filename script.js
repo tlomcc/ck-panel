@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v111-typewriter-reveal';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v112-first-byte-latency-probe';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3995,6 +3995,13 @@ function chatFormatRecallDiag(data){
 }
 function chatFormatDebug(ev,data){
   data=data||{};
+  if(ev==='latency'){
+    function latencyValue(value){return value===undefined||value===null?'-':value}
+    if(data.phase==='network'){
+      return '⏱ 首字网络｜ID '+(data.debug_id||'-')+'｜请求→响应头 '+latencyValue(data.request_to_headers_ms)+'ms｜响应头→首网络块 '+latencyValue(data.headers_to_first_chunk_ms)+'ms｜网关T4→面板首delta '+latencyValue(data.gateway_t4_to_panel_delta_ms)+'ms｜协议 HTTP+SSE';
+    }
+    return '⌨️ 首字渲染｜ID '+(data.debug_id||'-')+'｜首delta→首字 '+latencyValue(data.first_delta_to_render_ms)+'ms｜流结束→首字 '+latencyValue(data.stream_done_to_render_ms)+'ms｜首字时间 '+(data.panel_first_rendered_char_ms||'-');
+  }
   if(data&&data.mode==='new_session'){
     return '🆕 新会话｜会话：'+(data.session_id||'-')+'｜历史：空';
   }
@@ -4068,6 +4075,10 @@ function chatFormatDebug(ev,data){
     return '🛠 工具调用｜'+(data.name||'未知工具')+'｜'+status+'｜来源：'+(data.source||'internal')+sec+chars;
   }
   if(ev==='debug'){
+    if(data.latency_probe&&typeof data.latency_probe==='object'){
+      var lp=data.latency_probe;
+      return '⏱ 网关首字链路｜ID '+(lp.debug_id||'-')+'｜T1→T2 '+(lp.t1_to_t2_ms!==undefined?lp.t1_to_t2_ms:'-')+'ms｜T2→T3首chunk '+(lp.t2_to_t3_first_chunk_ms!==undefined?lp.t2_to_t3_first_chunk_ms:'-')+'ms｜T3首chunk→T4 '+(lp.t3_first_chunk_to_t4_ms!==undefined?lp.t3_first_chunk_to_t4_ms:'-')+'ms｜T3首文本→T4 '+(lp.t3_first_text_to_t4_ms!==undefined?lp.t3_first_text_to_t4_ms:'-')+'ms｜T4后上游继续 '+(lp.t4_to_upstream_full_ms!==undefined?lp.t4_to_upstream_full_ms:'-')+'ms';
+    }
     if(data.mcp_error){
       return '⚠️ MCP异常｜'+(data.mcp_source||'-')+'｜'+(data.mcp_host||'-')+'｜'+data.mcp_error;
     }
@@ -5309,6 +5320,20 @@ async function chatRunReplyTypewriter(job){
       var chars=chatTypewriterCharacters(chatAssistantTypewriterText(msg.text||''));
       for(var n=0;n<chars.length;n++){
         if(job.finished)break;
+        if(!job.firstRenderedAt){
+          job.firstRenderedAt=Date.now();
+          var latency=job.latency&&typeof job.latency==='object'?job.latency:{};
+          latency.panel_first_rendered_char_ms=job.firstRenderedAt;
+          latency.first_delta_to_render_ms=latency.panel_first_delta_ms?Math.max(0,job.firstRenderedAt-latency.panel_first_delta_ms):null;
+          latency.stream_done_to_render_ms=latency.panel_stream_done_ms?Math.max(0,job.firstRenderedAt-latency.panel_stream_done_ms):null;
+          chatDebug('latency',{
+            phase:'render',
+            debug_id:latency.debug_id||'',
+            panel_first_rendered_char_ms:job.firstRenderedAt,
+            first_delta_to_render_ms:latency.first_delta_to_render_ms,
+            stream_done_to_render_ms:latency.stream_done_to_render_ms
+          });
+        }
         textNode.appendData(chars[n]);
         chatTypewriterScrollBottom();
         await chatTypewriterPause(job,chatTypewriterCharacterDelay());
@@ -5454,6 +5479,8 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
     wake:null,
     finished:false,
     settled:false,
+    latency:opts&&opts.latency&&typeof opts.latency==='object'?opts.latency:null,
+    firstRenderedAt:0,
     resolve:null
   };
   job.promise=new Promise(function(resolve){job.resolve=resolve});
@@ -6659,6 +6686,34 @@ async function chatSubmitPendingMessages(options){
   var assistantText='',recallInfo=null,toolEvents=[];
   var responseUserTs=submitTs;
   var firstReplyTs=0;
+  var latencyTrace={
+    debug_id:'',
+    panel_request_started_ms:0,
+    panel_response_headers_ms:0,
+    panel_first_chunk_ms:0,
+    panel_first_delta_ms:0,
+    panel_stream_done_ms:0,
+    gateway_latency:null
+  };
+  function recordFirstDeltaLatency(data){
+    if(latencyTrace.panel_first_delta_ms)return;
+    latencyTrace.panel_first_delta_ms=Date.now();
+    if(data&&data.ck_latency&&typeof data.ck_latency==='object')latencyTrace.gateway_latency=data.ck_latency;
+    var gateway=latencyTrace.gateway_latency||{};
+    latencyTrace.debug_id=gateway.debug_id||latencyTrace.debug_id||'';
+    chatDebug('latency',{
+      phase:'network',
+      debug_id:latencyTrace.debug_id,
+      panel_request_started_ms:latencyTrace.panel_request_started_ms,
+      panel_response_headers_ms:latencyTrace.panel_response_headers_ms,
+      panel_first_chunk_ms:latencyTrace.panel_first_chunk_ms,
+      panel_first_delta_ms:latencyTrace.panel_first_delta_ms,
+      request_to_headers_ms:latencyTrace.panel_response_headers_ms-latencyTrace.panel_request_started_ms,
+      headers_to_first_chunk_ms:latencyTrace.panel_first_chunk_ms-latencyTrace.panel_response_headers_ms,
+      gateway_t4_to_panel_delta_ms:gateway.t4_first_panel_delta_ms!==undefined?latencyTrace.panel_first_delta_ms-Number(gateway.t4_first_panel_delta_ms):null,
+      gateway_latency:gateway
+    });
+  }
   function markFirstReplyTs(){
     if(!firstReplyTs){
       firstReplyTs=Date.now();
@@ -6694,18 +6749,23 @@ async function chatSubmitPendingMessages(options){
     streamRenderDirty=false;
   }
   try{
+    latencyTrace.panel_request_started_ms=Date.now();
     await chatFetchWithSilentRetry(chatEndpoint(cfg),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:requestBodyText,
       signal:chatAbort?chatAbort.signal:undefined
     },async function(resp,attemptState){
+      latencyTrace.panel_response_headers_ms=Date.now();
       if(!resp.body){
         var plain;
         try{plain=await resp.text()}
         catch(readError){throw chatMarkNetworkFailure(readError)}
         if(chatContainsPlatformExitError(plain))throw chatCreateRequestFailure(plain,true);
         if(plain)attemptState.receivedValidContent=true;
+        latencyTrace.panel_first_chunk_ms=latencyTrace.panel_response_headers_ms;
+        latencyTrace.panel_first_delta_ms=latencyTrace.panel_response_headers_ms;
+        latencyTrace.panel_stream_done_ms=Date.now();
         assistantText=plain;
         markFirstReplyTs();
         return;
@@ -6727,6 +6787,7 @@ async function chatSubmitPendingMessages(options){
         }
         attemptState.receivedValidContent=true;
         if(ev==='delta'){
+          recordFirstDeltaLatency(data);
           if(data&&data.text)markFirstReplyTs();
           assistantText+=data.text||'';
         }else if(ev==='memory'){
@@ -6744,6 +6805,8 @@ async function chatSubmitPendingMessages(options){
             chatSaveSessions();
           }
         }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
+          if(ev==='meta'&&data&&data.debug_id)latencyTrace.debug_id=String(data.debug_id||'');
+          if(data&&data.latency_probe&&typeof data.latency_probe==='object')latencyTrace.gateway_latency=data.latency_probe;
           chatDebug(ev,data);
           if(ev==='tool'){
             markFirstReplyTs();
@@ -6773,6 +6836,7 @@ async function chatSubmitPendingMessages(options){
         try{r=await reader.read()}
         catch(readError){throw chatMarkNetworkFailure(readError)}
         if(r.done)break;
+        if(!latencyTrace.panel_first_chunk_ms)latencyTrace.panel_first_chunk_ms=Date.now();
         var chunk=decoder.decode(r.value,{stream:true});
         if(!attemptState.receivedValidContent)beforeContentRaw=(beforeContentRaw+chunk).slice(-4000);
         buffer+=chunk;
@@ -6792,11 +6856,12 @@ async function chatSubmitPendingMessages(options){
       if(!attemptState.receivedValidContent&&chatContainsPlatformExitError(beforeContentRaw)){
         throw chatCreateRequestFailure(CHAT_PLATFORM_EXIT_ERROR,true);
       }
+      latencyTrace.panel_stream_done_ms=Date.now();
     });
     stopStreamRender();
     chatSetStatus('正在显示回复...');
     markFirstReplyTs();
-    chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs});
+    chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace});
     if(!chatReplyTypewriter){
       if(out&&out.parentNode)out.parentNode.remove();
       chatSetStatus('完成');

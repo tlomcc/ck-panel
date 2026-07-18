@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v111-typewriter-reveal').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v112-first-byte-latency-probe').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v131-chat-v111-typewriter-reveal';
+const CACHE_NAME = 'ck-panel-shell-v132-chat-v112-first-byte-latency-probe';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v111-typewriter-reveal',
-  './polish.css?v=chat-v111-typewriter-reveal',
-  './chat.css?v=chat-v111-typewriter-reveal',
-  './wechat.css?v=chat-v111-typewriter-reveal',
-  './script.js?v=chat-v111-typewriter-reveal',
-  './script-extra.js?v=chat-v111-typewriter-reveal',
-  './pwa.js?v=chat-v111-typewriter-reveal',
+  './style.css?v=chat-v112-first-byte-latency-probe',
+  './polish.css?v=chat-v112-first-byte-latency-probe',
+  './chat.css?v=chat-v112-first-byte-latency-probe',
+  './wechat.css?v=chat-v112-first-byte-latency-probe',
+  './script.js?v=chat-v112-first-byte-latency-probe',
+  './script-extra.js?v=chat-v112-first-byte-latency-probe',
+  './pwa.js?v=chat-v112-first-byte-latency-probe',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
