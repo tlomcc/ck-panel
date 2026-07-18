@@ -1,8 +1,8 @@
 {
-  "version": "chat-v106-body-key-endpoints-fix",
+  "version": "chat-v107-stream-render-nonblocking",
   "notes": [
-    "修复清理聊天历史时的 Failed to fetch",
-    "聊天与清理两个请求体 Key 接口均恢复原有请求路径",
-    "完成统一门禁改动涉及接口的全量调用审计"
+    "流式回复渲染改为 requestAnimationFrame 节流，每帧最多一次全量重渲染",
+    "接收循环只累加数据，不再逐 chunk 同步重排，回复过程中页面交互不再卡死",
+    "delta 与 tool 事件统一走渲染调度器，流结束和中断均取消挂起帧"
   ]
 }

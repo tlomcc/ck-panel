@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v106-body-key-endpoints-fix';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v107-stream-render-nonblocking';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -6406,6 +6406,34 @@ async function chatSubmitPendingMessages(options){
     }
     return firstReplyTs;
   }
+  // 流式渲染节流：接收循环只累加数据，渲染统一交给 rAF，每帧最多一次全量重渲染，
+  // 避免高频 delta 在主线程里同步反复重排 markdown，把点击/切换/图片查看等交互挤掉。
+  var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;
+  function flushStreamRender(){
+    if(streamRenderStopped)return;
+    streamRenderDirty=false;
+    if(!out)return;
+    var shouldStick=chatIsMessagesNearBottom();
+    var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
+    out.classList.toggle('streaming-empty',streamingEmpty);
+    if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',streamingEmpty);
+    out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
+    chatFollowMessagesBottom(shouldStick,true,true);
+  }
+  function scheduleStreamRender(){
+    if(streamRenderStopped)return;
+    streamRenderDirty=true;
+    if(streamRenderRaf)return;
+    streamRenderRaf=requestAnimationFrame(function(){
+      streamRenderRaf=0;
+      if(streamRenderDirty)flushStreamRender();
+    });
+  }
+  function stopStreamRender(){
+    streamRenderStopped=true;
+    if(streamRenderRaf){cancelAnimationFrame(streamRenderRaf);streamRenderRaf=0;}
+    streamRenderDirty=false;
+  }
   try{
     await chatFetchWithSilentRetry(chatEndpoint(cfg),{
       method:'POST',
@@ -6445,12 +6473,7 @@ async function chatSubmitPendingMessages(options){
         if(ev==='delta'){
           if(data&&data.text)markFirstReplyTs();
           assistantText+=data.text||'';
-          var streamingEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
-          var deltaShouldStick=chatIsMessagesNearBottom();
-          out.classList.toggle('streaming-empty',streamingEmpty);
-          if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',streamingEmpty);
-          out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
-          chatFollowMessagesBottom(deltaShouldStick,true,true);
+          scheduleStreamRender();
         }else if(ev==='memory'){
           recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
           document.getElementById('chat-memory-pack').value=recallInfo.preview||'';
@@ -6469,12 +6492,7 @@ async function chatSubmitPendingMessages(options){
           if(ev==='tool'){
             markFirstReplyTs();
             toolEvents=chatUpsertToolEvent(toolEvents,data);
-            var stillEmpty=!chatAssistantStreamingVisibleText(assistantText)&&!toolEvents.length;
-            var toolShouldStick=chatIsMessagesNearBottom();
-            out.classList.toggle('streaming-empty',stillEmpty);
-            if(out.parentNode)out.parentNode.classList.toggle('streaming-empty-row',stillEmpty);
-            out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents);
-            chatFollowMessagesBottom(toolShouldStick,true,true);
+            scheduleStreamRender();
           }
           if(ev==='usage'){
             chatUpdateRuntime(cfg,data||{});
@@ -6519,6 +6537,7 @@ async function chatSubmitPendingMessages(options){
         throw chatCreateRequestFailure(CHAT_PLATFORM_EXIT_ERROR,true);
       }
     });
+    stopStreamRender();
     chatSetStatus('正在显示回复...');
     markFirstReplyTs();
     await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{anchorEl:out,splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs});
@@ -6537,6 +6556,7 @@ async function chatSubmitPendingMessages(options){
       toast(chatFriendlyError(e));
     }
   }finally{
+    stopStreamRender();
     chatSending=false;chatAbort=null;
     if(btn){btn.disabled=false;btn.textContent='发送';btn.title='发送';btn.classList.remove('chat-stop-btn')}
   }
