@@ -99,14 +99,19 @@
         deferredPrompt.userChoice.then(function() {
           deferredPrompt = null;
           updateInstallButton();
+        }).catch(function() {
+          deferredPrompt = null;
+          updateInstallButton();
         });
       });
     }
 
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
       var refreshing = false;
+      var hadControllerAtLoad = !!navigator.serviceWorker.controller;
       navigator.serviceWorker.addEventListener('controllerchange', function() {
         if (refreshing) return;
+        if (!hadControllerAtLoad) { hadControllerAtLoad = true; return; }
         refreshing = true;
         try {
           if (document.body && document.body.classList.contains('chat-active')) {
@@ -125,7 +130,7 @@
             }
           });
         });
-        if (reg && reg.update) reg.update();
+        if (reg && reg.update) { try { var up = reg.update(); if (up && up.catch) up.catch(function() {}); } catch (e) {} }
       }).catch(function() {});
     }
 
