@@ -1,8 +1,8 @@
 {
-  "version": "chat-v113-live-typewriter-stream",
+  "version": "chat-v114-direct-sse-stream",
   "notes": [
-    "首个可见 SSE delta 到达后立即开始逐字显示，不再等待 Claude 完整回复",
-    "基础速度 30–50ms，标点和换行加入自然停顿，流结束后从已显示前缀继续多气泡动画",
-    "移除闪烁光标、跳动圆点和空占位动画，保留最终 Markdown、自动跟底和立即补全"
+    "SSE delta 到达后立即追加到 assistant 气泡，不再经过模拟打字机和字符延时",
+    "流式阶段使用纯文本轻量渲染，结束后一次性渲染完整 Markdown并保存对话",
+    "流中发送新消息会中止旧流、保留已收正文并继续发送新内容"
   ]
 }

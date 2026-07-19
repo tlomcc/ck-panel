@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v133-chat-v113-live-typewriter-stream';
+const CACHE_NAME = 'ck-panel-shell-v134-chat-v114-direct-sse-stream';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v113-live-typewriter-stream',
-  './polish.css?v=chat-v113-live-typewriter-stream',
-  './chat.css?v=chat-v113-live-typewriter-stream',
-  './wechat.css?v=chat-v113-live-typewriter-stream',
-  './script.js?v=chat-v113-live-typewriter-stream',
-  './script-extra.js?v=chat-v113-live-typewriter-stream',
-  './pwa.js?v=chat-v113-live-typewriter-stream',
+  './style.css?v=chat-v114-direct-sse-stream',
+  './polish.css?v=chat-v114-direct-sse-stream',
+  './chat.css?v=chat-v114-direct-sse-stream',
+  './wechat.css?v=chat-v114-direct-sse-stream',
+  './script.js?v=chat-v114-direct-sse-stream',
+  './script-extra.js?v=chat-v114-direct-sse-stream',
+  './pwa.js?v=chat-v114-direct-sse-stream',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

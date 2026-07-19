@@ -3244,7 +3244,7 @@ body.chat-active .chat-send:not(:disabled):active{
   transform:translateY(0) scale(.94)!important;
 }
 
-body.chat-active .chat-typewriter-plain{
+body.chat-active .chat-stream-plain{
   display:inline!important;
   white-space:pre-wrap!important;
   overflow-wrap:anywhere!important;
