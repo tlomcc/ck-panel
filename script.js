@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v114-direct-sse-stream';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v115-stream-paragraph-bubbles';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5198,6 +5198,27 @@ function chatSplitAssistantReplies(rawText,splitEnabled){
   if(parsed.thinking&&out.length)out[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+out[0];
   return out.length?out:[rawText];
 }
+function chatLiveStreamParagraphs(text,splitEnabled){
+  text=String(text||'').replace(/\r\n/g,'\n');
+  if(splitEnabled===false||text.indexOf('\n\n')<0)return text?[text]:[];
+  var lines=text.split('\n');
+  var parts=[],buffer=[],inFence=false;
+  function flush(){
+    var part=buffer.join('\n').replace(/\s+$/,'');
+    buffer=[];
+    if(part)parts.push(part);
+  }
+  lines.forEach(function(line){
+    if(/^\s*```/.test(line))inFence=!inFence;
+    if(!inFence&&!String(line||'').trim()){
+      flush();
+      return;
+    }
+    buffer.push(line);
+  });
+  flush();
+  return parts.length?parts:(text?[text]:[]);
+}
 function chatStreamScrollBottom(){
   var box=chatMessagesBox();
   if(!box)return;
@@ -6570,29 +6591,40 @@ async function chatSubmitPendingMessages(options){
     }
     return firstReplyTs;
   }
-  // SSE 读取循环只追加本次 delta 的纯文本；流结束后再统一渲染 Markdown。
-  var liveStream={started:false,displayed:'',textNode:null};
-  function startLiveStream(){
-    if(liveStream.started||!out)return;
+  // SSE delta 直接更新当前段；只有明确的段落边界才创建下一个气泡。
+  var liveStream={started:false,bubbles:[],textNodes:[],displayed:[]};
+  function ensureLiveStreamPart(index){
+    if(liveStream.textNodes[index])return liveStream.textNodes[index];
+    var bubble=index===0?out:chatAddBubble('assistant','',false);
+    if(!bubble)return null;
     liveStream.started=true;
-    out.classList.remove('streaming-empty');
-    if(out.parentNode)out.parentNode.classList.remove('streaming-empty-row');
-    out.innerHTML=chatRenderToolTrace(toolEvents)+'<span class="chat-stream-plain"></span>';
-    var holder=out.querySelector('.chat-stream-plain');
-    liveStream.textNode=document.createTextNode('');
-    if(holder)holder.appendChild(liveStream.textNode);
+    bubble.classList.remove('streaming-empty');
+    if(bubble.parentNode)bubble.parentNode.classList.remove('streaming-empty-row');
+    bubble.innerHTML=(index===0?chatRenderToolTrace(toolEvents):'')+'<span class="chat-stream-plain"></span>';
+    var holder=bubble.querySelector('.chat-stream-plain');
+    var textNode=document.createTextNode('');
+    if(holder)holder.appendChild(textNode);
+    liveStream.bubbles[index]=bubble;
+    liveStream.textNodes[index]=textNode;
+    liveStream.displayed[index]='';
+    return textNode;
   }
   function appendLiveStream(rawText){
     var target=String(chatAssistantStreamingVisibleText(rawText)||'');
     if(!target)return;
-    startLiveStream();
-    var suffix=target.indexOf(liveStream.displayed)===0?target.slice(liveStream.displayed.length):target;
-    if(target.indexOf(liveStream.displayed)!==0&&liveStream.textNode)liveStream.textNode.data='';
-    if(suffix&&liveStream.textNode){
-      chatRecordFirstRenderedLatency(latencyTrace);
-      liveStream.textNode.appendData(suffix);
-    }
-    liveStream.displayed=target;
+    var parts=chatLiveStreamParagraphs(target,cfg.splitAssistantReplies!==false);
+    parts.forEach(function(part,index){
+      var textNode=ensureLiveStreamPart(index);
+      if(!textNode)return;
+      var previous=String(liveStream.displayed[index]||'');
+      var suffix=part.indexOf(previous)===0?part.slice(previous.length):part;
+      if(part.indexOf(previous)!==0)textNode.data='';
+      if(suffix){
+        chatRecordFirstRenderedLatency(latencyTrace);
+        textNode.appendData(suffix);
+      }
+      liveStream.displayed[index]=part;
+    });
     chatStreamScrollBottom();
   }
   var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;

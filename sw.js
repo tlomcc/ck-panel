@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v134-chat-v114-direct-sse-stream';
+const CACHE_NAME = 'ck-panel-shell-v135-chat-v115-stream-paragraph-bubbles';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v114-direct-sse-stream',
-  './polish.css?v=chat-v114-direct-sse-stream',
-  './chat.css?v=chat-v114-direct-sse-stream',
-  './wechat.css?v=chat-v114-direct-sse-stream',
-  './script.js?v=chat-v114-direct-sse-stream',
-  './script-extra.js?v=chat-v114-direct-sse-stream',
-  './pwa.js?v=chat-v114-direct-sse-stream',
+  './style.css?v=chat-v115-stream-paragraph-bubbles',
+  './polish.css?v=chat-v115-stream-paragraph-bubbles',
+  './chat.css?v=chat-v115-stream-paragraph-bubbles',
+  './wechat.css?v=chat-v115-stream-paragraph-bubbles',
+  './script.js?v=chat-v115-stream-paragraph-bubbles',
+  './script-extra.js?v=chat-v115-stream-paragraph-bubbles',
+  './pwa.js?v=chat-v115-stream-paragraph-bubbles',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
