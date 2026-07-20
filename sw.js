@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v136-chat-v116-fix-history-loss-race';
+const CACHE_NAME = 'ck-panel-shell-v137-chat-v117-reuse-stream-bubbles';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v116-fix-history-loss-race',
-  './polish.css?v=chat-v116-fix-history-loss-race',
-  './chat.css?v=chat-v116-fix-history-loss-race',
-  './wechat.css?v=chat-v116-fix-history-loss-race',
-  './script.js?v=chat-v116-fix-history-loss-race',
-  './script-extra.js?v=chat-v116-fix-history-loss-race',
-  './pwa.js?v=chat-v116-fix-history-loss-race',
+  './style.css?v=chat-v117-reuse-stream-bubbles',
+  './polish.css?v=chat-v117-reuse-stream-bubbles',
+  './chat.css?v=chat-v117-reuse-stream-bubbles',
+  './wechat.css?v=chat-v117-reuse-stream-bubbles',
+  './script.js?v=chat-v117-reuse-stream-bubbles',
+  './script-extra.js?v=chat-v117-reuse-stream-bubbles',
+  './pwa.js?v=chat-v117-reuse-stream-bubbles',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

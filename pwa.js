@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v116-fix-history-loss-race').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v117-reuse-stream-bubbles').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

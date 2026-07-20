@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v116-fix-history-loss-race';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v117-reuse-stream-bubbles';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5359,12 +5359,24 @@ async function chatFetchWithSilentRetry(url,requestInit,consumeResponse){
   }
 }
 function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
-  var parts=chatSplitAssistantReplies(rawText,!(opts&&opts.splitAssistantReplies===false));
+  opts=opts||{};
+  // 复用流式已显示的分段：流结束时用屏幕上已存在的段落边界落地，
+  // 避免再用语义分段重新切一遍导致所有气泡重排、集体重播浮入动画（“一起跳”）。
+  var liveParts=Array.isArray(opts.liveParts)?opts.liveParts.filter(function(p){return String(p||'').trim()}):[];
+  var reuseLive=opts.reuseLiveBubbles===true&&liveParts.length>0;
+  var parts;
+  if(reuseLive){
+    parts=liveParts.slice();
+    var parsedLive=chatSplitThinkingText(rawText);
+    if(parsedLive.thinking&&parts.length)parts[0]='<ck_thinking>\n'+parsedLive.thinking+'\n</ck_thinking>\n\n'+parts[0];
+  }else{
+    parts=chatSplitAssistantReplies(rawText,!(opts.splitAssistantReplies===false));
+  }
   var tools=chatCloneToolEvents(toolEvents);
   if(!parts.length&&tools.length)parts=[''];
   if(!parts.length)return Promise.resolve();
-  var firstReplyTs=Number(opts&&opts.firstReplyTs)||Date.now();
-  var userSentTs=Number(opts&&opts.userSentTs)||0;
+  var firstReplyTs=Number(opts.firstReplyTs)||Date.now();
+  var userSentTs=Number(opts.userSentTs)||0;
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
     var ts=i===0?firstReplyTs:Math.max(Date.now(),firstReplyTs+i);
@@ -5375,7 +5387,8 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
       msg.waitMs=Math.max(0,firstReplyTs-userSentTs);
     }
     chatMessages.push(msg);
-    chatMarkMessageFresh(msg);
+    // 复用流式气泡时不重标 chat-fresh，收尾只把纯文本换成 Markdown，不再重播入场动画。
+    if(!reuseLive)chatMarkMessageFresh(msg);
   }
   chatSaveLocalMessages();
   chatRenderPendingBar();
@@ -6801,7 +6814,9 @@ async function chatSubmitPendingMessages(options){
     stopStreamRender();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace});
+    // 流式已逐段显示过内容时，复用屏幕上的分段落地，气泡不重排、不重播浮入动画。
+    var liveDisplayedParts=liveStream.started?(liveStream.displayed||[]).filter(function(p){return String(p||'').trim()}):[];
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,reuseLiveBubbles:liveDisplayedParts.length>0,liveParts:liveDisplayedParts});
     chatSetStatus('完成');
   }catch(e){
     if(chatRequestWasAborted(e,chatAbort&&chatAbort.signal)){
