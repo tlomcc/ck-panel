@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v115-stream-paragraph-bubbles';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v116-fix-history-loss-race';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2243,6 +2243,9 @@ var chatDb=null;
 var chatDbOpenPromise=null;
 var chatSessionsLoadPromise=null;
 var chatSessionsLoadedFromIndexedDb=false;
+var chatSessionsReady=false;
+var chatPendingIdbSave=false;
+var chatStorageDegradedWarned=false;
 var chatIndexedDbFailed=false;
 var chatDeletedSessionIds={};
 var chatInputFocused=false;
@@ -3486,6 +3489,12 @@ function chatLoadSessionsFromIndexedDb(){
 }
 function chatSaveSessionsToIndexedDb(snapshot){
   if(!chatIndexedDbSupported()||chatIndexedDbFailed)return;
+  // 权威存储写入门闩：全量加载完成前禁止写 IndexedDB，
+  // 否则启动 race 窗口内的自动保存会用 localStorage 40 条摘要覆盖并删除全量历史。
+  if(!chatSessionsReady){
+    chatPendingIdbSave=true;
+    return;
+  }
   snapshot=(snapshot||chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES)).map(chatNormalizeSession);
   chatOpenIndexedDb().then(function(db){
     return new Promise(function(resolve,reject){
@@ -3504,8 +3513,6 @@ function chatSaveSessionsToIndexedDb(snapshot){
       tx.onerror=function(){reject(tx.error||new Error('IndexedDB write failed'))};
       tx.onabort=function(){reject(tx.error||new Error('IndexedDB write aborted'))};
     });
-  }).then(function(){
-    chatSessionsLoadedFromIndexedDb=true;
   }).catch(function(e){
     chatIndexedDbFailed=true;
     if(window.console&&console.warn)console.warn('[CK chat] IndexedDB save failed:',e);
@@ -4367,6 +4374,20 @@ function chatSaveSessions(){
   data=chatSessionStorageData(20,10,0);
   chatStoreJson(CHAT_MESSAGES_KEY,data);
 }
+function chatMarkSessionsReady(){
+  if(chatSessionsReady)return;
+  chatSessionsReady=true;
+  // race 期间被门闩拦下的写入在此合并 flush 一次，保证内存权威全量落盘。
+  if(chatPendingIdbSave){
+    chatPendingIdbSave=false;
+    chatSaveSessionsToIndexedDb(chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES));
+  }
+}
+function chatNotifyPersistenceDegraded(){
+  if(chatStorageDegradedWarned)return;
+  chatStorageDegradedWarned=true;
+  try{toast('本机无法完整保存聊天历史，较早的消息可能不会被保留',5000)}catch(e){}
+}
 function chatStartIndexedDbSessionLoad(){
   if(!chatIndexedDbSupported()||chatIndexedDbFailed)return Promise.resolve(chatSessions);
   if(chatSessionsLoadPromise)return chatSessionsLoadPromise;
@@ -4390,6 +4411,8 @@ function chatStartIndexedDbSessionLoad(){
         });
         if(!exists)chatMessages.push(m);
       });
+      // 权威全量已回填到内存，此后写入才安全。开门闩并合并 race 期间挂起的保存。
+      chatMarkSessionsReady();
       chatSaveSessions();
       if(chatInitialized){
         chatRenderSessions();
@@ -4398,14 +4421,23 @@ function chatStartIndexedDbSessionLoad(){
       }
       return chatSessions;
     }
+    // IndexedDB 确为空：仅此时才允许用 localStorage 摘要迁移写入，
+    // 避免用 40 条摘要覆盖任何已存在的全量历史。
     if(localSnapshot.length){
       chatSessions=localSnapshot;
+    }
+    chatMarkSessionsReady();
+    if(localSnapshot.length){
       chatSaveSessionsToIndexedDb(chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES));
     }
     return chatSessions;
   }).catch(function(e){
     chatIndexedDbFailed=true;
     if(window.console&&console.warn)console.warn('[CK chat] IndexedDB load failed:',e);
+    // IndexedDB 不可用：解锁保存门闩，让 localStorage 降级副本仍能持续写入，
+    // 并提示用户历史可能无法完整持久化。
+    chatMarkSessionsReady();
+    chatNotifyPersistenceDegraded();
     return chatSessions;
   });
   return chatSessionsLoadPromise;

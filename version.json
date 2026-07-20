@@ -1,8 +1,8 @@
 {
-  "version": "chat-v115-stream-paragraph-bubbles",
+  "version": "chat-v116-fix-history-loss-race",
   "notes": [
-    "真流式回复遇到明确段落边界时，新段会在独立 assistant 气泡中浮入",
-    "单段回复仍在一个气泡内直接追加，不加入字符延时或模拟打字速度",
-    "代码块内部空行不会误拆，流结束后继续统一渲染完整 Markdown"
+    "修复聊天记录会莫名变少：IndexedDB 全量加载完成前禁止写权威存储，避免启动 race 期间自动保存用 40 条 localStorage 摘要覆盖并删除全量历史",
+    "保存动作不再冒充 IndexedDB 已加载标志，损坏不会被固化；仅当 IndexedDB 确为空时才用摘要迁移写入",
+    "IndexedDB 不可用时不再静默截断，提示用户历史无法完整持久化"
   ]
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ck-panel-shell-v135-chat-v115-stream-paragraph-bubbles';
+const CACHE_NAME = 'ck-panel-shell-v136-chat-v116-fix-history-loss-race';
 const SHELL_ASSETS = [
   './',
   './index.html',
