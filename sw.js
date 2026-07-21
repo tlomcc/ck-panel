@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v137-chat-v117-reuse-stream-bubbles';
+const CACHE_NAME = 'ck-panel-shell-v138-chat-v118-retry-all-failed-messages';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v117-reuse-stream-bubbles',
-  './polish.css?v=chat-v117-reuse-stream-bubbles',
-  './chat.css?v=chat-v117-reuse-stream-bubbles',
-  './wechat.css?v=chat-v117-reuse-stream-bubbles',
-  './script.js?v=chat-v117-reuse-stream-bubbles',
-  './script-extra.js?v=chat-v117-reuse-stream-bubbles',
-  './pwa.js?v=chat-v117-reuse-stream-bubbles',
+  './style.css?v=chat-v118-retry-all-failed-messages',
+  './polish.css?v=chat-v118-retry-all-failed-messages',
+  './chat.css?v=chat-v118-retry-all-failed-messages',
+  './wechat.css?v=chat-v118-retry-all-failed-messages',
+  './script.js?v=chat-v118-retry-all-failed-messages',
+  './script-extra.js?v=chat-v118-retry-all-failed-messages',
+  './pwa.js?v=chat-v118-retry-all-failed-messages',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

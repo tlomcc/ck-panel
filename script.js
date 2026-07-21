@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v117-reuse-stream-bubbles';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v118-retry-all-failed-messages';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4704,6 +4704,14 @@ function chatWindowContextMessages(){
 function chatPendingMessages(){
   return chatMessages.filter(function(m){return m&&m.role==='pending_user'&&chatMessageHasContent(m)});
 }
+function chatFailedUserMessages(){
+  return chatMessages.filter(function(m){return m&&m.role==='user'&&m.sendFailed===true&&chatMessageHasContent(m)});
+}
+function chatQueueFailedUserMessagesForRetry(){
+  var failed=chatFailedUserMessages();
+  failed.forEach(function(m){m.role='pending_user'});
+  return failed;
+}
 function chatRenderPendingBar(){
   var bar=document.getElementById('chat-pending-bar');
   if(!bar)return;
@@ -6380,7 +6388,7 @@ async function chatSendMessage(){
     toast('图片处理中');
     return;
   }
-  if(text||chatDraftImages.length||chatPendingMessages().length){
+  if(text||chatDraftImages.length||chatPendingMessages().length||chatFailedUserMessages().length){
     var imageSnapshot=Array.isArray(chatDraftImages)?chatDraftImages.slice(0,CHAT_IMAGE_MAX_COUNT):[];
     var submitTs=Date.now();
     chatBeginSendingUi();
@@ -6443,11 +6451,6 @@ function chatRetryFailedUser(i){
   if(chatSending)return;
   var m=chatMessages[i];
   if(!m||m.role!=='user'||!m.sendFailed||!chatMessageHasContent(m))return;
-  m.role='pending_user';
-  delete m.sendFailed;
-  delete m.failedAt;
-  chatSaveLocalMessages();
-  chatRenderMessages({respectUserScroll:true,newMessage:true});
   return chatSubmitPendingMessages();
 }
 async function chatSubmitPendingMessages(options){
@@ -6458,6 +6461,7 @@ async function chatSubmitPendingMessages(options){
   var input=document.getElementById('chat-input');
   var extra=options.inputSnapshot?String(options.extraText||'').trim():(input&&input.value||'').trim();
   var pending=chatPendingMessages();
+  var failed=chatFailedUserMessages();
   var regeneratePending=pending.find(function(m){return m&&m.regenerateRequest===true});
   if(regeneratePending&&Number.isInteger(regeneratePending.regenerateCutoff)){
     var regenerateCurrentIndex=chatMessages.indexOf(regeneratePending);
@@ -6474,7 +6478,7 @@ async function chatSubmitPendingMessages(options){
     pending=[regeneratePending];
   }
   var draftImages=options.inputSnapshot?chatNormalizeImageList(options.draftImages):chatNormalizeImageList(chatDraftImages);
-  var hasPlanned=pending.some(chatMessageHasContent)||!!extra||draftImages.length>0;
+  var hasPlanned=pending.some(chatMessageHasContent)||failed.length>0||!!extra||draftImages.length>0;
   if(!hasPlanned)return;
   if(chatImageEncodingCount>0){
     toast('图片处理中');
@@ -6490,16 +6494,16 @@ async function chatSubmitPendingMessages(options){
     }
     chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:submitTs});
   }
+  var out=chatAddBubble('assistant','',false);
+  var btn=document.getElementById('chat-send-btn');
+  if(!options.sendingStarted)chatBeginSendingUi();
+  await chatEnsureSessionsReady();
+  chatQueueFailedUserMessagesForRetry();
   pending=chatPendingMessages();
   pending.forEach(function(m){delete m.sendFailed;delete m.failedAt;chatMarkMessageFresh(m)});
   pending.forEach(function(m){chatUpdateMessageRowOnly(chatMessages.indexOf(m))});
   chatSaveLocalMessagesDeferred();
   chatScrollMessagesBottom(true);
-  var out=chatAddBubble('assistant','',false);
-  var btn=document.getElementById('chat-send-btn');
-  if(!options.sendingStarted)chatBeginSendingUi();
-  await chatEnsureSessionsReady();
-  pending=chatPendingMessages();
   if(!out||!out.parentNode)out=chatAddBubble('assistant','',false);
   var route=await chatEnsureMainRouteReady();
   if(!route||!route.ok){
