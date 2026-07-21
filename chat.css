@@ -3173,6 +3173,10 @@ body.chat-active .chat-msg-row.user.chat-fresh{
   animation-name:ckChatMessageFloatUser!important;
 }
 
+body.chat-active .chat-msg-row.assistant.chat-fresh.chat-staggered{
+  animation:ckChatAssistantStaggerIn .22s ease-out both!important;
+}
+
 body.chat-active .chat-bubble{
   transition:
     transform .18s cubic-bezier(.22,1,.36,1),
@@ -3261,6 +3265,11 @@ body.chat-active .chat-stream-plain{
   0%{opacity:0;transform:translate3d(8px,10px,0) scale(.985)}
   60%{opacity:1;transform:translate3d(0,-1px,0) scale(1.003)}
   100%{opacity:1;transform:translate3d(0,0,0) scale(1)}
+}
+
+@keyframes ckChatAssistantStaggerIn{
+  from{opacity:0;transform:translate3d(0,7px,0)}
+  to{opacity:1;transform:translate3d(0,0,0)}
 }
 
 @media(prefers-reduced-motion:reduce){
