@@ -307,6 +307,17 @@ body.chat-active .chat-bubble.user.pending{
   border-style:dashed!important;
   opacity:.92!important;
 }
+body.chat-active .chat-msg-row.pending{
+  position:relative!important;
+  transition:transform .16s ease,opacity .16s ease!important;
+  touch-action:pan-y!important;
+}
+body.chat-active .chat-msg-row.pending.pending-swipe-active{
+  transform:translateX(var(--pending-swipe-x,0px))!important;
+}
+body.chat-active .chat-msg-row.pending.pending-long-press{
+  opacity:.62!important;
+}
 
 body.chat-active .chat-bubble.assistant{
   max-width:min(700px,82%)!important;

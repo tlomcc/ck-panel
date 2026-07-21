@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v139-chat-v119-stagger-assistant-bubbles';
+const CACHE_NAME = 'ck-panel-shell-v140-chat-v120-pending-message-queue';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v119-stagger-assistant-bubbles',
-  './polish.css?v=chat-v119-stagger-assistant-bubbles',
-  './chat.css?v=chat-v119-stagger-assistant-bubbles',
-  './wechat.css?v=chat-v119-stagger-assistant-bubbles',
-  './script.js?v=chat-v119-stagger-assistant-bubbles',
-  './script-extra.js?v=chat-v119-stagger-assistant-bubbles',
-  './pwa.js?v=chat-v119-stagger-assistant-bubbles',
+  './style.css?v=chat-v120-pending-message-queue',
+  './polish.css?v=chat-v120-pending-message-queue',
+  './chat.css?v=chat-v120-pending-message-queue',
+  './wechat.css?v=chat-v120-pending-message-queue',
+  './script.js?v=chat-v120-pending-message-queue',
+  './script-extra.js?v=chat-v120-pending-message-queue',
+  './pwa.js?v=chat-v120-pending-message-queue',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
