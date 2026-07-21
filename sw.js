@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v140-chat-v120-pending-message-queue';
+const CACHE_NAME = 'ck-panel-shell-v141-chat-v121-readable-error-toast';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v120-pending-message-queue',
-  './polish.css?v=chat-v120-pending-message-queue',
-  './chat.css?v=chat-v120-pending-message-queue',
-  './wechat.css?v=chat-v120-pending-message-queue',
-  './script.js?v=chat-v120-pending-message-queue',
-  './script-extra.js?v=chat-v120-pending-message-queue',
-  './pwa.js?v=chat-v120-pending-message-queue',
+  './style.css?v=chat-v121-readable-error-toast',
+  './polish.css?v=chat-v121-readable-error-toast',
+  './chat.css?v=chat-v121-readable-error-toast',
+  './wechat.css?v=chat-v121-readable-error-toast',
+  './script.js?v=chat-v121-readable-error-toast',
+  './script-extra.js?v=chat-v121-readable-error-toast',
+  './pwa.js?v=chat-v121-readable-error-toast',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

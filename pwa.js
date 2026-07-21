@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v120-pending-message-queue').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v121-readable-error-toast').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

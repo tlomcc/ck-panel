@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v120-pending-message-queue';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v121-readable-error-toast';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2198,7 +2198,56 @@ function goMemory(){
   updateStats();renderGrid();renderTags();renderHomeInsights();
   switchPanelTab(target,{restoreScroll:returnScrollY});
 }
-function toast(msg,duration){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show';setTimeout(function(){t.className='toast'},duration||2000)}
+var toastAutoHideTimer=null;
+var toastAutoHideDuration=0;
+var toastHoverPauses=false;
+function toastClearAutoHide(){
+  if(toastAutoHideTimer!==null){clearTimeout(toastAutoHideTimer);toastAutoHideTimer=null}
+}
+function toastIsInteracting(){
+  var t=document.getElementById('toast');
+  if(!t)return false;
+  try{if(typeof t.matches==='function'&&t.matches(':hover'))return true}catch(e){}
+  return !!(document.activeElement&&typeof t.contains==='function'&&t.contains(document.activeElement));
+}
+function closeToast(){
+  toastClearAutoHide();toastHoverPauses=false;toastAutoHideDuration=0;
+  var t=document.getElementById('toast');
+  if(!t)return;
+  t.className='toast';
+  t.setAttribute('role','status');
+  t.setAttribute('aria-live','polite');
+  t.setAttribute('aria-hidden','true');
+}
+function toastScheduleAutoHide(){
+  toastClearAutoHide();
+  if(toastAutoHideDuration<=0||(toastHoverPauses&&toastIsInteracting()))return;
+  toastAutoHideTimer=setTimeout(closeToast,toastAutoHideDuration);
+}
+function toastPauseAutoHide(){
+  if(toastHoverPauses)toastClearAutoHide();
+}
+function toastResumeAutoHide(){
+  var t=document.getElementById('toast');
+  if(toastHoverPauses&&t&&t.classList.contains('show')&&!toastIsInteracting())toastScheduleAutoHide();
+}
+function toast(msg,duration,opts){
+  opts=opts||{};
+  var t=document.getElementById('toast');
+  if(!t)return;
+  var message=t.querySelector('.toast-message');
+  if(!message){message=document.createElement('div');message.className='toast-message';t.insertBefore(message,t.firstChild)}
+  var isError=opts.type==='error';
+  var requestedDuration=Number(duration);
+  message.textContent=String(msg==null?'':msg);
+  toastAutoHideDuration=requestedDuration>0?requestedDuration:(isError?5000:2000);
+  toastHoverPauses=!!opts.pauseOnHover;
+  t.className='toast show'+(isError?' toast-error':'')+(opts.closable?' toast-closable':'');
+  t.setAttribute('role',isError?'alert':'status');
+  t.setAttribute('aria-live',isError?'assertive':'polite');
+  t.setAttribute('aria-hidden','false');
+  toastScheduleAutoHide();
+}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 var CHAT_CONFIG_KEY='ckChatConfigV2';
@@ -7039,7 +7088,7 @@ async function chatSubmitPendingMessages(options){
         if(chatMessages[idx]){chatMessages[idx].sendFailed=true;chatMessages[idx].failedAt=Date.now()}
       });
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('请求失败');
-      toast(chatFriendlyError(e));
+      toast(chatFriendlyError(e),5000,{type:'error',closable:true,pauseOnHover:true});
     }
   }finally{
     stopStreamRender();

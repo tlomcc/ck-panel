@@ -2122,6 +2122,98 @@ body.dark.chat-active .toast{
   box-shadow:0 12px 28px rgba(15,23,42,.16)!important;
 }
 
+body.chat-active .toast.toast-error{
+  top:calc(118px + env(safe-area-inset-top))!important;
+  bottom:auto!important;
+  width:min(640px,calc(100vw - 28px))!important;
+  max-width:none!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+  background:#fff1f2!important;
+  color:#8f1d2c!important;
+  border:1px solid #ef9aa5!important;
+  border-radius:8px!important;
+  box-shadow:0 12px 30px rgba(127,29,45,.18)!important;
+  font-size:14px!important;
+  line-height:1.55!important;
+  text-align:left!important;
+  z-index:26!important;
+  user-select:text!important;
+  -webkit-user-select:text!important;
+  animation:chatErrorToastIn .18s ease-out!important;
+}
+
+body.chat-active .toast.toast-error .toast-message{
+  max-height:min(34vh,260px)!important;
+  padding:14px 48px 14px 16px!important;
+  overflow-y:auto!important;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  user-select:text!important;
+  -webkit-user-select:text!important;
+}
+
+body.chat-active .toast .toast-close{
+  display:none;
+}
+
+body.chat-active .toast.toast-closable .toast-close{
+  position:absolute!important;
+  top:7px!important;
+  right:7px!important;
+  width:30px!important;
+  height:30px!important;
+  padding:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:0!important;
+  border-radius:6px!important;
+  background:transparent!important;
+  color:#9f2f3d!important;
+  font:700 22px/1 Arial,sans-serif!important;
+  cursor:pointer!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+}
+
+body.chat-active .toast.toast-closable .toast-close:hover{
+  background:#ffe0e3!important;
+  color:#751421!important;
+}
+
+body.chat-active .toast.toast-closable .toast-close:focus-visible{
+  outline:2px solid #b42336!important;
+  outline-offset:1px!important;
+}
+
+body.dark.chat-active .toast.toast-error{
+  background:#32191d!important;
+  color:#ffd1d6!important;
+  border-color:#8f3b49!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.34)!important;
+}
+
+body.dark.chat-active .toast.toast-closable .toast-close{
+  color:#ffb2bd!important;
+}
+
+body.dark.chat-active .toast.toast-closable .toast-close:hover{
+  background:#51242b!important;
+  color:#ffe8eb!important;
+}
+
+@keyframes chatErrorToastIn{
+  from{opacity:0;transform:translateX(-50%) translateY(-6px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}
+}
+
+@media(prefers-reduced-motion:reduce){
+  body.chat-active .toast.toast-error{animation:none!important}
+}
+
 @media(min-width:560px){
   body.chat-active .chat-settings{
     left:50%!important;
