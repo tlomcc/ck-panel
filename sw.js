@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v145-chat-v125-stop-keeps-retry-batch';
+const CACHE_NAME = 'ck-panel-shell-v146-chat-v126-error-copy-scroll-follow';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v125-stop-keeps-retry-batch',
-  './polish.css?v=chat-v125-stop-keeps-retry-batch',
-  './chat.css?v=chat-v125-stop-keeps-retry-batch',
-  './wechat.css?v=chat-v125-stop-keeps-retry-batch',
-  './script.js?v=chat-v125-stop-keeps-retry-batch',
-  './script-extra.js?v=chat-v125-stop-keeps-retry-batch',
-  './pwa.js?v=chat-v125-stop-keeps-retry-batch',
+  './style.css?v=chat-v126-error-copy-scroll-follow',
+  './polish.css?v=chat-v126-error-copy-scroll-follow',
+  './chat.css?v=chat-v126-error-copy-scroll-follow',
+  './wechat.css?v=chat-v126-error-copy-scroll-follow',
+  './script.js?v=chat-v126-error-copy-scroll-follow',
+  './script-extra.js?v=chat-v126-error-copy-scroll-follow',
+  './pwa.js?v=chat-v126-error-copy-scroll-follow',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

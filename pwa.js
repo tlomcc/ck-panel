@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v125-stop-keeps-retry-batch').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v126-error-copy-scroll-follow').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

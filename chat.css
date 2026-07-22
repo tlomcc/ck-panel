@@ -213,7 +213,8 @@ body.chat-active .chat-messages{
 
 body.chat-active .chat-new-message-tip{
   position:absolute!important;
-  left:50%!important;
+  left:auto!important;
+  right:max(14px,calc((100% - 820px)/2 + 14px))!important;
   bottom:calc(var(--ck-chat-compose-height,64px) + 12px)!important;
   z-index:24!important;
   min-width:118px!important;
@@ -233,14 +234,14 @@ body.chat-active .chat-new-message-tip{
   cursor:pointer!important;
   opacity:0!important;
   pointer-events:none!important;
-  transform:translate(-50%,10px)!important;
+  transform:translateY(10px)!important;
   transition:opacity .18s ease,transform .18s ease,background .18s ease!important;
 }
 
 body.chat-active .chat-new-message-tip.show{
   opacity:1!important;
   pointer-events:auto!important;
-  transform:translate(-50%,0)!important;
+  transform:translateY(0)!important;
 }
 
 body.chat-active .chat-new-message-tip[hidden]{
@@ -2127,8 +2128,12 @@ body.chat-active .toast.toast-error{
   bottom:auto!important;
   width:min(640px,calc(100vw - 28px))!important;
   max-width:none!important;
-  padding:0!important;
+  padding:8px 7px 0 16px!important;
   box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto auto!important;
+  align-items:center!important;
+  column-gap:6px!important;
   overflow:hidden!important;
   background:#fff1f2!important;
   color:#8f1d2c!important;
@@ -2145,8 +2150,10 @@ body.chat-active .toast.toast-error{
 }
 
 body.chat-active .toast.toast-error .toast-message{
+  grid-column:1 / -1!important;
+  grid-row:2!important;
   max-height:min(34vh,260px)!important;
-  padding:14px 48px 14px 16px!important;
+  padding:5px 9px 14px 0!important;
   overflow-y:auto!important;
   white-space:pre-wrap!important;
   overflow-wrap:anywhere!important;
@@ -2155,14 +2162,52 @@ body.chat-active .toast.toast-error .toast-message{
   -webkit-user-select:text!important;
 }
 
-body.chat-active .toast .toast-close{
+body.chat-active .toast .toast-close,
+body.chat-active .toast .toast-copy{
   display:none;
 }
 
+body.chat-active .toast.toast-error .toast-copy{
+  position:static!important;
+  grid-column:2!important;
+  grid-row:1!important;
+  min-width:70px!important;
+  height:28px!important;
+  padding:0 9px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:1px solid #e2a0aa!important;
+  border-radius:6px!important;
+  background:#fff9fa!important;
+  color:#8f1d2c!important;
+  font:650 12px/1 Arial,"Microsoft YaHei",sans-serif!important;
+  cursor:pointer!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+}
+
+body.chat-active .toast.toast-error .toast-copy:hover{
+  background:#ffe4e7!important;
+  border-color:#d77d8a!important;
+  color:#751421!important;
+}
+
+body.chat-active .toast.toast-error .toast-copy:focus-visible{
+  outline:2px solid #b42336!important;
+  outline-offset:1px!important;
+}
+
+body.chat-active .toast.toast-error .toast-copy.copied{
+  background:#e9f8ee!important;
+  border-color:#8bc9a0!important;
+  color:#21643a!important;
+}
+
 body.chat-active .toast.toast-closable .toast-close{
-  position:absolute!important;
-  top:7px!important;
-  right:7px!important;
+  position:static!important;
+  grid-column:3!important;
+  grid-row:1!important;
   width:30px!important;
   height:30px!important;
   padding:0!important;
@@ -2198,6 +2243,24 @@ body.dark.chat-active .toast.toast-error{
 
 body.dark.chat-active .toast.toast-closable .toast-close{
   color:#ffb2bd!important;
+}
+
+body.dark.chat-active .toast.toast-error .toast-copy{
+  border-color:#7b3c46!important;
+  background:#402027!important;
+  color:#ffc0c8!important;
+}
+
+body.dark.chat-active .toast.toast-error .toast-copy:hover{
+  border-color:#9d4d5a!important;
+  background:#51242b!important;
+  color:#ffe8eb!important;
+}
+
+body.dark.chat-active .toast.toast-error .toast-copy.copied{
+  border-color:#39714b!important;
+  background:#173923!important;
+  color:#9ce3b4!important;
 }
 
 body.dark.chat-active .toast.toast-closable .toast-close:hover{

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v125-stop-keeps-retry-batch';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v126-error-copy-scroll-follow';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2214,6 +2214,8 @@ function closeToast(){
   toastClearAutoHide();toastHoverPauses=false;toastAutoHideDuration=0;
   var t=document.getElementById('toast');
   if(!t)return;
+  var copyButton=t.querySelector('.toast-copy');
+  if(copyButton){copyButton.__ckCopyToken=Number(copyButton.__ckCopyToken||0)+1;copyButton.__ckCopyBusy=false}
   t.className='toast';
   t.setAttribute('role','status');
   t.setAttribute('aria-live','polite');
@@ -2231,6 +2233,54 @@ function toastResumeAutoHide(){
   var t=document.getElementById('toast');
   if(toastHoverPauses&&t&&t.classList.contains('show')&&!toastIsInteracting())toastScheduleAutoHide();
 }
+function ckFallbackCopyText(text){
+  return new Promise(function(resolve){
+    var ta=null;
+    try{
+      ta=document.createElement('textarea');
+      ta.value=String(text==null?'':text);
+      ta.setAttribute('readonly','');
+      ta.style.position='fixed';
+      ta.style.left='-9999px';
+      ta.style.top='0';
+      ta.style.opacity='0';
+      document.body.appendChild(ta);
+      ta.select();
+      resolve(document.execCommand('copy')!==false);
+    }catch(e){resolve(false)}
+    finally{if(ta&&ta.parentNode)ta.parentNode.removeChild(ta)}
+  });
+}
+function ckCopyText(text){
+  var value=String(text==null?'':text);
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(value).then(function(){return true},function(){return ckFallbackCopyText(value)});
+  }
+  return ckFallbackCopyText(value);
+}
+function toastCopyMessage(button){
+  var t=document.getElementById('toast');
+  var message=t&&t.querySelector('.toast-message');
+  var value=String((message&&message.textContent)||'');
+  if(!button||!t||!t.classList.contains('toast-error')||!value||button.__ckCopyBusy)return;
+  var copyToken=Number(button.__ckCopyToken||0)+1;
+  button.__ckCopyToken=copyToken;
+  button.__ckCopyBusy=true;
+  toastPauseAutoHide();
+  ckCopyText(value).then(function(copied){
+    if(!document.contains(button)||button.__ckCopyToken!==copyToken)return;
+    button.textContent=copied?'已复制':'复制失败';
+    button.classList.toggle('copied',copied);
+    setTimeout(function(){
+      if(!document.contains(button)||button.__ckCopyToken!==copyToken)return;
+      button.textContent='一键复制';
+      button.classList.remove('copied');
+      button.__ckCopyBusy=false;
+      try{button.blur()}catch(e){}
+      toastResumeAutoHide();
+    },1200);
+  });
+}
 function toast(msg,duration,opts){
   opts=opts||{};
   var t=document.getElementById('toast');
@@ -2238,8 +2288,10 @@ function toast(msg,duration,opts){
   var message=t.querySelector('.toast-message');
   if(!message){message=document.createElement('div');message.className='toast-message';t.insertBefore(message,t.firstChild)}
   var isError=opts.type==='error';
+  var copyButton=t.querySelector('.toast-copy');
   var requestedDuration=Number(duration);
   message.textContent=String(msg==null?'':msg);
+  if(copyButton){copyButton.__ckCopyToken=Number(copyButton.__ckCopyToken||0)+1;copyButton.textContent='一键复制';copyButton.classList.remove('copied');copyButton.__ckCopyBusy=false}
   toastAutoHideDuration=requestedDuration>0?requestedDuration:(isError?5000:2000);
   toastHoverPauses=!!opts.pauseOnHover;
   t.className='toast show'+(isError?' toast-error':'')+(opts.closable?' toast-closable':'');
@@ -2272,7 +2324,7 @@ var CHAT_INDEXEDDB_NAME='ckPanelChatStoreV1';
 var CHAT_INDEXEDDB_VERSION=1;
 var CHAT_INDEXEDDB_SESSION_STORE='sessions';
 var CHAT_CACHE_NOTICE_TEXT='已超过5min，下一次会重新创建缓存';
-var CHAT_BOTTOM_THRESHOLD=50;
+var CHAT_BOTTOM_THRESHOLD=100;
 var CHAT_ASSISTANT_REVEAL_MIN_DELAY=800;
 var CHAT_ASSISTANT_REVEAL_MAX_DELAY=1200;
 var CHAT_REQUEST_RETRY_DELAYS=[500,1200,2000];
@@ -5565,12 +5617,6 @@ function chatSplitAssistantReplies(rawText,splitEnabled){
   if(parsed.thinking&&out.length)out[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+out[0];
   return out.length?out:[rawText];
 }
-function chatStreamScrollBottom(){
-  var box=chatMessagesBox();
-  if(!box)return;
-  chatSetNewMessageHint(false);
-  box.scrollTop=box.scrollHeight;
-}
 function chatRecordFirstRenderedLatency(latency){
   latency=latency&&typeof latency==='object'?latency:{};
   if(latency.panel_first_rendered_char_ms)return latency.panel_first_rendered_char_ms;
@@ -5615,8 +5661,7 @@ function chatScheduleAssistantReveal(){
       chatMarkStaggeredMessageFresh(message);
     }
     if(chatActiveSessionId===queue.sessionId){
-      chatRenderMessages({respectUserScroll:false,newMessage:true});
-      chatStreamScrollBottom();
+      chatRenderMessages({respectUserScroll:true,newMessage:true});
     }
     if(queue.hidden.size)chatScheduleAssistantReveal();
     else chatAssistantRevealQueue=null;
@@ -5630,8 +5675,7 @@ function chatFlushAssistantRevealQueue(options){
   queue.hidden.clear();
   chatAssistantRevealQueue=null;
   if(options.render!==false&&chatActiveSessionId===queue.sessionId){
-    chatRenderMessages({respectUserScroll:false,newMessage:true});
-    chatStreamScrollBottom();
+    chatRenderMessages({respectUserScroll:true,newMessage:true});
   }
   return true;
 }
@@ -5754,17 +5798,12 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   chatRecordFirstRenderedLatency(opts.latency);
   chatSaveLocalMessages();
   chatRenderPendingBar();
-  chatRenderMessages({respectUserScroll:false,newMessage:true,removeEphemeral:true});
-  chatStreamScrollBottom();
+  chatRenderMessages({respectUserScroll:true,newMessage:true,removeEphemeral:true});
   if(chatAssistantRevealQueue.hidden.size)chatScheduleAssistantReveal();
   else chatAssistantRevealQueue=null;
   return Promise.resolve();
 }
-function chatCopyText(t){
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){toast('已复制')},function(){chatFallbackCopy(t)})}
-  else chatFallbackCopy(t);
-}
-function chatFallbackCopy(t){try{var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('已复制')}catch(e){toast('复制失败')}}
+function chatCopyText(t){ckCopyText(t).then(function(copied){toast(copied?'已复制':'复制失败')})}
 function chatStopMessage(){
   var request=chatActiveRequest;
   if(!request){
