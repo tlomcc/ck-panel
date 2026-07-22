@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v126-error-copy-scroll-follow';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v127-cost-three-decimals';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2720,7 +2720,7 @@ function chatAssistantCostLabel(msg){
   if(!msg||!Object.prototype.hasOwnProperty.call(msg,'apiCost'))return '';
   var value=Number(msg.apiCost);
   if(!isFinite(value)||value<0)return '';
-  return String(msg.apiCostCurrency||'¥')+value.toFixed(2);
+  return String(msg.apiCostCurrency||'¥')+value.toFixed(3);
 }
 function chatAssistantCostHtml(msg){
   var label=chatAssistantCostLabel(msg);

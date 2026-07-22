@@ -1,8 +1,6 @@
 {
-  "version": "chat-v126-error-copy-scroll-follow",
+  "version": "chat-v127-cost-three-decimals",
   "notes": [
-    "报错提示支持一键复制全部错误文字，并短暂显示复制结果",
-    "查看历史消息时，助手回复不再强制跳到聊天底部",
-    "距离底部 100px 内继续自动跟随，离开底部时显示新消息按钮"
+    "聊天回复的金额统一显示到小数点后三位"
   ]
 }

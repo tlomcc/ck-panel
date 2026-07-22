@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v146-chat-v126-error-copy-scroll-follow';
+const CACHE_NAME = 'ck-panel-shell-v147-chat-v127-cost-three-decimals';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v126-error-copy-scroll-follow',
-  './polish.css?v=chat-v126-error-copy-scroll-follow',
-  './chat.css?v=chat-v126-error-copy-scroll-follow',
-  './wechat.css?v=chat-v126-error-copy-scroll-follow',
-  './script.js?v=chat-v126-error-copy-scroll-follow',
-  './script-extra.js?v=chat-v126-error-copy-scroll-follow',
-  './pwa.js?v=chat-v126-error-copy-scroll-follow',
+  './style.css?v=chat-v127-cost-three-decimals',
+  './polish.css?v=chat-v127-cost-three-decimals',
+  './chat.css?v=chat-v127-cost-three-decimals',
+  './wechat.css?v=chat-v127-cost-three-decimals',
+  './script.js?v=chat-v127-cost-three-decimals',
+  './script-extra.js?v=chat-v127-cost-three-decimals',
+  './pwa.js?v=chat-v127-cost-three-decimals',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

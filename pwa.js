@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v126-error-copy-scroll-follow').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v127-cost-three-decimals').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
