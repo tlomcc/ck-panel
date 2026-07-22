@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v123-bubble-tail-state-sync';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v124-stop-resets-send-state';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2281,6 +2281,8 @@ var chatInitialized=false;
 var chatSending=false;
 var chatMessages=[];
 var chatAbort=null;
+var chatActiveRequest=null;
+var chatRequestSeq=0;
 var chatDeferredSaveHandle=0;
 var chatSessions=[];
 var chatActiveSessionId='';
@@ -4706,10 +4708,79 @@ function chatDeferAfterSendPaint(fn){
   if(typeof requestAnimationFrame!=='function'){setTimeout(fn,0);return}
   requestAnimationFrame(function(){setTimeout(fn,0)});
 }
+function chatRestoreSendButton(){
+  var btn=document.getElementById('chat-send-btn');
+  if(!btn)return;
+  btn.disabled=false;
+  btn.textContent=chatEditingIndex>=0?'保存':'发送';
+  btn.title=chatEditingIndex>=0?'保存编辑':'发送';
+  btn.classList.remove('chat-stop-btn');
+}
+function chatReleaseSendingUi(request){
+  if(request&&chatActiveRequest!==request)return false;
+  if(request)request.finished=true;
+  chatSending=false;
+  chatAbort=null;
+  chatActiveRequest=null;
+  chatRestoreSendButton();
+  return true;
+}
+function chatFinalizeStoppedRequest(request){
+  if(!request||request.stopRecorded)return false;
+  request.stopRecorded=true;
+  var snapshot={};
+  if(typeof request.stopSnapshot==='function'){
+    try{snapshot=request.stopSnapshot()||{}}catch(e){snapshot={}}
+  }
+  var submitTs=Number(request.submitTs)||Date.now();
+  (request.pendingMessages||[]).forEach(function(message){
+    var index=chatMessages.indexOf(message);
+    if(index<0||!message||message.role!=='pending_user')return;
+    message.role='user';
+    message.ts=submitTs;
+    message.cacheHit=false;
+    delete message.pendingId;
+    delete message.regenerateRequest;
+    delete message.regenerateCutoff;
+    chatMarkMessageFresh(message);
+  });
+  var firstReplyTs=Number(snapshot.firstReplyTs)||Date.now();
+  var responseUserTs=Number(snapshot.responseUserTs)||submitTs;
+  var stopped=chatAttachAssistantTiming({
+    role:'assistant',
+    text:String(snapshot.assistantText||'')||'（已停止）',
+    recall:snapshot.recallInfo||null,
+    tools:chatCloneToolEvents(snapshot.toolEvents||[]),
+    stopped:true,
+    ts:firstReplyTs
+  },responseUserTs,firstReplyTs);
+  chatAttachAssistantCost(stopped,snapshot.requestUsage||null);
+  chatInsertMessagesBeforePending([stopped]);
+  if(request.out&&request.out.parentNode)request.out.parentNode.remove();
+  request.out=null;
+  chatSaveLocalMessages();
+  chatRenderMessages({respectUserScroll:true,newMessage:true,removeEphemeral:true});
+  chatRenderPendingBar();
+  chatSetStatus('已停止');
+  return true;
+}
 function chatBeginSendingUi(){
   var btn=document.getElementById('chat-send-btn');
+  var controller=(typeof AbortController!=='undefined')?new AbortController():null;
+  var request={
+    id:++chatRequestSeq,
+    controller:controller,
+    stopped:false,
+    stopRecorded:false,
+    finished:false,
+    pendingMessages:[],
+    submitTs:Date.now(),
+    out:null,
+    stopSnapshot:null
+  };
   chatSending=true;
-  chatAbort=(typeof AbortController!=='undefined')?new AbortController():null;
+  chatAbort=controller;
+  chatActiveRequest=request;
   if(btn){
     btn.disabled=false;
     btn.textContent='停止';
@@ -4718,6 +4789,7 @@ function chatBeginSendingUi(){
     if(typeof requestAnimationFrame==='function')requestAnimationFrame(function(){btn.classList.remove('chat-send-feedback')});
   }
   chatSetStatus('正在请求网关...');
+  return request;
 }
 function chatIsAutoTrimTurn(m){
   if(!m||typeof m!=='object')return false;
@@ -5682,7 +5754,18 @@ function chatCopyText(t){
   else chatFallbackCopy(t);
 }
 function chatFallbackCopy(t){try{var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('已复制')}catch(e){toast('复制失败')}}
-function chatStopMessage(){if(chatAbort){try{chatAbort.abort()}catch(e){}}}
+function chatStopMessage(){
+  var request=chatActiveRequest;
+  if(!request){
+    if(chatSending)chatReleaseSendingUi(null);
+    return false;
+  }
+  request.stopped=true;
+  if(request.controller){try{request.controller.abort()}catch(e){}}
+  chatReleaseSendingUi(request);
+  chatFinalizeStoppedRequest(request);
+  return true;
+}
 function chatAutosizeInput(input){
   if(!input)return;
   var styles=window.getComputedStyle?window.getComputedStyle(input):null;
@@ -6702,7 +6785,8 @@ async function chatSendMessage(){
   if(text||chatDraftImages.length||chatPendingMessages().length||chatFailedUserMessages().length){
     var imageSnapshot=Array.isArray(chatDraftImages)?chatDraftImages.slice(0,CHAT_IMAGE_MAX_COUNT):[];
     var submitTs=Date.now();
-    chatBeginSendingUi();
+    var requestState=chatBeginSendingUi();
+    requestState.submitTs=submitTs;
     if(input){
       try{input.blur()}catch(e){}
       input.value='';
@@ -6719,6 +6803,7 @@ async function chatSendMessage(){
       chatUpdateMessageRowOnly(optimisticIndex);
       chatRenderPendingBar();
     }
+    requestState.pendingMessages=chatPendingMessages().slice();
     chatDeferAfterSendPaint(function(){
       if(input)chatAutosizeInput(input);
       chatRenderDraftImages();
@@ -6729,6 +6814,7 @@ async function chatSendMessage(){
       deferForPaint:true,
       inputSnapshot:true,
       preparedPending:true,
+      requestState:requestState,
       submitTs:submitTs,
       extraText:'',
       draftImages:[]
@@ -6766,10 +6852,13 @@ function chatRetryFailedUser(i){
 }
 async function chatSubmitPendingMessages(options){
   options=options||{};
+  var requestState=options.requestState||null;
   chatInit();
   chatFlushAssistantRevealQueue();
   if(chatSending&&!options.sendingStarted){chatStopMessage();return;}
+  if(options.sendingStarted&&!requestState)requestState=chatActiveRequest;
   if(options.deferForPaint)await chatYieldAfterVisualFeedback();
+  if(requestState&&requestState.stopped)return;
   var input=document.getElementById('chat-input');
   var extra=options.inputSnapshot?String(options.extraText||'').trim():(input&&input.value||'').trim();
   var pending=chatPendingMessages();
@@ -6806,15 +6895,23 @@ async function chatSubmitPendingMessages(options){
     }
     chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:submitTs,pendingId:chatPendingMessageId()});
   }
-  var pendingBatch=chatPreparePendingBatch(chatMessages.filter(function(message){
+  var pendingBatchMessages=chatMessages.filter(function(message){
     return message&&chatMessageHasContent(message)&&(
       message.role==='pending_user'||(message.role==='user'&&message.sendFailed===true)
     );
-  }));
+  });
+  var pendingBatch=chatPreparePendingBatch(pendingBatchMessages);
   var out=chatAddBubble('assistant','',false);
   var btn=document.getElementById('chat-send-btn');
-  if(!options.sendingStarted)chatBeginSendingUi();
+  if(!options.sendingStarted)requestState=chatBeginSendingUi();
+  if(!requestState)requestState=chatActiveRequest;
+  if(requestState){
+    requestState.submitTs=submitTs;
+    requestState.pendingMessages=pendingBatchMessages.slice();
+    requestState.out=out;
+  }
   await chatEnsureSessionsReady();
+  if(requestState&&requestState.stopped)return;
   chatQueueFailedUserMessagesForRetry();
   pending=chatResolvePendingBatch(pendingBatch);
   pending.forEach(function(m){delete m.sendFailed;delete m.failedAt;chatMarkMessageFresh(m)});
@@ -6822,19 +6919,15 @@ async function chatSubmitPendingMessages(options){
   chatSaveLocalMessagesDeferred();
   chatScrollMessagesBottom(true);
   if(!out||!out.parentNode)out=chatAddBubble('assistant','',false);
+  if(requestState)requestState.out=out;
   var route=await chatEnsureMainRouteReady();
+  if(requestState&&requestState.stopped)return;
   if(!route||!route.ok){
     chatHandleMainRouteNotReady(route);
     pending.forEach(function(m){m.role='user';m.sendFailed=true;m.failedAt=Date.now()});
     pending.forEach(function(m){chatUpdateMessageRowOnly(chatMessages.indexOf(m))});
     chatSaveLocalMessagesDeferred();
-    chatSending=false;chatAbort=null;
-    if(btn){
-      btn.disabled=false;
-      btn.textContent=chatEditingIndex>=0?'保存':'发送';
-      btn.title=chatEditingIndex>=0?'保存编辑':'发送';
-      btn.classList.remove('chat-stop-btn');
-    }
+    chatReleaseSendingUi(requestState);
     return;
   }
   var regenerateRequest=pending.some(function(m){return m&&m.regenerateRequest===true});
@@ -6842,13 +6935,7 @@ async function chatSubmitPendingMessages(options){
   var currentImages=chatFlattenMessageImages(pending);
   if(!text&&!currentImages.length){
     if(out&&out.parentNode)out.parentNode.remove();
-    chatSending=false;chatAbort=null;
-    if(btn){
-      btn.disabled=false;
-      btn.textContent=chatEditingIndex>=0?'保存':'发送';
-      btn.title=chatEditingIndex>=0?'保存编辑':'发送';
-      btn.classList.remove('chat-stop-btn');
-    }
+    chatReleaseSendingUi(requestState);
     return;
   }
   var cfg=chatSaveConfig(true);
@@ -6939,6 +7026,18 @@ async function chatSubmitPendingMessages(options){
   var assistantText='',recallInfo=null,toolEvents=[],requestUsage=null;
   var responseUserTs=submitTs;
   var firstReplyTs=0;
+  if(requestState){
+    requestState.stopSnapshot=function(){
+      return {
+        assistantText:assistantText,
+        recallInfo:recallInfo,
+        toolEvents:toolEvents,
+        requestUsage:requestUsage,
+        responseUserTs:responseUserTs,
+        firstReplyTs:firstReplyTs
+      };
+    };
+  }
   var latencyTrace={
     debug_id:'',
     panel_request_started_ms:0,
@@ -7001,12 +7100,13 @@ async function chatSubmitPendingMessages(options){
     streamRenderDirty=false;
   }
   try{
+    var requestSignal=requestState&&requestState.controller?requestState.controller.signal:undefined;
     latencyTrace.panel_request_started_ms=Date.now();
     await chatFetchWithSilentRetry(chatEndpoint(cfg),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:requestBodyText,
-      signal:chatAbort?chatAbort.signal:undefined
+      signal:requestSignal
     },async function(resp,attemptState){
       latencyTrace.panel_response_headers_ms=Date.now();
       if(!resp.body){
@@ -7028,7 +7128,7 @@ async function chatSubmitPendingMessages(options){
       var beforeContentRaw='';
       var streamError=null;
       function handleStreamEvent(ev,data){
-        if(streamError)return;
+        if(streamError||(requestState&&requestState.stopped))return;
         if(ev==='error'){
           var streamErrorText=data&&typeof data==='object'
             ? [data.error,data.message,data.raw].filter(Boolean).join(' ')
@@ -7087,6 +7187,7 @@ async function chatSubmitPendingMessages(options){
         }
       }
       while(true){
+        if(requestState&&requestState.stopped)throw chatCreateAbortError();
         var r;
         try{r=await reader.read()}
         catch(readError){throw chatMarkNetworkFailure(readError)}
@@ -7113,17 +7214,16 @@ async function chatSubmitPendingMessages(options){
       }
       latencyTrace.panel_stream_done_ms=Date.now();
     });
+    if(requestState&&requestState.stopped)return;
     stopStreamRender();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
     await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage});
     chatSetStatus('完成');
   }catch(e){
-    if(chatRequestWasAborted(e,chatAbort&&chatAbort.signal)){
-      var stopped=chatAttachAssistantTiming({role:'assistant',text:assistantText||'（已停止）',recall:recallInfo,tools:chatCloneToolEvents(toolEvents),stopped:true,ts:firstReplyTs||Date.now()},responseUserTs,firstReplyTs||Date.now());
-      chatAttachAssistantCost(stopped,requestUsage);
-      chatInsertMessagesBeforePending([stopped]);
-      chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true,removeEphemeral:true});chatSetStatus('已停止');
+    if(requestState&&(requestState.stopped||chatRequestWasAborted(e,requestSignal))){
+      requestState.stopped=true;
+      chatFinalizeStoppedRequest(requestState);
     }else{
       userMessageIndexes.forEach(function(idx){
         if(chatMessages[idx]){chatMessages[idx].sendFailed=true;chatMessages[idx].failedAt=Date.now()}
@@ -7134,13 +7234,8 @@ async function chatSubmitPendingMessages(options){
   }finally{
     stopStreamRender();
     if(out&&out.parentNode)out.parentNode.remove();
-    chatSending=false;chatAbort=null;
-    if(btn){
-      btn.disabled=false;
-      btn.textContent=chatEditingIndex>=0?'保存':'发送';
-      btn.title=chatEditingIndex>=0?'保存编辑':'发送';
-      btn.classList.remove('chat-stop-btn');
-    }
+    if(requestState)requestState.stopSnapshot=null;
+    chatReleaseSendingUi(requestState);
   }
 }
 document.addEventListener('click',function(e){

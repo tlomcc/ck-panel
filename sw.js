@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v143-chat-v123-bubble-tail-state-sync';
+const CACHE_NAME = 'ck-panel-shell-v144-chat-v124-stop-resets-send-state';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v123-bubble-tail-state-sync',
-  './polish.css?v=chat-v123-bubble-tail-state-sync',
-  './chat.css?v=chat-v123-bubble-tail-state-sync',
-  './wechat.css?v=chat-v123-bubble-tail-state-sync',
-  './script.js?v=chat-v123-bubble-tail-state-sync',
-  './script-extra.js?v=chat-v123-bubble-tail-state-sync',
-  './pwa.js?v=chat-v123-bubble-tail-state-sync',
+  './style.css?v=chat-v124-stop-resets-send-state',
+  './polish.css?v=chat-v124-stop-resets-send-state',
+  './chat.css?v=chat-v124-stop-resets-send-state',
+  './wechat.css?v=chat-v124-stop-resets-send-state',
+  './script.js?v=chat-v124-stop-resets-send-state',
+  './script-extra.js?v=chat-v124-stop-resets-send-state',
+  './pwa.js?v=chat-v124-stop-resets-send-state',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
