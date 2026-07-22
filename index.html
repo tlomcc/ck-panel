@@ -14,11 +14,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v124-stop-resets-send-state">
-<link rel="stylesheet" href="polish.css?v=chat-v124-stop-resets-send-state">
-<link rel="stylesheet" href="chat.css?v=chat-v124-stop-resets-send-state">
-<link rel="stylesheet" href="wechat.css?v=chat-v124-stop-resets-send-state">
-<script>window.CK_PANEL_VERSION='chat-v124-stop-resets-send-state';</script>
+<link rel="stylesheet" href="style.css?v=chat-v125-stop-keeps-retry-batch">
+<link rel="stylesheet" href="polish.css?v=chat-v125-stop-keeps-retry-batch">
+<link rel="stylesheet" href="chat.css?v=chat-v125-stop-keeps-retry-batch">
+<link rel="stylesheet" href="wechat.css?v=chat-v125-stop-keeps-retry-batch">
+<script>window.CK_PANEL_VERSION='chat-v125-stop-keeps-retry-batch';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -27,7 +27,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v124">chat-v124-stop-resets-send-state</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v125">chat-v125-stop-keeps-retry-batch</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -177,7 +177,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v124-stop-resets-send-state">v124</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v125-stop-keeps-retry-batch">v125</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <label>系统提示词位置<select id="chat-system-prompt-position"><option value="before_style">自定义在 CK 规则前</option><option value="after_style">自定义在 CK 规则后</option></select></label>
@@ -254,8 +254,8 @@
 <div class="modal-bg" id="ckActionModal" aria-hidden="true" onclick="ckDialogBackdrop(event)"><div class="modal ck-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ck-action-title" aria-describedby="ck-action-message" onclick="event.stopPropagation()"><h3 id="ck-action-title">请确认</h3><p class="ck-action-message" id="ck-action-message"></p><input id="ck-action-input" autocomplete="off" hidden><div class="modal-btns"><button class="btn btn-outline btn-sm" id="ck-action-cancel" type="button" onclick="ckDialogCancel()">取消</button><button class="btn btn-blue btn-sm" id="ck-action-confirm" type="button" onclick="ckDialogSubmit()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="script.js?v=chat-v124-stop-resets-send-state"></script>
-<script src="script-extra.js?v=chat-v124-stop-resets-send-state"></script>
-<script src="pwa.js?v=chat-v124-stop-resets-send-state"></script>
+<script src="script.js?v=chat-v125-stop-keeps-retry-batch"></script>
+<script src="script-extra.js?v=chat-v125-stop-keeps-retry-batch"></script>
+<script src="pwa.js?v=chat-v125-stop-keeps-retry-batch"></script>
 </body>
 </html>

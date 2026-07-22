@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v144-chat-v124-stop-resets-send-state';
+const CACHE_NAME = 'ck-panel-shell-v145-chat-v125-stop-keeps-retry-batch';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v124-stop-resets-send-state',
-  './polish.css?v=chat-v124-stop-resets-send-state',
-  './chat.css?v=chat-v124-stop-resets-send-state',
-  './wechat.css?v=chat-v124-stop-resets-send-state',
-  './script.js?v=chat-v124-stop-resets-send-state',
-  './script-extra.js?v=chat-v124-stop-resets-send-state',
-  './pwa.js?v=chat-v124-stop-resets-send-state',
+  './style.css?v=chat-v125-stop-keeps-retry-batch',
+  './polish.css?v=chat-v125-stop-keeps-retry-batch',
+  './chat.css?v=chat-v125-stop-keeps-retry-batch',
+  './wechat.css?v=chat-v125-stop-keeps-retry-batch',
+  './script.js?v=chat-v125-stop-keeps-retry-batch',
+  './script-extra.js?v=chat-v125-stop-keeps-retry-batch',
+  './pwa.js?v=chat-v125-stop-keeps-retry-batch',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

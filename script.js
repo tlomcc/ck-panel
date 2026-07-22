@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v124-stop-resets-send-state';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v125-stop-keeps-retry-batch';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4735,15 +4735,24 @@ function chatFinalizeStoppedRequest(request){
   var submitTs=Number(request.submitTs)||Date.now();
   (request.pendingMessages||[]).forEach(function(message){
     var index=chatMessages.indexOf(message);
-    if(index<0||!message||message.role!=='pending_user')return;
-    message.role='user';
+    if(index<0||!message||(message.role!=='user'&&message.role!=='pending_user'))return;
+    message.role='pending_user';
     message.ts=submitTs;
     message.cacheHit=false;
-    delete message.pendingId;
+    chatEnsurePendingMessageId(message);
     delete message.regenerateRequest;
     delete message.regenerateCutoff;
+    delete message.sendFailed;
+    delete message.failedAt;
+    delete message.cacheRead;
+    delete message.cacheCreate;
     chatMarkMessageFresh(message);
   });
+  var session=chatCurrentSession();
+  if(session&&request.transportSnapshot){
+    session.transportMessages=chatLimitArray(request.transportSnapshot.messages||[],CHAT_MAX_TRANSPORT_MESSAGES);
+    session.transportUpdated=Number(request.transportSnapshot.updated)||0;
+  }
   var firstReplyTs=Number(snapshot.firstReplyTs)||Date.now();
   var responseUserTs=Number(snapshot.responseUserTs)||submitTs;
   var stopped=chatAttachAssistantTiming({
@@ -4774,6 +4783,7 @@ function chatBeginSendingUi(){
     stopRecorded:false,
     finished:false,
     pendingMessages:[],
+    transportSnapshot:null,
     submitTs:Date.now(),
     out:null,
     stopSnapshot:null
@@ -4869,6 +4879,7 @@ function chatWindowContextMessages(){
   return (chatMessages||[]).filter(function(m){
     if(!m||typeof m!=='object')return false;
     if(m.role!=='user'&&m.role!=='assistant')return false;
+    if(m.role==='assistant'&&m.stopped===true)return false;
     return chatMessageHasContent(m);
   }).map(function(m){
     var item={
@@ -6912,6 +6923,13 @@ async function chatSubmitPendingMessages(options){
   }
   await chatEnsureSessionsReady();
   if(requestState&&requestState.stopped)return;
+  if(requestState){
+    var requestSession=chatCurrentSession();
+    requestState.transportSnapshot={
+      messages:chatLimitArray((requestSession&&requestSession.transportMessages)||[],CHAT_MAX_TRANSPORT_MESSAGES),
+      updated:Number(requestSession&&requestSession.transportUpdated)||0
+    };
+  }
   chatQueueFailedUserMessagesForRetry();
   pending=chatResolvePendingBatch(pendingBatch);
   pending.forEach(function(m){delete m.sendFailed;delete m.failedAt;chatMarkMessageFresh(m)});
