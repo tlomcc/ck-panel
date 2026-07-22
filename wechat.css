@@ -233,18 +233,20 @@ body.chat-active .chat-bubble:active{
 }
 body.chat-active .chat-bubble.user,
 body.chat-active .chat-bubble.user:not(.has-images){
+  --wx-bubble-bg:var(--wx-green);
   max-width:min(600px,72%)!important;
   min-width:0!important;
   padding:9px 13px!important;
   border-radius:7px!important;
-  background:var(--wx-green)!important;
+  background:var(--wx-bubble-bg)!important;
   color:#0d1a12!important;
 }
 body.chat-active .chat-bubble.assistant{
+  --wx-bubble-bg:var(--wx-panel);
   max-width:min(680px,78%)!important;
   padding:9px 13px!important;
   border-radius:7px!important;
-  background:var(--wx-panel)!important;
+  background:var(--wx-bubble-bg)!important;
   color:var(--wx-ink)!important;
 }
 body.chat-active .chat-bubble.user::after{
@@ -257,7 +259,8 @@ body.chat-active .chat-bubble.user::after{
   height:0!important;
   border-top:5px solid transparent!important;
   border-bottom:5px solid transparent!important;
-  border-left:6px solid var(--wx-green)!important;
+  border-left:6px solid var(--wx-bubble-bg)!important;
+  transition:border-left-color .18s ease!important;
 }
 body.chat-active .chat-bubble.assistant::before{
   content:""!important;
@@ -269,8 +272,9 @@ body.chat-active .chat-bubble.assistant::before{
   height:0!important;
   border-top:5px solid transparent!important;
   border-bottom:5px solid transparent!important;
-  border-right:6px solid var(--wx-panel)!important;
+  border-right:6px solid var(--wx-bubble-bg)!important;
   background:transparent!important;
+  transition:border-right-color .18s ease!important;
 }
 body.chat-active .chat-msg-time,
 body.chat-active .chat-msg-tools .chat-msg-act,
@@ -913,10 +917,8 @@ body.dark.chat-active .chat-shell,
 body.dark.chat-active .chat-main,
 body.dark.chat-active .chat-messages{background:#111111!important}
 /* 气泡 + 尾三角 深色 */
-body.dark.chat-active .chat-bubble.assistant{background:#262628!important;color:#e6e6e6!important}
-body.dark.chat-active .chat-bubble.assistant::before{border-right-color:#262628!important}
-body.dark.chat-active .chat-bubble.user{background:#4a8f43!important;color:#f1faf1!important}
-body.dark.chat-active .chat-bubble.user::after{border-left-color:#4a8f43!important}
+body.dark.chat-active .chat-bubble.assistant{--wx-bubble-bg:#262628;background:var(--wx-bubble-bg)!important;color:#e6e6e6!important}
+body.dark.chat-active .chat-bubble.user{--wx-bubble-bg:#4a8f43;background:var(--wx-bubble-bg)!important;color:#f1faf1!important}
 /* 输入栏 深色 */
 body.dark.chat-active .chat-compose,
 body.dark.chat-active .chat-compose-row,
@@ -2078,19 +2080,19 @@ body.dark .select-bar{background:rgba(28,28,30,.97)!important;box-shadow:0 -4px 
 /* Rich message states stay subordinate to the conversation. */
 body.chat-active .chat-msg-row.state-error .chat-bubble.assistant,
 body.chat-active .chat-msg-row.state-stopped .chat-bubble.assistant{
+  --wx-bubble-bg:#fff8f8;
   border-color:#f0c4c4!important;
-  background:#fff8f8!important;
+  background:var(--wx-bubble-bg)!important;
   color:#5d3030!important;
 }
-body.chat-active .chat-msg-row.state-error .chat-bubble.assistant::before,
-body.chat-active .chat-msg-row.state-stopped .chat-bubble.assistant::before{border-right-color:#fff8f8!important}
 body.chat-active .chat-msg-row.state-error .chat-msg-time,
 body.chat-active .chat-msg-row.state-stopped .chat-msg-time{color:#c56b6b!important}
 body.chat-active .chat-msg-row.state-error .chat-msg-time::before{content:'失败';display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:4px;background:#fff0f0;color:#d65757;font-size:10px;font-weight:600}
 body.chat-active .chat-msg-row.state-stopped .chat-msg-time::before{content:'已停止';display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:4px;background:#f2f2f2;color:#888;font-size:10px;font-weight:500}
 body.chat-active .chat-msg-row.pending .chat-bubble.user{
+  --wx-bubble-bg:#eaf8ed;
   border:1px dashed #9bcda9!important;
-  background:#eaf8ed!important;
+  background:var(--wx-bubble-bg)!important;
   color:#315d3f!important;
   opacity:1!important;
 }
@@ -2173,13 +2175,11 @@ body.chat-active.chat-editing .chat-edit-actions{
   margin:0!important;
 }
 body.dark.chat-active .chat-msg-row.state-error .chat-bubble.assistant,
-body.dark.chat-active .chat-msg-row.state-stopped .chat-bubble.assistant{border-color:#5f2f2f!important;background:#241717!important;color:#f0d4d4!important}
-body.dark.chat-active .chat-msg-row.state-error .chat-bubble.assistant::before,
-body.dark.chat-active .chat-msg-row.state-stopped .chat-bubble.assistant::before{border-right-color:#241717!important}
+body.dark.chat-active .chat-msg-row.state-stopped .chat-bubble.assistant{--wx-bubble-bg:#241717;border-color:#5f2f2f!important;background:var(--wx-bubble-bg)!important;color:#f0d4d4!important}
 body.dark.chat-active .chat-msg-row.state-error .chat-msg-time{color:#e38b8b!important}
 body.dark.chat-active .chat-msg-row.state-error .chat-msg-time::before{background:#3b1111!important;color:#fecaca!important}
 body.dark.chat-active .chat-msg-row.state-stopped .chat-msg-time::before{background:#303033!important;color:#aaa!important}
-body.dark.chat-active .chat-msg-row.pending .chat-bubble.user{border-color:#3f8155!important;background:#183524!important;color:#bde8c9!important}
+body.dark.chat-active .chat-msg-row.pending .chat-bubble.user{--wx-bubble-bg:#183524;border-color:#3f8155!important;background:var(--wx-bubble-bg)!important;color:#bde8c9!important}
 body.dark.chat-active .chat-msg-row.pending .chat-msg-meta-pending{color:#8bd2a1!important}
 body.dark.chat-active .chat-user-retry{color:#ef8d8d}
 body.dark.chat-active .chat-md .cb{background:#151b23!important;border-color:#2b3440!important}
