@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v141-chat-v121-readable-error-toast';
+const CACHE_NAME = 'ck-panel-shell-v142-chat-v122-cost-debug-menu';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v121-readable-error-toast',
-  './polish.css?v=chat-v121-readable-error-toast',
-  './chat.css?v=chat-v121-readable-error-toast',
-  './wechat.css?v=chat-v121-readable-error-toast',
-  './script.js?v=chat-v121-readable-error-toast',
-  './script-extra.js?v=chat-v121-readable-error-toast',
-  './pwa.js?v=chat-v121-readable-error-toast',
+  './style.css?v=chat-v122-cost-debug-menu',
+  './polish.css?v=chat-v122-cost-debug-menu',
+  './chat.css?v=chat-v122-cost-debug-menu',
+  './wechat.css?v=chat-v122-cost-debug-menu',
+  './script.js?v=chat-v122-cost-debug-menu',
+  './script-extra.js?v=chat-v122-cost-debug-menu',
+  './pwa.js?v=chat-v122-cost-debug-menu',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
