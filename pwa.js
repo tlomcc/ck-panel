@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v128-text-file-attachments').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v129-plus-menu-split-visible').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

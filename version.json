@@ -1,7 +1,7 @@
 {
-  "version": "chat-v128-text-file-attachments",
+  "version": "chat-v129-plus-menu-split-visible",
   "notes": [
-    "聊天加号菜单支持上传多个 UTF-8 纯文本文件",
-    "发送时自动按文件标签格式拼接内容，并提供大小警告和删除预览"
+    "修复加号菜单新增上传文件后分条与整段切换被裁掉",
+    "第一页保留八个高频入口，截断设置移到第二页"
   ]
 }
