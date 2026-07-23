@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v149-chat-v129-plus-menu-split-visible';
+const CACHE_NAME = 'ck-panel-shell-v150-chat-v130-file-message-cards';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v129-plus-menu-split-visible',
-  './polish.css?v=chat-v129-plus-menu-split-visible',
-  './chat.css?v=chat-v129-plus-menu-split-visible',
-  './wechat.css?v=chat-v129-plus-menu-split-visible',
-  './script.js?v=chat-v129-plus-menu-split-visible',
-  './script-extra.js?v=chat-v129-plus-menu-split-visible',
-  './pwa.js?v=chat-v129-plus-menu-split-visible',
+  './style.css?v=chat-v130-file-message-cards',
+  './polish.css?v=chat-v130-file-message-cards',
+  './chat.css?v=chat-v130-file-message-cards',
+  './wechat.css?v=chat-v130-file-message-cards',
+  './script.js?v=chat-v130-file-message-cards',
+  './script-extra.js?v=chat-v130-file-message-cards',
+  './pwa.js?v=chat-v130-file-message-cards',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
