@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v127-cost-three-decimals';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v128-text-file-attachments';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2320,6 +2320,7 @@ var CHAT_IMAGE_MAX_SOURCE_BYTES=12*1024*1024;
 var CHAT_IMAGE_MAX_DATA_URL_CHARS=5*1024*1024;
 var CHAT_IMAGE_MAX_DIMENSION=2048;
 var CHAT_IMAGE_JPEG_QUALITY=.86;
+var CHAT_FILE_WARNING_BYTES=100*1024;
 var CHAT_INDEXEDDB_NAME='ckPanelChatStoreV1';
 var CHAT_INDEXEDDB_VERSION=1;
 var CHAT_INDEXEDDB_SESSION_STORE='sessions';
@@ -2370,6 +2371,9 @@ var chatNewMessageHintVisible=false;
 var chatDraftImages=[];
 var chatImageSeq=0;
 var chatImageEncodingCount=0;
+var chatDraftFiles=[];
+var chatFileSeq=0;
+var chatFileReadingCount=0;
 var chatPlusPager={currentPage:0,totalPages:0};
 var chatCleanHistoryResolver=null;
 var chatDebugScrollRaf=0;
@@ -3413,6 +3417,138 @@ function chatTakeDraftImages(){
   chatDraftImages=[];
   chatRenderDraftImages();
   return images;
+}
+function chatFileId(){
+  chatFileSeq+=1;
+  return 'file-'+Date.now().toString(36)+'-'+chatFileSeq.toString(36);
+}
+function chatFileSizeLabel(bytes){
+  bytes=Math.max(0,Number(bytes)||0);
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(bytes>=10240?0:1)+' KB';
+  return (bytes/(1024*1024)).toFixed(bytes>=10*1024*1024?0:1)+' MB';
+}
+function chatNormalizeFileAttachment(file){
+  if(!file||typeof file!=='object')return null;
+  var content=String(file.content==null?'':file.content);
+  var size=Math.max(0,Math.floor(Number(file.size||0)||0));
+  return {
+    id:String(file.id||chatFileId()).slice(0,96),
+    name:String(file.name||file.filename||'未命名文件').replace(/[\r\n]/g,' ').slice(0,240),
+    size:size,
+    content:content,
+    oversized:size>CHAT_FILE_WARNING_BYTES
+  };
+}
+function chatNormalizeFileList(list){
+  return (Array.isArray(list)?list:[]).map(chatNormalizeFileAttachment).filter(Boolean);
+}
+function chatFormatFileBlock(file){
+  file=chatNormalizeFileAttachment(file);
+  if(!file)return '';
+  return '[文件：'+file.name+']\n'+file.content+'\n[/文件]';
+}
+function chatComposeFileText(text,files){
+  var parts=[];
+  text=String(text||'').trim();
+  if(text)parts.push(text);
+  chatNormalizeFileList(files).forEach(function(file){
+    var block=chatFormatFileBlock(file);
+    if(block)parts.push(block);
+  });
+  return parts.join('\n\n');
+}
+function chatRenderDraftFiles(){
+  var wrap=document.getElementById('chat-draft-files');
+  if(!wrap)return;
+  var files=chatNormalizeFileList(chatDraftFiles);
+  chatDraftFiles=files;
+  if(!files.length){
+    wrap.hidden=true;
+    wrap.innerHTML='';
+  }else{
+    wrap.hidden=false;
+    wrap.innerHTML=files.map(function(file){
+      var warning=file.oversized||file.size>CHAT_FILE_WARNING_BYTES;
+      return '<div class="chat-draft-file'+(warning?' is-oversized':'')+'" title="'+escAttr(file.name)+'">'+
+        '<span class="chat-draft-file-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M8.5 12h7M8.5 15.5h5"/></svg></span>'+
+        '<span class="chat-draft-file-main"><b>'+esc(file.name)+'</b><small>'+esc(chatFileSizeLabel(file.size))+(warning?' · 文件较大':'')+'</small></span>'+
+        '<button class="chat-draft-file-remove" type="button" onclick="chatRemoveDraftFile(\''+escAttr(file.id)+'\')" aria-label="删除文件 '+escAttr(file.name)+'" title="删除文件">×</button>'+
+        '</div>';
+    }).join('');
+  }
+  chatLayoutCompose({force:true});
+}
+function chatRemoveDraftFile(id){
+  id=String(id||'');
+  chatDraftFiles=chatNormalizeFileList(chatDraftFiles).filter(function(file){return file.id!==id});
+  chatRenderDraftFiles();
+}
+function chatTakeDraftFiles(){
+  var files=chatNormalizeFileList(chatDraftFiles);
+  chatDraftFiles=[];
+  chatRenderDraftFiles();
+  return files;
+}
+function chatReadTextFile(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(){
+      try{
+        var bytes=new Uint8Array(reader.result||new ArrayBuffer(0));
+        var decoder=new TextDecoder('utf-8',{fatal:true});
+        var content=decoder.decode(bytes);
+        if(content.charCodeAt(0)===0xFEFF)content=content.slice(1);
+        var controls=0;
+        for(var i=0;i<content.length;i++){
+          var code=content.charCodeAt(i);
+          if(code===0||(code<32&&code!==9&&code!==10&&code!==13&&code!==12))controls++;
+        }
+        if(content.indexOf('\0')>=0||(controls>0&&controls>Math.max(4,Math.floor(content.length*.02))))throw new Error('不支持该文件格式');
+        resolve(chatNormalizeFileAttachment({id:chatFileId(),name:file.name,size:file.size,content:content}));
+      }catch(err){reject(err&&err.message==='不支持该文件格式'?err:new Error('不支持该文件格式'))}
+    };
+    reader.onerror=function(){reject(new Error('不支持该文件格式'))};
+    reader.onabort=function(){reject(new Error('不支持该文件格式'))};
+    reader.readAsArrayBuffer(file);
+  });
+}
+function chatPickFiles(){
+  if(chatSending||chatFileReadingCount>0)return;
+  var input=document.getElementById('chat-file-input');
+  if(!input)return;
+  chatTogglePlus(false);
+  input.click();
+}
+async function chatOnFilesSelected(e){
+  var input=e&&e.target;
+  var files=Array.prototype.slice.call((input&&input.files)||[]).filter(Boolean);
+  if(input)input.value='';
+  if(!files.length)return;
+  chatFileReadingCount+=1;
+  chatSetStatus('正在读取文件...');
+  var added=0,oversized=0,rejected=[];
+  for(var i=0;i<files.length;i++){
+    try{
+      var file=await chatReadTextFile(files[i]);
+      if(!file)continue;
+      chatDraftFiles.push(file);
+      added+=1;
+      if(file.size>CHAT_FILE_WARNING_BYTES)oversized+=1;
+      chatRenderDraftFiles();
+    }catch(err){
+      rejected.push((files[i]&&files[i].name)||'该文件');
+    }
+  }
+  chatFileReadingCount=Math.max(0,chatFileReadingCount-1);
+  chatRenderDraftFiles();
+  chatSetStatus();
+  if(rejected.length){
+    var rejectedLabel=rejected.slice(0,3).join('、')+(rejected.length>3?' 等 '+rejected.length+' 个文件':'');
+    toast(rejectedLabel+'：不支持该文件格式'+(oversized?'\n文件过大，建议精简后再上传':''),5000);
+  }
+  else if(oversized)toast('文件过大，建议精简后再上传');
+  else if(added)toast('已添加 '+added+' 个文件');
 }
 function chatReadFileAsDataUrl(file){
   return new Promise(function(resolve,reject){
@@ -5153,13 +5289,15 @@ function chatKeepLatestVisible(opts){
 }
 function chatStoreDraftMessage(opts){
   if(chatEditingIndex>=0)return;
-  if(chatImageEncodingCount>0){
-    toast('图片处理中');
+  if(chatImageEncodingCount>0||chatFileReadingCount>0){
+    toast(chatFileReadingCount>0?'文件读取中':'图片处理中');
     return;
   }
   var input=document.getElementById('chat-input');
   var text=(input&&input.value||'').trim();
   var images=chatTakeDraftImages();
+  var files=chatTakeDraftFiles();
+  text=chatComposeFileText(text,files);
   if(!text&&!images.length)return;
   if(input){input.value='';chatAutosizeInput(input);}
   chatStageUserMessage(text,images);
@@ -6225,7 +6363,7 @@ document.addEventListener('dblclick',function(e){
 });
 function chatEditPointerInside(target){
   if(!target||!target.closest)return false;
-  return !!target.closest('#chat-input,#chat-edit-actions,#chat-edit-images,#chat-send-btn,#chat-plus-btn,#chat-plus-panel,#chat-image-input,#chat-camera-input');
+  return !!target.closest('#chat-input,#chat-edit-actions,#chat-edit-images,#chat-draft-files,#chat-send-btn,#chat-plus-btn,#chat-plus-panel,#chat-image-input,#chat-camera-input,#chat-file-input');
 }
 document.addEventListener('pointerdown',function(e){
   if(chatEditingIndex<0||!e.target)return;
@@ -6773,6 +6911,7 @@ function chatInit(){
   chatRenderSessions();
   chatRenderMessages();
   chatRenderDraftImages();
+  chatRenderDraftFiles();
   chatAttachMessagesScroll();
   var input=document.getElementById('chat-input');
   chatLayoutCompose();
@@ -6828,12 +6967,14 @@ async function chatSendMessage(){
   }
   var input=document.getElementById('chat-input');
   var text=(input.value||'').trim();
-  if(chatImageEncodingCount>0){
-    toast('图片处理中');
+  if(chatImageEncodingCount>0||chatFileReadingCount>0){
+    toast(chatFileReadingCount>0?'文件读取中':'图片处理中');
     return;
   }
-  if(text||chatDraftImages.length||chatPendingMessages().length||chatFailedUserMessages().length){
+  if(text||chatDraftImages.length||chatDraftFiles.length||chatPendingMessages().length||chatFailedUserMessages().length){
     var imageSnapshot=Array.isArray(chatDraftImages)?chatDraftImages.slice(0,CHAT_IMAGE_MAX_COUNT):[];
+    var fileSnapshot=chatNormalizeFileList(chatDraftFiles);
+    text=chatComposeFileText(text,fileSnapshot);
     var submitTs=Date.now();
     var requestState=chatBeginSendingUi();
     requestState.submitTs=submitTs;
@@ -6842,6 +6983,7 @@ async function chatSendMessage(){
       input.value='';
     }
     chatDraftImages=[];
+    chatDraftFiles=[];
     if(text||imageSnapshot.length){
       var optimistic={role:'pending_user',text:text,images:imageSnapshot,ts:submitTs,pendingId:chatPendingMessageId()};
       chatMessages.push(optimistic);
@@ -6857,6 +6999,7 @@ async function chatSendMessage(){
     chatDeferAfterSendPaint(function(){
       if(input)chatAutosizeInput(input);
       chatRenderDraftImages();
+      chatRenderDraftFiles();
       chatScrollMessagesBottom(true);
     });
     return chatSubmitPendingMessages({
@@ -6867,7 +7010,8 @@ async function chatSendMessage(){
       requestState:requestState,
       submitTs:submitTs,
       extraText:'',
-      draftImages:[]
+      draftImages:[],
+      draftFiles:[]
     });
   }
 }
@@ -6910,7 +7054,7 @@ async function chatSubmitPendingMessages(options){
   if(options.deferForPaint)await chatYieldAfterVisualFeedback();
   if(requestState&&requestState.stopped)return;
   var input=document.getElementById('chat-input');
-  var extra=options.inputSnapshot?String(options.extraText||'').trim():(input&&input.value||'').trim();
+  var extraText=options.inputSnapshot?String(options.extraText||'').trim():(input&&input.value||'').trim();
   var pending=chatPendingMessages();
   var failed=chatFailedUserMessages();
   var regeneratePending=pending.find(function(m){return m&&m.regenerateRequest===true});
@@ -6929,10 +7073,12 @@ async function chatSubmitPendingMessages(options){
     pending=[regeneratePending];
   }
   var draftImages=options.inputSnapshot?chatNormalizeImageList(options.draftImages):chatNormalizeImageList(chatDraftImages);
+  var draftFiles=options.inputSnapshot?chatNormalizeFileList(options.draftFiles):chatNormalizeFileList(chatDraftFiles);
+  var extra=chatComposeFileText(extraText,draftFiles);
   var hasPlanned=pending.some(chatMessageHasContent)||failed.length>0||!!extra||draftImages.length>0;
   if(!hasPlanned)return;
-  if(chatImageEncodingCount>0){
-    toast('图片处理中');
+  if(chatImageEncodingCount>0||chatFileReadingCount>0){
+    toast(chatFileReadingCount>0?'文件读取中':'图片处理中');
     return;
   }
   var submitTs=Number(options.submitTs)||Date.now();
@@ -6941,7 +7087,9 @@ async function chatSubmitPendingMessages(options){
       input.value='';
       chatAutosizeInput(input);
       chatDraftImages=[];
+      chatDraftFiles=[];
       chatRenderDraftImages();
+      chatRenderDraftFiles();
     }
     chatMessages.push({role:'pending_user',text:extra,images:draftImages,ts:submitTs,pendingId:chatPendingMessageId()});
   }

@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v147-chat-v127-cost-three-decimals';
+const CACHE_NAME = 'ck-panel-shell-v148-chat-v128-text-file-attachments';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v127-cost-three-decimals',
-  './polish.css?v=chat-v127-cost-three-decimals',
-  './chat.css?v=chat-v127-cost-three-decimals',
-  './wechat.css?v=chat-v127-cost-three-decimals',
-  './script.js?v=chat-v127-cost-three-decimals',
-  './script-extra.js?v=chat-v127-cost-three-decimals',
-  './pwa.js?v=chat-v127-cost-three-decimals',
+  './style.css?v=chat-v128-text-file-attachments',
+  './polish.css?v=chat-v128-text-file-attachments',
+  './chat.css?v=chat-v128-text-file-attachments',
+  './wechat.css?v=chat-v128-text-file-attachments',
+  './script.js?v=chat-v128-text-file-attachments',
+  './script-extra.js?v=chat-v128-text-file-attachments',
+  './pwa.js?v=chat-v128-text-file-attachments',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

@@ -1,6 +1,7 @@
 {
-  "version": "chat-v127-cost-three-decimals",
+  "version": "chat-v128-text-file-attachments",
   "notes": [
-    "聊天回复的金额统一显示到小数点后三位"
+    "聊天加号菜单支持上传多个 UTF-8 纯文本文件",
+    "发送时自动按文件标签格式拼接内容，并提供大小警告和删除预览"
   ]
 }
