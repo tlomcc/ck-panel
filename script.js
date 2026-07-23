@@ -2779,11 +2779,11 @@ function chatCacheStrategyMeta(value){
       value:'prefix_24h',
       label:'24h 共同缓存',
       shortLabel:'24h',
-      ttl:'',
-      ttlLabel:'自动',
+      ttl:'5m',
+      ttlLabel:'5m',
       retentionSeconds:0,
-      sendText:'24h 共同前缀缓存；不发送显式 cache_control，旧召回和旧图片每轮剔除',
-      debugText:'共同内容自动缓存 + 清旧召回/旧图片'
+      sendText:'四个稳定断点；旧召回和旧图片每轮剔除',
+      debugText:'四个稳定断点 + 清旧召回/旧图片'
     };
   }
   if(strategy==='assistant_latest'){
@@ -2813,7 +2813,6 @@ function chatCacheStrategyTtlLabel(meta){
   return (meta&&meta.ttlLabel)||(meta&&meta.ttl)||'自动';
 }
 function chatCacheStrategyTtlDetail(meta){
-  if(meta&&meta.value==='prefix_24h')return '不发送显式 cache_control；由上游共同前缀缓存自动处理';
   return 'cache_control TTL：'+chatCacheStrategyTtlLabel(meta)+'（只影响上游缓存有效期，不截断历史）';
 }
 function chatRecallMeta(enabled){
@@ -3296,12 +3295,106 @@ function chatRenderImageGrid(images,opts){
     return '<div class="chat-image-thumb'+viewable+'"'+ratio+' title="'+escAttr(title)+'"'+viewAttrs+'><img src="'+escAttr(img.dataUrl)+'" alt="'+escAttr(title)+'" loading="lazy">'+remove+'</div>';
   }).join('')+'</div>';
 }
-function chatRenderUserMessageContent(m){
+function chatTextByteLength(text){
+  text=String(text==null?'':text);
+  if(typeof TextEncoder==='function')return new TextEncoder().encode(text).length;
+  try{return unescape(encodeURIComponent(text)).length}catch(e){return text.length}
+}
+function chatFileTypeMeta(name){
+  var value=String(name||'').toLowerCase();
+  var ext=(value.match(/\.([a-z0-9+#-]{1,12})$/)||[])[1]||'';
+  var codeExt={js:1,jsx:1,ts:1,tsx:1,py:1,java:1,c:1,cc:1,cpp:1,h:1,hpp:1,go:1,rs:1,rb:1,php:1,swift:1,kt:1,kts:1,sql:1,sh:1,bash:1,bat:1,ps1:1};
+  var configExt={yaml:1,yml:1,toml:1,ini:1,conf:1,env:1};
+  var markupExt={html:1,htm:1,css:1,scss:1,less:1,xml:1,svg:1};
+  var tone='text';
+  if(ext==='md'||ext==='markdown')tone='markdown';
+  else if(ext==='json'||ext==='jsonl'||ext==='csv'||ext==='tsv')tone='data';
+  else if(codeExt[ext])tone='code';
+  else if(configExt[ext])tone='config';
+  else if(markupExt[ext])tone='markup';
+  var label=ext?ext.toUpperCase():'TXT';
+  if(label.length>5)label=label.slice(0,5);
+  return {ext:ext,label:label,tone:tone,typeName:ext?ext.toUpperCase():'TEXT'};
+}
+function chatNormalizeTaggedFileContent(raw){
+  var content=String(raw==null?'':raw);
+  if(content.indexOf('\r\n')===0)content=content.slice(2);
+  else if(content.charAt(0)==='\n')content=content.slice(1);
+  if(content.slice(-2)==='\r\n')content=content.slice(0,-2);
+  else if(content.slice(-1)==='\n')content=content.slice(0,-1);
+  return content;
+}
+function chatParseTaggedFileMessage(raw){
+  var source=String(raw==null?'':raw).trim();
+  var parts=[],files=[],cursor=0,m,re=/\[文件[：:]([^\]\r\n]+)\]([\s\S]*?)\[\/文件\]/g;
+  while((m=re.exec(source))){
+    if(m.index>cursor){
+      var before=source.slice(cursor,m.index).replace(/^(?:\r?\n)+/,'').replace(/(?:\r?\n)+$/,'');
+      if(before)parts.push({type:'text',text:before});
+    }
+    var file={name:String(m[1]||'').trim()||'未命名文件',content:chatNormalizeTaggedFileContent(m[2])};
+    file.size=chatTextByteLength(file.content);
+    file.type=chatFileTypeMeta(file.name);
+    files.push(file);
+    parts.push({type:'file',file:file,index:files.length-1});
+    cursor=re.lastIndex;
+  }
+  if(!files.length)return null;
+  if(cursor<source.length){
+    var after=source.slice(cursor).replace(/^(?:\r?\n)+/,'').replace(/(?:\r?\n)+$/,'');
+    if(after)parts.push({type:'text',text:after});
+  }
+  return {parts:parts,files:files};
+}
+function chatMessageFileCount(text){
+  var parsed=chatParseTaggedFileMessage(text);
+  return parsed?parsed.files.length:0;
+}
+function chatFileIconHtml(meta){
+  return '<span class="chat-file-icon '+escAttr(meta.tone)+'" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/></svg><span>'+esc(meta.label)+'</span></span>';
+}
+function chatRenderFileCard(file,ctx){
+  file=file||{};
+  var meta=file.type||chatFileTypeMeta(file.name);
+  var name=String(file.name||'未命名文件');
+  var content=String(file.content||'');
+  var messageIndex=ctx&&Number.isFinite(ctx.messageIndex)?String(ctx.messageIndex):'';
+  var fileIndex=ctx&&Number.isFinite(ctx.fileIndex)?String(ctx.fileIndex):'';
+  var attrs=(messageIndex!==''?' data-message-index="'+messageIndex+'"':'')+(fileIndex!==''?' data-file-index="'+fileIndex+'"':'');
+  return '<div class="chat-file-card '+escAttr(meta.tone)+'"'+attrs+'>'+
+    '<div class="chat-file-head">'+
+      '<button class="chat-file-toggle" type="button" aria-expanded="false" title="展开文件内容">'+
+        chatFileIconHtml(meta)+
+        '<span class="chat-file-main"><b>'+esc(name)+'</b><small>'+esc(meta.typeName+' · '+chatFileSizeLabel(file.size))+'</small></span>'+
+        '<span class="chat-file-chevron" aria-hidden="true">⌄</span>'+
+      '</button>'+
+      '<button class="chat-file-copy" type="button" title="复制文件全部内容" aria-label="复制 '+escAttr(name)+' 的全部内容">复制</button>'+
+    '</div>'+
+    '<div class="chat-file-content" hidden><pre><code>'+chatEsc(content)+'</code></pre></div>'+
+  '</div>';
+}
+function chatRenderTaggedFileMessage(raw,mode,ctx){
+  var parsed=chatParseTaggedFileMessage(raw);
+  if(!parsed)return null;
+  ctx=ctx||{};
+  var html='<div class="chat-file-message">';
+  parsed.parts.forEach(function(part){
+    if(part.type==='file')html+=chatRenderFileCard(part.file,{messageIndex:ctx.messageIndex,fileIndex:part.index});
+    else if(part.text){
+      if(mode==='assistant')html+='<div class="chat-file-text chat-md">'+chatRenderMarkdown(part.text)+'</div>';
+      else html+='<span class="chat-file-text chat-user-text">'+esc(part.text)+'</span>';
+    }
+  });
+  return html+'</div>';
+}
+function chatRenderUserMessageContent(m,messageIndex){
   var text=String((m&&m.text)||'').trim();
   var images=chatMessageImages(m);
   var html='';
   if(images.length)html+=chatRenderImageGrid(images);
-  if(text)html+='<span class="chat-user-text">'+esc(text)+'</span>';
+  var tagged=chatRenderTaggedFileMessage(text,'user',{messageIndex:messageIndex});
+  if(tagged!==null)html+=tagged;
+  else if(text)html+='<span class="chat-user-text">'+esc(text)+'</span>';
   return html;
 }
 function chatRenderDraftImages(){
@@ -5567,13 +5660,14 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
-function chatRenderAssistantContent(rawText,streaming,tools){
+function chatRenderAssistantContent(rawText,streaming,tools,messageIndex){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
   var thinking=split.thinking?(
     '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
   ):'';
   var toolTrace=chatRenderToolTrace(tools);
-  var body=split.text?('<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
+  var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
+  var body=split.text?(tagged!==null?tagged:'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
   return thinking+toolTrace+body;
 }
 function chatStreamingAssistantPreviewText(rawText){
@@ -5942,6 +6036,17 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   return Promise.resolve();
 }
 function chatCopyText(t){ckCopyText(t).then(function(copied){toast(copied?'已复制':'复制失败')})}
+function chatFileCardContent(card){
+  if(!card)return '';
+  var messageIndex=parseInt(card.getAttribute('data-message-index'),10);
+  var fileIndex=parseInt(card.getAttribute('data-file-index'),10);
+  if(Number.isFinite(messageIndex)&&Number.isFinite(fileIndex)&&chatMessages[messageIndex]){
+    var parsed=chatParseTaggedFileMessage(chatMessages[messageIndex].text||'');
+    if(parsed&&parsed.files[fileIndex])return parsed.files[fileIndex].content;
+  }
+  var code=card.querySelector('.chat-file-content code');
+  return code?code.textContent:'';
+}
 function chatStopMessage(){
   var request=chatActiveRequest;
   if(!request){
@@ -6326,6 +6431,30 @@ document.addEventListener('click',function(e){
   }
   var cb=e.target.closest('.cb-copy');
   if(cb){var code=cb.closest('.cb')?cb.closest('.cb').querySelector('pre code'):null;if(code){chatCopyText(code.textContent);cb.textContent='已复制';setTimeout(function(){cb.textContent='复制'},1200)}return;}
+  var fileCopy=e.target.closest('.chat-file-copy');
+  if(fileCopy){
+    e.preventDefault();
+    e.stopPropagation();
+    var card=fileCopy.closest('.chat-file-card');
+    var content=chatFileCardContent(card);
+    ckCopyText(content).then(function(copied){
+      if(!document.contains(fileCopy))return;
+      if(copied){fileCopy.textContent='已复制';setTimeout(function(){if(document.contains(fileCopy))fileCopy.textContent='复制'},1200)}
+      else toast('复制失败');
+    });
+    return;
+  }
+  var fileToggle=e.target.closest('.chat-file-toggle');
+  if(fileToggle){
+    var fileCard=fileToggle.closest('.chat-file-card');
+    if(!fileCard)return;
+    var open=!fileCard.classList.contains('open');
+    fileCard.classList.toggle('open',open);
+    fileToggle.setAttribute('aria-expanded',open?'true':'false');
+    var contentBox=fileCard.querySelector('.chat-file-content');
+    if(contentBox)contentBox.hidden=!open;
+    return;
+  }
   var rh=e.target.closest('.chat-recall-head');
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
   var th=e.target.closest('.chat-thinking-head');
@@ -6355,7 +6484,7 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('dblclick',function(e){
   if(!e.target||!e.target.closest)return;
-  if(e.target.closest('button,.chat-recall,.chat-thinking,.cb'))return;
+  if(e.target.closest('button,.chat-recall,.chat-thinking,.cb,.chat-file-card'))return;
   var bubble=e.target.closest('.chat-bubble');
   if(!bubble)return;
   var i=parseInt(bubble.getAttribute('data-i'),10);
@@ -6621,8 +6750,8 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
-  var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false,m.tools):esc(m.text||'');
-  if(role==='user')inner=chatRenderUserMessageContent(m);
+  var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false,m.tools,i):esc(m.text||'');
+  if(role==='user')inner=chatRenderUserMessageContent(m,i);
   var isGroupLast=chatIsMessageGroupLast(i,role);
   var toolButtons=role==='system'?[]:['<button class="chat-msg-act" data-act="copy" data-i="'+i+'" title="复制">复制</button>'];
   if(role==='assistant'&&isGroupLast&&!assistantError&&!assistantStopped)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成">↻</button>');
@@ -6631,7 +6760,8 @@ function chatRenderMessageRow(m,i){
   if(role==='user'&&m.sendFailed)userMeta+='<button class="chat-user-retry" type="button" data-act="retry" data-i="'+i+'">发送失败 · 点击重试</button>';
   var time=role==='assistant'?chatMessageTimingHtml(m,role,isGroupLast):'';
   var imageCount=chatMessageImages(m).length;
-  var bubbleState=(imageCount?' has-images':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
+  var fileCount=chatMessageFileCount(m&&m.text);
+  var bubbleState=(imageCount?' has-images':'')+(fileCount?' has-files':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
   var versionNav=pending?'':chatVersionNavHtml(m,i,role);
   var animKey=chatMessageAnimKey(m);
