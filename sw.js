@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v150-chat-v130-file-message-cards';
+const CACHE_NAME = 'ck-panel-shell-v151-chat-v131-backend-switch-notice';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v130-file-message-cards',
-  './polish.css?v=chat-v130-file-message-cards',
-  './chat.css?v=chat-v130-file-message-cards',
-  './wechat.css?v=chat-v130-file-message-cards',
-  './script.js?v=chat-v130-file-message-cards',
-  './script-extra.js?v=chat-v130-file-message-cards',
-  './pwa.js?v=chat-v130-file-message-cards',
+  './style.css?v=chat-v131-backend-switch-notice',
+  './polish.css?v=chat-v131-backend-switch-notice',
+  './chat.css?v=chat-v131-backend-switch-notice',
+  './wechat.css?v=chat-v131-backend-switch-notice',
+  './script.js?v=chat-v131-backend-switch-notice',
+  './script-extra.js?v=chat-v131-backend-switch-notice',
+  './pwa.js?v=chat-v131-backend-switch-notice',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',
