@@ -1839,6 +1839,12 @@ body.chat-active .chat-cost-amount{
   font-weight:800!important;
   color:#0f9f64!important;
 }
+body.chat-active .chat-cost-amount-unknown{
+  color:#b7791f!important;
+}
+body.chat-active .chat-cost-amount-estimated{
+  color:#7c5aa6!important;
+}
 
 body.chat-active .chat-debug-cache-number{
   color:#2563eb!important;
@@ -2107,6 +2113,12 @@ body.dark.chat-active .chat-debug-cache-number{color:#7db3ff!important}
 
 body.dark.chat-active .chat-cost-amount{
   color:#75e2a7!important;
+}
+body.dark.chat-active .chat-cost-amount-unknown{
+  color:#f3c969!important;
+}
+body.dark.chat-active .chat-cost-amount-estimated{
+  color:#c7a9f0!important;
 }
 
 body.chat-active .toast{
@@ -2820,10 +2832,22 @@ body.chat-active .chat-msg-cost{
 body.chat-active .chat-msg-cost{
   font-variant-numeric:tabular-nums!important;
 }
+body.chat-active .chat-msg-cost-unknown{
+  color:#b7791f!important;
+}
+body.chat-active .chat-msg-cost-estimated{
+  color:#7c5aa6!important;
+}
 
 body.dark.chat-active .chat-msg-separator,
 body.dark.chat-active .chat-msg-cost{
   color:rgba(230,246,235,.58)!important;
+}
+body.dark.chat-active .chat-msg-cost-unknown{
+  color:#f3c969!important;
+}
+body.dark.chat-active .chat-msg-cost-estimated{
+  color:#c7a9f0!important;
 }
 
 body.chat-active .chat-settings-title{

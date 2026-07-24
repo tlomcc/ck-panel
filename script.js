@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v132-debug-observability';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v133-provider-billing';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2673,6 +2673,97 @@ function chatMoney(value,currency){
   var digits=n>=1?4:(n>=.01?5:6);
   return String(currency||'¥')+n.toFixed(digits);
 }
+function chatCostAmountText(value,currency){
+  var n=Number(value)||0;
+  var digits=n>=1?4:(n>=.01?5:6);
+  return currency?String(currency)+n.toFixed(digits):n.toFixed(digits)+'（币种未知）';
+}
+function chatUsageBillingObject(usage){
+  var obj=chatUsagePayload(usage);
+  if(obj&&obj.billing&&typeof obj.billing==='object')return obj.billing;
+  if(usage&&usage.billing&&typeof usage.billing==='object')return usage.billing;
+  return null;
+}
+function chatUsageBillingAmount(value){
+  if(value===undefined||value===null||value==='')return null;
+  var n=Number(value);
+  if(Number.isFinite?Number.isFinite(n):isFinite(n))return n>=0?n:null;
+  var text=String(value).trim();
+  var m=text.match(/(?:[$¥€£]\s*)?([0-9][0-9,]*(?:\.[0-9]+)?)/);
+  if(!m)return null;
+  n=Number(String(m[1]).replace(/,/g,''));
+  return (Number.isFinite?Number.isFinite(n):isFinite(n))&&n>=0?n:null;
+}
+function chatUsageBillingProvider(usage){
+  var obj=chatUsagePayload(usage);
+  var b=chatUsageBillingObject(usage)||{};
+  return String(b.provider_name||b.providerName||obj.provider_name||obj.providerName||obj.backend_name||obj.backendName||obj.provider_url||obj.api_base||'').trim();
+}
+function chatEnrichUsageRoute(usage,cfg){
+  usage=usage&&typeof usage==='object'?usage:{};
+  var obj=chatUsagePayload(usage);
+  cfg=cfg||{};
+  if(!obj.provider_name&&!obj.providerName)obj.provider_name=cfg.mainRouteProvider||'';
+  if(!obj.provider_url&&!obj.api_base)obj.provider_url=cfg.apiBase||'';
+  if(!obj.model)obj.model=cfg.model||'';
+  if(!obj.upstream_format&&cfg.apiBase){
+    var base=String(cfg.apiBase||'').toLowerCase();
+    obj.upstream_format=(base.indexOf('nowcoding.ai')>=0||/\/messages\/?$/.test(base))?'anthropic':'openai';
+  }
+  if(!obj.usage_status)obj.usage_status=chatUsageHasTokenFields(obj)?'available':'unknown';
+  return usage;
+}
+function chatUsageBillingCurrency(usage){
+  var obj=chatUsagePayload(usage);
+  var b=chatUsageBillingObject(usage)||{};
+  var value=b.currency||b.currency_code||b.currencyCode||obj.currency||obj.currency_code||obj.currencyCode||'';
+  var text=String(value||'').trim();
+  if(text)return text.toUpperCase()==='CNY'?'¥':(text.toUpperCase()==='USD'?'$':text);
+  var raw=JSON.stringify(b||{});
+  if(raw.indexOf('¥')>=0||/cny|rmb/i.test(raw))return '¥';
+  if(raw.indexOf('$')>=0||/usd/i.test(raw))return '$';
+  return '';
+}
+function chatUsageBillingStatus(usage){
+  var b=chatUsageBillingObject(usage);
+  if(!b)return '';
+  var status=String(b.status||b.state||'').trim().toLowerCase();
+  if(status==='known'||status==='authoritative'||status==='exact'||status==='confirmed')return 'known';
+  if(status==='estimated'||status==='estimate')return 'estimated';
+  if(status==='partial'||status==='mixed')return 'unknown';
+  if(status==='unknown'||status==='unavailable'||status==='missing')return 'unknown';
+  var amount=chatUsageBillingAmount(b.amount!==undefined?b.amount:(b.cost!==undefined?b.cost:b.total_cost));
+  return amount!==null?'known':'';
+}
+function chatUsageExplicitBillingAmount(usage){
+  var b=chatUsageBillingObject(usage);
+  if(b){
+    var amount=chatUsageBillingAmount(b.amount!==undefined?b.amount:(b.cost!==undefined?b.cost:(b.total_cost!==undefined?b.total_cost:(b.totalCost!==undefined?b.totalCost:b.usd))));
+    if(amount!==null)return amount;
+  }
+  var obj=chatUsagePayload(usage);
+  var keys=['cost','total_cost','totalCost','usd_cost','usdCost','charge','charged','billing_amount','billingAmount'];
+  for(var i=0;i<keys.length;i++){
+    var value=chatObjectPathValue(obj,keys[i]);
+    var parsed=chatUsageBillingAmount(value);
+    if(parsed!==null)return parsed;
+  }
+  return null;
+}
+function chatUsageHasTokenFields(usage){
+  var obj=chatUsagePayload(usage);
+  var keys=['input_tokens','output_tokens','prompt_tokens','completion_tokens','total_tokens','cache_read_input_tokens','cache_creation_input_tokens','cached_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens'];
+  for(var i=0;i<keys.length;i++)if(Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!==null&&obj[keys[i]]!==undefined)return true;
+  return !!(chatUsageCacheRead(usage)||chatUsageCacheCreate(usage)||chatUsageNumber(usage,['input_tokens','prompt_tokens','output_tokens','completion_tokens']));
+}
+function chatUsageHasBillingMeta(usage){
+  var obj=chatUsagePayload(usage);
+  return !!(chatUsageBillingObject(usage)||obj.usage_status||obj.billing_status||chatUsageExplicitBillingAmount(usage)!==null);
+}
+function chatUsageIsNcProvider(usage){
+  var text=chatUsageBillingProvider(usage).toLowerCase();
+  return text.indexOf('nowcoding.ai')>=0||text.indexOf('nowcoding')>=0||text.indexOf('nc中转')>=0||text==='nc'||text.indexOf('nc中转站')>=0;
+}
 function chatUsageCost(usage){
   usage=usage&&usage.usage?usage.usage:(usage||{});
   var pricing=chatCurrentCostPricing();
@@ -2685,7 +2776,24 @@ function chatUsageCost(usage){
   var readCost=read*pricing.cacheReadPerMTokens/1000000;
   var createCost=create*pricing.cacheCreatePerMTokens/1000000;
   var raw=inputCost+outputCost+readCost+createCost;
-  var total=raw*pricing.multiplier;
+  var localEstimate=raw*pricing.multiplier;
+  var billing=chatUsageBillingObject(usage);
+  var explicitAmount=chatUsageExplicitBillingAmount(usage);
+  var billingStatus=chatUsageBillingStatus(usage);
+  var hasUsage=chatUsageHasTokenFields(usage);
+  var status='unknown',total=null,currency=chatUsageBillingCurrency(usage),reason='';
+  if(explicitAmount!==null&&billingStatus!=='unknown'){
+    status=billingStatus||'known';
+    total=explicitAmount;
+  }else if(chatUsageIsNcProvider(usage)&&hasUsage){
+    // NC 没有把单次总价放进上游响应时，保留原有面板标准，但明确标记为本地估算。
+    status='estimated';
+    total=localEstimate;
+    currency=currency||pricing.currency;
+    reason='上游未返回价格，按 NC 面板单价估算';
+  }else{
+    reason=hasUsage?'上游返回了 token 用量，但未返回价格':'上游未返回 token 用量或价格';
+  }
   return {
     pricing:pricing,
     input:input,
@@ -2697,40 +2805,55 @@ function chatUsageCost(usage){
     readCost:readCost,
     createCost:createCost,
     raw:raw,
-    total:total,
-    hasUsage:!!(input||output||read||create)
+    total:total===null?0:total,
+    status:status,
+    currency:currency||((status==='estimated')?pricing.currency:''),
+    source:(billing&&billing.source)||'panel',
+    provider:chatUsageBillingProvider(usage),
+    reason:status==='estimated'?reason:((billing&&billing.reason)||reason),
+    hasUsage:hasUsage,
+    hasBillingMeta:chatUsageHasBillingMeta(usage)
   };
 }
 function chatFormatUsageCost(usage){
   var cost=chatUsageCost(usage);
-  if(!cost.hasUsage)return '';
-  return '费用：'+chatMoney(cost.total,(cost.pricing&&cost.pricing.currency)||'¥');
+  if(cost.status==='known')return '费用：'+chatCostAmountText(cost.total,cost.currency||'');
+  if(cost.status==='estimated')return '费用：估算 '+chatCostAmountText(cost.total,cost.currency||'¥');
+  return '费用：未知（'+(cost.reason|| (cost.hasUsage?'上游未返回价格':'上游未返回用量'))+'）';
 }
 function chatDebugRecordCostAmount(record){
-  if(!record||record.event!=='done'||!record.data)return '';
+  if(!record||record.event!=='done'||!record.data)return null;
   var cost=chatUsageCost(record.data.usage||{});
-  if(!cost.hasUsage)return '';
-  return chatMoney(cost.total,(cost.pricing&&cost.pricing.currency)||'¥');
+  var text=chatFormatUsageCost(record.data.usage||{});
+  return {text:text.indexOf('费用：')===0?text.slice(3):'',status:cost.status};
 }
 function chatAttachAssistantCost(msg,usage){
   if(!msg||msg.role!=='assistant')return msg;
   var cost=chatUsageCost(usage||{});
-  if(!cost.hasUsage)return msg;
-  msg.apiCost=cost.total;
-  msg.apiCostCurrency=(cost.pricing&&cost.pricing.currency)||'¥';
+  if(!cost.hasUsage&&!cost.hasBillingMeta)return msg;
+  msg.apiCostStatus=cost.status;
+  msg.apiCostReason=cost.reason||'';
+  msg.apiCostProvider=cost.provider||'';
+  msg.apiCostCurrency=cost.currency||'';
+  if(cost.status==='known'||cost.status==='estimated')msg.apiCost=cost.total;
+  else delete msg.apiCost;
   return msg;
 }
 function chatAssistantCostLabel(msg){
-  if(!msg||!Object.prototype.hasOwnProperty.call(msg,'apiCost'))return '';
+  if(!msg)return '';
+  var status=String(msg.apiCostStatus||'').toLowerCase();
+  if(status==='unknown')return '费用未知';
+  if(!Object.prototype.hasOwnProperty.call(msg,'apiCost'))return '';
   var value=Number(msg.apiCost);
   if(!isFinite(value)||value<0)return '';
-  return String(msg.apiCostCurrency||'¥')+value.toFixed(3);
+  return (status==='estimated'?'估算 ':'')+chatCostAmountText(value,msg.apiCostCurrency||'');
 }
 function chatAssistantCostHtml(msg){
   var label=chatAssistantCostLabel(msg);
   if(!label)return '';
-  var exact=chatMoney(msg.apiCost,msg.apiCostCurrency||'¥');
-  return '<span class="chat-msg-cost" title="本轮 API 花费：'+escAttr(exact)+'">'+esc(label)+'</span>';
+  var exact=msg.apiCostStatus==='unknown'?(msg.apiCostReason||'上游未返回价格'):chatCostAmountText(msg.apiCost,msg.apiCostCurrency||'');
+  var cls='chat-msg-cost'+(msg.apiCostStatus==='unknown'?' chat-msg-cost-unknown':'')+(msg.apiCostStatus==='estimated'?' chat-msg-cost-estimated':'');
+  return '<span class="'+cls+'" title="本轮 API 花费：'+escAttr(exact)+'">'+esc(label)+'</span>';
 }
 function chatDefaultConfig(){
   var panelKey=storedPanelKey();
@@ -4357,10 +4480,11 @@ function chatHasIntentRewriteRecord(data){
   });
 }
 function chatDecorateDebugBody(html,record){
-  var amount=chatDebugRecordCostAmount(record);
-  if(amount){
-    var safeAmount=esc(amount);
-    html=html.replace(safeAmount,'<strong class="chat-cost-amount">'+safeAmount+'</strong>');
+  var amountInfo=chatDebugRecordCostAmount(record);
+  if(amountInfo&&amountInfo.text){
+    var safeAmount=esc(amountInfo.text);
+    var amountClass='chat-cost-amount'+(amountInfo.status==='unknown'?' chat-cost-amount-unknown':'')+(amountInfo.status==='estimated'?' chat-cost-amount-estimated':'');
+    html=html.replace(safeAmount,'<strong class="'+amountClass+'">'+safeAmount+'</strong>');
   }
   html=html.replace(/(缓存读取[:：]\s*)([0-9][0-9,]*)/g,'$1<span class="chat-debug-cache-number">$2</span>');
   html=html.replace(/(缓存创建[:：]\s*)([0-9][0-9,]*)/g,'$1<span class="chat-debug-cache-number">$2</span>');
@@ -4503,7 +4627,9 @@ function chatFormatDebug(ev,data){
     var read=chatUsageCacheRead(data);
     var create=chatUsageCacheCreate(data);
     var rounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
-    return '📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0)+rounds;
+    var usageCost=chatFormatUsageCost(data);
+    var provider=data.provider_name?('｜后端：'+data.provider_name):'';
+    return '📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0)+provider+(usageCost?'｜'+usageCost:'')+rounds;
   }
   if(ev==='done'){
     var u=data.usage||{};
@@ -6870,7 +6996,7 @@ function chatRenderMessageRow(m,i){
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-  var signature=[m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.waitMs,m.apiCost,m.apiCostCurrency,m.versionIndex,chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
+  var signature=[m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;
@@ -7595,6 +7721,8 @@ async function chatSubmitPendingMessages(options){
         }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
           if(ev==='meta'&&data&&data.debug_id)latencyTrace.debug_id=String(data.debug_id||'');
           if(data&&data.latency_probe&&typeof data.latency_probe==='object')latencyTrace.gateway_latency=data.latency_probe;
+          if(ev==='usage')data=chatEnrichUsageRoute(data||{},cfg);
+          if(ev==='done'&&data&&data.usage)data.usage=chatEnrichUsageRoute(data.usage,cfg);
           chatDebug(ev,data);
           if(ev==='tool'){
             markFirstReplyTs();
