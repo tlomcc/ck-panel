@@ -1815,6 +1815,7 @@ body.chat-active .chat-debug-empty{
 }
 
 body.chat-active .chat-debug-cache{border-left-color:#4f8df7!important;background:#f7fbff!important}
+body.chat-active .chat-debug-intent{border-left-color:#8b5cf6!important;background:#fbf8ff!important}
 body.chat-active .chat-debug-usage{border-left-color:#f59e0b!important;background:#fffaf1!important}
 body.chat-active .chat-debug-done{border-left-color:#39b76f!important;background:#f5fff8!important}
 body.chat-active .chat-debug-error{border-left-color:#ef4444!important;background:#fff6f6!important}
@@ -2096,6 +2097,7 @@ body.dark.chat-active .chat-debug-empty{
 }
 
 body.dark.chat-active .chat-debug-cache{border-left-color:#60a5fa!important;background:#101a28!important}
+body.dark.chat-active .chat-debug-intent{border-left-color:#a78bfa!important;background:#211a35!important}
 body.dark.chat-active .chat-debug-usage{border-left-color:#f59e0b!important;background:#231b0d!important}
 body.dark.chat-active .chat-debug-done{border-left-color:#34d399!important;background:#102016!important}
 body.dark.chat-active .chat-debug-error{border-left-color:#fb7185!important;background:#261316!important}

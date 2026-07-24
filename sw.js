@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v151-chat-v131-backend-switch-notice';
+const CACHE_NAME = 'ck-panel-shell-v152-chat-v132-debug-observability';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v131-backend-switch-notice',
-  './polish.css?v=chat-v131-backend-switch-notice',
-  './chat.css?v=chat-v131-backend-switch-notice',
-  './wechat.css?v=chat-v131-backend-switch-notice',
-  './script.js?v=chat-v131-backend-switch-notice',
-  './script-extra.js?v=chat-v131-backend-switch-notice',
-  './pwa.js?v=chat-v131-backend-switch-notice',
+  './style.css?v=chat-v132-debug-observability',
+  './polish.css?v=chat-v132-debug-observability',
+  './chat.css?v=chat-v132-debug-observability',
+  './wechat.css?v=chat-v132-debug-observability',
+  './script.js?v=chat-v132-debug-observability',
+  './script-extra.js?v=chat-v132-debug-observability',
+  './pwa.js?v=chat-v132-debug-observability',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

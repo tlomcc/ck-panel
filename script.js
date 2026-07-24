@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v129-plus-menu-split-visible';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v132-debug-observability';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4296,11 +4296,65 @@ function chatDebugLine(record){
 function chatDebugRecordKind(record,text){
   var ev=record&&record.event?String(record.event):'';
   text=String(text||'');
+  if(ev==='intent_rewrite'||text.indexOf('🧠 意图改写')>=0)return 'intent';
   if(ev==='usage'||text.indexOf('用量统计')>=0)return 'usage';
   if(ev==='done'||text.indexOf('请求完成')>=0)return 'done';
   if(text.indexOf('缓存诊断')>=0||text.indexOf('缓存读取')>=0||text.indexOf('缓存创建')>=0||text.indexOf('CACHE')>=0)return 'cache';
   if(ev==='error'||text.indexOf('请求错误')>=0)return 'error';
   return 'info';
+}
+function chatIntentRewriteFromDebug(data){
+  if(!data||typeof data!=='object')return null;
+  var source=data.intent_rewrite;
+  if(!source&&data.recall_diag&&typeof data.recall_diag==='object')source=data.recall_diag.rewrite;
+  if(!source||typeof source!=='object')return null;
+  var out={};
+  Object.keys(source).forEach(function(k){out[k]=source[k]});
+  if(out.original_query===undefined)out.original_query=data.recall_query||'';
+  if(out.debug_id===undefined)out.debug_id=data.debug_id||'';
+  if(out.elapsed_ms===undefined&&data.recall_diag&&Array.isArray(data.recall_diag.phases)){
+    var phase=data.recall_diag.phases.find(function(item){return item&&item.name==='意图改写'});
+    if(phase&&phase.seconds!==undefined)out.elapsed_ms=Math.round(Number(phase.seconds||0)*1000);
+  }
+  return out;
+}
+function chatIntentOneLine(value,fallback){
+  var text=String(value===undefined||value===null?'':value).replace(/\s+/g,' ').trim();
+  return text||fallback||'无';
+}
+function chatFormatIntentRewrite(data){
+  data=data&&typeof data==='object'?data:{};
+  var original=chatIntentOneLine(data.original_query,'无');
+  var rewritten=chatIntentOneLine(data.rewritten_query,'（未改写，使用原始 query）');
+  var keywords=Array.isArray(data.keywords)?data.keywords.map(function(x){return chatIntentOneLine(x,'')}).filter(Boolean).join('、'):'无';
+  var need=data.need_recall===false?'否':(data.need_recall===true?'是':'未知');
+  var confidence=Number(data.confidence);
+  var confidenceText=isFinite(confidence)?Math.max(0,Math.min(1,confidence)).toFixed(2):'未知';
+  var elapsed=data.elapsed_ms;
+  if(elapsed===undefined||elapsed===null)elapsed=data.rewrite_elapsed_ms;
+  if(elapsed===undefined||elapsed===null){
+    var seconds=Number(data.elapsed_seconds);
+    elapsed=isFinite(seconds)?Math.round(seconds*1000):'-';
+  }
+  var elapsedText=elapsed==='-'?'未知':Math.max(0,Math.round(Number(elapsed)||0))+'ms';
+  var status=chatIntentOneLine(data.status,data.used===true?'已完成':'未改写（回退原始查询）');
+  return '🧠 意图改写｜'+status+'\n'
+    +'📝 原始 query：'+original+'\n'
+    +'✍️ 改写结果：'+rewritten+'\n'
+    +'🔑 提取关键词：'+keywords+'\n'
+    +'🎯 是否需要召回：'+need+'\n'
+    +'🎚️ 改写确信度：'+confidenceText+'\n'
+    +'⏱️ 改写耗时：'+elapsedText;
+}
+function chatIntentRewriteSignature(data){
+  data=data&&typeof data==='object'?data:{};
+  return [data.debug_id||'',data.original_query||'',data.rewritten_query||'',data.need_recall,data.confidence,data.elapsed_ms,data.keywords||[]].join('|');
+}
+function chatHasIntentRewriteRecord(data){
+  var sig=chatIntentRewriteSignature(data);
+  return chatDebugRecords.some(function(record){
+    return record&&record.event==='intent_rewrite'&&chatIntentRewriteSignature(record.data)===sig;
+  });
 }
 function chatDecorateDebugBody(html,record){
   var amount=chatDebugRecordCostAmount(record);
@@ -4384,12 +4438,13 @@ function chatFormatRecallDiag(data){
 }
 function chatFormatDebug(ev,data){
   data=data||{};
+  if(ev==='intent_rewrite')return chatFormatIntentRewrite(data);
   if(ev==='latency'){
     function latencyValue(value){return value===undefined||value===null?'-':value}
     if(data.phase==='network'){
-      return '⏱ 首字网络｜ID '+(data.debug_id||'-')+'｜请求→响应头 '+latencyValue(data.request_to_headers_ms)+'ms｜响应头→首网络块 '+latencyValue(data.headers_to_first_chunk_ms)+'ms｜网关T4→面板首delta '+latencyValue(data.gateway_t4_to_panel_delta_ms)+'ms｜协议 HTTP+SSE';
+      return '⏱ 首字网络｜请求编号 '+(data.debug_id||'-')+'｜面板发起请求→收到响应头 '+latencyValue(data.request_to_headers_ms)+'ms｜收到响应头→收到首个网络数据块 '+latencyValue(data.headers_to_first_chunk_ms)+'ms｜网关发出首个增量→面板收到首个增量 '+latencyValue(data.gateway_t4_to_panel_delta_ms)+'ms｜传输方式：HTTP 流式响应（SSE）';
     }
-    return '⌨️ 首字渲染｜ID '+(data.debug_id||'-')+'｜首delta→首字 '+latencyValue(data.first_delta_to_render_ms)+'ms｜流结束→首字 '+latencyValue(data.stream_done_to_render_ms)+'ms｜首字时间 '+(data.panel_first_rendered_char_ms||'-');
+    return '⌨️ 首字渲染｜请求编号 '+(data.debug_id||'-')+'｜收到首个增量→页面显示首字 '+latencyValue(data.first_delta_to_render_ms)+'ms｜流结束→页面显示首字 '+latencyValue(data.stream_done_to_render_ms)+'ms｜页面显示首字时刻 '+(data.panel_first_rendered_char_ms||'-');
   }
   if(data&&data.mode==='new_session'){
     return '🆕 新会话｜会话：'+(data.session_id||'-')+'｜历史：空';
@@ -4468,7 +4523,7 @@ function chatFormatDebug(ev,data){
   if(ev==='debug'){
     if(data.latency_probe&&typeof data.latency_probe==='object'){
       var lp=data.latency_probe;
-      return '⏱ 网关首字链路｜ID '+(lp.debug_id||'-')+'｜T1→T2 '+(lp.t1_to_t2_ms!==undefined?lp.t1_to_t2_ms:'-')+'ms｜T2→T3首chunk '+(lp.t2_to_t3_first_chunk_ms!==undefined?lp.t2_to_t3_first_chunk_ms:'-')+'ms｜T3首chunk→T4 '+(lp.t3_first_chunk_to_t4_ms!==undefined?lp.t3_first_chunk_to_t4_ms:'-')+'ms｜T3首文本→T4 '+(lp.t3_first_text_to_t4_ms!==undefined?lp.t3_first_text_to_t4_ms:'-')+'ms｜T4后上游继续 '+(lp.t4_to_upstream_full_ms!==undefined?lp.t4_to_upstream_full_ms:'-')+'ms';
+      return '⏱ 网关首字链路｜请求编号 '+(lp.debug_id||'-')+'｜收到请求→发起上游请求 '+(lp.t1_to_t2_ms!==undefined?lp.t1_to_t2_ms:'-')+'ms｜发起上游请求→收到上游首个网络数据块 '+(lp.t2_to_t3_first_chunk_ms!==undefined?lp.t2_to_t3_first_chunk_ms:'-')+'ms｜收到上游首个网络数据块→发出首个面板增量 '+(lp.t3_first_chunk_to_t4_ms!==undefined?lp.t3_first_chunk_to_t4_ms:'-')+'ms｜收到上游首个可显示文本→发出首个面板增量 '+(lp.t3_first_text_to_t4_ms!==undefined?lp.t3_first_text_to_t4_ms:'-')+'ms｜发出首个面板增量→收到上游完整响应 '+(lp.t4_to_upstream_full_ms!==undefined?lp.t4_to_upstream_full_ms:'-')+'ms';
     }
     if(data.mcp_error){
       return '⚠️ MCP异常｜'+(data.mcp_source||'-')+'｜'+(data.mcp_host||'-')+'｜'+data.mcp_error;
@@ -4493,6 +4548,11 @@ function chatFormatDebug(ev,data){
 }
 function chatDebugSafeData(ev,data){
   if(!data||typeof data!=='object')return data||{};
+  if(ev==='intent_rewrite'){
+    var rewrite={};
+    Object.keys(data).forEach(function(k){rewrite[k]=data[k]});
+    return rewrite;
+  }
   if(ev==='done'){
     return {
       session_id:data.session_id||'',
@@ -4521,6 +4581,10 @@ function chatDebugSafeData(ev,data){
 function chatDebug(ev,data){
   if(arguments.length===1){data=ev;ev='debug'}
   try{
+    var intent=ev==='debug'?chatIntentRewriteFromDebug(data):null;
+    if(intent&&!chatHasIntentRewriteRecord(intent)){
+      chatDebugRecords.push({ts:Date.now(),event:'intent_rewrite',text:chatFormatIntentRewrite(intent),data:intent});
+    }
     var text;
     try{text=chatFormatDebug(ev,data)}catch(fmtErr){text='调试记录格式化失败：'+String((fmtErr&&fmtErr.message)||fmtErr)}
     var record={ts:Date.now(),event:ev||'debug',text:text,data:chatDebugSafeData(ev,data)};
@@ -4551,6 +4615,11 @@ async function chatRefreshGatewayDebug(){
     var added=0;
     records.forEach(function(r){
       var ts=Number(r.ts_ms||Date.now());
+      var intent=chatIntentRewriteFromDebug(r&&r.data);
+      if(intent&&!intent.debug_id&&r&&r.debug_id)intent.debug_id=r.debug_id;
+      if(intent&&!chatHasIntentRewriteRecord(intent)){
+        chatDebugRecords.push({ts:ts,event:'intent_rewrite',text:chatFormatIntentRewrite(intent),data:intent});
+      }
       var text='🗂 网关记录｜'+(r.text||JSON.stringify(r.data||{}));
       var sig=String(ts)+'|'+text;
       if(seen[sig])return;
