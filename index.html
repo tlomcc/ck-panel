@@ -14,11 +14,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v133-provider-billing">
-<link rel="stylesheet" href="polish.css?v=chat-v133-provider-billing">
-<link rel="stylesheet" href="chat.css?v=chat-v133-provider-billing">
-<link rel="stylesheet" href="wechat.css?v=chat-v133-provider-billing">
-<script>window.CK_PANEL_VERSION='chat-v133-provider-billing';</script>
+<link rel="stylesheet" href="style.css?v=chat-v134-configurable-billing">
+<link rel="stylesheet" href="polish.css?v=chat-v134-configurable-billing">
+<link rel="stylesheet" href="chat.css?v=chat-v134-configurable-billing">
+<link rel="stylesheet" href="wechat.css?v=chat-v134-configurable-billing">
+<script>window.CK_PANEL_VERSION='chat-v134-configurable-billing';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -27,7 +27,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v133">chat-v133-provider-billing</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v134">chat-v134-configurable-billing</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -180,7 +180,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v133-provider-billing">v133</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v134-configurable-billing">v134</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <label>系统提示词位置<select id="chat-system-prompt-position"><option value="before_style">自定义在 CK 规则前</option><option value="after_style">自定义在 CK 规则后</option></select></label>
@@ -229,7 +229,7 @@
 <button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存截断设置</button>
 </div>
 <div class="chat-side-panel" id="chat-side-debug">
-<details class="chat-memory-card chat-cost-card"><summary><b>计费标准</b><span>按需展开</span></summary><p>优先显示上游返回的实际费用；只有 NC 未返回总价时才按下方标准标记“估算”。DS、闪速等未返回价格的供应商会显示“未知”，不会套用 NC 单价。</p><div class="chat-cost-grid"><label>币种<input id="chat-cost-currency" autocomplete="off" value="¥"></label><label>输入 / 1M<input id="chat-cost-input-price" type="number" min="0" step="0.0001" value="5"></label><label>输出 / 1M<input id="chat-cost-output-price" type="number" min="0" step="0.0001" value="0"></label><label>缓存读取 / 1M<input id="chat-cost-cache-read-price" type="number" min="0" step="0.0001" value="0.5"></label><label>缓存创建 / 1M<input id="chat-cost-cache-create-price" type="number" min="0" step="0.0001" value="6.25"></label><label>分组倍率<input id="chat-cost-multiplier" type="number" min="0" step="0.0001" value="0.2"></label></div><button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存计费标准</button></details>
+<details class="chat-memory-card chat-cost-card"><summary><b>计费标准</b><span>按需展开</span></summary><p>计费不再固定套用 NC。先选择计算方式，再填写当前后端/模型的输入、输出、缓存命中和缓存创建单价；网关会同时返回输入总量与未命中输入，避免缓存命中重复计费。</p><label>计算方式<select id="chat-cost-mode" onchange="chatSaveCostMode()"><option value="auto">上游优先，无价格时按当前单价</option><option value="manual">始终按当前面板单价计算</option><option value="upstream">只显示上游实际价格</option></select></label><p class="chat-field-hint" id="chat-cost-mode-hint">上游有明确总价时优先使用；只有 token 时按当前面板计价标准计算。</p><div class="chat-cost-grid"><label>币种<input id="chat-cost-currency" autocomplete="off" value="¥"></label><label>输入（未命中） / 1M<input id="chat-cost-input-price" type="number" min="0" step="0.0001" value="5"></label><label>输出 / 1M<input id="chat-cost-output-price" type="number" min="0" step="0.0001" value="0"></label><label>缓存命中 / 1M<input id="chat-cost-cache-read-price" type="number" min="0" step="0.0001" value="0.5"></label><label>缓存创建 / 1M<input id="chat-cost-cache-create-price" type="number" min="0" step="0.0001" value="6.25"></label><label>分组倍率<input id="chat-cost-multiplier" type="number" min="0" step="0.0001" value="0.2"></label></div><button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存计费标准</button></details>
 <div class="chat-debug-cache-mode" id="chat-debug-cache-mode">缓存模式读取中</div>
 <div class="chat-debug-toolbar"><button class="btn btn-sm chat-debug-refresh" type="button" onclick="chatRefreshGatewayDebug()">刷新网关记录</button><button class="btn btn-sm chat-debug-clear" type="button" onclick="chatClearDebug()">清空本地调试</button></div>
 <div class="chat-debug" id="chat-debug"></div>
@@ -258,8 +258,8 @@
 <div class="modal-bg" id="ckActionModal" aria-hidden="true" onclick="ckDialogBackdrop(event)"><div class="modal ck-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ck-action-title" aria-describedby="ck-action-message" onclick="event.stopPropagation()"><h3 id="ck-action-title">请确认</h3><p class="ck-action-message" id="ck-action-message"></p><input id="ck-action-input" autocomplete="off" hidden><div class="modal-btns"><button class="btn btn-outline btn-sm" id="ck-action-cancel" type="button" onclick="ckDialogCancel()">取消</button><button class="btn btn-blue btn-sm" id="ck-action-confirm" type="button" onclick="ckDialogSubmit()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="script.js?v=chat-v133-provider-billing"></script>
-<script src="script-extra.js?v=chat-v133-provider-billing"></script>
-<script src="pwa.js?v=chat-v133-provider-billing"></script>
+<script src="script.js?v=chat-v134-configurable-billing"></script>
+<script src="script-extra.js?v=chat-v134-configurable-billing"></script>
+<script src="pwa.js?v=chat-v134-configurable-billing"></script>
 </body>
 </html>

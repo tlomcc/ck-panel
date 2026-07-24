@@ -1845,6 +1845,9 @@ body.chat-active .chat-cost-amount-unknown{
 body.chat-active .chat-cost-amount-estimated{
   color:#7c5aa6!important;
 }
+body.chat-active .chat-cost-amount-calculated{
+  color:#2563eb!important;
+}
 
 body.chat-active .chat-debug-cache-number{
   color:#2563eb!important;
@@ -2838,6 +2841,9 @@ body.chat-active .chat-msg-cost-unknown{
 body.chat-active .chat-msg-cost-estimated{
   color:#7c5aa6!important;
 }
+body.chat-active .chat-msg-cost-calculated{
+  color:#2563eb!important;
+}
 
 body.dark.chat-active .chat-msg-separator,
 body.dark.chat-active .chat-msg-cost{
@@ -2848,6 +2854,9 @@ body.dark.chat-active .chat-msg-cost-unknown{
 }
 body.dark.chat-active .chat-msg-cost-estimated{
   color:#c7a9f0!important;
+}
+body.dark.chat-active .chat-msg-cost-calculated{
+  color:#8db8ff!important;
 }
 
 body.chat-active .chat-settings-title{

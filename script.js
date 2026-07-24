@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v133-provider-billing';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v134-configurable-billing';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2559,6 +2559,7 @@ function chatDefaultThinkingPrompt(){
 }
 function chatDefaultCostPricing(){
   return {
+    mode:'auto',
     currency:'¥',
     inputPerMTokens:5,
     outputPerMTokens:0,
@@ -2566,6 +2567,30 @@ function chatDefaultCostPricing(){
     cacheCreatePerMTokens:6.25,
     multiplier:.2
   };
+}
+function chatNormalizeCostMode(value){
+  var mode=String(value||'').trim().toLowerCase().replace(/[-\s]+/g,'_');
+  if(mode==='manual'||mode==='panel'||mode==='local'||mode==='panel_price')return 'manual';
+  if(mode==='upstream'||mode==='authoritative'||mode==='actual'||mode==='real')return 'upstream';
+  return 'auto';
+}
+function chatCostModeLabel(mode){
+  mode=chatNormalizeCostMode(mode);
+  if(mode==='manual')return '按当前面板单价计算';
+  if(mode==='upstream')return '只用上游实际价格';
+  return '上游优先，无价格时按当前单价';
+}
+function chatRenderCostPricingModeHint(mode){
+  var el=document.getElementById('chat-cost-mode-hint');
+  if(!el)return;
+  mode=chatNormalizeCostMode(mode!==undefined?mode:chatFieldValue('chat-cost-mode','auto'));
+  if(mode==='manual'){
+    el.textContent='本模式对所有中转站/模型都按下方输入、输出、缓存读取、缓存创建单价计算；必须有 token 用量才会计算。';
+  }else if(mode==='upstream'){
+    el.textContent='本模式只显示上游明确返回的总价；只有 token 没有价格时显示“未知”。';
+  }else{
+    el.textContent='本模式优先采用上游明确总价；上游只返回 token 时，按下方当前计价标准计算并标注“按面板单价”。';
+  }
 }
 function chatNumberOrDefault(value,fallback){
   var n=Number(value);
@@ -2579,6 +2604,7 @@ function chatNormalizeCostPricing(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
   var d=chatDefaultCostPricing();
   return {
+    mode:chatNormalizeCostMode(raw.mode!==undefined?raw.mode:(raw.billingMode!==undefined?raw.billingMode:raw.pricingMode)),
     currency:String(raw.currency||d.currency||'¥').trim()||'¥',
     inputPerMTokens:Math.max(0,chatNumberOrDefault(raw.inputPerMTokens!==undefined?raw.inputPerMTokens:raw.input,d.inputPerMTokens)),
     outputPerMTokens:Math.max(0,chatNumberOrDefault(raw.outputPerMTokens!==undefined?raw.outputPerMTokens:raw.output,d.outputPerMTokens)),
@@ -2614,6 +2640,7 @@ function chatCurrentCostPricing(){
 function chatReadCostPricing(saved){
   var base=chatNormalizeCostPricing(saved);
   return chatNormalizeCostPricing({
+    mode:chatFieldValue('chat-cost-mode',base.mode),
     currency:chatFieldValue('chat-cost-currency',base.currency),
     inputPerMTokens:chatFieldValue('chat-cost-input-price',base.inputPerMTokens),
     outputPerMTokens:chatFieldValue('chat-cost-output-price',base.outputPerMTokens),
@@ -2654,6 +2681,34 @@ function chatUsageNumber(usage,key,fallbackKey){
     }
   }
   return 0;
+}
+function chatUsageInputTotal(usage){
+  var obj=chatUsagePayload(usage);
+  var explicit=chatUsageNumber(usage,['input_tokens_total','prompt_tokens_total','inputTokensTotal','promptTokensTotal']);
+  if(explicit>0)return explicit;
+  var input=chatUsageNumber(usage,['input_tokens','prompt_tokens','inputTokens','promptTokens']);
+  var read=chatUsageCacheRead(usage);
+  var create=chatUsageCacheCreate(usage);
+  var format=String(obj.upstream_format||obj.upstreamFormat||'').toLowerCase();
+  var looksOpenAi=format==='openai'||Object.prototype.hasOwnProperty.call(obj,'prompt_tokens')||Object.prototype.hasOwnProperty.call(obj,'prompt_tokens_details');
+  if(looksOpenAi){
+    var promptTotal=chatUsageNumber(usage,['prompt_tokens','promptTokens']);
+    if(promptTotal>0)return promptTotal;
+  }
+  return input+read+create;
+}
+function chatUsageInputBillable(usage){
+  var obj=chatUsagePayload(usage);
+  var explicit=chatUsageNumber(usage,['input_tokens_uncached','billable_input_tokens','uncached_input_tokens','inputTokensUncached','billableInputTokens']);
+  if(explicit>0)return explicit;
+  var input=chatUsageNumber(usage,['input_tokens','prompt_tokens','inputTokens','promptTokens']);
+  var total=chatUsageInputTotal(usage);
+  var format=String(obj.upstream_format||obj.upstreamFormat||'').toLowerCase();
+  var looksOpenAi=format==='openai'||Object.prototype.hasOwnProperty.call(obj,'prompt_tokens')||Object.prototype.hasOwnProperty.call(obj,'prompt_tokens_details');
+  // 旧网关/旧上游没有 input_tokens_uncached 时，OpenAI 的 prompt_tokens 是总量；
+  // Anthropic 的 input_tokens 已经是未命中部分，不能重复扣缓存。
+  if(looksOpenAi&&total>0)return Math.max(0,total-chatUsageCacheRead(usage)-chatUsageCacheCreate(usage));
+  return input;
 }
 function chatUsageFlag(usage,key){
   var keys=Array.isArray(key)?key:[key];
@@ -2752,7 +2807,7 @@ function chatUsageExplicitBillingAmount(usage){
 }
 function chatUsageHasTokenFields(usage){
   var obj=chatUsagePayload(usage);
-  var keys=['input_tokens','output_tokens','prompt_tokens','completion_tokens','total_tokens','cache_read_input_tokens','cache_creation_input_tokens','cached_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens'];
+  var keys=['input_tokens','input_tokens_total','input_tokens_uncached','billable_input_tokens','output_tokens','prompt_tokens','completion_tokens','total_tokens','cache_read_input_tokens','cache_hit_input_tokens','cache_creation_input_tokens','cached_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens'];
   for(var i=0;i<keys.length;i++)if(Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!==null&&obj[keys[i]]!==undefined)return true;
   return !!(chatUsageCacheRead(usage)||chatUsageCacheCreate(usage)||chatUsageNumber(usage,['input_tokens','prompt_tokens','output_tokens','completion_tokens']));
 }
@@ -2767,7 +2822,8 @@ function chatUsageIsNcProvider(usage){
 function chatUsageCost(usage){
   usage=usage&&usage.usage?usage.usage:(usage||{});
   var pricing=chatCurrentCostPricing();
-  var input=chatUsageNumber(usage,'input_tokens','prompt_tokens');
+  var input=chatUsageInputBillable(usage);
+  var inputTotal=chatUsageInputTotal(usage);
   var output=chatUsageNumber(usage,'output_tokens','completion_tokens');
   var read=chatUsageCacheRead(usage);
   var create=chatUsageCacheCreate(usage);
@@ -2781,22 +2837,31 @@ function chatUsageCost(usage){
   var explicitAmount=chatUsageExplicitBillingAmount(usage);
   var billingStatus=chatUsageBillingStatus(usage);
   var hasUsage=chatUsageHasTokenFields(usage);
+  var mode=chatNormalizeCostMode(pricing.mode);
   var status='unknown',total=null,currency=chatUsageBillingCurrency(usage),reason='';
-  if(explicitAmount!==null&&billingStatus!=='unknown'){
+  if(mode!=='manual'&&explicitAmount!==null&&billingStatus!=='unknown'){
     status=billingStatus||'known';
     total=explicitAmount;
-  }else if(chatUsageIsNcProvider(usage)&&hasUsage){
-    // NC 没有把单次总价放进上游响应时，保留原有面板标准，但明确标记为本地估算。
-    status='estimated';
+  }else if(mode==='manual'&&hasUsage){
+    status='calculated';
     total=localEstimate;
     currency=currency||pricing.currency;
-    reason='上游未返回价格，按 NC 面板单价估算';
+    reason='按当前面板计价标准计算';
+  }else if(mode==='auto'&&hasUsage){
+    // 任意供应商只要返回了规范化 token，就可以按当前面板计价标准计算；
+    // 不再把“没有上游总价”限定成 NC 专属估算。
+    status='calculated';
+    total=localEstimate;
+    currency=currency||pricing.currency;
+    reason='上游未返回总价，按当前面板计价标准计算';
   }else{
     reason=hasUsage?'上游返回了 token 用量，但未返回价格':'上游未返回 token 用量或价格';
   }
   return {
     pricing:pricing,
+    mode:mode,
     input:input,
+    inputTotal:inputTotal,
     output:output,
     read:read,
     create:create,
@@ -2807,10 +2872,10 @@ function chatUsageCost(usage){
     raw:raw,
     total:total===null?0:total,
     status:status,
-    currency:currency||((status==='estimated')?pricing.currency:''),
-    source:(billing&&billing.source)||'panel',
+    currency:currency||((status==='estimated'||status==='calculated')?pricing.currency:''),
+    source:(status==='calculated'||status==='estimated'?'panel':((billing&&billing.source)||'panel')),
     provider:chatUsageBillingProvider(usage),
-    reason:status==='estimated'?reason:((billing&&billing.reason)||reason),
+    reason:(status==='estimated'||status==='calculated')?reason:((billing&&billing.reason)||reason),
     hasUsage:hasUsage,
     hasBillingMeta:chatUsageHasBillingMeta(usage)
   };
@@ -2819,7 +2884,14 @@ function chatFormatUsageCost(usage){
   var cost=chatUsageCost(usage);
   if(cost.status==='known')return '费用：'+chatCostAmountText(cost.total,cost.currency||'');
   if(cost.status==='estimated')return '费用：估算 '+chatCostAmountText(cost.total,cost.currency||'¥');
+  if(cost.status==='calculated')return '费用：按面板单价 '+chatCostAmountText(cost.total,cost.currency||cost.pricing.currency||'');
   return '费用：未知（'+(cost.reason|| (cost.hasUsage?'上游未返回价格':'上游未返回用量'))+'）';
+}
+function chatUsageCostBreakdown(usage){
+  var cost=chatUsageCost(usage);
+  var currency=cost.pricing&&cost.pricing.currency?cost.pricing.currency:'';
+  return '输入未命中 '+cost.input+' · 输出 '+cost.output+' · 缓存命中 '+cost.read+' · 缓存创建 '+cost.create+
+    '｜计费输入总量 '+cost.inputTotal+'｜单价计算 '+chatCostAmountText(cost.raw,currency)+' × 倍率 '+cost.pricing.multiplier;
 }
 function chatDebugRecordCostAmount(record){
   if(!record||record.event!=='done'||!record.data)return null;
@@ -2835,7 +2907,7 @@ function chatAttachAssistantCost(msg,usage){
   msg.apiCostReason=cost.reason||'';
   msg.apiCostProvider=cost.provider||'';
   msg.apiCostCurrency=cost.currency||'';
-  if(cost.status==='known'||cost.status==='estimated')msg.apiCost=cost.total;
+  if(cost.status==='known'||cost.status==='estimated'||cost.status==='calculated')msg.apiCost=cost.total;
   else delete msg.apiCost;
   return msg;
 }
@@ -2846,13 +2918,13 @@ function chatAssistantCostLabel(msg){
   if(!Object.prototype.hasOwnProperty.call(msg,'apiCost'))return '';
   var value=Number(msg.apiCost);
   if(!isFinite(value)||value<0)return '';
-  return (status==='estimated'?'估算 ':'')+chatCostAmountText(value,msg.apiCostCurrency||'');
+  return (status==='estimated'?'估算 ':status==='calculated'?'按单价 ':'')+chatCostAmountText(value,msg.apiCostCurrency||'');
 }
 function chatAssistantCostHtml(msg){
   var label=chatAssistantCostLabel(msg);
   if(!label)return '';
   var exact=msg.apiCostStatus==='unknown'?(msg.apiCostReason||'上游未返回价格'):chatCostAmountText(msg.apiCost,msg.apiCostCurrency||'');
-  var cls='chat-msg-cost'+(msg.apiCostStatus==='unknown'?' chat-msg-cost-unknown':'')+(msg.apiCostStatus==='estimated'?' chat-msg-cost-estimated':'');
+  var cls='chat-msg-cost'+(msg.apiCostStatus==='unknown'?' chat-msg-cost-unknown':'')+(msg.apiCostStatus==='estimated'?' chat-msg-cost-estimated':'')+(msg.apiCostStatus==='calculated'?' chat-msg-cost-calculated':'');
   return '<span class="'+cls+'" title="本轮 API 花费：'+escAttr(exact)+'">'+esc(label)+'</span>';
 }
 function chatDefaultConfig(){
@@ -4105,12 +4177,14 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-auto-trim-threshold',trimCfg.threshold);
   chatSetFieldValue('chat-auto-trim-drop',trimCfg.drop);
   var costPricing=chatNormalizeCostPricing(cfg.costPricing);
+  chatSetFieldValue('chat-cost-mode',costPricing.mode);
   chatSetFieldValue('chat-cost-currency',costPricing.currency);
   chatSetFieldValue('chat-cost-input-price',costPricing.inputPerMTokens);
   chatSetFieldValue('chat-cost-output-price',costPricing.outputPerMTokens);
   chatSetFieldValue('chat-cost-cache-read-price',costPricing.cacheReadPerMTokens);
   chatSetFieldValue('chat-cost-cache-create-price',costPricing.cacheCreatePerMTokens);
   chatSetFieldValue('chat-cost-multiplier',costPricing.multiplier);
+  chatRenderCostPricingModeHint(costPricing.mode);
   chatSyncCacheStrategyFields(true);
   chatSetFieldChecked('chat-full-window-context',cfg.fullWindowContext!==false);
   chatUpdateSplitReplyButton(cfg);
@@ -4190,8 +4264,16 @@ function chatSaveConfig(silent){
   chatRenderRecallState();
   chatRenderNcContextState();
   chatRenderBackendSwitchNotificationState();
+  chatRenderCostPricingModeHint(cfg.costPricing&&cfg.costPricing.mode);
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
+  return cfg;
+}
+function chatSaveCostMode(){
+  var cfg=chatSaveConfig(true);
+  var mode=chatNormalizeCostMode(cfg.costPricing&&cfg.costPricing.mode);
+  chatRenderCostPricingModeHint(mode);
+  toast('计费方式已切换：'+chatCostModeLabel(mode));
   return cfg;
 }
 function chatOnMcpToggle(){
@@ -4483,7 +4565,7 @@ function chatDecorateDebugBody(html,record){
   var amountInfo=chatDebugRecordCostAmount(record);
   if(amountInfo&&amountInfo.text){
     var safeAmount=esc(amountInfo.text);
-    var amountClass='chat-cost-amount'+(amountInfo.status==='unknown'?' chat-cost-amount-unknown':'')+(amountInfo.status==='estimated'?' chat-cost-amount-estimated':'');
+    var amountClass='chat-cost-amount'+(amountInfo.status==='unknown'?' chat-cost-amount-unknown':'')+(amountInfo.status==='estimated'?' chat-cost-amount-estimated':'')+(amountInfo.status==='calculated'?' chat-cost-amount-calculated':'');
     html=html.replace(safeAmount,'<strong class="'+amountClass+'">'+safeAmount+'</strong>');
   }
   html=html.replace(/(缓存读取[:：]\s*)([0-9][0-9,]*)/g,'$1<span class="chat-debug-cache-number">$2</span>');
@@ -4628,14 +4710,15 @@ function chatFormatDebug(ev,data){
     var create=chatUsageCacheCreate(data);
     var rounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
     var usageCost=chatFormatUsageCost(data);
+    var costBreakdown=chatUsageCostBreakdown(data);
     var provider=data.provider_name?('｜后端：'+data.provider_name):'';
-    return '📊 用量统计｜缓存读取：'+read+'｜缓存创建：'+create+'｜输入：'+(data.input_tokens||0)+'｜输出：'+(data.output_tokens||0)+provider+(usageCost?'｜'+usageCost:'')+rounds;
+    return '📊 用量统计｜缓存命中：'+read+'｜缓存创建：'+create+'｜输入（未命中）：'+chatUsageInputBillable(data)+'｜输入总量：'+chatUsageInputTotal(data)+'｜输出：'+(data.output_tokens||0)+provider+(usageCost?'｜'+usageCost:'')+'｜'+costBreakdown+rounds;
   }
   if(ev==='done'){
     var u=data.usage||{};
     var doneRounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
     var doneCostText=chatFormatUsageCost(u);
-    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字'+(doneCostText?'｜'+doneCostText:'')+'｜缓存读取：'+chatUsageCacheRead(u)+'｜缓存创建：'+chatUsageCacheCreate(u)+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
+    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字'+(doneCostText?'｜'+doneCostText:'')+'｜缓存命中：'+chatUsageCacheRead(u)+'｜缓存创建：'+chatUsageCacheCreate(u)+'｜输入（未命中）：'+chatUsageInputBillable(u)+'｜输入总量：'+chatUsageInputTotal(u)+'｜输出：'+chatUsageNumber(u,'output_tokens','completion_tokens')+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
   }
   if(ev==='error'){
     return '❌ 请求错误｜'+(data.error||data.message||JSON.stringify(data));
@@ -7040,11 +7123,13 @@ function chatCacheTickHtml(m){
 function chatUsageCacheRead(usage){
   return chatUsageNumber(usage,[
     'cache_read_input_tokens',
+    'cache_hit_input_tokens',
     'cache_read_tokens',
     'cache_read',
     'cached_input_tokens',
     'cached_tokens',
     'cacheReadInputTokens',
+    'cacheHitInputTokens',
     'cacheReadTokens',
     'cacheRead',
     'cachedInputTokens',
