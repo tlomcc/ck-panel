@@ -1556,65 +1556,40 @@ body.chat-active .chat-cache-mode-card{
   background:linear-gradient(180deg,#f6fbf8,#f2f8f5)!important;
 }
 
-body.chat-active .chat-cache-mode-options{
+body.chat-active .chat-cache-strategy-select-row{
   display:grid!important;
-  grid-template-columns:repeat(3,minmax(0,1fr))!important;
-  gap:8px!important;
+  grid-template-columns:72px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:9px!important;
   margin-top:10px!important;
 }
 
-body.chat-active .chat-cache-mode-options button{
-  min-width:0!important;
-  min-height:78px!important;
-  padding:10px!important;
-  display:flex!important;
-  flex-direction:column!important;
-  align-items:flex-start!important;
-  justify-content:center!important;
-  gap:4px!important;
-  border:1px solid #dfe8e3!important;
-  border-radius:14px!important;
-  background:rgba(255,255,255,.76)!important;
-  color:#41524a!important;
-  box-shadow:0 3px 10px rgba(15,23,42,.05)!important;
-  text-align:left!important;
-  cursor:pointer!important;
-  transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease!important;
-}
-
-body.chat-active .chat-cache-mode-options button:hover{
-  transform:translateY(-1px)!important;
-  border-color:#a9d7c1!important;
-}
-
-body.chat-active .chat-cache-mode-options button.active{
-  border-color:#69bf91!important;
-  background:linear-gradient(135deg,#e7f8ef,#f8fffb)!important;
-  box-shadow:0 7px 18px rgba(76,154,111,.16)!important;
-}
-
-body.chat-active .chat-cache-mode-options span{
-  display:inline-flex!important;
-  width:34px!important;
-  height:24px!important;
-  align-items:center!important;
-  justify-content:center!important;
-  border-radius:999px!important;
-  background:#e8f4ed!important;
-  color:#278358!important;
-  font-size:11px!important;
+body.chat-active .chat-cache-strategy-select-row>label{
+  margin:0!important;
+  color:#52645a!important;
+  font-size:12px!important;
   font-weight:800!important;
 }
 
-body.chat-active .chat-cache-mode-options strong{
+body.chat-active .chat-cache-strategy-select{
+  width:100%!important;
+  min-height:38px!important;
+  padding:0 34px 0 12px!important;
+  border:1px solid #bcdcca!important;
+  border-radius:12px!important;
+  background:#ffffff!important;
+  color:#23372b!important;
   font-size:13px!important;
-  color:#223027!important;
+  font-weight:750!important;
+  line-height:38px!important;
+  cursor:pointer!important;
+  box-shadow:0 3px 10px rgba(15,23,42,.05)!important;
 }
 
-body.chat-active .chat-cache-mode-options small{
-  color:#708077!important;
-  font-size:11px!important;
-  line-height:1.35!important;
+body.chat-active .chat-cache-strategy-select:focus{
+  outline:2px solid rgba(78,174,116,.24)!important;
+  outline-offset:1px!important;
+  border-color:#69bf91!important;
 }
 
 body.chat-active .chat-cache-saved,
@@ -2736,29 +2711,15 @@ body.dark.chat-active .chat-cache-mode-card{
   background:linear-gradient(180deg,#17251d,#141f1a)!important;
 }
 
-body.dark.chat-active .chat-cache-mode-options button{
-  border-color:#28362e!important;
+body.dark.chat-active .chat-cache-strategy-select-row>label{
+  color:#a9bbb0!important;
+}
+
+body.dark.chat-active .chat-cache-strategy-select{
+  border-color:#31513d!important;
   background:#111821!important;
-  color:#b7c4bd!important;
-}
-
-body.dark.chat-active .chat-cache-mode-options button.active{
-  border-color:#41a66e!important;
-  background:linear-gradient(135deg,#123121,#101b17)!important;
-  box-shadow:0 8px 20px rgba(32,164,95,.14)!important;
-}
-
-body.dark.chat-active .chat-cache-mode-options span{
-  background:#1c3628!important;
-  color:#82e0aa!important;
-}
-
-body.dark.chat-active .chat-cache-mode-options strong{
-  color:#e2ece6!important;
-}
-
-body.dark.chat-active .chat-cache-mode-options small{
-  color:#8fa19a!important;
+  color:#dce9e0!important;
+  box-shadow:0 4px 12px rgba(0,0,0,.18)!important;
 }
 
 body.dark.chat-active .chat-cache-saved,
@@ -2794,8 +2755,9 @@ body.dark.chat-active .chat-debug-cache-mode{
 }
 
 @media(max-width:760px){
-  body.chat-active .chat-cache-mode-options{
+  body.chat-active .chat-cache-strategy-select-row{
     grid-template-columns:1fr!important;
+    gap:5px!important;
   }
 
   body.chat-active .chat-cache-mode-actions{

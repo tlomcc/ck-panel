@@ -17,14 +17,15 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "worldbook_injection_position": "system_tail",
   "api_base": "upstream base URL",
   "upstream_key": "upstream key",
+  "upstream_format": "anthropic when cache_strategy is native_stable; otherwise omit for auto detection",
   "nc_context_injection": true,
   "recall": true,
   "ck_thinking_enabled": false,
   "ck_thinking_prompt": "visible pseudo-thinking style prompt",
   "ck_thinking_injection_position": "system_after_anchor",
   "use_mcp": false,
-  "cache_strategy": "single_5m | prefix_24h | assistant_latest",
-  "prompt_cache_ttl": "5m for strict breakpoint modes only; omit for prefix_24h",
+  "cache_strategy": "single_5m | prefix_24h | assistant_latest | native_stable",
+  "prompt_cache_ttl": "5m for strict breakpoint modes; omit by default for prefix_24h/native_stable",
   "session_anchor": {
     "first_user_text": "first visible user message in this CK window",
     "first_user_ts": 1760000000000
@@ -44,13 +45,13 @@ Do not send these fields:
 
 `script.js` has a request-body lock that removes those fields before sending, but new code should not add them in the first place.
 
-`prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` omits `prompt_cache_ttl` and does not request explicit Anthropic-style `cache_control`. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
+`prompt_cache_ttl` is the upstream prompt-cache lifetime, not the amount of chat history sent. The CK panel derives it from `cache_strategy`: `single_5m` sends `5m`; `assistant_latest` sends `5m`; `prefix_24h` omits `prompt_cache_ttl`; `native_stable` omits it by default so the upstream receives the tested plain `{"type":"ephemeral"}` anchors. The panel still sends the full same-window history through `transport_messages`/`window_messages`; history cleanup is controlled by `recall_history_retention_seconds`.
 
 `nc_context_injection` controls only the gateway-owned current Beijing time. It must not enable or disable memory lookup.
 
 `recall` independently controls memory lookup and memory injection. The valid combinations are neither, time only, memory only, and time plus memory. Turning either switch off must remove only that dynamic component on the next rebuilt context without changing the selected cache strategy.
 
-The changing current-time and recall block must stay after the latest real user's stable text block and must not itself carry `cache_control`. In `single_5m`, the anchor remains on real user text before the dynamic block. In `assistant_latest`, the anchor remains on the previous assistant. In `prefix_24h`, no explicit anchor is added and the dynamic block remains at the changing tail after the reusable common prefix.
+The changing current-time and recall block must stay after the latest real user's stable text block and must not itself carry `cache_control`. In `single_5m`, the anchor remains on real user text before the dynamic block. In `assistant_latest`, the anchor remains on the previous assistant. In `native_stable`, the request uses Anthropic native `/messages` and places one anchor on the last stable system block plus one on the latest completed assistant; the current user and dynamic tail remain after those anchors. In `prefix_24h`, no explicit anchor is added and the dynamic block remains at the changing tail after the reusable common prefix.
 
 Optimistic rendering must not mutate the transport contract. The panel may persist/render a `pending_user` immediately, but `window_messages` must continue to exclude that pending turn until it is represented by `text`; request serialization, retry reuse, transport selection, TTL and retention fields remain unchanged apart from explicitly added feature fields such as `nc_context_injection`.
 
@@ -96,8 +97,9 @@ For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text bloc
 - `single_5m`: place the cache breakpoint under the latest user message. It is strict: the cached prefix must match byte-for-byte within the 5 minute TTL. The gateway preserves injected historical user messages while the previous turn is still within the short prompt-cache TTL; when idle time exceeds `recall_history_retention_seconds`, it strips old `<ck_gateway_context>` blocks and rebuilds from clean chat history.
 - `prefix_24h`: optimize for NC long-lived common-content cache. The gateway strips old `<ck_gateway_context>` blocks every turn, keeps clean chat history as the stable prefix, and only injects recall into the current user message. This mode must not add explicit `cache_control` anchors and must not send `prompt_cache_ttl: "1h"`; the strategy name describes NC's common-content cache behavior, not a one-hour history window.
 - `assistant_latest`: place the cache breakpoint after the latest assistant message. Editing/deleting the latest assistant reply or inserting a message after it can invalidate that breakpoint.
+- `native_stable`: use Anthropic native `/messages` with the stable system + latest completed assistant two-anchor shape. The panel sends `upstream_format: "anthropic"`; the gateway omits a TTL by default and leaves the current user, time, recall, and reply-target blocks after the assistant anchor. This is intended for the separately validated stable Uocode/Claude-native route; it is not a guarantee for an OpenAI-compatible endpoint.
 
-`recall_history_retention_seconds` defaults to `300` for `single_5m` and `assistant_latest`, and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
+`recall_history_retention_seconds` defaults to `300` for `single_5m`, `assistant_latest`, and `native_stable`, and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
 
 `ck_thinking_enabled` and `ck_thinking_prompt` are optional CK pseudo-thinking controls. When enabled, the gateway injects a stable system block that asks the model to put a short visible inner-monologue block before the normal reply:
 

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v134-configurable-billing';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v135-native-stable-cache';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2966,6 +2966,7 @@ function chatNormalizeCacheStrategy(value){
   var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
   if(raw==='prefix_24h'||raw==='prefix24h'||raw==='partial_24h'||raw==='24h'||raw==='prefix')return 'prefix_24h';
   if(raw==='assistant_latest'||raw==='latest_assistant'||raw==='assistant'||raw==='assistant_breakpoint'||raw==='assistant_5m')return 'assistant_latest';
+  if(raw==='native_stable'||raw==='native'||raw==='native_cache'||raw==='stable_native'||raw==='anthropic_native'||raw==='anthropic_stable'||raw==='uocode_stable'||raw==='uocode_native'||raw==='native_5m')return 'native_stable';
   return 'single_5m';
 }
 function chatCacheStrategyMeta(value){
@@ -2980,6 +2981,18 @@ function chatCacheStrategyMeta(value){
       retentionSeconds:0,
       sendText:'四个稳定断点；旧召回和旧图片每轮剔除',
       debugText:'四个稳定断点 + 清旧召回/旧图片'
+    };
+  }
+  if(strategy==='native_stable'){
+    return {
+      value:'native_stable',
+      label:'原生稳定缓存',
+      shortLabel:'原生',
+      ttl:'',
+      ttlLabel:'上游默认（通常 5min）',
+      retentionSeconds:300,
+      sendText:'已验证的 Uocode Claude /messages 形状：固定 system + 最新完成助手双锚点；当前用户和动态召回放在锚点后',
+      debugText:'system + 最新完成助手双锚点'
     };
   }
   if(strategy==='assistant_latest'){
@@ -3057,9 +3070,6 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   var retention=document.getElementById('chat-recall-retention-seconds');
   if(strategy)strategy.value=meta.value;
   if(retention)retention.value=String(meta.retentionSeconds);
-  document.querySelectorAll('[data-cache-strategy]').forEach(function(btn){
-    btn.classList.toggle('active',btn.getAttribute('data-cache-strategy')===meta.value);
-  });
   var savedCfg=chatLoadConfig()||{};
   var savedMeta=chatCacheStrategyMeta(savedCfg.cacheStrategy);
   var recallMeta=chatRecallMeta(savedCfg.recall!==false);
@@ -3071,7 +3081,7 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   if(detail)detail.textContent='当前选择：'+meta.label+'｜发送：'+meta.sendText+'｜'+chatCacheStrategyTtlDetail(meta);
   var status=document.getElementById('chat-cache-save-status');
   if(status){
-    status.textContent=statusText||'点击模式会立即保存，也可点按钮确认。';
+    status.textContent=statusText||'选择后会立即保存，也可点按钮确认。';
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
   }
   chatRenderRecallState();
@@ -7654,6 +7664,9 @@ async function chatSubmitPendingMessages(options){
     }
   };
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
+  // 原生稳定策略必须走 Anthropic 原生 /messages 形状；其它策略继续
+  // 由网关按供应商地址自动判断 OpenAI/Anthropic 协议。
+  if(cacheStrategy==='native_stable')body.upstream_format='anthropic';
   if(regenerateRequest){
     currentSession.transportMessages=[];
     currentSession.transportUpdated=0;

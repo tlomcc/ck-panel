@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v154-chat-v134-configurable-billing';
+const CACHE_NAME = 'ck-panel-shell-v155-chat-v135-native-stable-cache';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v134-configurable-billing',
-  './polish.css?v=chat-v134-configurable-billing',
-  './chat.css?v=chat-v134-configurable-billing',
-  './wechat.css?v=chat-v134-configurable-billing',
-  './script.js?v=chat-v134-configurable-billing',
-  './script-extra.js?v=chat-v134-configurable-billing',
-  './pwa.js?v=chat-v134-configurable-billing',
+  './style.css?v=chat-v135-native-stable-cache',
+  './polish.css?v=chat-v135-native-stable-cache',
+  './chat.css?v=chat-v135-native-stable-cache',
+  './wechat.css?v=chat-v135-native-stable-cache',
+  './script.js?v=chat-v135-native-stable-cache',
+  './script-extra.js?v=chat-v135-native-stable-cache',
+  './pwa.js?v=chat-v135-native-stable-cache',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

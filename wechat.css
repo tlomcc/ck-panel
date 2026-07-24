@@ -708,33 +708,32 @@ body.chat-active .chat-cache-save-btn{
   font-weight:500!important;
 }
 body.chat-active .chat-cache-mode-card{background:#fff!important}
-body.chat-active .chat-cache-mode-options button{
-  min-height:88px!important;
-  padding:11px!important;
-  border:1px solid #ddd!important;
-  border-radius:8px!important;
-  background:#fff!important;
-  box-shadow:none!important;
+body.chat-active .chat-cache-strategy-select-row{
+  display:grid!important;
+  grid-template-columns:68px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:8px!important;
+  margin-top:10px!important;
 }
-body.chat-active .chat-cache-mode-options button:hover{transform:none!important;border-color:#aaa!important}
-body.chat-active .chat-cache-mode-options button.active{
-  border-color:var(--wx-primary)!important;
-  background:#f3fff8!important;
-  box-shadow:none!important;
-}
-body.chat-active .chat-cache-mode-options span{
-  width:auto!important;
-  min-width:34px!important;
-  height:22px!important;
-  padding:0 6px!important;
-  border-radius:5px!important;
-  background:#edf8f2!important;
-  color:var(--wx-primary-ink)!important;
+body.chat-active .chat-cache-strategy-select-row>label{
+  margin:0!important;
+  color:#777!important;
   font-size:12px!important;
-  font-weight:600!important;
+  font-weight:500!important;
 }
-body.chat-active .chat-cache-mode-options strong{color:#222!important;font-size:13px!important;font-weight:600!important}
-body.chat-active .chat-cache-mode-options small{color:#888!important;font-size:11px!important;font-weight:400!important}
+body.chat-active .chat-settings .chat-cache-strategy-select{
+  min-height:40px!important;
+  padding:8px 10px!important;
+  border-color:#c9ddd1!important;
+  background:#fbfffc!important;
+  color:#24372c!important;
+  font-weight:500!important;
+}
+body.chat-active .chat-settings .chat-cache-strategy-select:focus{
+  border-color:var(--wx-primary)!important;
+  outline:2px solid rgba(7,193,96,.12)!important;
+  outline-offset:1px!important;
+}
 body.chat-active .chat-cache-saved,
 body.chat-active .chat-cache-mode-detail{
   border:1px solid #d9ebe1!important;
@@ -816,7 +815,7 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
   body.chat-active .chat-side-tabs{padding:0 4px!important}
   body.chat-active .chat-side-tabs button{min-width:64px!important;height:42px!important;font-size:12px!important}
   body.chat-active .chat-side-panel{padding:14px 12px calc(20px + env(safe-area-inset-bottom))!important;scrollbar-gutter:auto!important}
-  body.chat-active .chat-cache-mode-options{grid-template-columns:1fr!important}
+  body.chat-active .chat-cache-strategy-select-row{grid-template-columns:1fr!important;gap:5px!important}
   body.chat-active .chat-cache-mode-actions{grid-template-columns:1fr!important}
 }
 
@@ -997,21 +996,12 @@ body.dark.chat-active .chat-memory-card b,
 body.dark.chat-active .chat-switch span{color:#eee!important}
 body.dark.chat-active .chat-memory-card p,
 body.dark.chat-active .chat-field-hint{color:#999!important}
-body.dark.chat-active .chat-cache-mode-options button{
-  border-color:#343437!important;
-  background:#1c1c1e!important;
-  color:#ddd!important;
-  box-shadow:none!important;
+body.dark.chat-active .chat-cache-strategy-select-row>label{color:#999!important}
+body.dark.chat-active .chat-settings .chat-cache-strategy-select{
+  border-color:#31513d!important;
+  background:#18231c!important;
+  color:#e8eee9!important;
 }
-body.dark.chat-active .chat-cache-mode-options button:hover{border-color:#555!important;background:#242426!important;transform:none!important}
-body.dark.chat-active .chat-cache-mode-options button.active{
-  border-color:var(--wx-primary)!important;
-  background:#10291c!important;
-  box-shadow:none!important;
-}
-body.dark.chat-active .chat-cache-mode-options span{background:#173324!important;color:#70d89c!important}
-body.dark.chat-active .chat-cache-mode-options strong{color:#eee!important}
-body.dark.chat-active .chat-cache-mode-options small{color:#999!important}
 body.dark.chat-active .chat-cache-saved,
 body.dark.chat-active .chat-cache-mode-detail{
   border-color:#28503b!important;
