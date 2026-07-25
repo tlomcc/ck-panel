@@ -788,17 +788,17 @@ body.dark.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!i
 /* Desaturated type accents shared by memory web + fact library */
 .eg-type-person{border-left-color:var(--ck-blue)!important}
 .eg-type-event{border-left-color:var(--ck-amber)!important}
-.eg-type-place{border-left-color:#3f9285!important}
+.eg-type-place{border-left-color:var(--ck-place)!important}
 .eg-type-thing{border-left-color:var(--ck-violet)!important}
-.eg-type-mood{border-left-color:#b06a86!important}
-.eg-type-topic{border-left-color:#71808d!important}
+.eg-type-mood{border-left-color:var(--ck-mood)!important}
+.eg-type-topic{border-left-color:var(--ck-topic)!important}
 .eg-type-relation{border-left-color:var(--ck-blue)!important}
 .fact-type-person{--fact-accent:var(--ck-blue)!important}
 .fact-type-event{--fact-accent:var(--ck-amber)!important}
-.fact-type-place{--fact-accent:#3f9285!important}
+.fact-type-place{--fact-accent:var(--ck-place)!important}
 .fact-type-thing{--fact-accent:var(--ck-violet)!important}
-.fact-type-mood{--fact-accent:#b06a86!important}
-.fact-type-topic{--fact-accent:#71808d!important}
+.fact-type-mood{--fact-accent:var(--ck-mood)!important}
+.fact-type-topic{--fact-accent:var(--ck-topic)!important}
 .eg-badge-person,.fact-badge-person{background:#e9eef5!important;color:#456492!important}
 .eg-badge-event,.fact-badge-event{background:#f4ecdd!important;color:#8a6320!important}
 .eg-badge-place,.fact-badge-place{background:#e2efec!important;color:#357a6d!important}
@@ -890,4 +890,179 @@ body.dark .toast.toast-error{border-left-color:var(--ck-danger)!important}
     animation-iteration-count:1!important;
     transition-duration:.01ms!important;
   }
+}
+
+/* ---- Final refinement: quieter chrome, real line icons, one memory line ---- */
+.panel-version-badge,
+body:not(.chat-active) .panel-version-badge{
+  min-width:30px!important;
+  padding:5px 9px!important;
+  font-size:0!important;
+  letter-spacing:0!important;
+  text-align:center!important;
+}
+.panel-version-badge::after{
+  content:attr(data-short-version);
+  font:600 10px/1 var(--ck-font-data)!important;
+  letter-spacing:.02em!important;
+}
+
+.hamburger-btn svg,
+.side-drawer-head button svg{
+  width:18px!important;
+  height:18px!important;
+  fill:none!important;
+  stroke:currentColor!important;
+  stroke-width:1.7!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+}
+.side-drawer-head button svg{width:17px!important;height:17px!important}
+.side-nav{padding:12px 10px 18px!important}
+.side-nav-label{
+  margin:13px 12px 5px!important;
+  color:var(--ck-faint)!important;
+  font:700 10px/1.2 var(--ck-font-body)!important;
+  letter-spacing:.14em!important;
+  text-transform:uppercase!important;
+}
+.side-nav-label:first-child{margin-top:2px!important}
+.side-nav-item{
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+  width:100%!important;
+  min-height:44px!important;
+  padding:0 12px!important;
+  text-align:left!important;
+}
+.side-nav-item[hidden]{display:none!important}
+.side-nav-item .side-nav-icon{
+  width:18px!important;
+  height:18px!important;
+  flex:0 0 18px!important;
+  fill:none!important;
+  stroke:currentColor!important;
+  stroke-width:1.65!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+  opacity:.82!important;
+}
+.side-nav-item.active .side-nav-icon{opacity:1!important}
+.side-nav-item>span{min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+
+/* Attachment icons were already SVG in the markup; this prevents legacy CSS
+   from painting them as black filled glyphs on narrow screens. */
+body.chat-active .chat-plus-page>button span svg{
+  width:21px!important;
+  height:21px!important;
+  display:block!important;
+  fill:none!important;
+  stroke:currentColor!important;
+  stroke-width:1.7!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+}
+body.chat-active .chat-plus-page>button:hover span,
+body.chat-active .chat-plus-page>button:focus-visible span{
+  border-color:var(--ck-accent)!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-accent-strong)!important;
+}
+body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
+
+/* The spine is the signature; keep the old orbit as a whisper. */
+.archive-spine::after{opacity:.34!important}
+.archive-spine-track{background:linear-gradient(90deg,var(--ck-line),rgba(var(--ck-accent-rgb),.72),var(--ck-line))!important}
+.archive-spine-node:hover::before{transform:scale(1.08)!important}
+
+/* Give secondary pages the same title-to-content rhythm as the overview. */
+#tab-graph .graph-hero,
+#tab-apiconfig .api-page-head{
+  position:relative!important;
+  overflow:hidden!important;
+  padding:20px 22px!important;
+}
+#tab-graph .graph-hero>div:first-child,
+#tab-apiconfig .api-page-title{
+  position:relative!important;
+  padding-left:15px!important;
+}
+#tab-graph .graph-hero>div:first-child::before,
+#tab-apiconfig .api-page-title::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:3px;
+  width:2px;
+  height:42px;
+  border-radius:var(--ck-radius-pill);
+  background:linear-gradient(180deg,var(--ck-accent),rgba(var(--ck-accent-rgb),.12));
+}
+#tab-graph .graph-hero h2,
+#tab-apiconfig .api-page-head h2{
+  font-size:22px!important;
+  line-height:1.2!important;
+  letter-spacing:-.2px!important;
+}
+#tab-graph .graph-hero p,
+#tab-apiconfig .api-page-head p{line-height:1.65!important}
+#tab-graph .graph-hero::after,
+#tab-apiconfig .api-page-head::after{
+  content:"";
+  position:absolute;
+  right:24px;
+  top:20px;
+  width:56px;
+  height:56px;
+  border:1px solid rgba(var(--ck-accent-rgb),.10);
+  border-radius:50%;
+  box-shadow:0 0 0 9px rgba(var(--ck-accent-rgb),.028);
+  pointer-events:none;
+}
+#tab-status .tab-head{
+  position:relative!important;
+  padding:4px 0 16px 15px!important;
+  border-bottom:1px solid var(--ck-line)!important;
+}
+#tab-status .tab-head::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:7px;
+  width:2px;
+  height:34px;
+  border-radius:var(--ck-radius-pill);
+  background:linear-gradient(180deg,var(--ck-accent),rgba(var(--ck-accent-rgb),.12));
+}
+
+/* Auth is a deliberate entry surface, not a generic centered form. */
+.modal-bg.panel-auth-gate .modal{
+  position:relative!important;
+  width:min(420px,calc(100vw - 32px))!important;
+  max-width:none!important;
+  padding:28px!important;
+  overflow:hidden!important;
+}
+.modal-bg.panel-auth-gate .modal::before{
+  content:"";
+  position:absolute;
+  left:28px;
+  top:0;
+  width:54px;
+  height:2px;
+  background:var(--ck-accent);
+}
+.modal-bg.panel-auth-gate .modal h3{font-size:18px!important;letter-spacing:-.15px!important}
+.modal-bg.panel-auth-gate .modal p{line-height:1.7!important;color:var(--ck-muted)!important}
+.modal-bg.panel-auth-gate .modal-btns .btn-blue{min-width:96px!important}
+
+@media(max-width:760px){
+  .side-nav-label{margin-top:11px!important}
+  #tab-graph .graph-hero,
+  #tab-apiconfig .api-page-head{padding:17px 16px!important}
+  #tab-graph .graph-hero::after,
+  #tab-apiconfig .api-page-head::after{right:14px;top:16px;width:44px;height:44px}
+  #tab-graph .graph-hero h2,
+  #tab-apiconfig .api-page-head h2{font-size:20px!important}
 }
