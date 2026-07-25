@@ -429,6 +429,115 @@ body.chat-active .chat-worldbook-list{
 .archive-ledger-meter{background:var(--ck-line-soft)!important}
 .archive-ledger-meter i{background:linear-gradient(90deg,var(--ck-accent),#8fd0ad)!important}
 
+/* ---- Status page: memory-line ledger tiles, tokenized status colors ---- */
+#tab-status .ds-tile{border-radius:var(--ck-radius-md)!important}
+#tab-status .ds-note{border-radius:var(--ck-radius-md)!important}
+#tab-status .ds-stat,
+#tab-status .ds-meta{border-radius:var(--ck-radius-md)!important}
+#tab-status .ds-tile-title{color:var(--ck-text)!important}
+#tab-status .ds-tile-sub,
+#tab-status .ds-note,
+#tab-status .ds-stat span,
+#tab-status .ds-meta-row>span{color:var(--ck-muted)!important}
+#tab-status .ds-stat b,
+#tab-status .ds-meta-row>b{color:var(--ck-text)!important}
+#tab-status .ds-stat b{font-family:var(--ck-font-data)!important}
+#tab-status .ds-ok{background:var(--ck-accent-wash)!important;border-color:var(--ck-accent-soft)!important}
+#tab-status .ds-wait{background:#f8f0dd!important;border-color:#ecd6a6!important}
+#tab-status .ds-meta-row{border-bottom-color:var(--ck-line-soft)!important}
+#tab-status .ds-day-chips i{
+  border:1px solid var(--ck-line-soft)!important;
+  border-radius:var(--ck-radius-sm)!important;
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-muted)!important;
+}
+body.dark #tab-status .ds-tile,
+body.dark #tab-status .ds-note,
+body.dark #tab-status .ds-stat,
+body.dark #tab-status .ds-meta{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
+body.dark #tab-status .ds-tile-title,
+body.dark #tab-status .ds-stat b,
+body.dark #tab-status .ds-meta-row>b{color:var(--ck-text)!important}
+body.dark #tab-status .ds-ok{background:var(--ck-accent-wash)!important;border-color:var(--ck-accent-soft)!important}
+body.dark #tab-status .ds-wait{background:#2b2415!important;border-color:#5c4d2a!important}
+body.dark #tab-status .ds-day-chips i{background:var(--ck-surface-soft)!important;border-color:var(--ck-line)!important;color:var(--ck-muted)!important}
+
+/* ---- Legacy memory pages (category / search / detail): retire the blue-gray ---- */
+/* Detail hero: replace the near-black slab with a quiet paper hero */
+#page-detail .detail-top{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-lg)!important;
+  background:linear-gradient(120deg,var(--ck-accent-wash),var(--ck-surface) 62%)!important;
+  color:var(--ck-text)!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+#page-detail .detail-top small{color:var(--ck-muted)!important}
+body.dark #page-detail .detail-top{background:linear-gradient(120deg,var(--ck-accent-wash),var(--ck-surface) 60%)!important;border-color:var(--ck-line)!important}
+
+/* Category page */
+#tab-categories .cat-grid,
+#tab-categories .cat-section{
+  border-color:var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+#tab-categories .cat-card,
+#tab-categories .cat-section .cat-card{background:var(--ck-surface)!important;border-bottom-color:var(--ck-line-soft)!important}
+#tab-categories .cat-card:hover{background:var(--ck-surface-soft)!important}
+#tab-categories .cat-section-head{background:var(--ck-surface-soft)!important;border-bottom-color:var(--ck-line-soft)!important}
+#tab-categories .cat-card-name{color:var(--ck-text)!important}
+#tab-categories .cat-card-num{color:var(--ck-text)!important;font-family:var(--ck-font-data)!important}
+#tab-categories .cat-card-detail{color:var(--ck-muted)!important}
+#tab-categories .cat-mark{
+  border-radius:var(--ck-radius-sm)!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-accent-strong)!important;
+}
+body.dark #tab-categories .cat-grid,
+body.dark #tab-categories .cat-section,
+body.dark #tab-categories .cat-card,
+body.dark #tab-categories .cat-section .cat-card{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
+body.dark #tab-categories .cat-mark{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
+
+/* Search page */
+#tab-search .search-head{background:transparent!important}
+#tab-search .search-clear{background:var(--ck-line-soft)!important;color:var(--ck-muted)!important}
+#tab-search .search-panel,
+#tab-search .search-suggest,
+#tab-search .search-result-item,
+#tab-search .search-entry{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:none!important;
+}
+#tab-search .search-result-item:hover{background:var(--ck-surface-soft)!important}
+#tab-search .search-filter{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-pill)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-muted)!important;
+}
+#tab-search .search-filter.active{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+#tab-search .search-result-cat{color:var(--ck-accent-strong)!important}
+#tab-search .search-result-text,
+#tab-search .search-entry .search-result-text{color:var(--ck-text)!important}
+#tab-search .search-result-head,
+#tab-search .search-suggest-title{color:var(--ck-muted)!important}
+#tab-search .search-empty-card{
+  border:1px dashed var(--ck-line-strong)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+}
+#tab-search .search-empty-title{color:var(--ck-text)!important}
+#tab-search .search-empty-sub{color:var(--ck-muted)!important}
+body.dark #tab-search .search-panel,
+body.dark #tab-search .search-suggest,
+body.dark #tab-search .search-result-item,
+body.dark #tab-search .search-entry,
+body.dark #tab-search .search-empty-card{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
+
 /* ---- API control room: clearer hierarchy without dashboard theatrics ---- */
 .sub-tabs{
   border-color:var(--ck-line)!important;
@@ -527,6 +636,10 @@ body.chat-active .startup-icon{
 body.chat-active .startup-name{color:var(--ck-accent-strong)!important;letter-spacing:2px!important}
 body.chat-active .startup-subtitle,
 body.chat-active .loading-text{color:var(--ck-muted)!important}
+
+/* Auth gate: memory-tinted overlay instead of slate blue */
+.modal-bg.panel-auth-gate{background:rgba(17,35,26,.62)!important}
+.modal-bg.panel-auth-gate .modal{border-radius:var(--ck-radius-xl)!important}
 
 /* ---- Dark paper, not black iOS chrome ---- */
 body.dark.chat-active,

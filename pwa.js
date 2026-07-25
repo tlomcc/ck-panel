@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v138-memory-loom-foundation').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v139-memory-loom-legacy-pages').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
