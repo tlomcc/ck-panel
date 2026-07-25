@@ -182,6 +182,23 @@ body:not(.chat-active) .theme-toggle{
 }
 body:not(.chat-active) .hamburger-btn:hover,
 body:not(.chat-active) .theme-toggle:hover{background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+/* 顶栏明暗切换：内联 SVG 月/日，随 is-dark 状态互斥显示（对齐聊天页写法，去掉彩色 emoji） */
+.theme-toggle .theme-ico{
+  width:19px!important;height:19px!important;
+  fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;
+  stroke-linecap:round!important;stroke-linejoin:round!important;
+}
+.theme-toggle:not(.is-dark) .theme-moon,
+.theme-toggle.is-dark .theme-sun{display:block!important}
+.theme-toggle:not(.is-dark) .theme-sun,
+.theme-toggle.is-dark .theme-moon{display:none!important}
+/* 搜索图标：单色描边放大镜 SVG（信息网 eg-search + 事实库 facts-search 统一） */
+.eg-search-icon svg,
+.facts-search>span svg{
+  width:15px!important;height:15px!important;
+  display:block!important;opacity:.72!important;
+  stroke-width:2!important;
+}
 .install-app-btn{
   border:1px solid var(--ck-line)!important;
   border-radius:var(--ck-radius-pill)!important;
