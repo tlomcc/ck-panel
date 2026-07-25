@@ -876,47 +876,6 @@ body.dark .toast.toast-error{border-left-color:var(--ck-danger)!important}
   .facts-toolbar{border-radius:14px!important}
 }
 
-/* 调试卡片：收敛为 Memory Loom 纸面 + 左侧单色记忆线，语义色接 token
-   （与信息网/事实库同一套降饱和语义色统一，去掉旧的五色染底） */
-body.chat-active .chat-debug-record,
-body.chat-active .chat-debug-empty{
-  border:1px solid var(--ck-line)!important;
-  border-left:3px solid var(--ck-line-strong)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-text-soft)!important;
-  box-shadow:var(--ck-shadow-xs)!important;
-}
-body.chat-active .chat-debug-cache{border-left-color:var(--ck-blue)!important;background:var(--ck-surface)!important}
-body.chat-active .chat-debug-intent{border-left-color:var(--ck-violet)!important;background:var(--ck-surface)!important}
-body.chat-active .chat-debug-usage{border-left-color:var(--ck-amber)!important;background:var(--ck-surface)!important}
-body.chat-active .chat-debug-done{border-left-color:var(--ck-accent)!important;background:var(--ck-surface)!important}
-body.chat-active .chat-debug-error{border-left-color:var(--ck-danger)!important;background:var(--ck-surface)!important}
-body.chat-active .chat-debug-time{color:var(--ck-faint)!important}
-body.chat-active .chat-debug-body{color:var(--ck-text-soft)!important}
-body.chat-active .chat-debug-cache-number,
-body.chat-active .chat-debug-body .chat-debug-cache-number{color:var(--ck-blue)!important}
-body.chat-active .chat-cost-amount{color:var(--ck-accent-strong)!important}
-body.chat-active .chat-cost-amount-unknown{color:var(--ck-amber)!important}
-body.chat-active .chat-cost-amount-estimated{color:var(--ck-violet)!important}
-body.chat-active .chat-cost-amount-calculated{color:var(--ck-blue)!important}
-/* 深色：chat.css 用 body.dark.chat-active（双类特异性更高），需同特异性覆盖；token 已在深色翻转 */
-body.dark.chat-active .chat-debug-record,
-body.dark.chat-active .chat-debug-empty{
-  border-color:var(--ck-line)!important;
-  border-left-color:var(--ck-line-strong)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-text-soft)!important;
-}
-body.dark.chat-active .chat-debug-cache{border-left-color:var(--ck-blue)!important;background:var(--ck-surface)!important}
-body.dark.chat-active .chat-debug-intent{border-left-color:var(--ck-violet)!important;background:var(--ck-surface)!important}
-body.dark.chat-active .chat-debug-usage{border-left-color:var(--ck-amber)!important;background:var(--ck-surface)!important}
-body.dark.chat-active .chat-debug-done{border-left-color:var(--ck-accent)!important;background:var(--ck-surface)!important}
-body.dark.chat-active .chat-debug-error{border-left-color:var(--ck-danger)!important;background:var(--ck-surface)!important}
-body.dark.chat-active .chat-debug-time{color:var(--ck-faint)!important}
-body.dark.chat-active .chat-debug-body{color:var(--ck-text-soft)!important}
-body.dark.chat-active .chat-debug-cache-number{color:var(--ck-blue)!important}
-
 @media(max-width:360px){
   body.chat-active .chat-messages{padding-inline:10px!important}
   body.chat-active .chat-bubble.user,
