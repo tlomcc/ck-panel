@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v137-archive-fact-overview').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v138-memory-loom-foundation').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

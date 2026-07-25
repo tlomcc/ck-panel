@@ -1,0 +1,763 @@
+/* ============================================================
+   CK Memory Loom — temporary visual migration layer
+
+   Scope: visual treatment only. No display-state, pointer-event or
+   business-selector changes belong here.
+
+   Exit rule: after a component is visually approved, move these rules to
+   its single owner file (chat / memory / api / components) and remove the
+   migrated block from this file. This layer must not become permanent.
+   ============================================================ */
+
+/* ---- Bridge legacy palettes to the Memory Loom vocabulary ---- */
+:root{
+  --wx-bg:var(--ck-bg);
+  --wx-nav:var(--ck-surface-overlay);
+  --wx-panel:var(--ck-surface);
+  --wx-green:var(--ck-user-bubble);
+  --wx-primary:var(--ck-accent);
+  --wx-primary-ink:var(--ck-accent-strong);
+  --wx-ink:var(--ck-text);
+  --wx-ink-2:var(--ck-blue);
+  --wx-gray:var(--ck-muted);
+  --wx-faint:var(--ck-faint);
+  --wx-line:var(--ck-line);
+  --wx-line-soft:var(--ck-line-soft);
+  --wx-cell:var(--ck-surface);
+  --wx-group-bg:var(--ck-bg);
+
+  --pg-emerald-600:var(--ck-accent-strong);
+  --pg-emerald-500:var(--ck-accent);
+  --pg-emerald-400:#59b982;
+  --pg-emerald-soft:var(--ck-accent-soft);
+  --pg-grad:linear-gradient(135deg,var(--ck-accent-strong),var(--ck-accent));
+  --pg-hero:linear-gradient(145deg,#183426 0%,#24593d 54%,#2f8f62 100%);
+  --pg-ink:var(--ck-text);
+  --pg-ink-2:var(--ck-text-soft);
+  --pg-ink-3:var(--ck-muted);
+  --pg-surface:var(--ck-surface);
+  --pg-surface-soft:var(--ck-surface-soft);
+  --pg-line:var(--ck-line);
+  --pg-line-soft:var(--ck-line-soft);
+  --pg-shadow-sm:var(--ck-shadow-xs);
+  --pg-shadow-md:var(--ck-shadow-sm);
+  --pg-shadow-lg:var(--ck-shadow-md);
+  --pg-radius:var(--ck-radius-lg);
+  --bg-color:var(--ck-bg);
+}
+
+body.dark{
+  --wx-bg:var(--ck-bg);
+  --wx-nav:var(--ck-surface-overlay);
+  --wx-panel:var(--ck-surface);
+  --wx-green:var(--ck-user-bubble);
+  --wx-primary:var(--ck-accent);
+  --wx-primary-ink:var(--ck-accent-strong);
+  --wx-ink:var(--ck-text);
+  --wx-ink-2:var(--ck-blue);
+  --wx-gray:var(--ck-muted);
+  --wx-faint:var(--ck-faint);
+  --wx-line:var(--ck-line);
+  --wx-line-soft:var(--ck-line-soft);
+  --wx-cell:var(--ck-surface);
+  --wx-group-bg:var(--ck-bg);
+}
+
+/* ---- Global paper, type and interaction language ---- */
+html{background:var(--ck-bg)!important}
+body{
+  background:
+    radial-gradient(circle at 84% -12%,rgba(47,143,98,.075),transparent 30rem),
+    linear-gradient(180deg,var(--ck-bg) 0%,var(--ck-bg-soft) 100%) fixed!important;
+  color:var(--ck-text)!important;
+  font-family:var(--ck-font-body)!important;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+body.dark{
+  background:
+    radial-gradient(circle at 82% -10%,rgba(97,197,142,.06),transparent 28rem),
+    linear-gradient(180deg,var(--ck-bg) 0%,#121914 100%) fixed!important;
+}
+
+::selection{background:var(--ck-accent-soft);color:var(--ck-text)}
+
+button,input,select,textarea{font-family:var(--ck-font-body)!important}
+
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:2px solid var(--ck-accent)!important;
+  outline-offset:2px!important;
+}
+
+.btn,
+.chat-wide-btn,
+.chat-cache-save-btn,
+.prov-add,
+.prov-fetch-models,
+.prov-save{
+  border-radius:var(--ck-radius-sm)!important;
+  transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease),color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease)!important;
+}
+.btn:active,
+.chat-wide-btn:active,
+.chat-cache-save-btn:active{transform:none!important}
+.btn-blue,
+.chat-wide-btn,
+.chat-cache-save-btn{
+  border:1px solid var(--ck-accent)!important;
+  background:var(--ck-accent)!important;
+  color:#fff!important;
+  box-shadow:none!important;
+}
+.btn-blue:hover,
+.chat-wide-btn:hover,
+.chat-cache-save-btn:hover{
+  border-color:var(--ck-accent-strong)!important;
+  background:var(--ck-accent-strong)!important;
+}
+.btn-outline{
+  border:1px solid var(--ck-line-strong)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-accent-strong)!important;
+  box-shadow:none!important;
+}
+.btn-outline:hover{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important}
+.btn-red{background:var(--ck-danger)!important;color:#fff!important;box-shadow:none!important}
+
+input:not([type=checkbox]):not([type=radio]),
+select,
+textarea{
+  border-color:var(--ck-line)!important;
+  border-radius:var(--ck-radius-sm)!important;
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-text)!important;
+  box-shadow:none!important;
+}
+input:not([type=checkbox]):not([type=radio]):focus,
+select:focus,
+textarea:focus{
+  border-color:var(--ck-accent)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:0 0 0 3px var(--ck-focus)!important;
+}
+input::placeholder,textarea::placeholder{color:var(--ck-faint)!important}
+
+/* ---- Shared shell: quiet paper header and memory-line navigation ---- */
+body:not(.chat-active) #page-memory{padding-inline:20px!important}
+body:not(.chat-active) .app-header{
+  min-height:64px!important;
+  margin-bottom:24px!important;
+  border-bottom:1px solid var(--ck-line)!important;
+  background:var(--ck-surface-overlay)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.52)!important;
+  backdrop-filter:blur(18px) saturate(120%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(120%)!important;
+}
+.brand-mark,
+body:not(.chat-active) .brand-mark{
+  position:relative!important;
+  overflow:hidden!important;
+  border:1px solid rgba(255,255,255,.32)!important;
+  border-radius:var(--ck-radius-sm)!important;
+  background:linear-gradient(145deg,var(--ck-accent-strong),var(--ck-accent))!important;
+  color:#fff!important;
+  box-shadow:var(--ck-shadow-sm)!important;
+}
+.brand-mark::after{
+  content:"";
+  position:absolute;
+  right:-5px;
+  bottom:-7px;
+  width:22px;
+  height:22px;
+  border:1px solid rgba(255,255,255,.26);
+  border-radius:50%;
+}
+body:not(.chat-active) .brand-lockup h1{color:var(--ck-text)!important;font-weight:680!important}
+body:not(.chat-active) .brand-lockup p{color:var(--ck-muted)!important;font-size:11px!important}
+body:not(.chat-active) .hamburger-btn,
+body:not(.chat-active) .theme-toggle{
+  border-radius:var(--ck-radius-sm)!important;
+  color:var(--ck-text-soft)!important;
+}
+body:not(.chat-active) .hamburger-btn:hover,
+body:not(.chat-active) .theme-toggle:hover{background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+.install-app-btn{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-pill)!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-accent-strong)!important;
+  box-shadow:none!important;
+}
+.panel-version-badge,
+body:not(.chat-active) .panel-version-badge{
+  border:1px solid var(--ck-line-soft)!important;
+  border-radius:var(--ck-radius-pill)!important;
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-muted)!important;
+  font-family:var(--ck-font-data)!important;
+}
+
+.side-drawer{
+  border-right:1px solid var(--ck-line)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-overlay)!important;
+}
+.side-drawer-head{border-bottom-color:var(--ck-line)!important;background:var(--ck-surface)!important}
+.side-drawer-head b{color:var(--ck-text)!important}
+.side-drawer-head span{color:var(--ck-muted)!important}
+.side-nav-item{
+  position:relative!important;
+  min-height:46px!important;
+  border-radius:var(--ck-radius-sm)!important;
+  color:var(--ck-text-soft)!important;
+}
+.side-nav-item:hover{background:var(--ck-surface-soft)!important;color:var(--ck-text)!important}
+.side-nav-item.active{
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-accent-strong)!important;
+  font-weight:700!important;
+}
+.side-nav-item.active::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:11px;
+  bottom:11px;
+  width:2px;
+  border-radius:var(--ck-radius-pill);
+  background:var(--ck-accent);
+}
+
+/* ---- Chat becomes a CK memory conversation, not a WeChat skin ---- */
+body.chat-active,
+body.chat-active #page-memory,
+body.chat-active #tab-chat,
+body.chat-active .chat-shell,
+body.chat-active .chat-main,
+body.chat-active .chat-messages{
+  background:
+    radial-gradient(circle at 50% -15%,rgba(47,143,98,.085),transparent 30rem),
+    linear-gradient(180deg,#eef3ef 0%,#f4f6f4 26%,#edf1ee 100%)!important;
+}
+body.chat-active .chat-head{
+  border-bottom-color:var(--ck-line)!important;
+  background:rgba(250,252,250,.92)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.62)!important;
+  backdrop-filter:blur(18px) saturate(120%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(120%)!important;
+}
+body.chat-active .chat-titlebar h2{color:var(--ck-text)!important;font-weight:680!important;letter-spacing:-.1px!important}
+body.chat-active .chat-titlebar h2::before{
+  content:"";
+  display:inline-block;
+  width:18px;
+  height:2px;
+  margin-right:8px;
+  border-radius:var(--ck-radius-pill);
+  background:linear-gradient(90deg,var(--ck-accent),rgba(47,143,98,.2));
+  vertical-align:middle;
+}
+body.chat-active .chat-titlebar p{color:var(--ck-muted)!important}
+body.chat-active .chat-online-dot{background:var(--ck-accent)!important;box-shadow:0 0 0 3px var(--ck-focus)!important}
+body.chat-active .chat-icon-btn{border-radius:var(--ck-radius-sm)!important;color:var(--ck-text-soft)!important}
+body.chat-active .chat-icon-btn:hover{background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+
+body.chat-active .chat-messages{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+  gap:18px!important;
+  padding-top:22px!important;
+  padding-bottom:28px!important;
+  overflow-x:hidden!important;
+}
+body.chat-active .chat-msg-row{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+}
+body.chat-active .chat-bubble{
+  box-sizing:border-box!important;
+  min-width:0!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  border:1px solid var(--ck-line-soft)!important;
+  border-radius:var(--ck-radius-md)!important;
+  font-size:15px!important;
+  line-height:1.65!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+body.chat-active .chat-bubble:hover,
+body.chat-active .chat-bubble:active{transform:none!important;box-shadow:var(--ck-shadow-xs)!important}
+body.chat-active .chat-bubble.user,
+body.chat-active .chat-bubble.user:not(.has-images){
+  --wx-bubble-bg:var(--ck-user-bubble);
+  max-width:min(620px,74%)!important;
+  padding:10px 14px!important;
+  border-color:var(--ck-user-bubble-border)!important;
+  border-radius:14px 14px 4px 14px!important;
+  background:var(--ck-user-bubble)!important;
+  color:#173426!important;
+  box-shadow:0 4px 14px rgba(38,96,65,.07)!important;
+}
+body.chat-active .chat-bubble.assistant{
+  --wx-bubble-bg:var(--ck-surface);
+  max-width:min(720px,80%)!important;
+  padding:11px 14px!important;
+  border-color:var(--ck-line)!important;
+  border-radius:14px 14px 14px 4px!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+  box-shadow:var(--ck-shadow-sm)!important;
+}
+body.chat-active .chat-bubble.user::after,
+body.chat-active .chat-bubble.assistant::before{content:none!important;display:none!important}
+body.chat-active .chat-msg-time,
+body.chat-active .chat-msg-tools .chat-msg-act,
+body.chat-active .chat-msg-tools .chat-user-regen{color:var(--ck-faint)!important}
+body.chat-active .chat-msg-tools .chat-msg-act,
+body.chat-active .chat-msg-tools .chat-user-regen{
+  border:1px solid var(--ck-line-soft)!important;
+  background:var(--ck-surface-soft)!important;
+}
+body.chat-active .chat-md blockquote{
+  border-left:3px solid var(--ck-accent)!important;
+  border-radius:0 var(--ck-radius-sm) var(--ck-radius-sm) 0!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-text-soft)!important;
+}
+body.chat-active .chat-md .cb,
+body.chat-active .chat-md pre{
+  border-color:#2b3932!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:#18211d!important;
+}
+
+body.chat-active .chat-compose{
+  border-top-color:var(--ck-line)!important;
+  background:rgba(250,252,250,.94)!important;
+  box-shadow:0 -8px 30px rgba(25,49,37,.045)!important;
+  backdrop-filter:blur(18px) saturate(118%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(118%)!important;
+}
+body.chat-active #chat-input{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+}
+body.chat-active #chat-input:focus{
+  border-color:var(--ck-accent)!important;
+  box-shadow:0 0 0 3px var(--ck-focus)!important;
+}
+body.chat-active .chat-plus-btn{
+  border:1px solid var(--ck-line-strong)!important;
+  border-radius:50%!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-accent-strong)!important;
+}
+body.chat-active .chat-plus-btn:hover{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important}
+body.chat-active .chat-send,
+body.chat-active .chat-send:not(:disabled){
+  border-radius:var(--ck-radius-sm)!important;
+  background:var(--ck-accent)!important;
+  color:#fff!important;
+}
+body.chat-active .chat-send:not(:disabled):hover{background:var(--ck-accent-strong)!important}
+body.chat-active .chat-send.chat-stop-btn,
+body.chat-active .chat-send.chat-stop-btn:not(:disabled){background:var(--ck-danger)!important}
+
+body.chat-active .chat-drawer,
+body.chat-active .chat-settings{
+  border-color:var(--ck-line)!important;
+  border-radius:var(--ck-radius-lg)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-overlay)!important;
+}
+body.chat-active .chat-drawer-head,
+body.chat-active .chat-settings-head{border-bottom-color:var(--ck-line)!important;background:var(--ck-surface)!important}
+body.chat-active .chat-session-row.active{
+  border-left-color:var(--ck-accent)!important;
+  background:var(--ck-accent-wash)!important;
+}
+body.chat-active .chat-session-row:hover{background:var(--ck-surface-soft)!important}
+body.chat-active .chat-memory-card,
+body.chat-active .chat-cache-mode-card,
+body.chat-active .chat-switch,
+body.chat-active .chat-worldbook-list{
+  border-color:var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface-soft)!important;
+}
+
+/* ---- Memory center: preserve the strong layout, harmonize material ---- */
+.archive-overview-page,
+.facts-page-head,
+#tab-graph,
+#tab-status{color:var(--ck-text)!important}
+.archive-overview-kicker,
+.facts-kicker{color:var(--ck-accent)!important}
+.archive-overview-title h2{color:var(--ck-text)!important}
+.archive-overview-title p,
+.facts-title-block p{color:var(--ck-muted)!important}
+.archive-spine,
+.archive-overview-panel,
+.archive-overview-status,
+.facts-toolbar,
+.facts-status,
+.fact-card,
+#tab-graph .graph-hero,
+#tab-graph .eg-toolbar,
+#tab-status .ds-tile,
+#tab-status .ds-note,
+#tab-status .ds-stat,
+#tab-status .ds-meta{
+  border-color:var(--ck-line)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+.archive-spine{border-radius:var(--ck-radius-lg)!important;background:linear-gradient(118deg,var(--ck-accent-wash),var(--ck-surface) 52%,rgba(132,104,162,.055))!important}
+.archive-overview-panel,
+.facts-toolbar{border-radius:var(--ck-radius-lg)!important}
+.fact-card{border-radius:var(--ck-radius-md)!important}
+.fact-card:hover{background:var(--ck-surface-soft)!important;box-shadow:var(--ck-shadow-xs)!important;transform:none!important}
+.archive-overview-status,
+.facts-status{color:var(--ck-text-soft)!important}
+.archive-ledger-meter{background:var(--ck-line-soft)!important}
+.archive-ledger-meter i{background:linear-gradient(90deg,var(--ck-accent),#8fd0ad)!important}
+
+/* ---- API control room: clearer hierarchy without dashboard theatrics ---- */
+.sub-tabs{
+  border-color:var(--ck-line)!important;
+  background:var(--ck-surface-overlay)!important;
+  backdrop-filter:blur(16px)!important;
+  -webkit-backdrop-filter:blur(16px)!important;
+}
+.sub-tab{color:var(--ck-muted)!important}
+.sub-tab.active{border-bottom-color:var(--ck-accent)!important;color:var(--ck-accent-strong)!important}
+#tab-apiconfig .api-page-head{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-lg)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+#tab-apiconfig .api-page-head h2{color:var(--ck-text)!important}
+#tab-apiconfig .api-page-head p{color:var(--ck-muted)!important}
+#tab-apiconfig .api-info-main,
+#tab-apiconfig .api-info-text{
+  border:1px solid var(--ck-line)!important;
+  border-left:2px solid var(--ck-accent)!important;
+  border-radius:var(--ck-radius-sm)!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-text-soft)!important;
+}
+#tab-apiconfig .prov-card,
+#tab-apiconfig .api-assign-card,
+#tab-apiconfig .api-empty-callout{
+  position:relative!important;
+  overflow:hidden!important;
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+#tab-apiconfig .prov-card::before,
+#tab-apiconfig .api-assign-card::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:2px;
+  background:var(--ck-accent);
+}
+#tab-apiconfig .prov-name,
+#tab-apiconfig .api-group-title{color:var(--ck-text)!important}
+#tab-apiconfig .prov-title-wrap small,
+#tab-apiconfig .prov-model-hint,
+#tab-apiconfig .prov-row>label,
+#tab-apiconfig .api-assign-grid label>span{color:var(--ck-muted)!important}
+#tab-apiconfig .prov-usage span,
+#tab-apiconfig .prov-status,
+#tab-apiconfig .api-page-stats span{
+  border:1px solid var(--ck-line-soft)!important;
+  border-radius:var(--ck-radius-pill)!important;
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-muted)!important;
+}
+#tab-apiconfig .prov-status-on,
+#tab-apiconfig .prov-status-model{border-color:transparent!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+#tab-apiconfig .api-assign-summary{border:1px solid var(--ck-line-soft)!important;background:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important}
+
+/* ---- Dialogs, toasts and startup surface ---- */
+.modal-bg,
+.confirm-bg,
+.panel-update-modal{background:rgba(20,36,28,.44)!important;backdrop-filter:blur(6px)!important;-webkit-backdrop-filter:blur(6px)!important}
+.modal,
+.confirm-box,
+.panel-update-card{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-xl)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+  box-shadow:var(--ck-shadow-overlay)!important;
+}
+.modal h3,
+.confirm-box p,
+.panel-update-card h3{color:var(--ck-text)!important}
+.toast,
+body.chat-active .toast{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+  box-shadow:var(--ck-shadow-md)!important;
+}
+body.chat-active .loading-bar-wrap{
+  background:
+    radial-gradient(circle at 50% 42%,rgba(47,143,98,.1),transparent 18rem),
+    linear-gradient(155deg,var(--ck-accent-wash),var(--ck-surface) 62%,var(--ck-bg))!important;
+}
+body.chat-active .startup-icon{
+  border-radius:var(--ck-radius-xl)!important;
+  background:linear-gradient(145deg,#7bc99d,var(--ck-accent))!important;
+  box-shadow:0 16px 42px rgba(36,114,77,.16)!important;
+}
+body.chat-active .startup-name{color:var(--ck-accent-strong)!important;letter-spacing:2px!important}
+body.chat-active .startup-subtitle,
+body.chat-active .loading-text{color:var(--ck-muted)!important}
+
+/* ---- Dark paper, not black iOS chrome ---- */
+body.dark.chat-active,
+body.dark.chat-active #page-memory,
+body.dark.chat-active #tab-chat,
+body.dark.chat-active .chat-shell,
+body.dark.chat-active .chat-main,
+body.dark.chat-active .chat-messages{
+  background:
+    radial-gradient(circle at 50% -12%,rgba(97,197,142,.065),transparent 26rem),
+    linear-gradient(180deg,var(--ck-bg) 0%,#121814 100%)!important;
+}
+body.dark.chat-active .chat-head,
+body.dark.chat-active .chat-compose{
+  border-color:var(--ck-line)!important;
+  background:rgba(25,33,29,.94)!important;
+}
+body.dark.chat-active .chat-titlebar h2,
+body.dark.chat-active .chat-icon-btn{color:var(--ck-text)!important}
+body.dark.chat-active .chat-bubble.assistant{
+  --wx-bubble-bg:var(--ck-surface);
+  border-color:var(--ck-line)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+  box-shadow:var(--ck-shadow-sm)!important;
+}
+body.dark.chat-active .chat-bubble.user{
+  --wx-bubble-bg:var(--ck-user-bubble);
+  border-color:var(--ck-user-bubble-border)!important;
+  background:var(--ck-user-bubble)!important;
+  color:#eff8f2!important;
+}
+body.dark.chat-active #chat-input,
+body.dark.chat-active .chat-plus-btn,
+body.dark.chat-active .chat-drawer,
+body.dark.chat-active .chat-settings,
+body.dark.chat-active .chat-drawer-head,
+body.dark.chat-active .chat-settings-head{
+  border-color:var(--ck-line)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+}
+body.dark .app-header,
+body.dark .side-drawer,
+body.dark .side-drawer-head,
+body.dark .sub-tabs{border-color:var(--ck-line)!important;background:var(--ck-surface-overlay)!important}
+body.dark .side-nav-item{color:var(--ck-text-soft)!important}
+body.dark .side-nav-item:hover{background:var(--ck-surface-soft)!important}
+body.dark .side-nav-item.active{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
+body.dark .panel-version-badge{border-color:var(--ck-line)!important;background:var(--ck-surface-soft)!important;color:var(--ck-muted)!important}
+body.dark #tab-apiconfig .api-page-head,
+body.dark #tab-apiconfig .api-info-main,
+body.dark #tab-apiconfig .api-info-text,
+body.dark #tab-apiconfig .prov-card,
+body.dark #tab-apiconfig .api-assign-card,
+body.dark #tab-apiconfig .api-empty-callout,
+body.dark .archive-spine,
+body.dark .archive-overview-panel,
+body.dark .archive-overview-status,
+body.dark .facts-toolbar,
+body.dark .facts-status,
+body.dark .fact-card{
+  border-color:var(--ck-line)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+}
+body.dark .archive-spine{background:linear-gradient(118deg,var(--ck-accent-wash),var(--ck-surface) 54%,rgba(176,139,199,.065))!important}
+body.dark input:not([type=checkbox]):not([type=radio]),
+body.dark select,
+body.dark textarea{border-color:var(--ck-line)!important;background:var(--ck-surface-soft)!important;color:var(--ck-text)!important}
+
+/* ---- Chat attachment tray: CK tool sheet, not a WeChat grid ---- */
+body.chat-active .chat-plus-panel{background:var(--ck-surface-overlay)!important;backdrop-filter:blur(18px) saturate(118%)!important;-webkit-backdrop-filter:blur(18px) saturate(118%)!important}
+body.chat-active .chat-plus-panel.open{border-top-color:var(--ck-line)!important}
+body.chat-active .chat-plus-page > button{color:var(--ck-text-soft)!important}
+body.chat-active .chat-plus-page > button:active{background:var(--ck-accent-wash)!important}
+body.chat-active .chat-plus-panel span,
+body.chat-active .chat-plus-page > button:nth-child(n) span,
+body.chat-active .chat-plus-page > button.chat-toggle-on span,
+body.chat-active .chat-plus-page > button.chat-toggle-off span{
+  border:1px solid var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-accent-strong)!important;
+}
+body.chat-active .chat-plus-panel b,
+body.chat-active .chat-plus-page > button.chat-toggle-off b{color:var(--ck-muted)!important}
+body.chat-active .chat-plus-page > button.chat-toggle-on span{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+body.chat-active .chat-plus-page > button.chat-toggle-off span,
+body.chat-active .chat-plus-page > button.chat-toggle-off b{color:var(--ck-faint)!important}
+body.chat-active .chat-plus-dot::after{background:var(--ck-line-strong)!important}
+body.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!important}
+body.dark.chat-active .chat-plus-panel{background:var(--ck-surface-overlay)!important}
+body.dark.chat-active .chat-plus-panel span,
+body.dark.chat-active .chat-plus-page > button:nth-child(n) span,
+body.dark.chat-active .chat-plus-page > button.chat-toggle-on span,
+body.dark.chat-active .chat-plus-page > button.chat-toggle-off span{border-color:var(--ck-line)!important;background:var(--ck-surface-soft)!important;color:var(--ck-accent)!important}
+body.dark.chat-active .chat-plus-page > button.chat-toggle-on span{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
+body.dark.chat-active .chat-plus-page > button.chat-toggle-off span,
+body.dark.chat-active .chat-plus-page > button.chat-toggle-off b{color:var(--ck-faint)!important}
+body.dark.chat-active .chat-plus-dot::after{background:var(--ck-line-strong)!important}
+body.dark.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!important}
+
+/* ---- Memory web: nodes and lines, desaturated entity types ---- */
+#tab-graph .eg-card{
+  border-color:var(--ck-line)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  box-shadow:var(--ck-shadow-xs)!important;
+}
+#tab-graph .eg-card:hover{background:var(--ck-surface-soft)!important;box-shadow:var(--ck-shadow-xs)!important;transform:none!important}
+#tab-graph .eg-card-name{color:var(--ck-text)!important}
+#tab-graph .eg-card-profile,
+#tab-graph .eg-card-alias,
+#tab-graph .eg-rel-name{color:var(--ck-muted)!important}
+#tab-graph .eg-fact-chip,
+#tab-graph .eg-chip{
+  border:1px solid var(--ck-line-soft)!important;
+  border-radius:var(--ck-radius-pill)!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-accent-strong)!important;
+}
+#tab-graph .eg-stat,
+#tab-graph .eg-count{color:var(--ck-text-soft)!important}
+#tab-graph .eg-detail-panel,
+#tab-graph .eg-detail-sheet{border-color:var(--ck-line)!important;background:var(--ck-surface)!important;box-shadow:var(--ck-shadow-overlay)!important}
+#tab-graph .eg-detail-mask{background:rgba(20,36,28,.44)!important}
+
+/* Desaturated type accents shared by memory web + fact library */
+.eg-type-person{border-left-color:var(--ck-blue)!important}
+.eg-type-event{border-left-color:var(--ck-amber)!important}
+.eg-type-place{border-left-color:#3f9285!important}
+.eg-type-thing{border-left-color:var(--ck-violet)!important}
+.eg-type-mood{border-left-color:#b06a86!important}
+.eg-type-topic{border-left-color:#71808d!important}
+.eg-type-relation{border-left-color:var(--ck-blue)!important}
+.fact-type-person{--fact-accent:var(--ck-blue)!important}
+.fact-type-event{--fact-accent:var(--ck-amber)!important}
+.fact-type-place{--fact-accent:#3f9285!important}
+.fact-type-thing{--fact-accent:var(--ck-violet)!important}
+.fact-type-mood{--fact-accent:#b06a86!important}
+.fact-type-topic{--fact-accent:#71808d!important}
+.eg-badge-person,.fact-badge-person{background:#e9eef5!important;color:#456492!important}
+.eg-badge-event,.fact-badge-event{background:#f4ecdd!important;color:#8a6320!important}
+.eg-badge-place,.fact-badge-place{background:#e2efec!important;color:#357a6d!important}
+.eg-badge-thing,.fact-badge-thing{background:#ece5f3!important;color:#6d5490!important}
+.eg-badge-mood,.fact-badge-mood{background:#f3e7ec!important;color:#96566f!important}
+.eg-badge-topic,.fact-badge-topic{background:#eceff2!important;color:#5c6a75!important}
+.eg-badge-relation{background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+body.dark .eg-badge-person,body.dark .fact-badge-person{background:#1e2a38!important;color:#94b7df!important}
+body.dark .eg-badge-event,body.dark .fact-badge-event{background:#33291a!important;color:#d6a862!important}
+body.dark .eg-badge-place,body.dark .fact-badge-place{background:#173029!important;color:#66c2b0!important}
+body.dark .eg-badge-thing,body.dark .fact-badge-thing{background:#2a2338!important;color:#b391d4!important}
+body.dark .eg-badge-mood,body.dark .fact-badge-mood{background:#341f29!important;color:#d68aa8!important}
+body.dark .eg-badge-topic,body.dark .fact-badge-topic{background:#232b30!important;color:#93a2ad!important}
+body.dark .eg-badge-relation{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
+body.dark #tab-graph .eg-card,
+body.dark #tab-graph .eg-detail-panel,
+body.dark #tab-graph .eg-detail-sheet{border-color:var(--ck-line)!important;background:var(--ck-surface)!important;color:var(--ck-text)!important}
+body.dark #tab-graph .eg-fact-chip,
+body.dark #tab-graph .eg-chip{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important;border-color:var(--ck-line)!important}
+
+/* ---- Fact library card: type spine already tokenized, harmonize chrome ---- */
+.fact-card-field{color:var(--fact-accent,var(--ck-accent))!important}
+.fact-chip{
+  border:1px solid var(--ck-line-soft)!important;
+  border-radius:var(--ck-radius-pill)!important;
+  background:var(--ck-accent-wash)!important;
+  color:var(--ck-accent-strong)!important;
+}
+.fact-card-value{color:var(--ck-text)!important}
+.fact-card-meta,
+.fact-card-alias{color:var(--ck-muted)!important}
+body.dark .fact-chip{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important;border-color:var(--ck-line)!important}
+
+/* ---- Toast: quiet paper with a status line, not a black pill ---- */
+.toast,
+body.chat-active .toast,
+body.dark .toast,
+body.dark.chat-active .toast{
+  border:1px solid var(--ck-line)!important;
+  border-left:3px solid var(--ck-accent)!important;
+  border-radius:var(--ck-radius-md)!important;
+  background:var(--ck-surface)!important;
+  color:var(--ck-text)!important;
+  box-shadow:var(--ck-shadow-md)!important;
+}
+.toast .toast-message,
+body.chat-active .toast .toast-message{color:var(--ck-text)!important}
+.toast.toast-error,
+body.chat-active .toast.toast-error,
+body.dark .toast.toast-error{border-left-color:var(--ck-danger)!important}
+.toast .toast-copy,
+.toast .toast-close{color:var(--ck-muted)!important}
+.toast .toast-copy:hover,
+.toast .toast-close:hover{color:var(--ck-accent-strong)!important}
+
+/* ---- Empty states: quiet muted copy ---- */
+.empty-state{color:var(--ck-muted)!important}
+
+@media(max-width:760px){
+  body:not(.chat-active) #page-memory{padding-inline:14px!important}
+  body.chat-active .chat-titlebar h2::before{display:none!important}
+  body.chat-active .chat-messages{
+    width:100%!important;
+    max-width:100%!important;
+    padding:16px 12px 20px!important;
+  }
+  body.chat-active .chat-msg-row{width:100%!important;max-width:100%!important;flex-basis:auto!important}
+  body.chat-active .chat-bubble.user,
+  body.chat-active .chat-bubble.user:not(.has-images){max-width:86%!important}
+  body.chat-active .chat-bubble.assistant{max-width:92%!important}
+  body.chat-active .chat-compose{padding-inline:8px!important}
+  body.chat-active .chat-compose-row{min-width:0!important}
+  body.chat-active #chat-input{min-width:0!important}
+  .archive-overview-panel,
+  .facts-toolbar{border-radius:14px!important}
+}
+
+@media(max-width:360px){
+  body.chat-active .chat-messages{padding-inline:10px!important}
+  body.chat-active .chat-bubble.user,
+  body.chat-active .chat-bubble.user:not(.has-images){max-width:88%!important}
+  body.chat-active .chat-bubble.assistant{max-width:94%!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    scroll-behavior:auto!important;
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+  }
+}
