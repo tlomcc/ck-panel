@@ -251,9 +251,21 @@ body.chat-active .chat-md blockquote{
 }
 body.chat-active .chat-md .cb,
 body.chat-active .chat-md pre{
-  border-color:#2b3932!important;
+  border-color:#d7dee2!important;
   border-radius:var(--ck-radius-md)!important;
+  background:#f3f5f6!important;
+  color:#27313a!important;
+}
+body.chat-active .chat-md .cb code{
+  background:#f3f5f6!important;
+  color:#27313a!important;
+}
+body.dark.chat-active .chat-md .cb,
+body.dark.chat-active .chat-md pre,
+body.dark.chat-active .chat-md .cb code{
+  border-color:#2b3932!important;
   background:#18211d!important;
+  color:var(--ck-text)!important;
 }
 
 body.chat-active .chat-compose{

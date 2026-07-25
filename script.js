@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v145-recall-mode-or';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v146-rewrite-api-code-light';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -8779,6 +8779,7 @@ API_TABS=[
     {key:'roll_status',label:'状态滚动',info:'每天自动把这一天的情况汇总成一份“今日状态”。这里选择负责写状态的供应商和模型。'}
   ]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
+    {key:'recall_rewrite',label:'意图改写',kind:'rewrite',info:'在正式召回前，把当前问题改写成更明确、适合检索的查询。模型名、API Key 和站点地址只供这一步使用。'},
     {key:'recall_vector',label:'向量化',info:'把每条记忆变成电脑能比对“意思像不像”的形式。这里选择向量化服务供应商和模型。'},
     {key:'recall_keyword',label:'关键词辅助',info:'除了按“意思”找，再用关键词兜底，减少漏召回。这里选择关键词辅助服务。'}
   ]}
@@ -8788,10 +8789,11 @@ apiProviders={};
 apiProvidersLoaded=false;
 apiProvIdSeq=0;
 pendingProvDel=null;
+var apiDirectConfig={};
 
 function allApiGroups(){
   var out=[];
-  API_TABS.forEach(function(t){(t.groups||[]).forEach(function(g){out.push(g)})});
+  API_TABS.forEach(function(t){(t.groups||[]).forEach(function(g){if(g.kind!=='rewrite')out.push(g)})});
   return out;
 }
 function findApiGroup(k){
@@ -8814,6 +8816,10 @@ function apiGroupSlot(g){
   apiProviders[g].model=String(apiProviders[g].model||'');
   delete apiProviders[g].providers;
   return apiProviders[g];
+}
+function apiDirectValue(key){
+  var item=apiDirectConfig&&apiDirectConfig[key];
+  return item&&typeof item==='object'?String(item.display||''):'';
 }
 function normalizeProvider(p){
   p=p&&typeof p==='object'&&!Array.isArray(p)?p:{};
@@ -9013,12 +9019,31 @@ function renderApiAssignments(tab){
   var list=providerLibraryList();
   var html=apiPageHeadHtml(tab.label,'选择此类任务使用的供应商和模型。','');
   html+=renderApiIntro(tab);
-  if(!list.length){
+  var groups=tab.groups||[];
+  var hasDirect=groups.some(function(g){return g.kind==='rewrite'});
+  if(!list.length&&!hasDirect){
     html+='<div class="api-empty-callout"><b>先添加供应商</b><p>功能页只负责选择供应商；请到供应商页新增 API URL / Key。</p><button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
     return html;
   }
-  (tab.groups||[]).forEach(function(g){html+=assignmentCardHtml(g)});
+  groups.forEach(function(g){
+    if(g.kind==='rewrite')html+=rewriteConfigCardHtml(g);
+    else if(list.length)html+=assignmentCardHtml(g);
+  });
+  if(!list.length){
+    html+='<div class="api-empty-callout"><b>其他召回功能还没有供应商</b><p>向量化和关键词辅助需先在供应商页新增 API URL / Key。</p><button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
+  }
   return html;
+}
+function rewriteConfigCardHtml(g){
+  var keyItem=apiDirectConfig.RECALL_REWRITE_API_KEY||{};
+  var keyHint=keyItem.set?('已配置 '+String(keyItem.display||'')):'尚未配置';
+  return '<div class="api-assign-card api-rewrite-card" data-group="'+escAttr(g.key)+'">'+
+    '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
+    '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
+    '<div class="api-assign-grid api-rewrite-grid"><label><span>模型名</span><input class="rewrite-model" type="text" value="'+escAttr(apiDirectValue('RECALL_REWRITE_MODEL'))+'" placeholder="例如 qwen-turbo" autocapitalize="off" spellcheck="false"></label><label><span>API Key</span><input class="rewrite-key" type="password" value="" placeholder="'+escAttr(keyHint)+'" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label><label class="api-rewrite-url"><span>站点地址</span><input class="rewrite-base" type="url" value="'+escAttr(apiDirectValue('RECALL_REWRITE_BASE'))+'" placeholder="https://.../v1" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="prov-model-hint">Key 留空表示保持现值；模型名与站点地址直接显示当前生效配置。</div>'+
+    '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveRewriteConfig(this)">保存意图改写配置</button></div>'+
+  '</div>';
 }
 function assignmentCardHtml(g){
   var slot=apiGroupSlot(g.key),p=findLibraryProvider(slot.current);
@@ -9131,6 +9156,25 @@ function saveAssignment(btn){
   btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
   persistAndReload(d.providerId?'选择已保存':'已清空选择').then(function(){btn.disabled=false;btn.textContent=old;renderApiConfig()});
 }
+function saveRewriteConfig(btn){
+  var row=btn.closest('.api-rewrite-card');if(!row)return;
+  var model=String((row.querySelector('.rewrite-model')||{}).value||'').trim();
+  var key=String((row.querySelector('.rewrite-key')||{}).value||'').trim();
+  var base=String((row.querySelector('.rewrite-base')||{}).value||'').trim().replace(/\/+$/,'');
+  if(!model){toast('请填写意图改写模型名');return}
+  if(!base){toast('请填写意图改写站点地址');return}
+  if(!/^https?:\/\//i.test(base)){toast('站点地址需以 http:// 或 https:// 开头');return}
+  if(!(apiDirectConfig.RECALL_REWRITE_API_KEY&&apiDirectConfig.RECALL_REWRITE_API_KEY.set)&&!key){toast('请填写意图改写 API Key');return}
+  var updates={RECALL_REWRITE_MODEL:model,RECALL_REWRITE_BASE:base};
+  if(key)updates.RECALL_REWRITE_API_KEY=key;
+  btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
+  keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})
+    .then(function(res){if(!res.ok)throw new Error((res.j&&res.j.error)||'保存失败');return reloadGatewayConfig()})
+    .then(function(){toast('意图改写配置已保存并生效');apiProvidersLoaded=false;return loadApiProviders()})
+    .catch(function(e){toast((e&&e.message)?e.message:'保存失败，检查网络')})
+    .finally(function(){btn.disabled=false;btn.textContent=old});
+}
 function fetchAssignmentModels(btn){
   var row=btn.closest('.api-assign-card');if(!row)return;
   var d=readAssignmentRow(row),p=findLibraryProvider(d.providerId);
@@ -9155,6 +9199,8 @@ function loadApiProviders(opts){
   if(apiProvidersLoadInFlight)return apiProvidersLoadInFlight;
   apiProvidersLoadInFlight=keyCfgFetch(undefined,opts||{}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
     var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
+    apiDirectConfig={};
+    if(d&&Array.isArray(d.keys))d.keys.forEach(function(item){if(item&&item.key)apiDirectConfig[item.key]=item});
     normalizeApiProviders(prov);
     apiProvidersLoaded=true;
     renderApiConfig();
