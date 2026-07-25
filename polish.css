@@ -39,14 +39,6 @@ body{
   text-rendering:optimizeLegibility;
 }
 
-/* —— 品牌标 / Logo 方块 —— */
-.brand-mark{
-  background:var(--pg-hero);
-  box-shadow:0 6px 16px rgba(31,138,91,.28);
-  border-radius:12px;
-}
-.app-header h1{letter-spacing:-.3px}
-
 /* —— 按钮 —— */
 .btn{border-radius:12px;transition:transform .12s ease,box-shadow .2s ease,background .2s ease}
 .btn-blue{
@@ -145,18 +137,6 @@ body{
 }
 .eg-search input:focus{border-color:var(--pg-emerald-500);box-shadow:0 0 0 4px rgba(46,158,107,.10)}
 
-/* —— 侧栏抽屉导航 —— */
-.side-drawer{box-shadow:var(--pg-shadow-lg)}
-.side-nav-item{border-radius:12px;transition:all .15s ease}
-.side-nav-item.active{
-  background:var(--pg-emerald-soft);
-  color:var(--pg-emerald-600);
-  font-weight:700;
-}
-
-/* —— 二级 tab —— */
-.sub-tab.active{color:var(--pg-emerald-600);border-bottom-color:var(--pg-emerald-500)}
-
 /* —— 详情页：开关条 / 排序条 —— */
 .switch-item.active{color:var(--pg-emerald-600)}
 .sort-btn.active{background:var(--pg-emerald-soft);color:var(--pg-emerald-600);border-color:transparent}
@@ -190,8 +170,6 @@ body.dark{
   background:linear-gradient(180deg,#0f1713 0%,#121d18 100%) fixed;
   color:#e6efe9;
 }
-body.dark .brand-mark{background:var(--pg-grad);box-shadow:0 6px 16px rgba(46,158,107,.35)}
-
 body.dark .stat-box,
 body.dark .home-console,
 body.dark .home-insight-block,
@@ -216,16 +194,12 @@ body.dark .tag-expand-btn{
   border-color:#2a3a30;
   color:#e6efe9;
 }
-body.dark .side-drawer{background:#121d18;box-shadow:var(--pg-shadow-lg)}
-
 /* 深色强调色：统一回翡翠绿 */
 body.dark .btn-blue{background:var(--pg-grad);box-shadow:0 6px 18px rgba(46,158,107,.30)}
 body.dark .btn-outline{background:#18241e;color:#6fe0a6;border-color:#2f5a45}
 body.dark .tag-btn.active,
 body.dark .search-filter.active,
 body.dark .sort-btn.active{background:var(--pg-grad);border-color:transparent;color:#fff}
-body.dark .side-nav-item.active{background:#1d3a2c;color:#7fe3ad}
-body.dark .sub-tab.active{color:#7fe3ad;border-bottom-color:var(--pg-emerald-400)}
 body.dark .switch-item.active,
 body.dark .mini-top span{color:#7fe3ad}
 body.dark .search-wrap input:focus,
@@ -295,29 +269,7 @@ body.dark.chat-active .chat-cache-tick{
    仍只覆盖视觉，不动结构/JS；回退删除本段即可。
    ============================================================ */
 
-/* —— 顶栏右侧元信息收敛：版本徽章不再是抢眼的绿色粗药丸 —— */
-.panel-version-badge{
-  background:transparent!important;
-  color:var(--pg-ink-3)!important;
-  border:1px solid var(--pg-line)!important;
-  font-weight:500!important;
-  font-size:11px!important;
-  letter-spacing:.2px!important;
-  padding:3px 10px!important;
-  border-radius:999px!important;
-  box-shadow:none!important;
-}
-.install-app-btn{
-  font-size:12px!important;font-weight:600!important;
-  color:var(--pg-emerald-600)!important;
-  background:var(--pg-emerald-soft)!important;
-  border:none!important;border-radius:999px!important;
-  padding:5px 13px!important;box-shadow:none!important;
-}
-.theme-toggle.icon-btn{opacity:.8}
-
-/* —— 两条 header：半透明毛玻璃 + 细线分隔，读作一个整体顶区 —— */
-.app-header,
+/* —— 聊天标题栏：半透明毛玻璃 + 细线分隔 —— */
 body.chat-active .chat-titlebar{
   background:rgba(250,253,251,.82)!important;
   -webkit-backdrop-filter:saturate(1.5) blur(12px);
@@ -374,12 +326,7 @@ body.chat-active .chat-runtime span{
   box-shadow:none!important;opacity:.7;
 }
 
-/* —— 深色模式守卫：别让上面的浅色表单/徽章样式在深色下变白 —— */
-body.dark .panel-version-badge{
-  color:#8ba396!important;border-color:#2a3a30!important;background:transparent!important;
-}
-body.dark .install-app-btn{background:#1d3a2c!important;color:#7fe3ad!important}
-body.dark .app-header,
+/* —— 深色模式守卫 —— */
 body.dark.chat-active .chat-titlebar{
   background:rgba(16,24,20,.78)!important;border-bottom-color:#22302a!important;
 }
