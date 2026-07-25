@@ -1,8 +1,8 @@
 {
-  "version": "chat-v135-native-stable-cache",
+  "version": "chat-v136-fact-library-readonly",
   "notes": [
-    "新增原生稳定缓存策略：Anthropic /messages 固定 system 与最新完成助手双锚点",
-    "缓存策略改为节省空间的下拉选择，选择后立即保存并同步 TTL/召回保留设置",
-    "原有 5min、24h、助手断点策略继续保留"
+    "新增只读事实库：逐条查看 Active fact、搜索筛选、分页和向量健康状态",
+    "事实详情可跳回所属小档案；不向面板下发原始向量数组",
+    "原生稳定缓存、下拉策略和原有 5min/24h/助手断点策略继续保留"
   ]
 }

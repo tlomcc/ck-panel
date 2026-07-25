@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v155-chat-v135-native-stable-cache';
+const CACHE_NAME = 'ck-panel-shell-v156-chat-v136-fact-library-readonly';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v135-native-stable-cache',
-  './polish.css?v=chat-v135-native-stable-cache',
-  './chat.css?v=chat-v135-native-stable-cache',
-  './wechat.css?v=chat-v135-native-stable-cache',
-  './script.js?v=chat-v135-native-stable-cache',
-  './script-extra.js?v=chat-v135-native-stable-cache',
-  './pwa.js?v=chat-v135-native-stable-cache',
+  './style.css?v=chat-v136-fact-library-readonly',
+  './polish.css?v=chat-v136-fact-library-readonly',
+  './chat.css?v=chat-v136-fact-library-readonly',
+  './wechat.css?v=chat-v136-fact-library-readonly',
+  './script.js?v=chat-v136-fact-library-readonly',
+  './script-extra.js?v=chat-v136-fact-library-readonly',
+  './pwa.js?v=chat-v136-fact-library-readonly',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

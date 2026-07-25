@@ -14,11 +14,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v135-native-stable-cache">
-<link rel="stylesheet" href="polish.css?v=chat-v135-native-stable-cache">
-<link rel="stylesheet" href="chat.css?v=chat-v135-native-stable-cache">
-<link rel="stylesheet" href="wechat.css?v=chat-v135-native-stable-cache">
-<script>window.CK_PANEL_VERSION='chat-v135-native-stable-cache';</script>
+<link rel="stylesheet" href="style.css?v=chat-v136-fact-library-readonly">
+<link rel="stylesheet" href="polish.css?v=chat-v136-fact-library-readonly">
+<link rel="stylesheet" href="chat.css?v=chat-v136-fact-library-readonly">
+<link rel="stylesheet" href="wechat.css?v=chat-v136-fact-library-readonly">
+<script>window.CK_PANEL_VERSION='chat-v136-fact-library-readonly';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -27,7 +27,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v135">chat-v135-native-stable-cache</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v136">chat-v136-fact-library-readonly</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -41,6 +41,7 @@
 <button class="side-nav-item" data-tab="categories" onclick="navTo('categories')">分类</button>
 <button class="side-nav-item" data-tab="search" onclick="navTo('search')">搜索</button>
 <button class="side-nav-item" data-tab="graph" onclick="navTo('graph')">信息网</button>
+<button class="side-nav-item" data-tab="facts" onclick="navTo('facts')">事实库</button>
 <button class="side-nav-item" data-tab="status" onclick="navTo('status')">状态</button>
 <button class="side-nav-item" data-tab="apiconfig" onclick="navTo('apiconfig')">API配置</button>
 </nav>
@@ -104,6 +105,27 @@
 </div>
 <div class="eg-status" id="graph-status">进入本页后会自动读取。</div>
 <div class="eg-cards" id="eg-cards"><div class="empty-state small">加载中...</div></div>
+</section>
+<section class="panel-tab" id="tab-facts">
+<div class="facts-page-head">
+<div class="facts-title-block"><div class="facts-kicker"><span></span>事实控制台 · 只读首版</div><h2>事实库</h2><p>把小档案里的每条明细拆开查看，确认它们是否能被正常召回。</p></div>
+<div class="facts-head-actions"><button class="btn btn-outline btn-sm" type="button" onclick="loadFactLibrary(true,true)">刷新</button></div>
+</div>
+<div class="facts-rail"><span class="facts-rail-dot"></span><span>内容来自实体卡片，向量只展示健康状态</span><span class="facts-rail-note" id="facts-updated">等待读取</span></div>
+<div class="facts-statbar" id="facts-stats"></div>
+<div class="facts-toolbar">
+<div class="facts-search"><span aria-hidden="true">⌕</span><input id="facts-query" type="search" placeholder="搜实体、别名、字段或事实内容…" oninput="onFactSearch(this.value)" autocomplete="off"><button id="facts-query-clear" type="button" onclick="clearFactSearch()" aria-label="清除搜索">×</button></div>
+<div class="facts-filter-grid">
+<label><span>实体类型</span><select id="facts-type" onchange="onFactFilterChange()"><option value="">全部类型</option></select></label>
+<label><span>事实字段</span><select id="facts-field" onchange="onFactFilterChange()"><option value="">全部字段</option></select></label>
+<label><span>向量状态</span><select id="facts-vector" onchange="onFactFilterChange()"><option value="">全部状态</option><option value="ok">正常</option><option value="missing">缺失</option><option value="zero">零向量</option><option value="dimension_error">维度异常</option><option value="invalid">格式异常</option></select></label>
+<label><span>排序</span><select id="facts-sort" onchange="onFactSortChange(this.value)"><option value="recent">最近更新</option><option value="name">实体名称</option><option value="field">事实字段</option><option value="importance">档案重要度</option><option value="confidence">低置信度优先</option></select></label>
+</div>
+<div class="facts-filter-actions"><span id="facts-count" aria-live="polite"></span><button type="button" onclick="clearFactFilters()">清除筛选</button></div>
+</div>
+<div class="facts-status" id="facts-status">进入本页后自动读取 Active facts。</div>
+<div class="facts-cards" id="facts-cards"><div class="empty-state small">加载中...</div></div>
+<div class="facts-more-wrap"><button class="btn btn-outline" id="facts-more" type="button" onclick="loadMoreFacts()" hidden>继续加载</button><span id="facts-more-hint"></span></div>
 </section>
 <section class="panel-tab" id="tab-status">
 <div class="tab-head"><div><h2>每日状态</h2><p id="status-sub">前一天有没有整理好，一眼就知道</p></div><button class="btn btn-outline btn-sm" onclick="loadDailyStatus(true)">刷新</button></div>
@@ -180,7 +202,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v135-native-stable-cache">v135</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v136-fact-library-readonly">v136</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <label>系统提示词位置<select id="chat-system-prompt-position"><option value="before_style">自定义在 CK 规则前</option><option value="after_style">自定义在 CK 规则后</option></select></label>
@@ -257,8 +279,8 @@
 <div class="modal-bg" id="ckActionModal" aria-hidden="true" onclick="ckDialogBackdrop(event)"><div class="modal ck-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ck-action-title" aria-describedby="ck-action-message" onclick="event.stopPropagation()"><h3 id="ck-action-title">请确认</h3><p class="ck-action-message" id="ck-action-message"></p><input id="ck-action-input" autocomplete="off" hidden><div class="modal-btns"><button class="btn btn-outline btn-sm" id="ck-action-cancel" type="button" onclick="ckDialogCancel()">取消</button><button class="btn btn-blue btn-sm" id="ck-action-confirm" type="button" onclick="ckDialogSubmit()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="script.js?v=chat-v135-native-stable-cache"></script>
-<script src="script-extra.js?v=chat-v135-native-stable-cache"></script>
-<script src="pwa.js?v=chat-v135-native-stable-cache"></script>
+<script src="script.js?v=chat-v136-fact-library-readonly"></script>
+<script src="script-extra.js?v=chat-v136-fact-library-readonly"></script>
+<script src="pwa.js?v=chat-v136-fact-library-readonly"></script>
 </body>
 </html>
