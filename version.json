@@ -1,8 +1,8 @@
 {
-  "version": "chat-v144-memory-loom-shell",
+  "version": "chat-v145-recall-mode-or",
   "notes": [
-    "Memory Loom Phase 6：新增 shell.css，统一非聊天顶栏、侧栏导航和 API 二级页签的样式归属",
-    "移除 style、polish、wechat 和 visual-overrides 中这三组组件的重复覆盖，shell.css 不使用 !important",
-    "保留聊天页、调试记录五类语义色和隐藏分类/搜索入口；缓存、召回、网关与请求逻辑不变"
+    "记忆召回新增全量召回与仅 Fact 两种模式，选择后立即保存并随下一条请求发送",
+    "仅 Fact 模式只注入小档案原子事实，模式切换会清理旧模式的历史注入并使用独立 epoch",
+    "调试记录新增召回模式、切换清理、Fact 候选来源和 16/32/9000 预算信息"
   ]
 }

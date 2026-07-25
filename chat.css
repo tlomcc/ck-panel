@@ -4059,6 +4059,100 @@ body.chat-active .chat-recall-switch{
   user-select:none!important;
 }
 
+body.chat-active .chat-recall-mode-segment{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  gap:3px!important;
+  min-width:0!important;
+  margin:0 0 8px!important;
+  padding:3px!important;
+  border:1px solid rgba(18,140,76,.18)!important;
+  border-radius:8px!important;
+  background:#eaf5ee!important;
+}
+
+body.chat-active .chat-recall-mode-segment label{
+  position:relative!important;
+  min-width:0!important;
+  margin:0!important;
+  cursor:pointer!important;
+}
+
+body.chat-active .chat-recall-mode-segment input{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  margin:0!important;
+  opacity:0!important;
+  cursor:pointer!important;
+}
+
+body.chat-active .chat-recall-mode-segment span{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:0!important;
+  min-height:34px!important;
+  padding:6px 8px!important;
+  border:1px solid transparent!important;
+  border-radius:6px!important;
+  color:#577064!important;
+  font-size:12px!important;
+  font-weight:700!important;
+  line-height:1.3!important;
+  text-align:center!important;
+}
+
+body.chat-active .chat-recall-mode-segment input:checked+span{
+  border-color:rgba(18,140,76,.22)!important;
+  background:#fff!important;
+  color:#116c3c!important;
+  box-shadow:0 1px 4px rgba(25,84,51,.12)!important;
+}
+
+body.chat-active .chat-recall-mode-segment input:focus-visible+span{
+  outline:2px solid #17824a!important;
+  outline-offset:1px!important;
+}
+
+body.chat-active .chat-recall-mode-segment.is-disabled{
+  opacity:.55!important;
+}
+
+body.chat-active .chat-recall-mode-segment.is-disabled label,
+body.chat-active .chat-recall-mode-segment.is-disabled input{
+  cursor:not-allowed!important;
+}
+
+body.chat-active .chat-recall-mode-detail{
+  margin:0 0 10px!important;
+  color:#617369!important;
+  font-size:11px!important;
+  line-height:1.55!important;
+  overflow-wrap:anywhere!important;
+}
+
+body.dark.chat-active .chat-recall-mode-segment{
+  border-color:#31513d!important;
+  background:#102117!important;
+}
+
+body.dark.chat-active .chat-recall-mode-segment span{
+  color:#9db0a5!important;
+}
+
+body.dark.chat-active .chat-recall-mode-segment input:checked+span{
+  border-color:#34704c!important;
+  background:#1b2d22!important;
+  color:#91e2ad!important;
+  box-shadow:0 1px 4px rgba(0,0,0,.28)!important;
+}
+
+body.dark.chat-active .chat-recall-mode-detail{
+  color:#9eafa6!important;
+}
+
 body.chat-active #chat-side-debug{
   overflow-y:auto!important;
   overscroll-behavior:contain!important;
