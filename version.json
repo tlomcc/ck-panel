@@ -1,8 +1,8 @@
 {
-  "version": "chat-v136-fact-library-readonly",
+  "version": "chat-v137-archive-fact-overview",
   "notes": [
-    "新增只读事实库：逐条查看 Active fact、搜索筛选、分页和向量健康状态",
-    "事实详情可跳回所属小档案；不向面板下发原始向量数组",
+    "新增档案与事实总览：档案 → 关系 → Active fact → 向量健康一眼可见",
+    "隐藏分类与搜索入口但保留原代码；事实库继续支持只读搜索、筛选、分页和详情",
     "原生稳定缓存、下拉策略和原有 5min/24h/助手断点策略继续保留"
   ]
 }

@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ck-panel-shell-v156-chat-v136-fact-library-readonly';
+const CACHE_NAME = 'ck-panel-shell-v157-chat-v137-archive-fact-overview';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './style.css?v=chat-v136-fact-library-readonly',
-  './polish.css?v=chat-v136-fact-library-readonly',
-  './chat.css?v=chat-v136-fact-library-readonly',
-  './wechat.css?v=chat-v136-fact-library-readonly',
-  './script.js?v=chat-v136-fact-library-readonly',
-  './script-extra.js?v=chat-v136-fact-library-readonly',
-  './pwa.js?v=chat-v136-fact-library-readonly',
+  './style.css?v=chat-v137-archive-fact-overview',
+  './polish.css?v=chat-v137-archive-fact-overview',
+  './chat.css?v=chat-v137-archive-fact-overview',
+  './wechat.css?v=chat-v137-archive-fact-overview',
+  './script.js?v=chat-v137-archive-fact-overview',
+  './script-extra.js?v=chat-v137-archive-fact-overview',
+  './pwa.js?v=chat-v137-archive-fact-overview',
   './manifest.webmanifest',
   './icons/app-icon-v2-192.png',
   './icons/app-icon-v2-maskable-192.png',

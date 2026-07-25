@@ -14,11 +14,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="style.css?v=chat-v136-fact-library-readonly">
-<link rel="stylesheet" href="polish.css?v=chat-v136-fact-library-readonly">
-<link rel="stylesheet" href="chat.css?v=chat-v136-fact-library-readonly">
-<link rel="stylesheet" href="wechat.css?v=chat-v136-fact-library-readonly">
-<script>window.CK_PANEL_VERSION='chat-v136-fact-library-readonly';</script>
+<link rel="stylesheet" href="style.css?v=chat-v137-archive-fact-overview">
+<link rel="stylesheet" href="polish.css?v=chat-v137-archive-fact-overview">
+<link rel="stylesheet" href="chat.css?v=chat-v137-archive-fact-overview">
+<link rel="stylesheet" href="wechat.css?v=chat-v137-archive-fact-overview">
+<script>window.CK_PANEL_VERSION='chat-v137-archive-fact-overview';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -27,7 +27,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单">☰</button><div class="brand-mark">CK</div><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v136">chat-v136-fact-library-readonly</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v137">chat-v137-archive-fact-overview</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式">🌙</button>
 </div>
 </header>
@@ -38,8 +38,8 @@
 <nav class="side-nav">
 <button class="side-nav-item active" data-tab="chat" onclick="navTo('chat')">聊天</button>
 <button class="side-nav-item" data-tab="overview" onclick="navTo('overview')">总览</button>
-<button class="side-nav-item" data-tab="categories" onclick="navTo('categories')">分类</button>
-<button class="side-nav-item" data-tab="search" onclick="navTo('search')">搜索</button>
+<button class="side-nav-item legacy-nav-entry" data-tab="categories" onclick="navTo('categories')" hidden aria-hidden="true">分类</button>
+<button class="side-nav-item legacy-nav-entry" data-tab="search" onclick="navTo('search')" hidden aria-hidden="true">搜索</button>
 <button class="side-nav-item" data-tab="graph" onclick="navTo('graph')">信息网</button>
 <button class="side-nav-item" data-tab="facts" onclick="navTo('facts')">事实库</button>
 <button class="side-nav-item" data-tab="status" onclick="navTo('status')">状态</button>
@@ -56,19 +56,52 @@
 </nav>
 
 <section class="panel-tab" id="tab-overview">
-<div class="overview-grid">
-<div class="day-card"><h2>Day <span id="day-num">0</span></h2><p>Since 2026.3.26</p></div>
-<div class="stats-row"><div class="stat-box"><div class="val" id="st-total">-</div><div class="lbl">总数</div></div><div class="stat-box"><div class="val" id="st-active">-</div><div class="lbl">活跃</div></div><div class="stat-box"><div class="val" id="st-archived">-</div><div class="lbl">归档</div></div></div>
-</div>
-<div class="home-console">
-<div class="home-insight-grid">
-<section class="home-insight-block">
-<div class="console-head"><div><span>今日 Rolling</span><small id="console-sub">正在读取</small></div><small class="roll-count" id="today-roll-count">0 条</small></div>
-<div class="today-roll-list" id="today-roll-list"><div class="empty-state small">加载中...</div></div>
+<div class="archive-overview-page">
+<header class="archive-overview-head">
+<div class="archive-overview-title"><div class="archive-overview-kicker"><span></span>MEMORY ATLAS · READ ONLY</div><h2>档案与事实</h2><p>从小档案一路看到原子事实和向量健康，快速确认当前记忆图谱的规模、覆盖与最近变化。</p></div>
+<div class="archive-overview-actions"><small id="archive-overview-updated">等待读取</small><button class="btn btn-outline btn-sm" type="button" onclick="loadArchiveFactOverview(true)">刷新</button></div>
+</header>
+
+<section class="archive-spine" aria-label="档案、关系、事实与向量概览">
+<div class="archive-spine-track" aria-hidden="true"></div>
+<button class="archive-spine-node archive-spine-profile" type="button" onclick="openArchiveType('all')"><span>小档案</span><b id="archive-spine-profiles">-</b><small id="archive-spine-profiles-note">读取实体卡片</small></button>
+<button class="archive-spine-node archive-spine-relation" type="button" onclick="openArchiveType('relation')"><span>关系</span><b id="archive-spine-relations">-</b><small>人物与事件连线</small></button>
+<button class="archive-spine-node archive-spine-fact" type="button" onclick="openArchiveFactFilter('', '')"><span>Active facts</span><b id="archive-spine-facts">-</b><small>可主动召回的事实</small></button>
+<button class="archive-spine-node archive-spine-vector" type="button" onclick="openArchiveFactFilter('', 'ok')"><span>Fact 向量</span><b id="archive-spine-vectors">-</b><small id="archive-spine-vectors-note">等待读取覆盖率</small></button>
+<div class="archive-spine-meta"><span>运行 Day <b id="day-num">0</b></span><span id="archive-overview-consolidated">昨日整理：等待读取</span><span id="archive-overview-indexed">向量化：等待读取</span></div>
 </section>
-<section class="home-insight-block">
-<div class="console-head"><div><span>最近重点</span><small>高权重更新</small></div><small class="roll-count" id="recent-focus-count">0 条</small></div>
-<div class="mini-list insight-mini-list" id="recent-focus-list"><div class="empty-state small">加载中...</div></div>
+
+<div class="archive-overview-status" id="archive-overview-status" aria-live="polite">进入总览后自动读取小档案和 Active facts。</div>
+
+<div class="archive-overview-grid archive-overview-distributions">
+<section class="archive-overview-panel">
+<div class="archive-panel-head"><div><b>档案分布</b><span>按实体类型查看当前信息网</span></div><button type="button" onclick="openArchiveType('all')">查看信息网</button></div>
+<div class="archive-ledger" id="archive-type-list"><div class="empty-state small">加载中...</div></div>
+</section>
+<section class="archive-overview-panel">
+<div class="archive-panel-head"><div><b>事实字段</b><span>Active facts 最常出现的结构</span></div><button type="button" onclick="openArchiveFactFilter('', '')">查看事实库</button></div>
+<div class="archive-ledger archive-field-ledger" id="archive-field-list"><div class="empty-state small">加载中...</div></div>
+</section>
+</div>
+
+<div class="archive-overview-grid archive-overview-recent">
+<section class="archive-overview-panel">
+<div class="archive-panel-head"><div><b>最近更新的小档案</b><span>按最后印证时间排列</span></div><button type="button" onclick="openArchiveType('all')">全部档案</button></div>
+<div class="archive-record-list" id="archive-recent-entities"><div class="empty-state small">加载中...</div></div>
+</section>
+<section class="archive-overview-panel">
+<div class="archive-panel-head"><div><b>最近更新的事实</b><span>点击可直接打开事实详情</span></div><button type="button" onclick="openArchiveFactFilter('', '')">全部事实</button></div>
+<div class="archive-record-list" id="archive-recent-facts"><div class="empty-state small">加载中...</div></div>
+</section>
+</div>
+
+<div class="archive-overview-grid archive-overview-health-row">
+<section class="archive-overview-panel archive-health-panel">
+<div class="archive-panel-head"><div><b>向量与数据健康</b><span>只显示真实检查结果</span></div><button type="button" onclick="openArchiveFactFilter('', 'missing')">进入待检查</button></div>
+<div class="archive-health-grid" id="archive-health-grid"><div class="empty-state small">加载中...</div></div>
+</section>
+<section class="archive-overview-panel archive-roadmap-panel">
+<div class="archive-roadmap-mark" aria-hidden="true"><i></i><i></i><i></i></div><div><b>召回观察尚未开始</b><p>当前没有逐 fact 的历史注入统计。第二阶段上线后才从 0 开始累计，不会用候选命中或推测数据冒充真实召回次数。</p><span>下一阶段：最终注入计数 · 7/30 天趋势 · 待检查视图</span></div>
 </section>
 </div>
 </div>
@@ -202,7 +235,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v136-fact-library-readonly">v136</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v137-archive-fact-overview">v137</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <label>系统提示词位置<select id="chat-system-prompt-position"><option value="before_style">自定义在 CK 规则前</option><option value="after_style">自定义在 CK 规则后</option></select></label>
@@ -279,8 +312,8 @@
 <div class="modal-bg" id="ckActionModal" aria-hidden="true" onclick="ckDialogBackdrop(event)"><div class="modal ck-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ck-action-title" aria-describedby="ck-action-message" onclick="event.stopPropagation()"><h3 id="ck-action-title">请确认</h3><p class="ck-action-message" id="ck-action-message"></p><input id="ck-action-input" autocomplete="off" hidden><div class="modal-btns"><button class="btn btn-outline btn-sm" id="ck-action-cancel" type="button" onclick="ckDialogCancel()">取消</button><button class="btn btn-blue btn-sm" id="ck-action-confirm" type="button" onclick="ckDialogSubmit()">确定</button></div></div></div>
 <div class="panel-update-modal" id="panel-update-modal" aria-hidden="true"><div class="panel-update-card" role="dialog" aria-modal="true" aria-labelledby="panel-update-title"><h3 id="panel-update-title">检测到 CK 面板新版本</h3><p id="panel-update-message">当前版本 <b id="panel-update-current">-</b>，最新版本 <b id="panel-update-next">-</b>。需要更新后继续使用。</p><div class="panel-update-notes" id="panel-update-notes"><strong>更新内容</strong><ul id="panel-update-notes-list"><li>正在读取更新说明。</li></ul></div><button class="panel-update-confirm" id="panel-update-confirm" type="button" onclick="confirmPanelUpdate()">确定更新</button></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="script.js?v=chat-v136-fact-library-readonly"></script>
-<script src="script-extra.js?v=chat-v136-fact-library-readonly"></script>
-<script src="pwa.js?v=chat-v136-fact-library-readonly"></script>
+<script src="script.js?v=chat-v137-archive-fact-overview"></script>
+<script src="script-extra.js?v=chat-v137-archive-fact-overview"></script>
+<script src="pwa.js?v=chat-v137-archive-fact-overview"></script>
 </body>
 </html>
