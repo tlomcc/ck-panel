@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v140-memory-loom-icons';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v141-memory-loom-debug-cards';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{

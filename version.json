@@ -1,9 +1,9 @@
 {
-  "version": "chat-v140-memory-loom-icons",
+  "version": "chat-v141-memory-loom-debug-cards",
   "notes": [
-    "延续 Memory Loom 视觉：统一图标语言，去掉与单色墨绿调色板冲突的彩色 emoji",
-    "顶栏明暗切换由彩色 🌙/☀️ 改为内联单色描边 SVG 月/日（对齐聊天页写法，随 is-dark 互斥显示）",
-    "信息网与事实库搜索框统一为单色描边放大镜 SVG；关闭按钮统一为 × 字形",
+    "延续 Memory Loom 视觉：把聊天调试卡片收敛为纸面 + 左侧单色记忆线，去掉旧的五色染底",
+    "cache/intent/usage/done/error 五类语义色接入统一 Token（与信息网、事实库同一套降饱和色），浅深两套一致",
+    "计费金额（calculated/estimated/unknown）配色同样接入 Token",
     "本次只调整视觉样式；消息结构、缓存策略、召回、网关和请求逻辑保持不变"
   ]
 }
