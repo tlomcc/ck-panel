@@ -3358,63 +3358,6 @@ body.chat-active .chat-stream-plain{
   word-break:break-word!important;
 }
 
-/* 消息容器独立滚动，快捷键跟随输入区高度并避开新消息提示。 */
-body:not(.chat-active) .chat-jump-nav{display:none}
-body.chat-active .chat-jump-nav{
-  position:fixed;
-  right:max(12px,calc((100vw - 900px)/2 - 96px));
-  bottom:calc(var(--ck-chat-compose-height,64px) + 12px);
-  z-index:23;
-  display:flex;
-  align-items:center;
-  gap:7px;
-  opacity:0;
-  visibility:hidden;
-  pointer-events:none;
-  transform:translateY(8px);
-  transition:opacity .16s ease,transform .16s ease,visibility .16s ease;
-}
-body.chat-active .chat-jump-nav.show{
-  opacity:1;
-  visibility:visible;
-  pointer-events:auto;
-  transform:translateY(0);
-}
-body.chat-active .chat-jump-nav button{
-  width:40px;
-  height:40px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:0;
-  border:1px solid var(--ck-line)!important;
-  border-radius:50%!important;
-  background:var(--ck-surface-overlay)!important;
-  color:var(--ck-accent-strong)!important;
-  box-shadow:var(--ck-shadow-md)!important;
-  backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);
-  cursor:pointer;
-  transition:border-color .15s ease,background .15s ease,opacity .15s ease,transform .15s ease!important;
-}
-body.chat-active .chat-jump-nav button:hover:not(:disabled){border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important}
-body.chat-active .chat-jump-nav button:active:not(:disabled){transform:scale(.94)}
-body.chat-active .chat-jump-nav button:focus-visible{outline:2px solid var(--ck-accent);outline-offset:3px}
-body.chat-active .chat-jump-nav button:disabled{opacity:.34;cursor:default;box-shadow:none!important}
-body.chat-active .chat-jump-nav svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-body.chat-active.chat-jump-visible .chat-new-message-tip{bottom:calc(var(--ck-chat-compose-height,64px) + 62px)!important}
-body.dark.chat-active .chat-jump-nav button{border-color:var(--ck-line)!important;background:rgba(20,29,25,.92)!important;color:var(--ck-accent)!important}
-@media(max-width:1100px){
-  body.chat-active.chat-jump-visible .chat-messages{padding-right:62px!important}
-  body.chat-active .chat-jump-nav{right:max(10px,env(safe-area-inset-right));flex-direction:column;gap:6px}
-  body.chat-active .chat-jump-nav button{width:38px;height:38px}
-  body.chat-active.chat-jump-visible .chat-new-message-tip{bottom:calc(var(--ck-chat-compose-height,64px) + 98px)!important}
-}
-@media(prefers-reduced-motion:reduce){
-  body.chat-active .chat-jump-nav,
-  body.chat-active .chat-jump-nav button{transition:none!important}
-}
-
 @keyframes ckChatMessageFloat{
   0%{opacity:0;transform:translate3d(-8px,10px,0) scale(.985)}
   60%{opacity:1;transform:translate3d(0,-1px,0) scale(1.003)}

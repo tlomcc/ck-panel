@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v157-loom-finish';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v159-chat-width-restore';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1501,6 +1501,7 @@ function renderFactDetail(item){
   var recallTotal=numOr(item.recall_count,item.recall_count_total||0),health=String(item.vector_status||'missing');
   var html='<div class="fact-detail-head"><div class="facts-kicker"><span></span>FACT · '+(state==='expired'?'EXPIRED':'ACTIVE')+'</div><h3>'+esc(factRowCategory(item))+'</h3><p>'+esc(item.time||item.last_seen||'时间待确认')+' · '+factStateLabel(state)+'</p></div>';
   html+='<div class="fact-detail-value"><small>正文</small><strong>'+esc(factRowText(item)||'暂无正文')+'</strong></div>';
+  if(state==='expired')html+='<div class="fact-detail-block"><b>过期原因</b><p>'+esc(item.expired_reason||'被后续更新事实替代')+'</p></div>';
   if(people.length)html+='<div class="fact-detail-chips">'+people.map(function(name){return '<span>'+esc(name)+'</span>'}).join('')+'</div>';
   html+='<div class="fact-detail-grid"><div><span>证据次数</span><b>'+numOr(item.evidence_count,1)+'</b></div><div><span>召回次数</span><b>'+recallTotal+'</b></div><div><span>最新召回</span><b>'+esc(item.last_recalled_at||'-')+'</b></div><div><span>状态</span><b>'+factStateLabel(state)+'</b></div></div>';
   html+='<div class="fact-detail-block"><b>来源原文</b>'+renderFactSourceDetail(source)+'</div>';
@@ -6926,7 +6927,6 @@ function chatLayoutCompose(opts){
     var composeHeight=Math.ceil((composeRect&&composeRect.height)||compose.offsetHeight||64);
     document.documentElement.style.setProperty('--ck-chat-compose-height',composeHeight+'px');
   }
-  chatScheduleJumpNavUpdate();
   var btn=document.getElementById('chat-send-btn');
   if(!btn)return;
   btn.style.position='';
@@ -7365,46 +7365,8 @@ document.addEventListener('visibilitychange',function(){
 function chatMessagesBox(){
   return document.getElementById('chat-messages');
 }
-var chatJumpNavRaf=0;
 function ckPrefersReducedMotion(){
   return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-}
-function chatUpdateJumpNav(){
-  var nav=document.getElementById('chat-jump-nav');
-  var box=chatMessagesBox();
-  var body=document.body;
-  if(!nav||!body)return;
-  var active=currentPanelTab==='chat'&&body.classList.contains('chat-active');
-  var scrollable=!!(box&&box.scrollHeight-box.clientHeight>48);
-  var show=active&&scrollable;
-  nav.classList.toggle('show',show);
-  nav.setAttribute('aria-hidden',show?'false':'true');
-  body.classList.toggle('chat-jump-visible',show);
-  var topBtn=document.getElementById('chat-jump-top');
-  var bottomBtn=document.getElementById('chat-jump-bottom');
-  if(topBtn)topBtn.disabled=!show||!box||box.scrollTop<=8;
-  if(bottomBtn)bottomBtn.disabled=!show||!box||chatIsMessagesNearBottom(12);
-}
-function chatScheduleJumpNavUpdate(){
-  if(chatJumpNavRaf)cancelAnimationFrame(chatJumpNavRaf);
-  chatJumpNavRaf=requestAnimationFrame(function(){
-    chatJumpNavRaf=0;
-    chatUpdateJumpNav();
-  });
-}
-function chatJumpTop(){
-  var box=chatMessagesBox();
-  if(!box)return;
-  try{box.scrollTo({top:0,behavior:ckPrefersReducedMotion()?'auto':'smooth'})}
-  catch(e){box.scrollTop=0}
-  chatSetNewMessageHint(false);
-  chatScheduleJumpNavUpdate();
-  setTimeout(chatScheduleJumpNavUpdate,240);
-}
-function chatJumpBottom(){
-  chatScrollMessagesBottom(ckPrefersReducedMotion());
-  chatScheduleJumpNavUpdate();
-  setTimeout(chatScheduleJumpNavUpdate,240);
 }
 function chatIsMessagesNearBottom(threshold){
   var box=chatMessagesBox();
@@ -7422,22 +7384,12 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
-  chatScheduleJumpNavUpdate();
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
   if(!box||box.__ckMessagesScrollAttached)return;
   box.__ckMessagesScrollAttached=true;
   box.addEventListener('scroll',chatHandleMessagesScroll,{passive:true});
-  if(window.MutationObserver){
-    box.__ckJumpMutationObserver=new MutationObserver(chatScheduleJumpNavUpdate);
-    box.__ckJumpMutationObserver.observe(box,{childList:true,subtree:true,characterData:true});
-  }
-  if(window.ResizeObserver){
-    box.__ckJumpResizeObserver=new ResizeObserver(chatScheduleJumpNavUpdate);
-    box.__ckJumpResizeObserver.observe(box);
-  }
-  chatScheduleJumpNavUpdate();
 }
 function chatFollowMessagesBottom(shouldStick,instant,showHint){
   if(shouldStick){
@@ -7528,8 +7480,6 @@ function chatScrollMessagesBottom(instant){
         try{box.scrollTo({top:box.scrollHeight,behavior:'smooth'});}
         catch(e){box.scrollTop=box.scrollHeight}
       });
-      chatScheduleJumpNavUpdate();
-      setTimeout(chatScheduleJumpNavUpdate,240);
       return;
     }catch(e){}
   }
@@ -7540,7 +7490,6 @@ function chatScrollMessagesBottom(instant){
       if(old)box.style.scrollBehavior=old;
       else box.style.removeProperty('scroll-behavior');
     }
-    chatScheduleJumpNavUpdate();
   });
 }
 function chatIsRealMessage(m){
@@ -8556,7 +8505,6 @@ function switchPanelTab(tab,opts) {
   }
   setTimeout(function(){
     ckUpdateScrollControls();
-    chatScheduleJumpNavUpdate();
   },0);
 }
 var memoryRealtimeTimer=null;
