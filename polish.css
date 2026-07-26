@@ -149,10 +149,7 @@ body{
 }
 .entry-badge.imp-high{background:var(--pg-emerald-soft);color:var(--pg-emerald-600)}
 
-/* —— 弹窗 / 确认框 ——（Toast 已迁入 components.css） */
-.modal{border-radius:20px;box-shadow:var(--pg-shadow-lg)}
-.confirm-box{border-radius:18px;box-shadow:var(--pg-shadow-lg)}
-.modal input,.modal textarea{border-radius:12px}
+/* —— 弹窗 / 确认框 / Toast 已迁入 components.css（Phase 6 第二组） —— */
 
 /* —— 加载条 —— */
 .loading-bar-inner{background:var(--pg-grad)}
@@ -171,17 +168,13 @@ body.dark .home-insight-block,
 body.dark .cat-card,
 body.dark .entry-item,
 body.dark .mini-item,
-body.dark .eg-card,
-body.dark .modal,
-body.dark .confirm-box{
+body.dark .eg-card{
   background:#18241e !important;
   border-color:#26352c;
   box-shadow:0 6px 20px rgba(0,0,0,.30);
 }
 body.dark .search-wrap input,
 body.dark .eg-search input,
-body.dark .modal input,
-body.dark .modal textarea,
 body.dark #add-input,
 body.dark .tag-btn,
 body.dark .tag-expand-btn{

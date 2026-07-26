@@ -524,11 +524,8 @@ body.dark #tab-search .search-empty-card{border-color:var(--ck-line)!important;b
 #tab-apiconfig .api-assign-summary{border:1px solid var(--ck-line-soft)!important;background:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important}
 
 /* ---- Dialogs, toasts and startup surface ---- */
-.modal-bg,
-.confirm-bg,
+/* 模态框 / 确认框 已迁入 components.css（Phase 6 第二组）；此处仅保留 panel-update */
 .panel-update-modal{background:rgba(20,36,28,.44)!important;backdrop-filter:blur(6px)!important;-webkit-backdrop-filter:blur(6px)!important}
-.modal,
-.confirm-box,
 .panel-update-card{
   border:1px solid var(--ck-line)!important;
   border-radius:var(--ck-radius-xl)!important;
@@ -536,8 +533,6 @@ body.dark #tab-search .search-empty-card{border-color:var(--ck-line)!important;b
   color:var(--ck-text)!important;
   box-shadow:var(--ck-shadow-overlay)!important;
 }
-.modal h3,
-.confirm-box p,
 .panel-update-card h3{color:var(--ck-text)!important}
 body.chat-active .loading-bar-wrap{
   background:
@@ -553,9 +548,7 @@ body.chat-active .startup-name{color:var(--ck-accent-strong)!important;letter-sp
 body.chat-active .startup-subtitle,
 body.chat-active .loading-text{color:var(--ck-muted)!important}
 
-/* Auth gate: memory-tinted overlay instead of slate blue */
-.modal-bg.panel-auth-gate{background:rgba(17,35,26,.62)!important}
-.modal-bg.panel-auth-gate .modal{border-radius:var(--ck-radius-xl)!important}
+/* Auth gate 已迁入 components.css（Phase 6 第二组） */
 
 /* ---- Dark paper, not black iOS chrome ---- */
 body.dark.chat-active,
@@ -849,26 +842,7 @@ body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
   background:linear-gradient(180deg,var(--ck-accent),rgba(var(--ck-accent-rgb),.12));
 }
 
-/* Auth is a deliberate entry surface, not a generic centered form. */
-.modal-bg.panel-auth-gate .modal{
-  position:relative!important;
-  width:min(420px,calc(100vw - 32px))!important;
-  max-width:none!important;
-  padding:28px!important;
-  overflow:hidden!important;
-}
-.modal-bg.panel-auth-gate .modal::before{
-  content:"";
-  position:absolute;
-  left:28px;
-  top:0;
-  width:54px;
-  height:2px;
-  background:var(--ck-accent);
-}
-.modal-bg.panel-auth-gate .modal h3{font-size:18px!important;letter-spacing:-.15px!important}
-.modal-bg.panel-auth-gate .modal p{line-height:1.7!important;color:var(--ck-muted)!important}
-.modal-bg.panel-auth-gate .modal-btns .btn-blue{min-width:96px!important}
+/* Auth gate 细化规则已迁入 components.css（Phase 6 第二组） */
 
 @media(max-width:760px){
   #tab-graph .graph-hero,

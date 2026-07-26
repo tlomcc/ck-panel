@@ -837,8 +837,7 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
   background:#fff!important;border:1px solid var(--wx-line)!important;border-radius:999px!important;
 }
 
-/* —— 弹窗：微信风 ——（Toast 已迁入 components.css） */
-.modal,.confirm-box{border-radius:14px!important;box-shadow:0 12px 40px rgba(0,0,0,.16)!important}
+/* —— 弹窗 / Toast 已迁入 components.css（Phase 6 第二组） —— */
 .btn-blue,.btn{transition:background .15s ease!important}
 
 /* ======================= 深色模式守卫（微信深色）======================= */
@@ -2060,84 +2059,13 @@ body.dark.chat-active .chat-tool-card{background:#151b23!important}
 #page-detail.single-entry-view .entry-text{font-size:14px!important;line-height:1.75!important}
 
 /* ======================= Dialogs, confirmations, updates ======================= */
-.modal-bg,
-.confirm-bg,
+/* 模态框 / 确认框 已迁入 components.css（Phase 6 第二组）；本节仅保留 panel-update */
 .panel-update-modal{
   padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom))!important;
   background:rgba(0,0,0,.5)!important;
   backdrop-filter:blur(5px)!important;
   -webkit-backdrop-filter:blur(5px)!important;
 }
-.modal,
-.confirm-box{
-  width:min(340px,calc(100vw - 36px))!important;
-  padding:20px!important;
-  border:0!important;
-  border-radius:10px!important;
-  background:#fff!important;
-  color:#222!important;
-  box-shadow:0 12px 38px rgba(0,0,0,.2)!important;
-}
-.modal h3{
-  margin:0 0 16px!important;
-  color:#222!important;
-  font-size:17px!important;
-  font-weight:600!important;
-  line-height:1.35!important;
-}
-.modal label{display:block!important;margin-bottom:5px!important;color:#888!important;font-size:11px!important;font-weight:400!important}
-.modal input,
-.modal select,
-.modal textarea{
-  width:100%!important;
-  min-height:40px!important;
-  margin:0 0 12px!important;
-  padding:9px 11px!important;
-  border:1px solid #ddd!important;
-  border-radius:7px!important;
-  background:#f7f7f7!important;
-  color:#222!important;
-  box-shadow:none!important;
-  font-size:13px!important;
-}
-.modal textarea{height:112px!important;max-height:min(260px,38vh)!important;line-height:1.6!important;resize:vertical!important}
-.modal input:focus,
-.modal select:focus,
-.modal textarea:focus{border-color:#aaa!important;background:#fff!important;box-shadow:none!important;outline:0!important}
-.modal-row{gap:10px!important}
-.modal-btns{gap:8px!important;margin-top:8px!important;justify-content:flex-end!important}
-.modal-btns .btn,
-.confirm-box-btns .btn{
-  min-width:56px!important;
-  min-height:36px!important;
-  padding:0 14px!important;
-  border:0!important;
-  border-radius:7px!important;
-  box-shadow:none!important;
-  font-size:12px!important;
-  font-weight:600!important;
-}
-.modal-btns .btn-outline,
-.confirm-box-btns .btn-outline{background:#f2f2f2!important;color:#555!important}
-.modal-btns .btn-blue{background:var(--wx-primary)!important;color:#fff!important}
-.modal-btns .btn-red,
-.confirm-box-btns .btn-red{background:#fa5151!important;color:#fff!important}
-.modal .prov-del-q{
-  margin:-4px 0 18px!important;
-  color:#777!important;
-  font-size:13px!important;
-  line-height:1.55!important;
-}
-.confirm-box{padding:20px 18px 18px!important}
-.confirm-box p{
-  margin:0 0 18px!important;
-  color:#222!important;
-  font-size:15px!important;
-  font-weight:500!important;
-  line-height:1.55!important;
-  text-align:center!important;
-}
-.confirm-box-btns{gap:8px!important;justify-content:center!important}
 
 .panel-update-card{
   width:min(390px,100%)!important;
@@ -2177,32 +2105,16 @@ body.dark.chat-active .chat-tool-card{background:#151b23!important}
 .panel-update-confirm:focus-visible{outline:2px solid rgba(7,193,96,.3)!important;outline-offset:2px!important}
 .panel-update-confirm:disabled{background:#aaa!important;color:#fff!important}
 
-body.dark .modal-bg,
-body.dark .confirm-bg,
 body.dark .panel-update-modal{background:rgba(0,0,0,.68)!important}
-body.dark .modal,
-body.dark .confirm-box,
 body.dark .panel-update-card{
   border:0!important;
   background:#1c1c1e!important;
   color:#eee!important;
   box-shadow:0 14px 42px rgba(0,0,0,.48)!important;
 }
-body.dark .modal h3,
-body.dark .confirm-box p,
 body.dark .panel-update-card h3,
 body.dark .panel-update-card b{color:#eee!important}
-body.dark .modal label,
-body.dark .modal .prov-del-q,
 body.dark .panel-update-card p{color:#999!important}
-body.dark .modal input,
-body.dark .modal select,
-body.dark .modal textarea{border-color:#39393c!important;background:#242426!important;color:#eee!important}
-body.dark .modal input:focus,
-body.dark .modal select:focus,
-body.dark .modal textarea:focus{border-color:#555!important;background:#2a2a2c!important}
-body.dark .modal-btns .btn-outline,
-body.dark .confirm-box-btns .btn-outline{background:#303033!important;color:#ddd!important}
 body.dark .panel-update-notes{background:#303033!important}
 body.dark .panel-update-notes strong{color:#ddd!important}
 body.dark .panel-update-notes ul{color:#aaa!important}
@@ -2214,9 +2126,6 @@ body.dark .panel-update-confirm{background:var(--wx-primary)!important;color:#ff
 /* Toast 已迁入 components.css（Phase 6 第二组） */
 
 @media(max-width:560px){
-  .modal,
-  .confirm-box{width:calc(100vw - 36px)!important}
-  .modal{padding:18px!important}
   .panel-update-card{padding:20px!important}
 }
 

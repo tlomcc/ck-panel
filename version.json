@@ -1,8 +1,8 @@
 {
-  "version": "chat-v150-components-css",
+  "version": "chat-v151-components-modal",
   "notes": [
-    "Phase 6 第二组启动：新增 components.css 作为共享基础组件唯一视觉来源",
-    "Toast（含聊天页错误 Toast）迁入 components.css，全部基于 token、0 个 !important",
-    "删除 style/polish/chat/wechat/visual-overrides 五个旧文件中的全部 Toast 重复规则"
+    "Phase 6 第二组继续：模态框/确认框/认证门迁入 components.css，全 token 化、0 个 !important",
+    "删除 style/polish/wechat/visual-overrides 中全部 .modal/.confirm 重复规则",
+    "panel-update 更新弹窗规则保留在原文件，待后续迁移"
   ]
 }

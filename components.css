@@ -4,7 +4,7 @@
    本文件在所有旧样式表之后加载；迁入一个组件时，必须同步删除
    旧文件（style / polish / chat / wechat / visual-overrides）中
    同组件的重复规则，因此本文件保持 0 个 !important。
-   当前已迁入：Toast。
+   当前已迁入：Toast、模态框/确认框。
    ============================================================ */
 
 /* ---- Toast：安静纸面 + 左侧状态线 ---- */
@@ -195,3 +195,140 @@ body.dark.chat-active .toast.toast-closable.toast-error .toast-close:hover{
   .toast.show{animation:none}
   body.chat-active .toast.toast-error{animation:none}
 }
+
+/* ---- 模态框 / 确认框：CK 纸面卡片 ---- */
+
+.modal-bg,
+.confirm-bg{
+  display:none;
+  position:fixed;
+  inset:0;
+  padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));
+  background:rgba(20,36,28,.44);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  align-items:center;
+  justify-content:center;
+}
+.modal-bg{z-index:100}
+.confirm-bg{z-index:110}
+.modal-bg.show,
+.confirm-bg.show{display:flex}
+body.dark .modal-bg,
+body.dark .confirm-bg{background:rgba(0,0,0,.62)}
+
+.modal,
+.confirm-box{
+  box-sizing:border-box;
+  width:min(340px,calc(100vw - 36px));
+  padding:20px;
+  border:1px solid var(--ck-line);
+  border-radius:var(--ck-radius-xl);
+  background:var(--ck-surface);
+  color:var(--ck-text);
+  box-shadow:var(--ck-shadow-overlay);
+}
+
+.modal h3{
+  margin:0 0 16px;
+  color:var(--ck-text);
+  font-size:17px;
+  font-weight:600;
+  line-height:1.35;
+}
+.modal label{
+  display:block;
+  margin-bottom:5px;
+  color:var(--ck-muted);
+  font-size:11px;
+  font-weight:400;
+}
+.modal input,
+.modal select,
+.modal textarea{
+  width:100%;
+  min-height:40px;
+  margin:0 0 12px;
+  padding:9px 11px;
+  border:1px solid var(--ck-line);
+  border-radius:var(--ck-radius-sm);
+  background:var(--ck-surface-soft);
+  color:var(--ck-text);
+  outline:none;
+  font-size:13px;
+  font-family:inherit;
+}
+.modal textarea{
+  height:112px;
+  max-height:min(260px,38vh);
+  line-height:1.6;
+  resize:vertical;
+}
+.modal input:focus,
+.modal select:focus,
+.modal textarea:focus{
+  border-color:var(--ck-accent);
+  background:var(--ck-surface);
+  box-shadow:0 0 0 3px var(--ck-focus);
+}
+.modal .prov-del-q{
+  margin:-4px 0 18px;
+  color:var(--ck-muted);
+  font-size:13px;
+  line-height:1.55;
+}
+
+.modal-row{display:flex;gap:10px}
+.modal-row>*{flex:1}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.modal-btns .btn,
+.confirm-box-btns .btn{
+  min-width:56px;
+  min-height:36px;
+  padding:0 14px;
+  border-radius:var(--ck-radius-sm);
+  font-size:12px;
+  font-weight:600;
+}
+
+.confirm-box{padding:20px 18px 18px;text-align:center}
+.confirm-box p{
+  margin:0 0 18px;
+  color:var(--ck-text);
+  font-size:15px;
+  font-weight:500;
+  line-height:1.55;
+  text-align:center;
+}
+.confirm-box-btns{display:flex;gap:8px;justify-content:center}
+
+/* ---- 认证门：刻意的入口面，不是普通居中表单 ---- */
+
+.modal-bg.panel-auth-gate{
+  z-index:200000;
+  background:rgba(17,35,26,.62);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.modal-bg.panel-auth-gate .modal{
+  position:relative;
+  width:min(420px,calc(100vw - 32px));
+  max-width:none;
+  padding:28px;
+  border-radius:var(--ck-radius-xl);
+  overflow:hidden;
+}
+.modal-bg.panel-auth-gate .modal::before{
+  content:"";
+  position:absolute;
+  left:28px;
+  top:0;
+  width:54px;
+  height:2px;
+  background:var(--ck-accent);
+}
+.modal-bg.panel-auth-gate .modal h3{font-size:18px;letter-spacing:-.15px}
+.modal-bg.panel-auth-gate .modal p{line-height:1.7;color:var(--ck-muted)}
+.modal-bg.panel-auth-gate .modal-btns .btn-blue{min-width:96px}
+body.panel-auth-locked{overflow:hidden}
+body.panel-auth-locked .page{visibility:hidden}

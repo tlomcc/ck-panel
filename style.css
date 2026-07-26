@@ -170,25 +170,7 @@ body{font-family:-apple-system,'PingFang SC',sans-serif;background:#f1f8e9;color
 .add-area-options{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .add-area-options select{padding:4px 8px;border:1px solid #e4e8ed;border-radius:6px;font-size:11px;outline:none}
 .empty-state{text-align:center;padding:40px 20px;color:#b0b7c0;font-size:13px}
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(28,32,40,0.4);backdrop-filter:blur(4px);z-index:100;align-items:center;justify-content:center}
-.modal-bg.panel-auth-gate{z-index:200000;background:rgba(15,23,42,.72);backdrop-filter:blur(12px)}
-.modal-bg.panel-auth-gate .modal{box-sizing:border-box;width:calc(100% - 32px);max-width:360px;border-radius:12px}
-body.panel-auth-locked{overflow:hidden}
-body.panel-auth-locked .page{visibility:hidden}
-.modal-bg.show,
-.confirm-bg.show{display:flex}
-.modal{background:#fff;border-radius:18px;padding:24px;width:300px;box-shadow:0 24px 60px rgba(0,0,0,0.15)}
-.modal h3{font-size:16px;font-weight:700;margin-bottom:14px}
-.modal input,.modal select,.modal textarea{width:100%;padding:10px 12px;border:1.5px solid #e4e8ed;border-radius:10px;font-size:13px;outline:none;margin-bottom:10px;font-family:inherit}
-.modal textarea{height:100px;resize:vertical;line-height:1.6}
-.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:#43a047}
-.modal-row{display:flex;gap:8px}
-.modal-row>*{flex:1}
-.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
-.confirm-bg{display:none;position:fixed;inset:0;background:rgba(28,32,40,0.4);backdrop-filter:blur(4px);z-index:110;align-items:center;justify-content:center}
-.confirm-box{background:#fff;border-radius:16px;padding:20px;width:260px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.15)}
-.confirm-box p{color:#1c2028;margin-bottom:18px;font-weight:500}
-.confirm-box-btns{display:flex;gap:10px;justify-content:center}
+/* 模态框 / 确认框 / 认证门 已迁入 components.css（Phase 6 第二组） */
 /* Toast 已迁入 components.css（Phase 6 第二组） */
 @keyframes entrySlideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 .entry-wrap.new-entry{animation:entrySlideIn .35s ease}
@@ -384,26 +366,6 @@ body.dark .nav-item {
 body.dark .nav-item.active {
   color: #66bb6a;
 }
-body.dark .modal {
-  background: #2a2a3e;
-  color: #e0e0e0;
-}
-body.dark .modal h3 {
-  color: #e0e0e0;
-}
-body.dark .modal input,
-body.dark .modal textarea,
-body.dark .modal select {
-  background: #1a1a2e;
-  border-color: #3a3a4e;
-  color: #e0e0e0;
-}
-body.dark .confirm-box {
-  background: #2a2a3e;
-}
-body.dark .confirm-box p {
-  color: #e0e0e0;
-}
 body.dark .day-card {
   background: linear-gradient(135deg, #2a2a3e, #3a3a4e, #4a4a5e);
 }
@@ -564,13 +526,6 @@ body.dark .highlight {
   background: #5c4b00;
   color: #ffe066;
 }
-body.dark .modal-bg {
-  background: rgba(10,10,20,0.6);
-}
-body.dark .confirm-bg {
-  background: rgba(10,10,20,0.6);
-}
-
 body.dark .cat-stats {
   color: #8c939e;
 }
@@ -994,8 +949,6 @@ select,
 .add-area,
 .entry-item,
 .switch-bar,
-.modal,
-.confirm-box,
 .menu-popup,
 .select-bar{
   background:var(--ck-surface);
@@ -1029,9 +982,7 @@ select,
 .cat-card-name,
 .entry-text,
 .mini-text,
-.entity-stats b,
-.modal h3,
-.confirm-box p{
+.entity-stats b{
   color:var(--ck-text);
 }
 
@@ -1156,9 +1107,6 @@ select,
 }
 
 .search-wrap input,
-.modal input,
-.modal select,
-.modal textarea,
 .add-area textarea,
 .add-area-options select,
 #add-tags{
@@ -1169,9 +1117,6 @@ select,
 }
 
 .search-wrap input:focus,
-.modal input:focus,
-.modal select:focus,
-.modal textarea:focus,
 .add-area-options select:focus,
 #add-tags:focus{
   border-color:var(--ck-accent)!important;
@@ -1370,17 +1315,6 @@ body:not(.dark) .back-btn{
   color:var(--ck-faint);
 }
 
-.modal-bg,
-.confirm-bg{
-  background:rgba(5,9,14,.62);
-  backdrop-filter:blur(10px);
-}
-
-.modal,
-.confirm-box{
-  width:min(340px,calc(100vw - 34px));
-}
-
 .score-popup{
   background:var(--ck-surface-2);
   border:1px solid var(--ck-border);
@@ -1465,8 +1399,6 @@ body.dark .entity-stats div,
 body.dark .add-area,
 body.dark .entry-item,
 body.dark .switch-bar,
-body.dark .modal,
-body.dark .confirm-box,
 body.dark .menu-popup,
 body.dark .select-bar{
   background:var(--ck-surface);
@@ -1484,9 +1416,6 @@ body.dark .detail-top{
 body.dark .cat-section-head,
 body.dark .console-action,
 body.dark .search-wrap input,
-body.dark .modal input,
-body.dark .modal textarea,
-body.dark .modal select,
 body.dark .add-area textarea,
 body.dark .add-area-options select,
 body.dark #add-tags,
@@ -1508,9 +1437,6 @@ body.dark .cat-section .cat-card{
 }
 
 body.dark .search-wrap input,
-body.dark .modal input,
-body.dark .modal textarea,
-body.dark .modal select,
 body.dark .add-area textarea,
 body.dark .add-area-options select,
 body.dark #add-tags{
@@ -3347,8 +3273,6 @@ body.dark .graph-hero p{
 .cat-card,
 .entry-item,
 .add-area,
-.modal,
-.confirm-box,
 .entity-console,
 .today-roll-item,
 .mini-item,
@@ -3388,9 +3312,6 @@ body.dark .graph-hero p{
 }
 
 .search-wrap input:focus,
-.modal input:focus,
-.modal select:focus,
-.modal textarea:focus,
 .add-area-options select:focus,
 #add-tags:focus{
   border-color:var(--ck-accent)!important;
@@ -3510,8 +3431,6 @@ body.dark{
 .cat-card,
 .entry-item,
 .add-area,
-.modal,
-.confirm-box,
 .entity-console,
 .today-roll-item,
 .mini-item,
@@ -3612,9 +3531,6 @@ body.dark{
 }
 
 .search-wrap input,
-.modal input,
-.modal textarea,
-.modal select,
 .add-area textarea,
 .add-area-options select,
 #add-tags{
@@ -3623,9 +3539,6 @@ body.dark{
 }
 
 .search-wrap input:focus,
-.modal input:focus,
-.modal select:focus,
-.modal textarea:focus,
 .add-area-options select:focus,
 #add-tags:focus{
   border-color:#52c596!important;
@@ -3665,8 +3578,6 @@ body.dark .search-panel,
 body.dark .cat-card,
 body.dark .entry-item,
 body.dark .add-area,
-body.dark .modal,
-body.dark .confirm-box,
 body.dark .entity-console,
 body.dark .today-roll-item,
 body.dark .mini-item,
