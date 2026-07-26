@@ -1,8 +1,8 @@
 {
-  "version": "chat-v153-components-input",
+  "version": "chat-v154-loom-polish",
   "notes": [
-    "Phase 6 第二组继续：通用输入控件（input/select/textarea + focus/placeholder/深色）迁入 components.css",
-    "visual-overrides 删除对应重复规则；各页面作用域内输入微调保留在原文件",
-    "components.css 维持 0 个 !important，靠加载顺序与特异度取胜"
+    "菜单弹层、空状态迁入 components.css，空状态加一段轻记忆线装饰",
+    "全站细滚动条统一为纸边式细条；模态框/确认框加入轻入场动效与顶部记忆线",
+    "均遵守 prefers-reduced-motion；components.css 保持 0 个 !important"
   ]
 }

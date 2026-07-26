@@ -1571,30 +1571,7 @@ body.dark #tab-status .ds-meta-row{border-color:#2a2a2c!important}
   font-weight:600!important;
   letter-spacing:2px!important;
 }
-#page-detail .menu-popup{
-  top:60px!important;
-  right:16px!important;
-  min-width:152px!important;
-  padding:5px 0!important;
-  overflow:hidden!important;
-  border:1px solid #e5e5e5!important;
-  border-radius:8px!important;
-  background:#fff!important;
-  box-shadow:0 8px 24px rgba(0,0,0,.14)!important;
-}
-#page-detail .menu-popup-item{
-  min-height:43px!important;
-  padding:0 16px!important;
-  display:flex!important;
-  align-items:center!important;
-  border-radius:0!important;
-  background:#fff!important;
-  color:#222!important;
-  font-size:13px!important;
-}
-#page-detail .menu-popup-item:hover,
-#page-detail .menu-popup-item:active{background:#f5f5f5!important}
-#page-detail .menu-popup-item.danger{color:#e25353!important}
+/* menu-popup 已统一走 components.css（Phase 6 第二组） */
 
 #page-detail .switch-bar{
   gap:0!important;
@@ -1836,9 +1813,7 @@ body.dark #page-detail .pinned-window,
 body.dark #page-detail .pinned-card,
 body.dark #page-detail .entry-wrap,
 body.dark #page-detail .entry-item,
-body.dark #page-detail .add-area,
-body.dark #page-detail .menu-popup,
-body.dark #page-detail .menu-popup-item{
+body.dark #page-detail .add-area{
   border-color:#2c2c2e!important;
   background:#1c1c1e!important;
   box-shadow:none!important;
@@ -1847,14 +1822,11 @@ body.dark #page-detail .detail-top h3,
 body.dark #page-detail .pinned-window-head span,
 body.dark #page-detail .pinned-card-text,
 body.dark #page-detail .entry-text,
-body.dark #page-detail .entry-text:not(.collapsed),
-body.dark #page-detail .menu-popup-item{color:#eee!important}
+body.dark #page-detail .entry-text:not(.collapsed){color:#eee!important}
 body.dark #page-detail .detail-top small,
 body.dark #page-detail .pinned-window-head small,
 body.dark #page-detail .entry-section-head small{color:#888!important}
 body.dark #page-detail .menu-btn{background:#303033!important;color:#aaa!important}
-body.dark #page-detail .menu-popup-item:hover,
-body.dark #page-detail .menu-popup-item:active{background:#28282a!important}
 body.dark #page-detail .switch-bar{background:#2c2c2e!important}
 body.dark #page-detail .switch-item{color:#999!important}
 body.dark #page-detail .switch-item.active{background:#4a4a4d!important;color:#fff!important}

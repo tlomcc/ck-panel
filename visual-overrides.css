@@ -690,8 +690,7 @@ body.dark .fact-chip{background:var(--ck-accent-wash)!important;color:var(--ck-a
 
 /* ---- Toast 已迁入 components.css（Phase 6 第二组） ---- */
 
-/* ---- Empty states: quiet muted copy ---- */
-.empty-state{color:var(--ck-muted)!important}
+/* ---- Empty states 已迁入 components.css（Phase 6 第二组） ---- */
 
 @media(max-width:760px){
   body:not(.chat-active) #page-memory{padding-inline:14px!important}
