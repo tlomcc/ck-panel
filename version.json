@@ -1,8 +1,8 @@
 {
-  "version": "chat-v146-rewrite-api-code-light",
+  "version": "chat-v147-rewrite-provider-model-picker",
   "notes": [
-    "API 配置的召回页新增意图改写模型名、API Key 和站点地址配置",
-    "网关意图改写改为读取独立配置并支持保存后立即热加载",
-    "浅色主题代码块改为浅灰背景和深色文字，深色主题保持原样"
+    "意图改写改为供应商与模型下拉联动选择",
+    "选择供应商后自动展示该供应商的可选模型，不再手动填写模型名",
+    "保存时自动使用所选供应商的 API URL 和 API Key，并兼容旧配置"
   ]
 }
