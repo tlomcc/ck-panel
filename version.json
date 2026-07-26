@@ -1,8 +1,8 @@
 {
-  "version": "chat-v154-loom-polish",
+  "version": "chat-v155-memory-owner",
   "notes": [
-    "菜单弹层、空状态迁入 components.css，空状态加一段轻记忆线装饰",
-    "全站细滚动条统一为纸边式细条；模态框/确认框加入轻入场动效与顶部记忆线",
-    "均遵守 prefers-reduced-motion；components.css 保持 0 个 !important"
+    "记忆中心成为单一来源：archive-*/facts-*/fact-*/eg-* 的最终视觉全部收敛进 style.css 本体",
+    "删除 wechat/polish/visual-overrides 三层中对应覆盖，类型徽章与脊线统一 Loom 降饱和色板",
+    "信息网卡片、筛选胶囊、详情底板全面 token 化；深色模式同步收敛"
   ]
 }

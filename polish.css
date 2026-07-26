@@ -113,17 +113,7 @@ body{
   border-radius:var(--pg-radius);
   box-shadow:var(--pg-shadow-md);
 }
-.eg-card{
-  border:1px solid var(--pg-line);
-  border-left:4px solid #d6e6dd;
-  border-radius:14px;
-  transition:transform .12s ease,box-shadow .18s ease,border-color .18s ease;
-}
-.eg-card:hover{
-  border-left-color:var(--pg-emerald-500);
-  box-shadow:var(--pg-shadow-md);
-}
-.eg-search input:focus{border-color:var(--pg-emerald-500);box-shadow:0 0 0 4px rgba(46,158,107,.10)}
+/* eg-* 皮肤已回归 style.css 单一来源（Phase 6） */
 
 /* —— 详情页：开关条 / 排序条 —— */
 .switch-item.active{color:var(--pg-emerald-600)}
@@ -155,14 +145,12 @@ body.dark .home-console,
 body.dark .home-insight-block,
 body.dark .cat-card,
 body.dark .entry-item,
-body.dark .mini-item,
-body.dark .eg-card{
+body.dark .mini-item{
   background:#18241e !important;
   border-color:#26352c;
   box-shadow:0 6px 20px rgba(0,0,0,.30);
 }
 body.dark .search-wrap input,
-body.dark .eg-search input,
 body.dark #add-input,
 body.dark .tag-btn,
 body.dark .tag-expand-btn{
@@ -177,10 +165,8 @@ body.dark .search-filter.active,
 body.dark .sort-btn.active{background:var(--pg-grad);border-color:transparent;color:#fff}
 body.dark .switch-item.active,
 body.dark .mini-top span{color:#7fe3ad}
-body.dark .search-wrap input:focus,
-body.dark .eg-search input:focus{border-color:var(--pg-emerald-400);box-shadow:0 0 0 4px rgba(76,195,138,.12)}
+body.dark .search-wrap input:focus{border-color:var(--pg-emerald-400);box-shadow:0 0 0 4px rgba(76,195,138,.12)}
 body.dark .entry-badge.imp-high{background:#163024;color:#7fe3ad}
-body.dark .eg-card:hover{border-left-color:var(--pg-emerald-400)}
 
 /* 聊天气泡状态：放在 polish.css 最后，确保 WhatsApp 风格对号最终生效。 */
 body.chat-active .chat-bubble.user{

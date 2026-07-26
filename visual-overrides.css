@@ -299,24 +299,13 @@ body.chat-active .chat-worldbook-list{
   background:var(--ck-surface-soft)!important;
 }
 
-/* ---- Memory center: preserve the strong layout, harmonize material ---- */
-.archive-overview-page,
+/* ---- Memory center: archive-* 已回归 style.css 单一来源（Phase 6） ---- */
 .facts-page-head,
 #tab-graph,
 #tab-status{color:var(--ck-text)!important}
-.archive-overview-kicker,
 .facts-kicker{color:var(--ck-accent)!important}
-.archive-overview-title h2{color:var(--ck-text)!important}
-.archive-overview-title p,
 .facts-title-block p{color:var(--ck-muted)!important}
-.archive-spine,
-.archive-overview-panel,
-.archive-overview-status,
-.facts-toolbar,
-.facts-status,
-.fact-card,
 #tab-graph .graph-hero,
-#tab-graph .eg-toolbar,
 #tab-status .ds-tile,
 #tab-status .ds-note,
 #tab-status .ds-stat,
@@ -325,15 +314,6 @@ body.chat-active .chat-worldbook-list{
   background:var(--ck-surface)!important;
   box-shadow:var(--ck-shadow-xs)!important;
 }
-.archive-spine{border-radius:var(--ck-radius-lg)!important;background:linear-gradient(118deg,var(--ck-accent-wash),var(--ck-surface) 52%,rgba(132,104,162,.055))!important}
-.archive-overview-panel,
-.facts-toolbar{border-radius:var(--ck-radius-lg)!important}
-.fact-card{border-radius:var(--ck-radius-md)!important}
-.fact-card:hover{background:var(--ck-surface-soft)!important;box-shadow:var(--ck-shadow-xs)!important;transform:none!important}
-.archive-overview-status,
-.facts-status{color:var(--ck-text-soft)!important}
-.archive-ledger-meter{background:var(--ck-line-soft)!important}
-.archive-ledger-meter i{background:linear-gradient(90deg,var(--ck-accent),#8fd0ad)!important}
 
 /* ---- Status page: memory-line ledger tiles, tokenized status colors ---- */
 #tab-status .ds-tile{border-radius:var(--ck-radius-md)!important}
@@ -571,17 +551,6 @@ body.dark #tab-apiconfig .api-info-text,
 body.dark #tab-apiconfig .prov-card,
 body.dark #tab-apiconfig .api-assign-card,
 body.dark #tab-apiconfig .api-empty-callout,
-body.dark .archive-spine,
-body.dark .archive-overview-panel,
-body.dark .archive-overview-status,
-body.dark .facts-toolbar,
-body.dark .facts-status,
-body.dark .fact-card{
-  border-color:var(--ck-line)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-text)!important;
-}
-body.dark .archive-spine{background:linear-gradient(118deg,var(--ck-accent-wash),var(--ck-surface) 54%,rgba(176,139,199,.065))!important}
 /* 深色通用输入已迁入 components.css（Phase 6 第二组） */
 
 /* ---- Chat attachment tray: CK tool sheet, not a WeChat grid ---- */
@@ -617,76 +586,12 @@ body.dark.chat-active .chat-plus-dot::after{background:var(--ck-line-strong)!imp
 body.dark.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!important}
 
 /* ---- Memory web: nodes and lines, desaturated entity types ---- */
-#tab-graph .eg-card{
-  border-color:var(--ck-line)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  box-shadow:var(--ck-shadow-xs)!important;
-}
-#tab-graph .eg-card:hover{background:var(--ck-surface-soft)!important;box-shadow:var(--ck-shadow-xs)!important;transform:none!important}
-#tab-graph .eg-card-name{color:var(--ck-text)!important}
-#tab-graph .eg-card-profile,
-#tab-graph .eg-card-alias,
-#tab-graph .eg-rel-name{color:var(--ck-muted)!important}
-#tab-graph .eg-fact-chip,
-#tab-graph .eg-chip{
-  border:1px solid var(--ck-line-soft)!important;
-  border-radius:var(--ck-radius-pill)!important;
-  background:var(--ck-accent-wash)!important;
-  color:var(--ck-accent-strong)!important;
-}
-#tab-graph .eg-stat,
-#tab-graph .eg-count{color:var(--ck-text-soft)!important}
-#tab-graph .eg-detail-panel,
-#tab-graph .eg-detail-sheet{border-color:var(--ck-line)!important;background:var(--ck-surface)!important;box-shadow:var(--ck-shadow-overlay)!important}
-#tab-graph .eg-detail-mask{background:rgba(20,36,28,.44)!important}
+/* 信息网 eg-* 已回归 style.css 单一来源（Phase 6） */
 
 /* Desaturated type accents shared by memory web + fact library */
-.eg-type-person{border-left-color:var(--ck-blue)!important}
-.eg-type-event{border-left-color:var(--ck-amber)!important}
-.eg-type-place{border-left-color:var(--ck-place)!important}
-.eg-type-thing{border-left-color:var(--ck-violet)!important}
-.eg-type-mood{border-left-color:var(--ck-mood)!important}
-.eg-type-topic{border-left-color:var(--ck-topic)!important}
-.eg-type-relation{border-left-color:var(--ck-blue)!important}
-.fact-type-person{--fact-accent:var(--ck-blue)!important}
-.fact-type-event{--fact-accent:var(--ck-amber)!important}
-.fact-type-place{--fact-accent:var(--ck-place)!important}
-.fact-type-thing{--fact-accent:var(--ck-violet)!important}
-.fact-type-mood{--fact-accent:var(--ck-mood)!important}
-.fact-type-topic{--fact-accent:var(--ck-topic)!important}
-.eg-badge-person,.fact-badge-person{background:#e9eef5!important;color:#456492!important}
-.eg-badge-event,.fact-badge-event{background:#f4ecdd!important;color:#8a6320!important}
-.eg-badge-place,.fact-badge-place{background:#e2efec!important;color:#357a6d!important}
-.eg-badge-thing,.fact-badge-thing{background:#ece5f3!important;color:#6d5490!important}
-.eg-badge-mood,.fact-badge-mood{background:#f3e7ec!important;color:#96566f!important}
-.eg-badge-topic,.fact-badge-topic{background:#eceff2!important;color:#5c6a75!important}
-.eg-badge-relation{background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
-body.dark .eg-badge-person,body.dark .fact-badge-person{background:#1e2a38!important;color:#94b7df!important}
-body.dark .eg-badge-event,body.dark .fact-badge-event{background:#33291a!important;color:#d6a862!important}
-body.dark .eg-badge-place,body.dark .fact-badge-place{background:#173029!important;color:#66c2b0!important}
-body.dark .eg-badge-thing,body.dark .fact-badge-thing{background:#2a2338!important;color:#b391d4!important}
-body.dark .eg-badge-mood,body.dark .fact-badge-mood{background:#341f29!important;color:#d68aa8!important}
-body.dark .eg-badge-topic,body.dark .fact-badge-topic{background:#232b30!important;color:#93a2ad!important}
-body.dark .eg-badge-relation{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
-body.dark #tab-graph .eg-card,
-body.dark #tab-graph .eg-detail-panel,
-body.dark #tab-graph .eg-detail-sheet{border-color:var(--ck-line)!important;background:var(--ck-surface)!important;color:var(--ck-text)!important}
-body.dark #tab-graph .eg-fact-chip,
-body.dark #tab-graph .eg-chip{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important;border-color:var(--ck-line)!important}
+/* eg/fact 类型脊线与徽章 已回归 style.css 单一来源（Phase 6） */
 
-/* ---- Fact library card: type spine already tokenized, harmonize chrome ---- */
-.fact-card-field{color:var(--fact-accent,var(--ck-accent))!important}
-.fact-chip{
-  border:1px solid var(--ck-line-soft)!important;
-  border-radius:var(--ck-radius-pill)!important;
-  background:var(--ck-accent-wash)!important;
-  color:var(--ck-accent-strong)!important;
-}
-.fact-card-value{color:var(--ck-text)!important}
-.fact-card-meta,
-.fact-card-alias{color:var(--ck-muted)!important}
-body.dark .fact-chip{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important;border-color:var(--ck-line)!important}
+/* ---- Fact library card 已回归 style.css 单一来源（Phase 6） ---- */
 
 /* ---- Toast 已迁入 components.css（Phase 6 第二组） ---- */
 
@@ -707,7 +612,6 @@ body.dark .fact-chip{background:var(--ck-accent-wash)!important;color:var(--ck-a
   body.chat-active .chat-compose{padding-inline:8px!important}
   body.chat-active .chat-compose-row{min-width:0!important}
   body.chat-active #chat-input{min-width:0!important}
-  .archive-overview-panel,
   .facts-toolbar{border-radius:14px!important}
 }
 
@@ -747,11 +651,6 @@ body.chat-active .chat-plus-page>button:focus-visible span{
   color:var(--ck-accent-strong)!important;
 }
 body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
-
-/* The spine is the signature; keep the old orbit as a whisper. */
-.archive-spine::after{opacity:.34!important}
-.archive-spine-track{background:linear-gradient(90deg,var(--ck-line),rgba(var(--ck-accent-rgb),.72),var(--ck-line))!important}
-.archive-spine-node:hover::before{transform:scale(1.08)!important}
 
 /* Give secondary pages the same title-to-content rhythm as the overview. */
 #tab-graph .graph-hero,
