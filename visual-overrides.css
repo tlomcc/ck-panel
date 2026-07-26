@@ -89,7 +89,8 @@ button,input,select,textarea{font-family:var(--ck-font-body)!important}
   outline-offset:2px!important;
 }
 
-.btn,
+/* 基础按钮 .btn/.btn-blue/.btn-outline/.btn-red 已迁入 components.css（Phase 6 第二组），
+   此处仅保留未迁移组件 */
 .chat-wide-btn,
 .chat-cache-save-btn,
 .prov-add,
@@ -98,10 +99,8 @@ button,input,select,textarea{font-family:var(--ck-font-body)!important}
   border-radius:var(--ck-radius-sm)!important;
   transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease),color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease)!important;
 }
-.btn:active,
 .chat-wide-btn:active,
 .chat-cache-save-btn:active{transform:none!important}
-.btn-blue,
 .chat-wide-btn,
 .chat-cache-save-btn{
   border:1px solid var(--ck-accent)!important;
@@ -109,20 +108,11 @@ button,input,select,textarea{font-family:var(--ck-font-body)!important}
   color:#fff!important;
   box-shadow:none!important;
 }
-.btn-blue:hover,
 .chat-wide-btn:hover,
 .chat-cache-save-btn:hover{
   border-color:var(--ck-accent-strong)!important;
   background:var(--ck-accent-strong)!important;
 }
-.btn-outline{
-  border:1px solid var(--ck-line-strong)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-accent-strong)!important;
-  box-shadow:none!important;
-}
-.btn-outline:hover{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important}
-.btn-red{background:var(--ck-danger)!important;color:#fff!important;box-shadow:none!important}
 
 input:not([type=checkbox]):not([type=radio]),
 select,

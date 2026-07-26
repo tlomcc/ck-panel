@@ -39,19 +39,7 @@ body{
   text-rendering:optimizeLegibility;
 }
 
-/* —— 按钮 —— */
-.btn{border-radius:12px;transition:transform .12s ease,box-shadow .2s ease,background .2s ease}
-.btn-blue{
-  background:var(--pg-grad);
-  box-shadow:0 6px 18px rgba(46,158,107,.30);
-}
-.btn-blue:active{box-shadow:0 3px 10px rgba(46,158,107,.28)}
-.btn-outline{
-  background:var(--pg-surface);
-  color:var(--pg-emerald-600);
-  border:1.5px solid #cdeada;
-}
-.btn-outline:active{background:var(--pg-emerald-soft)}
+/* —— 按钮 已迁入 components.css（Phase 6 第二组） —— */
 
 /* —— Day 英雄卡：精致深翡翠 —— */
 .day-card{
@@ -183,8 +171,7 @@ body.dark .tag-expand-btn{
   color:#e6efe9;
 }
 /* 深色强调色：统一回翡翠绿 */
-body.dark .btn-blue{background:var(--pg-grad);box-shadow:0 6px 18px rgba(46,158,107,.30)}
-body.dark .btn-outline{background:#18241e;color:#6fe0a6;border-color:#2f5a45}
+/* 深色按钮已迁入 components.css（Phase 6 第二组） */
 body.dark .tag-btn.active,
 body.dark .search-filter.active,
 body.dark .sort-btn.active{background:var(--pg-grad);border-color:transparent;color:#fff}

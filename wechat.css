@@ -780,8 +780,8 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
 
 /* ======================= 全局（非聊天视图）微信化 ======================= */
 
-/* —— 主题绿：按钮/强调统一为微信绿 #07c160 扁平（压过精致绿渐变）—— */
-.btn-blue,
+/* —— 主题绿：按钮/强调统一为微信绿 #07c160 扁平（压过精致绿渐变）——
+   基础 .btn-blue/.btn-outline 已迁入 components.css（Phase 6 第二组），此处仅保留未迁移组件 */
 .chat-wide-btn,
 .prov-add,
 .prov-fetch-models{
@@ -792,14 +792,7 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
   color:#fff!important;
   border-radius:8px!important;
 }
-.btn-blue:active,.chat-wide-btn:active{background:var(--wx-primary-ink)!important}
-.btn-outline{
-  background:#fff!important;
-  color:var(--wx-primary-ink)!important;
-  border:1px solid #d9e6df!important;
-  border-radius:8px!important;
-  box-shadow:none!important;
-}
+.chat-wide-btn:active{background:var(--wx-primary-ink)!important}
 
 /* —— 卡片：白底、hairline、极浅阴影（去精致绿的厚阴影/大圆角）—— */
 .chat-memory-card,.chat-route-card,.chat-worldbook-list,
@@ -837,8 +830,7 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
   background:#fff!important;border:1px solid var(--wx-line)!important;border-radius:999px!important;
 }
 
-/* —— 弹窗 / Toast 已迁入 components.css（Phase 6 第二组） —— */
-.btn-blue,.btn{transition:background .15s ease!important}
+/* —— 弹窗 / Toast / 基础按钮 已迁入 components.css（Phase 6 第二组） —— */
 
 /* ======================= 深色模式守卫（微信深色）======================= */
 body.dark{
@@ -883,7 +875,6 @@ body.dark .api-config-page .prov-card,body.dark .api-config-page .api-group{
 }
 body.dark .chat-settings,body.dark .chat-settings-head,
 body.dark .chat-side-panel,body.dark .api-config-page{background:#000000!important}
-body.dark .btn-outline{background:#1c1c1e!important;color:#7fe3ad!important;border-color:#2f5a45!important}
 
 /* Dark overlay surfaces mirror the light hierarchy without losing contrast. */
 body.dark.chat-active .chat-drawer,
@@ -983,7 +974,6 @@ body:not(.chat-active) .tab-head{
 }
 body:not(.chat-active) .tab-head h2{color:#222!important;font-size:21px!important;font-weight:600!important}
 body:not(.chat-active) .tab-head p{color:#888!important;font-size:12px!important}
-body:not(.chat-active) .btn-blue{background:var(--wx-primary)!important;box-shadow:none!important;border-radius:6px!important}
 
 /* Overview uses grouped white surfaces and restrained statistics. */
 #tab-overview .overview-grid{gap:12px!important;margin-bottom:12px!important}

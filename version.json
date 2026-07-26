@@ -1,8 +1,8 @@
 {
-  "version": "chat-v151-components-modal",
+  "version": "chat-v152-components-btn",
   "notes": [
-    "Phase 6 第二组继续：模态框/确认框/认证门迁入 components.css，全 token 化、0 个 !important",
-    "删除 style/polish/wechat/visual-overrides 中全部 .modal/.confirm 重复规则",
-    "panel-update 更新弹窗规则保留在原文件，待后续迁移"
+    "Phase 6 第二组继续：基础按钮 .btn/.btn-blue/.btn-outline/.btn-red/.btn-sm 迁入 components.css",
+    "删除 style/polish/wechat/visual-overrides 中全部基础按钮重复规则，深浅色统一走 token",
+    "作用域内按钮微调（graph-actions、api-error-actions 等）保留在原文件"
   ]
 }

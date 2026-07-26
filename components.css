@@ -4,8 +4,56 @@
    本文件在所有旧样式表之后加载；迁入一个组件时，必须同步删除
    旧文件（style / polish / chat / wechat / visual-overrides）中
    同组件的重复规则，因此本文件保持 0 个 !important。
-   当前已迁入：Toast、模态框/确认框。
+   当前已迁入：Toast、模态框/确认框、基础按钮。
    ============================================================ */
+
+/* ---- 基础按钮 ---- */
+
+.btn{
+  padding:10px 20px;
+  border:none;
+  border-radius:var(--ck-radius-sm);
+  font-size:12px;
+  font-weight:600;
+  font-family:inherit;
+  cursor:pointer;
+  transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease),color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease);
+}
+.btn:active{transform:none}
+.btn-sm{padding:8px 14px;font-size:11px}
+button:disabled,
+.btn:disabled{
+  opacity:.62;
+  cursor:default;
+  transform:none;
+}
+
+.btn-blue{
+  border:1px solid var(--ck-accent);
+  background:var(--ck-accent);
+  color:#fff;
+  box-shadow:none;
+}
+.btn-blue:hover{
+  border-color:var(--ck-accent-strong);
+  background:var(--ck-accent-strong);
+}
+.btn-outline{
+  border:1px solid var(--ck-line-strong);
+  background:var(--ck-surface);
+  color:var(--ck-accent-strong);
+  box-shadow:none;
+}
+.btn-outline:hover{
+  border-color:var(--ck-accent);
+  background:var(--ck-accent-wash);
+}
+.btn-red{
+  border:none;
+  background:var(--ck-danger);
+  color:#fff;
+  box-shadow:none;
+}
 
 /* ---- Toast：安静纸面 + 左侧状态线 ---- */
 
