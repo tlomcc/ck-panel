@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v147-rewrite-provider-model-picker';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v148-rewrite-vector-style';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -9054,8 +9054,9 @@ function rewriteConfigCardHtml(g){
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="rewrite-provider" onchange="onRewriteProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><select class="assign-model-select rewrite-model-select"'+(p?'':' disabled')+'>'+modelOptionsHtml(models,selectedModel)+'</select></label></div>'+
-    '<div class="prov-model-tools api-rewrite-model-tools"><div class="prov-model-hint">'+(models.length?'已展示 '+models.length+' 个可选模型。':'选择供应商后会展示模型列表；如列表为空，请先拉取模型。')+'</div><button class="prov-fetch-models" type="button" onclick="fetchRewriteModels(this)"'+(p?'':' disabled')+'>拉取模型</button></div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span><select class="rewrite-provider" onchange="onRewriteProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><input class="assign-model rewrite-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="从下方模型列表选择" readonly aria-readonly="true"></label></div>'+
+    '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select rewrite-model-select" onchange="pickRewriteModel(this)"'+(p?'':' disabled')+'>'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchRewriteModels(this)"'+(p?'':' disabled')+'>拉取模型</button></div>'+
+    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，模型名无需手动填写。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveRewriteConfig(this)">保存意图改写配置</button></div>'+
   '</div>';
 }
@@ -9168,16 +9169,22 @@ function onRewriteProviderChange(sel){
   var p=findLibraryProvider(sel.value);
   var models=p?cleanModelList(p.models,p.model):[];
   var selected=(p&&p.model)||models[0]||'';
+  var modelInput=row.querySelector('.rewrite-model');if(modelInput)modelInput.value=selected;
   var modelSelect=row.querySelector('.rewrite-model-select');
   if(modelSelect){modelSelect.innerHTML=modelOptionsHtml(models,selected);modelSelect.disabled=!p}
+  setModelSearchState(row,models);
   var summary=row.querySelector('.api-assign-summary');
   if(summary){
     summary.textContent=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
     summary.classList.toggle('empty',!p);
   }
   var hint=row.querySelector('.prov-model-hint');
-  if(hint)hint.textContent=models.length?'已展示 '+models.length+' 个可选模型。':'选择供应商后会展示模型列表；如列表为空，请先拉取模型。';
+  if(hint)hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，模型名无需手动填写。';
   var fetchBtn=row.querySelector('.prov-fetch-models');if(fetchBtn)fetchBtn.disabled=!p;
+}
+function pickRewriteModel(sel){
+  var row=sel.closest('.api-rewrite-card');if(!row)return;
+  var input=row.querySelector('.rewrite-model');if(input&&sel.value)input.value=sel.value;
 }
 function saveAssignment(btn){
   var row=btn.closest('.api-assign-card');if(!row)return;
@@ -9189,7 +9196,7 @@ function saveAssignment(btn){
 function saveRewriteConfig(btn){
   var row=btn.closest('.api-rewrite-card');if(!row)return;
   var providerId=String((row.querySelector('.rewrite-provider')||{}).value||'');
-  var model=String((row.querySelector('.rewrite-model-select')||{}).value||'').trim();
+  var model=String((row.querySelector('.rewrite-model')||{}).value||'').trim();
   var p=findLibraryProvider(providerId);
   if(!p){toast('请选择意图改写供应商');return}
   if(!model){toast('请选择意图改写模型');return}

@@ -1,8 +1,8 @@
 {
-  "version": "chat-v147-rewrite-provider-model-picker",
+  "version": "chat-v148-rewrite-vector-style",
   "notes": [
-    "意图改写改为供应商与模型下拉联动选择",
-    "选择供应商后自动展示该供应商的可选模型，不再手动填写模型名",
+    "意图改写完整复用向量化配置区块的布局和模型选择交互",
+    "选择供应商后自动展示可搜索的模型下拉列表，当前模型只读且无需手填",
     "保存时自动使用所选供应商的 API URL 和 API Key，并兼容旧配置"
   ]
 }

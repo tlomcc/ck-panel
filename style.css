@@ -4589,9 +4589,8 @@ body.dark .ds-day-chips i{background:#252a35;color:#aeb6c0}
 }
 .api-assign-grid select:focus,
 .api-assign-grid input:focus{border-color:var(--ck-accent)}
-.api-rewrite-model-tools{align-items:center}
-.api-rewrite-model-tools .prov-model-hint{margin-top:0}
 .api-assign-grid select:disabled{opacity:.62;cursor:default}
+.api-assign-grid input[readonly]{cursor:default}
 
 .prov-card{
   background:var(--ck-surface);border:1px solid var(--ck-border);border-radius:8px;
