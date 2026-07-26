@@ -4,8 +4,39 @@
    本文件在所有旧样式表之后加载；迁入一个组件时，必须同步删除
    旧文件（style / polish / chat / wechat / visual-overrides）中
    同组件的重复规则，因此本文件保持 0 个 !important。
-   当前已迁入：Toast、模态框/确认框、基础按钮。
+   当前已迁入：Toast、模态框/确认框、基础按钮、通用输入控件。
    ============================================================ */
+
+/* ---- 通用输入控件 ----
+   select/textarea 用 :not([hidden]) 抬到 (0,1,1)，与旧文件里
+   `.chat-settings textarea` 一类规则特异度打平，靠本文件最后加载取胜，
+   维持原 visual-overrides !important 的覆盖关系。 */
+
+input:not([type=checkbox]):not([type=radio]),
+select:not([hidden]),
+textarea:not([hidden]){
+  border-color:var(--ck-line);
+  border-radius:var(--ck-radius-sm);
+  background:var(--ck-surface-soft);
+  color:var(--ck-text);
+  box-shadow:none;
+}
+input:not([type=checkbox]):not([type=radio]):focus,
+select:not([hidden]):focus,
+textarea:not([hidden]):focus{
+  border-color:var(--ck-accent);
+  background:var(--ck-surface);
+  box-shadow:0 0 0 3px var(--ck-focus);
+}
+input::placeholder,
+textarea::placeholder{color:var(--ck-faint)}
+body.dark input:not([type=checkbox]):not([type=radio]),
+body.dark select:not([hidden]),
+body.dark textarea:not([hidden]){
+  border-color:var(--ck-line);
+  background:var(--ck-surface-soft);
+  color:var(--ck-text);
+}
 
 /* ---- 基础按钮 ---- */
 

@@ -1,8 +1,8 @@
 {
-  "version": "chat-v152-components-btn",
+  "version": "chat-v153-components-input",
   "notes": [
-    "Phase 6 第二组继续：基础按钮 .btn/.btn-blue/.btn-outline/.btn-red/.btn-sm 迁入 components.css",
-    "删除 style/polish/wechat/visual-overrides 中全部基础按钮重复规则，深浅色统一走 token",
-    "作用域内按钮微调（graph-actions、api-error-actions 等）保留在原文件"
+    "Phase 6 第二组继续：通用输入控件（input/select/textarea + focus/placeholder/深色）迁入 components.css",
+    "visual-overrides 删除对应重复规则；各页面作用域内输入微调保留在原文件",
+    "components.css 维持 0 个 !important，靠加载顺序与特异度取胜"
   ]
 }

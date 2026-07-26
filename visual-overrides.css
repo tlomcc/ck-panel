@@ -114,23 +114,7 @@ button,input,select,textarea{font-family:var(--ck-font-body)!important}
   background:var(--ck-accent-strong)!important;
 }
 
-input:not([type=checkbox]):not([type=radio]),
-select,
-textarea{
-  border-color:var(--ck-line)!important;
-  border-radius:var(--ck-radius-sm)!important;
-  background:var(--ck-surface-soft)!important;
-  color:var(--ck-text)!important;
-  box-shadow:none!important;
-}
-input:not([type=checkbox]):not([type=radio]):focus,
-select:focus,
-textarea:focus{
-  border-color:var(--ck-accent)!important;
-  background:var(--ck-surface)!important;
-  box-shadow:0 0 0 3px var(--ck-focus)!important;
-}
-input::placeholder,textarea::placeholder{color:var(--ck-faint)!important}
+/* 通用输入控件（含 focus/placeholder/深色）已迁入 components.css（Phase 6 第二组） */
 
 /* 搜索图标：单色描边放大镜 SVG（信息网 eg-search + 事实库 facts-search 统一） */
 .eg-search-icon svg,
@@ -598,9 +582,7 @@ body.dark .fact-card{
   color:var(--ck-text)!important;
 }
 body.dark .archive-spine{background:linear-gradient(118deg,var(--ck-accent-wash),var(--ck-surface) 54%,rgba(176,139,199,.065))!important}
-body.dark input:not([type=checkbox]):not([type=radio]),
-body.dark select,
-body.dark textarea{border-color:var(--ck-line)!important;background:var(--ck-surface-soft)!important;color:var(--ck-text)!important}
+/* 深色通用输入已迁入 components.css（Phase 6 第二组） */
 
 /* ---- Chat attachment tray: CK tool sheet, not a WeChat grid ---- */
 body.chat-active .chat-plus-panel{background:var(--ck-surface-overlay)!important;backdrop-filter:blur(18px) saturate(118%)!important;-webkit-backdrop-filter:blur(18px) saturate(118%)!important}
