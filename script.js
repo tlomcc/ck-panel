@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v148-rewrite-vector-style';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v149-standalone-facts-api-center';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -938,11 +938,11 @@ function archiveOverviewRenderTypes(graph){
 }
 function archiveOverviewRenderFields(facts){
   var box=document.getElementById('archive-field-list');if(!box)return;
-  var rows=((facts&&facts.facets&&facts.facets.fields)||[]).slice(0,7),max=rows.reduce(function(value,row){return Math.max(value,numOr(row&&row.count,0))},1);
-  if(!rows.length){box.innerHTML='<div class="empty-state small">当前没有可统计的事实字段</div>';return}
+  var rows=((facts&&facts.facets&&(facts.facets.categories||facts.facets.fields))||[]).slice(0,7),max=rows.reduce(function(value,row){return Math.max(value,numOr(row&&row.count,0))},1);
+  if(!rows.length){box.innerHTML='<div class="empty-state small">当前没有可统计的 Fact 分类</div>';return}
   box.innerHTML=rows.map(function(row){
     var count=numOr(row.count,0),pct=Math.max(6,Math.round(count*100/max)),encoded=encodeURIComponent(String(row.value||''));
-    return '<button class="archive-ledger-row archive-field-row" type="button" onclick="openArchiveField(\''+escAttr(encoded)+'\')"><span class="archive-ledger-label"><i>#</i><b>'+esc(row.label||entityFactLabel(row.value)||'事实')+'</b></span><span class="archive-ledger-meter"><i style="width:'+pct+'%"></i></span><strong>'+count+'</strong></button>';
+    return '<button class="archive-ledger-row archive-field-row" type="button" onclick="openArchiveField(\''+escAttr(encoded)+'\')"><span class="archive-ledger-label"><i>#</i><b>'+esc(row.label||row.value||'未分类')+'</b></span><span class="archive-ledger-meter"><i style="width:'+pct+'%"></i></span><strong>'+count+'</strong></button>';
   }).join('');
 }
 function archiveOverviewRenderEntities(graph){
@@ -957,10 +957,10 @@ function archiveOverviewRenderEntities(graph){
 function archiveOverviewRenderFacts(facts){
   var box=document.getElementById('archive-recent-facts');if(!box)return;
   var rows=Array.isArray(facts&&facts.items)?facts.items.slice(0,6):[];
-  if(!rows.length){box.innerHTML='<div class="empty-state small">当前没有 Active facts</div>';return}
+  if(!rows.length){box.innerHTML='<div class="empty-state small">当前没有有效 Fact</div>';return}
   box.innerHTML=rows.map(function(row){
-    var type=factTypeClass(row.entity_type),key=encodeURIComponent(String(row.fact_key||''));
-    return '<button class="archive-record archive-fact-record" type="button" onclick="openArchiveFact(\''+escAttr(key)+'\')"><span class="archive-record-badge fact-badge-'+escAttr(type)+'">'+esc(row.entity_type_label||entityTypeLabel(row.entity_type))+'</span><span class="archive-record-copy"><b>'+esc(row.entity_name||'未命名实体')+' <em>→</em> '+esc(row.field_label||row.field||'事实')+'</b><small>'+esc(shortText(row.value||'暂无内容',72))+'</small></span><span class="archive-record-date">'+esc(archiveOverviewSeenLabel(row.last_seen))+'</span></button>';
+    var key=encodeURIComponent(factRowId(row));
+    return '<button class="archive-record archive-fact-record" type="button" onclick="openArchiveFact(\''+escAttr(key)+'\')"><span class="archive-record-badge fact-badge-topic">'+esc(factRowCategory(row))+'</span><span class="archive-record-copy"><b>'+esc((factRowPeople(row).slice(0,2).join(' / '))||'未标人物')+'</b><small>'+esc(shortText(factRowText(row)||'暂无正文',72))+'</small></span><span class="archive-record-date">'+esc(row.time||archiveOverviewSeenLabel(row.last_seen))+'</span></button>';
   }).join('');
 }
 function archiveOverviewRenderHealth(graph,facts){
@@ -1040,15 +1040,14 @@ function loadArchiveFactOverview(force){
 function openArchiveType(type){entityGraphType=String(type||'all');switchPanelTab('graph')}
 function openArchiveFactFilter(field,vectorStatus){
   field=String(field||'');vectorStatus=String(vectorStatus||'');
-  var query=document.getElementById('facts-query'),type=document.getElementById('facts-type'),fieldEl=document.getElementById('facts-field'),vector=document.getElementById('facts-vector'),sort=document.getElementById('facts-sort'),clear=document.getElementById('facts-query-clear');
-  if(query)query.value='';if(clear)clear.classList.remove('show');if(type)type.value='';
-  if(fieldEl){
-    if(field&&!Array.prototype.some.call(fieldEl.options,function(option){return option.value===field})){
-      var option=document.createElement('option');option.value=field;option.textContent=entityFactLabel(field);fieldEl.appendChild(option);
+  var query=document.getElementById('facts-query'),category=document.getElementById('facts-category'),person=document.getElementById('facts-person'),state=document.getElementById('facts-state'),sort=document.getElementById('facts-sort'),clear=document.getElementById('facts-query-clear');
+  if(query)query.value='';if(clear)clear.classList.remove('show');if(person)person.value='';if(state)state.value='all';
+  if(category){
+    if(field&&!Array.prototype.some.call(category.options,function(option){return option.value===field})){
+      var option=document.createElement('option');option.value=field;option.textContent=field;category.appendChild(option);
     }
-    fieldEl.value=field;
+    category.value=field;
   }
-  if(vector)vector.value=vectorStatus;
   factLibrarySort='recent';if(sort)sort.value='recent';
   var hadData=!!factLibraryData;
   switchPanelTab('facts');
@@ -1248,15 +1247,7 @@ function renderEntityGraph(data){
     },0);
   }
 }
-/* ===== 事实库 · 只读首版 ===== */
-function factStatusLabel(status){
-  var map={ok:'向量正常',missing:'缺失向量',zero:'零向量',dimension_error:'维度异常',invalid:'格式异常'};
-  return map[String(status||'missing')]||'待检查';
-}
-function factStatusClass(status){
-  var key=String(status||'missing').replace(/[^a-z_]/g,'');
-  return 'fact-health-'+(key||'missing');
-}
+/* ===== Fact / 档案共享只读助手 ===== */
 function factTypeClass(type){
   var t=String(type||'topic').toLowerCase();
   return ENTITY_TYPE_ORDER.indexOf(t)>=0?t:'topic';
@@ -1264,21 +1255,6 @@ function factTypeClass(type){
 function factLibraryFilterValue(id){
   var el=document.getElementById(id);
   return el?String(el.value||'').trim():'';
-}
-function factLibraryUrl(offset,force){
-  var params=[];
-  function add(name,value){if(value!==undefined&&value!==null&&String(value)!=='')params.push(encodeURIComponent(name)+'='+encodeURIComponent(String(value)))}
-  add('state','active');
-  add('q',factLibraryFilterValue('facts-query'));
-  add('entity_type',factLibraryFilterValue('facts-type'));
-  add('field',factLibraryFilterValue('facts-field'));
-  add('vector_status',factLibraryFilterValue('facts-vector'));
-  add('recalled',factLibraryFilterValue('facts-recalled'));
-  add('sort',factLibrarySort||'recent');
-  add('offset',offset||0);
-  add('limit',100);
-  if(force){add('refresh','1');add('_t',Date.now())}
-  return ENTITY_FACTS_URL+'?'+params.join('&');
 }
 function factLibraryFetch(offset,force){
   return panelDataFetch(factLibraryUrl(offset,force),{cache:'no-store'},{label:'CK 事实库'});
@@ -1294,63 +1270,6 @@ function factFacetOptions(id,facets,allLabel){
   el.innerHTML=html;
   if(selected&&Array.prototype.some.call(el.options,function(opt){return opt.value===selected}))el.value=selected;
 }
-function renderFactFacets(data){
-  var facets=data&&data.facets||{};
-  factFacetOptions('facts-type',facets.entity_types,'全部类型');
-  factFacetOptions('facts-field',facets.fields,'全部字段');
-}
-function renderFactStats(data){
-  var box=document.getElementById('facts-stats');if(!box)return;
-  var c=data&&data.counts||{};
-  var attention=numOr(c.vector_missing,0)+numOr(c.vector_zero,0)+numOr(c.vector_dimension_error,0)+numOr(c.vector_invalid,0)+numOr(data&&data.stale_vector_count,0);
-  var pills=[
-    {n:numOr(c.active,c.total||0),l:'Active facts',tone:'accent'},
-    {n:numOr(c.vector_ok,0),l:'向量正常',tone:'ok'},
-    {n:attention,l:'待检查',tone:attention?'warn':'ok'},
-    {n:numOr(c.recalled,0),l:'已召回',tone:'ok'},
-    {n:numOr(c.never_recalled,0),l:'从未召回',tone:'plain'},
-    {n:numOr((data&&data.pagination||{}).total,0),l:'当前结果',tone:'plain'}
-  ];
-  box.innerHTML=pills.map(function(p){return '<div class="facts-stat facts-stat-'+p.tone+'"><b>'+p.n+'</b><span>'+esc(p.l)+'</span></div>'}).join('');
-  var count=document.getElementById('facts-count');
-  if(count)count.textContent='显示 '+numOr((data&&data.pagination||{}).total,0)+' 条 · Active 共 '+numOr(c.active,c.total||0)+' 条 · 最终注入累计 '+numOr(c.recall_count_total,0)+' 次';
-  var updated=document.getElementById('facts-updated');
-  if(updated)updated.textContent=data&&data.updated?('档案更新于 '+data.updated):'已读取当前档案';
-}
-function renderFactCard(row){
-  var type=factTypeClass(row.entity_type),health=String(row.vector_status||'missing');
-  var confidence=Math.round(Math.max(0,Math.min(1,Number(row.confidence)||0))*100);
-  var aliases=Array.isArray(row.aliases)?row.aliases.filter(Boolean).slice(0,2):[];
-  var alias=aliases.length?'<span class="fact-card-alias">'+esc(aliases.join(' / '))+'</span>':'';
-  var encoded=encodeURIComponent(String(row.fact_key||''));
-  var recallCount=numOr(row.recall_count_total,0);
-  var recallMeta=recallCount?'召回 '+recallCount+' 次'+(row.last_recalled_at?' · '+row.last_recalled_at:''):'从未召回';
-  return '<button class="fact-card fact-type-'+type+'" type="button" data-fact-key="'+escAttr(encoded)+'" aria-label="查看 '+escAttr((row.entity_name||'')+' '+(row.field_label||''))+'">'+
-    '<span class="fact-card-spine" aria-hidden="true"><i></i><i></i><i></i></span><span class="fact-card-main">'+
-    '<span class="fact-card-top"><span class="fact-badge fact-badge-'+type+'">'+esc(row.entity_type_label||entityTypeLabel(type))+'</span><strong>'+esc(row.entity_name||row.entity_key||'未命名实体')+'</strong>'+alias+'<em>→</em><span class="fact-card-field">'+esc(row.field_label||row.field||'事实')+'</span></span>'+
-    '<span class="fact-card-value">'+esc(row.value||'暂无内容')+'</span>'+
-    '<span class="fact-card-meta"><span>'+esc(row.last_seen||'暂无日期')+'</span><span>置信度 '+confidence+'%</span><span>'+esc(recallMeta)+'</span><span class="fact-health '+factStatusClass(health)+'">'+esc(factStatusLabel(health))+'</span></span>'+
-    '</span></button>';
-}
-function renderFactCards(){
-  var box=document.getElementById('facts-cards');if(!box)return;
-  if(!box.dataset.factDelegated){
-    box.dataset.factDelegated='1';
-    box.addEventListener('click',function(ev){
-      var card=ev.target&&ev.target.closest?ev.target.closest('.fact-card[data-fact-key]'):null;
-      if(!card||!box.contains(card))return;
-      var key='';try{key=decodeURIComponent(card.getAttribute('data-fact-key')||'')}catch(e){key=''}
-      if(key)openFactDetail(key);
-    });
-  }
-  if(!factLibraryData){box.innerHTML='<div class="empty-state small">进入本页后自动读取...</div>';return}
-  if(!factLibraryItems.length){
-    var q=factLibraryFilterValue('facts-query');
-    box.innerHTML='<div class="facts-empty"><b>'+(q?'没有匹配的事实':'当前没有可展示的 Active facts')+'</b><span>'+(q?'试试换一个实体名、字段或事实内容。':'网关尚未返回可主动召回的事实。')+'</span></div>';
-    return;
-  }
-  box.innerHTML=factLibraryItems.map(renderFactCard).join('');
-}
 function renderFactLibrary(data){
   factLibraryData=data||null;
   renderFactFacets(data||{});
@@ -1360,41 +1279,6 @@ function renderFactLibrary(data){
   factLibraryHasMore=!!(data&&data.pagination&&data.pagination.has_more);
   if(more){more.hidden=!factLibraryHasMore;more.disabled=factLibraryLoading;more.textContent=factLibraryLoading?'读取中…':'继续加载';}
   if(hint)hint.textContent=factLibraryHasMore?'还可以继续加载下一批':'已到当前筛选结果末尾';
-}
-function loadFactLibrary(reset,force){
-  reset=reset!==false;
-  if(factLibraryLoading&&!reset)return Promise.resolve();
-  var requestId=++factLibraryRequestId;
-  var offset=reset?0:factLibraryOffset;
-  factLibraryLoading=true;
-  var status=document.getElementById('facts-status');
-  var box=document.getElementById('facts-cards');
-  var more=document.getElementById('facts-more');
-  if(reset&&box)box.innerHTML='<div class="empty-state small">正在读取事实库…</div>';
-  if(status)status.textContent=reset?'正在读取 Active facts…':'正在加载下一批 facts…';
-  if(more)more.disabled=true;
-  return factLibraryFetch(offset,!!force).then(function(resp){
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    return resp.json();
-  }).then(function(data){
-    if(requestId!==factLibraryRequestId)return;
-    if(!data||!Array.isArray(data.items)||!data.pagination)throw new Error('事实库返回格式无效');
-    if(reset)factLibraryItems=[];
-    factLibraryItems=factLibraryItems.concat(data.items);
-    factLibraryOffset=numOr(data.pagination.next_offset,offset+data.items.length);
-    factLibraryHasMore=!!data.pagination.has_more;
-    renderFactLibrary(data);
-    if(status)status.textContent='只读展示 Active facts；召回次数只在最终注入模型提示词时累计，不参与排序。';
-  }).catch(function(err){
-    if(requestId!==factLibraryRequestId)return;
-    if(status)status.textContent='事实库暂时读取失败：'+(err&&err.message?err.message:'请稍后重试');
-    if(box)box.innerHTML='<div class="facts-empty facts-empty-error"><b>暂时读不到事实库</b><span>请点击右上角“刷新”重试；不会修改任何事实数据。</span></div>';
-    if(more)more.hidden=true;
-  }).finally(function(){
-    if(requestId!==factLibraryRequestId)return;
-    factLibraryLoading=false;
-    if(more){more.disabled=false;more.hidden=!factLibraryHasMore;more.textContent='继续加载';}
-  });
 }
 function loadMoreFacts(){if(factLibraryHasMore&&!factLibraryLoading)loadFactLibrary(false,false)}
 function onFactSearch(value){
@@ -1411,12 +1295,6 @@ function clearFactSearch(){
 }
 function onFactFilterChange(){loadFactLibrary(true,false)}
 function onFactSortChange(value){factLibrarySort=String(value||'recent');loadFactLibrary(true,false)}
-function clearFactFilters(){
-  ['facts-query','facts-type','facts-field','facts-vector','facts-recalled'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
-  var clear=document.getElementById('facts-query-clear');if(clear)clear.classList.remove('show');
-  var sort=document.getElementById('facts-sort');if(sort){sort.value='recent';factLibrarySort='recent'}
-  loadFactLibrary(true,false);
-}
 function renderEntityDetail(data,type,key){
   if(type==='relation'){
     var rel=(data.recent_relations||[])[parseInt(key,10)];
@@ -1441,63 +1319,187 @@ function renderEntityDetail(data,type,key){
   if(rels.length)html+='<div class="entity-detail-block"><b>相关关系</b>'+rels.map(function(r){return '<p>'+esc(r.source||'')+' → '+esc(r.target||'')+'：'+esc(r.relation||'')+(r.detail?'，'+esc(r.detail):'')+'</p>'}).join('')+'</div>';
   return html+rawEntityBlock(node);
 }
-function renderFactRefs(refs){
-  if(!Array.isArray(refs)||!refs.length)return '<p class="fact-detail-muted">暂无来源指针</p>';
-  return refs.slice().reverse().map(function(ref){
-    if(typeof ref==='string')return '<p>'+esc(ref)+'</p>';
-    var bits=[ref.date,ref.path].filter(Boolean).join(' · '),body=ref.quote||ref.summary||'';
-    return '<p><strong>'+esc(bits||'来源')+'</strong>'+(body?'：'+esc(body):'')+'</p>';
-  }).join('');
-}
-function renderFactHistory(history){
-  if(!Array.isArray(history)||!history.length)return '<p class="fact-detail-muted">暂无被替代的旧值</p>';
-  return history.slice().reverse().map(function(item){
-    var value=item&&typeof item==='object'?entityFactText(item.value):String(item||''),date=item&&typeof item==='object'?(item.last_seen||''):'';
-    return '<div class="fact-history-row"><span>'+esc(value||'旧值')+'</span><small>'+esc(date||'历史')+'</small></div>';
-  }).join('');
-}
-function renderFactDetail(item){
-  item=item||{};
-  var entity=item.entity||{},vector=item.vector||{},health=String(item.vector_status||vector.status||'missing');
-  var confidence=Math.round(Math.max(0,Math.min(1,Number(item.confidence)||0))*100);
-  var key=encodeURIComponent(String(item.entity_key||entity.key||''));
-  var aliases=Array.isArray(item.aliases)?item.aliases.filter(Boolean):[];
-  var recallTotal=numOr(item.recall_count_total,0),recallFull=numOr(item.recall_count_full,0),recallFact=numOr(item.recall_count_fact_only,0);
-  var recallSources={vector_original:'原始向量',vector_rewrite:'改写向量',vector_expanded:'扩大向量',keyword_fallback:'关键词',exact_alias:'实体/别名',fact_field:'字段',fact_value:'事实值',explicit_all:'全部事实'};
-  var lastSources=(Array.isArray(item.last_match_sources)?item.last_match_sources:[]).map(function(source){return recallSources[source]||source});
-  var lastMode=item.last_recall_mode==='fact_only'?'仅 Fact':(item.last_recall_mode==='full'?'全量召回':'-');
-  var html='<div class="fact-detail-head"><div class="facts-kicker"><span></span>FACT · ACTIVE</div><h3>'+esc(item.entity_name||entity.name||'未命名实体')+'</h3><p>'+esc(item.entity_type_label||entity.type_label||entityTypeLabel(entity.type))+' · '+esc(item.field_label||item.field||'事实')+'</p></div>';
-  if(aliases.length)html+='<div class="fact-detail-chips">'+aliases.map(function(a){return '<span>'+esc(a)+'</span>'}).join('')+'</div>';
-  html+='<div class="fact-detail-value"><small>事实值</small><strong>'+esc(item.value||'暂无内容')+'</strong></div>';
-  html+='<div class="fact-detail-grid"><div><span>置信度</span><b>'+confidence+'%</b></div><div><span>证据次数</span><b>'+numOr(item.evidence_count,0)+'</b></div><div><span>首次出现</span><b>'+esc(item.first_seen||'-')+'</b></div><div><span>最后印证</span><b>'+esc(item.last_seen||'-')+'</b></div></div>';
-  html+='<div class="fact-detail-block"><b>向量健康</b><p><span class="fact-health '+factStatusClass(health)+'">'+esc(factStatusLabel(health))+'</span> <span class="fact-detail-dimension">'+numOr(item.vector_dimension||vector.dimension,0)+' 维</span></p></div>';
-  html+='<div class="fact-detail-block"><b>召回表现</b><div class="fact-detail-grid"><div><span>累计</span><b>'+recallTotal+'</b></div><div><span>全量召回</span><b>'+recallFull+'</b></div><div><span>仅 Fact</span><b>'+recallFact+'</b></div><div><span>最后模式</span><b>'+esc(lastMode)+'</b></div></div><p class="fact-detail-muted">'+(recallTotal?('最近 '+esc(item.last_recalled_at||'-')+' · rank '+numOr(item.last_rank,0)+' · score '+Number(item.last_score||0).toFixed(4)+(lastSources.length?' · '+esc(lastSources.join(' / ')):'')):'尚未进入过最终注入；候选命中不会计数。')+'</p></div>';
-  html+='<div class="fact-detail-block"><b>来源</b>'+renderFactRefs(item.source_refs)+'</div>';
-  html+='<div class="fact-detail-block"><b>历史旧值</b>'+renderFactHistory(item.history)+'</div>';
-  html+='<div class="fact-detail-actions"><button type="button" class="btn btn-outline btn-sm" onclick="openFactEntity(\''+escAttr(key)+'\')">查看所属小档案</button></div>';
-  html+='<details class="entity-raw"><summary>技术信息</summary><pre>'+esc(JSON.stringify({fact_key:item.fact_key,entity_key:item.entity_key,field:item.field,vector_status:health,vector_dimension:item.vector_dimension,recall_count_total:recallTotal,recall_count_full:recallFull,recall_count_fact_only:recallFact,last_recall_mode:item.last_recall_mode,last_match_sources:item.last_match_sources,last_rank:item.last_rank,last_score:item.last_score},null,2))+'</pre></details>';
-  return html;
-}
-function openFactDetail(factKey){
-  var sheet=document.getElementById('eg-detail-sheet'),body=document.getElementById('eg-detail-body');
-  if(!sheet||!body)return;
-  body.innerHTML='<div class="fact-detail-loading">正在读取这条事实…</div>';
-  body.scrollTop=0;sheet.classList.add('show');document.body.classList.add('eg-sheet-open');
-  var url=ENTITY_FACTS_URL+'/'+encodeURIComponent(String(factKey||''));
-  panelDataFetch(url,{cache:'no-store'},{label:'CK 事实详情'}).then(function(resp){
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    return resp.json();
-  }).then(function(data){
-    if(!data||!data.item)throw new Error('事实详情格式无效');
-    body.innerHTML=renderFactDetail(data.item);body.scrollTop=0;
-  }).catch(function(err){body.innerHTML='<div class="facts-empty facts-empty-error"><b>这条事实暂时读不到</b><span>'+esc(err&&err.message?err.message:'请稍后重试')+'</span></div>'});
-}
 function openFactEntity(encodedKey){
   var key='';try{key=decodeURIComponent(String(encodedKey||''))}catch(e){key=String(encodedKey||'')}
   if(!key)return;
   factPendingEntityKey=key;
   closeEntityDetail();
   switchPanelTab('graph',{forceGraphRefresh:false});
+}
+
+/* ===== 独立 Fact 库 v2：动态分类、原文锚点与版本历史 ===== */
+function factStateLabel(state){
+  return String(state||'active').toLowerCase()==='expired'?'过期':'有效';
+}
+function factStateClass(state){
+  return String(state||'active').toLowerCase()==='expired'?'is-expired':'is-active';
+}
+function factRowId(row){return String(row&&((row.fact_id||row.fact_key))||'')}
+function factRowText(row){return String(row&&((row.text||row.value||row.summary))||'')}
+function factRowCategory(row){return String(row&&((row.category||row.field_label||row.field))||'未分类').trim()||'未分类'}
+function factRowPeople(row){
+  var people=Array.isArray(row&&row.people)?row.people:[];
+  if(!people.length&&row&&row.entity_name)people=[row.entity_name];
+  var out=[],seen=Object.create(null);
+  people.forEach(function(name){name=String(name||'').trim();if(name&&!seen[name]){seen[name]=1;out.push(name)}});
+  return out;
+}
+function factRowSource(row){
+  var source=row&&row.source&&typeof row.source==='object'?row.source:{};
+  var refs=Array.isArray(row&&row.source_refs)?row.source_refs:[];
+  if(!Object.keys(source).length&&refs.length){
+    var ref=refs[refs.length-1];
+    source=ref&&typeof ref==='object'?ref:{date:String(ref||'')};
+  }
+  return source;
+}
+function factSourceLabel(source){
+  source=source||{};
+  var path=String(source.path||'').replace(/^\/+/,''),segment=String(source.segment_id||source.segment||'').trim();
+  var label=path||(source.date?('chatlog/'+source.date):'chatlog 原文');
+  return label+(segment?(' / '+segment):'');
+}
+function factSourceUrl(source){
+  source=source||{};
+  var raw=String(source.url||'').trim();
+  if(/^https:\/\/github\.com\/tlomcc\/memory-server\/(?:blob|tree)\/main\//i.test(raw))return raw;
+  var path=String(source.path||'').replace(/^\/+/,''),repo=String(source.repo||'tlomcc/memory-server');
+  if(!/^tlomcc\/memory-server$/i.test(repo)||!/^chat-log\/[A-Za-z0-9._-]+\.md$/.test(path))return '';
+  var url='https://github.com/tlomcc/memory-server/blob/main/'+path.split('/').map(encodeURIComponent).join('/');
+  var start=Math.max(0,parseInt(source.start_line,10)||0),end=Math.max(start,parseInt(source.end_line,10)||0);
+  if(start)url+='#L'+start+(end&&end!==start?'-L'+end:'');
+  return url;
+}
+function factLibraryUrl(offset,force){
+  var params=[];
+  function add(name,value){if(value!==undefined&&value!==null&&String(value)!=='')params.push(encodeURIComponent(name)+'='+encodeURIComponent(String(value)))}
+  add('state',factLibraryFilterValue('facts-state')||'all');
+  add('q',factLibraryFilterValue('facts-query'));
+  add('category',factLibraryFilterValue('facts-category'));
+  add('person',factLibraryFilterValue('facts-person'));
+  add('recalled',factLibraryFilterValue('facts-recalled'));
+  add('sort',factLibrarySort||'recent');
+  add('offset',offset||0);add('limit',100);
+  if(force){add('refresh','1');add('_t',Date.now())}
+  return ENTITY_FACTS_URL+'?'+params.join('&');
+}
+function renderFactFacets(data){
+  var facets=data&&data.facets||{};
+  factFacetOptions('facts-category',facets.categories||facets.fields,'全部分类');
+  factFacetOptions('facts-person',facets.people||facets.entities,'全部人物');
+}
+function renderFactStats(data){
+  var box=document.getElementById('facts-stats');if(!box)return;
+  var c=data&&data.counts||{},facets=data&&data.facets||{};
+  var categories=(facets.categories||facets.fields||[]).length,people=(facets.people||facets.entities||[]).length;
+  var pills=[
+    {n:numOr(c.active,0),l:'有效 Fact',tone:'accent'},
+    {n:numOr(c.expired,0),l:'过期',tone:numOr(c.expired,0)?'warn':'plain'},
+    {n:categories,l:'分类',tone:'plain'},
+    {n:people,l:'关联人物',tone:'plain'},
+    {n:numOr(c.recalled,0),l:'已召回',tone:'ok'},
+    {n:numOr(c.recall_count_total,0),l:'累计召回',tone:'plain'}
+  ];
+  box.innerHTML=pills.map(function(p){return '<div class="facts-stat facts-stat-'+p.tone+'"><b>'+p.n+'</b><span>'+esc(p.l)+'</span></div>'}).join('');
+  var count=document.getElementById('facts-count');
+  if(count)count.textContent='当前筛选 '+numOr((data&&data.pagination||{}).total,0)+' 条 · 全库 '+numOr(c.total,numOr(c.active,0)+numOr(c.expired,0))+' 条';
+  var updated=document.getElementById('facts-updated');
+  if(updated)updated.textContent=data&&data.updated?('更新于 '+data.updated):'已读取当前 Fact 库';
+}
+function renderFactCard(row){
+  var id=factRowId(row),text=factRowText(row),category=factRowCategory(row),people=factRowPeople(row),source=factRowSource(row);
+  var encoded=encodeURIComponent(id),state=String(row.status||row.state||'active').toLowerCase(),recallCount=numOr(row.recall_count,row.recall_count_total||0);
+  var recalled=recallCount?('召回 '+recallCount+' 次'+(row.last_recalled_at?' · '+row.last_recalled_at:'')):'从未召回';
+  var sourceUrl=factSourceUrl(source),sourceHtml=sourceUrl?'<a class="fact-source-link" href="'+escAttr(sourceUrl)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">'+esc(factSourceLabel(source))+'</a>':'<span class="fact-source-missing">'+esc(factSourceLabel(source))+'</span>';
+  var peopleHtml=people.length?people.map(function(name){return '<span class="fact-person-chip">'+esc(name)+'</span>'}).join(''):'<span class="fact-person-empty">未标人物</span>';
+  return '<article class="fact-card '+factStateClass(state)+'" data-fact-key="'+escAttr(encoded)+'" role="button" tabindex="0" aria-label="查看 '+escAttr(category+' '+text)+'">'+
+    '<span class="fact-card-time">'+esc(row.time||row.last_seen||row.first_seen||'时间待确认')+'</span>'+
+    '<span class="fact-card-main"><span class="fact-card-top"><span class="fact-category-label">'+esc(category)+'</span><span class="fact-state '+factStateClass(state)+'">'+factStateLabel(state)+'</span></span>'+
+    '<strong class="fact-card-value">'+esc(text||'暂无正文')+'</strong><span class="fact-people-row">'+peopleHtml+'</span>'+
+    '<span class="fact-card-meta"><span>证据 '+numOr(row.evidence_count,1)+' 次</span><span>'+esc(recalled)+'</span><span>'+sourceHtml+'</span></span></span><span class="fact-card-arrow" aria-hidden="true">›</span></article>';
+}
+function renderFactCards(){
+  var box=document.getElementById('facts-cards');if(!box)return;
+  if(!box.dataset.factDelegated){
+    box.dataset.factDelegated='1';
+    function openFrom(target){
+      var card=target&&target.closest?target.closest('.fact-card[data-fact-key]'):null;
+      if(!card||!box.contains(card))return;
+      var key='';try{key=decodeURIComponent(card.getAttribute('data-fact-key')||'')}catch(e){key=''}
+      if(key)openFactDetail(key);
+    }
+    box.addEventListener('click',function(ev){if(ev.target&&ev.target.closest&&ev.target.closest('a'))return;openFrom(ev.target)});
+    box.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();openFrom(ev.target)}});
+  }
+  if(!factLibraryData){box.innerHTML='<div class="empty-state small">进入本页后自动读取...</div>';return}
+  if(!factLibraryItems.length){
+    var q=factLibraryFilterValue('facts-query');
+    box.innerHTML='<div class="facts-empty"><b>'+(q?'没有匹配的 Fact':'当前没有可展示的 Fact')+'</b><span>'+(q?'换一个正文、人物或分类关键词再试。':'提取脚本尚未生成数据，或当前筛选没有结果。')+'</span></div>';return;
+  }
+  var groups=[],byCategory=Object.create(null);
+  factLibraryItems.forEach(function(row){var category=factRowCategory(row);if(!byCategory[category]){byCategory[category]=[];groups.push(category)}byCategory[category].push(row)});
+  box.innerHTML=groups.map(function(category){
+    var rows=byCategory[category];
+    return '<section class="fact-category-group"><header><div><span class="fact-category-mark" aria-hidden="true"></span><h3>'+esc(category)+'</h3></div><b>'+rows.length+'</b></header><div class="fact-category-items">'+rows.map(renderFactCard).join('')+'</div></section>';
+  }).join('');
+}
+function loadFactLibrary(reset,force){
+  reset=reset!==false;if(factLibraryLoading&&!reset)return Promise.resolve();
+  var requestId=++factLibraryRequestId,offset=reset?0:factLibraryOffset;
+  factLibraryLoading=true;
+  var status=document.getElementById('facts-status'),box=document.getElementById('facts-cards'),more=document.getElementById('facts-more');
+  if(reset&&box)box.innerHTML='<div class="empty-state small">正在读取 Fact 库…</div>';
+  if(status)status.textContent=reset?'正在读取独立 Fact 库…':'正在加载下一批 Fact…';if(more)more.disabled=true;
+  return factLibraryFetch(offset,!!force).then(function(resp){if(!resp.ok)throw new Error('HTTP '+resp.status);return resp.json()}).then(function(data){
+    if(requestId!==factLibraryRequestId)return;
+    if(!data||!Array.isArray(data.items)||!data.pagination)throw new Error('Fact 库返回格式无效');
+    if(reset)factLibraryItems=[];factLibraryItems=factLibraryItems.concat(data.items);
+    factLibraryOffset=numOr(data.pagination.next_offset,offset+data.items.length);factLibraryHasMore=!!data.pagination.has_more;
+    renderFactLibrary(data);
+    if(status)status.textContent=data.source==='standalone'
+      ?'只读展示独立 Fact；分类由提取模型按实际内容生成。'
+      :'独立 Fact 尚未初始化，当前临时显示旧小档案 Fact；新库生成后会自动切换。';
+  }).catch(function(err){
+    if(requestId!==factLibraryRequestId)return;
+    if(status)status.textContent='Fact 库暂时读取失败：'+(err&&err.message?err.message:'请稍后重试');
+    if(box)box.innerHTML='<div class="facts-empty facts-empty-error"><b>暂时读不到 Fact 库</b><span>点击右上角“刷新”重试；页面不会修改任何 Fact。</span></div>';if(more)more.hidden=true;
+  }).finally(function(){if(requestId!==factLibraryRequestId)return;factLibraryLoading=false;if(more){more.disabled=false;more.hidden=!factLibraryHasMore;more.textContent='继续加载'}});
+}
+function clearFactFilters(){
+  ['facts-query','facts-category','facts-person','facts-recalled'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
+  var state=document.getElementById('facts-state');if(state)state.value='all';
+  var clear=document.getElementById('facts-query-clear');if(clear)clear.classList.remove('show');
+  var sort=document.getElementById('facts-sort');if(sort){sort.value='recent';factLibrarySort='recent'}loadFactLibrary(true,false);
+}
+function renderFactSourceDetail(source){
+  var url=factSourceUrl(source),label=factSourceLabel(source),positions=[];
+  if(source&&source.start!==undefined)positions.push('字符 '+source.start+'-'+source.end);
+  if(source&&source.start_line)positions.push('行 '+source.start_line+(source.end_line&&source.end_line!==source.start_line?('-'+source.end_line):''));
+  return '<div class="fact-source-detail"><p>'+(url?('<a href="'+escAttr(url)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>'):esc(label))+'</p>'+(positions.length?'<small>'+esc(positions.join(' · '))+'</small>':'')+'</div>';
+}
+function renderFactHistory(history){
+  if(!Array.isArray(history)||!history.length)return '<p class="fact-detail-muted">暂无被覆盖的旧值</p>';
+  return history.slice().reverse().map(function(item){
+    var value=item&&typeof item==='object'?String(item.text||item.value||''):String(item||''),date=item&&typeof item==='object'?String(item.expired_at||item.time||item.last_seen||''):'';
+    return '<div class="fact-history-row"><span>'+esc(value||'旧值')+'</span><small>'+esc(date||'历史版本')+'</small></div>';
+  }).join('');
+}
+function renderFactDetail(item){
+  item=item||{};var source=factRowSource(item),people=factRowPeople(item),state=String(item.status||item.state||'active').toLowerCase();
+  var recallTotal=numOr(item.recall_count,item.recall_count_total||0),health=String(item.vector_status||'missing');
+  var html='<div class="fact-detail-head"><div class="facts-kicker"><span></span>FACT · '+(state==='expired'?'EXPIRED':'ACTIVE')+'</div><h3>'+esc(factRowCategory(item))+'</h3><p>'+esc(item.time||item.last_seen||'时间待确认')+' · '+factStateLabel(state)+'</p></div>';
+  html+='<div class="fact-detail-value"><small>正文</small><strong>'+esc(factRowText(item)||'暂无正文')+'</strong></div>';
+  if(people.length)html+='<div class="fact-detail-chips">'+people.map(function(name){return '<span>'+esc(name)+'</span>'}).join('')+'</div>';
+  html+='<div class="fact-detail-grid"><div><span>证据次数</span><b>'+numOr(item.evidence_count,1)+'</b></div><div><span>召回次数</span><b>'+recallTotal+'</b></div><div><span>最新召回</span><b>'+esc(item.last_recalled_at||'-')+'</b></div><div><span>状态</span><b>'+factStateLabel(state)+'</b></div></div>';
+  html+='<div class="fact-detail-block"><b>来源原文</b>'+renderFactSourceDetail(source)+'</div>';
+  html+='<div class="fact-detail-block"><b>历史旧值</b>'+renderFactHistory(item.history)+'</div>';
+  html+='<details class="entity-raw"><summary>技术信息</summary><pre>'+esc(JSON.stringify({fact_id:factRowId(item),category:factRowCategory(item),status:state,vector_status:health,vector_dimension:item.vector_dimension||0,recall_count:recallTotal,source:source},null,2))+'</pre></details>';
+  return html;
+}
+function openFactDetail(factId){
+  var sheet=document.getElementById('eg-detail-sheet'),body=document.getElementById('eg-detail-body');if(!sheet||!body)return;
+  body.innerHTML='<div class="fact-detail-loading">正在读取这条 Fact…</div>';body.scrollTop=0;sheet.classList.add('show');document.body.classList.add('eg-sheet-open');
+  panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(String(factId||'')),{cache:'no-store'},{label:'CK Fact 详情'}).then(function(resp){if(!resp.ok)throw new Error('HTTP '+resp.status);return resp.json()}).then(function(data){if(!data||!data.item)throw new Error('Fact 详情格式无效');body.innerHTML=renderFactDetail(data.item);body.scrollTop=0}).catch(function(err){body.innerHTML='<div class="facts-empty facts-empty-error"><b>这条 Fact 暂时读不到</b><span>'+esc(err&&err.message?err.message:'请稍后重试')+'</span></div>'});
 }
 function rawEntityBlock(obj){
   return '<details class="entity-raw"><summary>结构原文</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>';
@@ -5119,7 +5121,7 @@ function chatFormatRecallDiag(data){
     lines.push('🔎 Fact 候选｜向量 '+(counts.vector_matched||0)+'｜关键词 '+(counts.keyword_matched||0)+'｜扩大搜索 '+(counts.expanded_vector_added||0)+'｜候选 '+(counts.candidate_count||0)+'｜must-keep '+(diag.must_keep_count||0));
     lines.push('🧷 命中来源｜'+sourceText);
     lines.push('🎯 最终注入｜entity-facts '+(final.entity_facts||0)+' 条｜其它类别 '+Math.max(0,(final.total||0)-(final.entity_facts||0))+' 条｜无命中 '+(diag.fact_miss?'是':'否'));
-    lines.push('📐 选择预算｜目标 '+(factSelection.target||16)+'｜硬上限 '+(factSelection.hard_limit||32)+'｜字符 '+(factSelection.selected_chars||0)+'/'+(factSelection.char_budget||9000)+'｜预算淘汰 '+(diag.dropped_by_budget||0));
+    lines.push('📐 选择预算｜Top '+(factSelection.target||8)+'｜硬上限 '+(factSelection.hard_limit||8)+'｜字符 '+(factSelection.selected_chars||0)+'/'+(factSelection.char_budget||3200)+'｜预算淘汰 '+(diag.dropped_by_budget||0));
     lines.push('🔑 Fact keys｜'+selectedKeys.length+' 个'+(selectedKeys.length?'｜'+selectedKeys.slice(0,8).join('，'):''));
   }else{
     lines.push('📦 拉取数量｜'+src('embeddings','普通CK记忆')+'｜'+src('chatlog','chatlog索引')+'｜'+src('devlog','开发日记索引')+'｜'+src('entity_profiles','小档案','个')+'｜小档案向量 '+(vec.items||0)+'项/'+(vec.relations||0)+'关系/'+(vec.facts||0)+'Fact（'+(vec.source||'未知')+'，'+sec(vec.seconds)+'）');
@@ -8674,24 +8676,7 @@ function navTo(tab){
 }
 
 /* ---- API 配置：数据结构与状态 ---- */
-var API_TABS=[
-  {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个账号”。',groups:[
-    {key:'main_io',label:'输入与输出',info:'在这里填你要用哪家的 AI、用哪个账号（钥匙），以及默认用它家的哪个模型。想换一家 AI 或换个模型，改这里就行。'}
-  ]},
-  {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：一是把聊天里提到的人和事，自动整理成一张张小卡片；二是把每天聊的内容存起来、剪成小段，方便以后回看。',groups:[
-    {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片（这个人是谁、你们之间有过什么）。这里选让哪个 AI 来做这件整理。'},
-    {key:'mem_chatlog',label:'Chatlog离线切片',info:'把每天的聊天记录存档，并剪成一小段一小段、每段配一句简短说明，方便以后快速翻找。这里选让哪个 AI 来做这个剪段和写说明。'}
-  ]},
-  {key:'rolling',label:'滚动',info:'这一栏管“自动整理近况”：放久了的旧近况会被自动概括一下、收进长期记录里，让“最近怎么样”这块始终干净，不会越堆越乱。',groups:[
-    {key:'roll_sys',label:'Sys Rolling',info:'把“当前近况”里放了挺久（大概一周以上）的旧条目，自动概括成一两句、并进长期时间线，原来的就收起来。这样“现在的情况”不会越攒越多。这里选让哪个 AI 来做。'},
-    {key:'roll_status',label:'状态滚动',info:'每天自动把这一天的情况汇总成一份“今日状态”（也就是你在“状态”那页看到的那份小结）。这里选让哪个 AI 来写这份小结。'}
-  ]},
-  {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从一大堆记忆里翻出相关的内容递给 AI，让它接得上话、记得住你。这里管翻找时用的工具。',groups:[
-    {key:'recall_vector',label:'向量化',info:'把每条记忆变成电脑能比对“意思像不像”的形式。这样哪怕你换种说法，也能把相关的记忆找回来。这里选用哪个服务来做这个转换。'},
-    {key:'recall_keyword',label:'关键词辅助',info:'除了按“意思”找，再用关键词兜个底，免得漏掉那些明明提到过、只是换了说法没对上的内容。这里设置相关的服务。'}
-  ]}
-];
-var currentApiTab='main';
+var currentApiTab='providers';
 var apiProviders={};
 var apiProvidersLoaded=false;
 var apiProvIdSeq=0;
@@ -8765,13 +8750,14 @@ function apiConfigErrorHtml(reason){
 
 /* ---- API 配置：供应商库 + 功能选择（新版） ---- */
 var API_PROVIDER_LIBRARY_KEY='provider_library';
-API_TABS=[
-  {key:'providers',label:'供应商',kind:'providers',info:'先在这里维护可用的 API 供应商。每个供应商只保存一次，模型也在这里拉取；下面的功能页只负责选择用哪个供应商。'},
+var API_TABS=[
+  {key:'providers',label:'供应商',kind:'providers',info:'在这里维护可复用的 API 供应商和模型缓存。各功能页也会完整显示并保存当前供应商的 Key、站点地址和模型。'},
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
   {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：一是把聊天里提到的人和事，自动整理成一张张小卡片；二是把每天聊的内容存起来、剪成一小段一小段、每段配一句简短说明，方便以后回看。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
+    {key:'fact_extract',label:'Fact 提取',info:'按话题切分 chatlog、提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'mem_chatlog',label:'Chatlog离线切片',info:'把每天的聊天记录存档，并剪成一小段一小段。这里直接选择负责切片和写摘要的供应商和模型。'}
   ]},
   {key:'rolling',label:'滚动',info:'这一栏管“自动整理近况”：放久了的旧近况会被自动概括一下、收进长期记录里，让“最近怎么样”这块始终干净。',groups:[
@@ -8779,16 +8765,11 @@ API_TABS=[
     {key:'roll_status',label:'状态滚动',info:'每天自动把这一天的情况汇总成一份“今日状态”。这里选择负责写状态的供应商和模型。'}
   ]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
-    {key:'recall_rewrite',label:'意图改写',kind:'rewrite',info:'在正式召回前，把当前问题改写成更明确、适合检索的查询。这里直接选择意图改写使用的供应商和模型。'},
+    {key:'recall_rewrite',label:'意图改写',info:'在正式召回前，把当前问题改写成更明确、适合检索的查询。这里直接选择意图改写使用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把每条记忆变成电脑能比对“意思像不像”的形式。这里选择向量化服务供应商和模型。'},
     {key:'recall_keyword',label:'关键词辅助',info:'除了按“意思”找，再用关键词兜底，减少漏召回。这里选择关键词辅助服务。'}
   ]}
 ];
-currentApiTab='providers';
-apiProviders={};
-apiProvidersLoaded=false;
-apiProvIdSeq=0;
-pendingProvDel=null;
 var apiDirectConfig={};
 
 function allApiGroups(){
@@ -8908,6 +8889,18 @@ function normalizeApiProviders(raw){
     }
     if(matches.length===1)rewriteSlot.current=matches[0].id;
     if(!rewriteSlot.model&&rewriteModel)rewriteSlot.model=rewriteModel;
+  }
+  var factSlot=apiGroupSlot('fact_extract');
+  if(!findLibraryProvider(factSlot.current)){
+    var factBase=normalizedProviderBase(apiDirectValue('FACT_EXTRACT_BASE'));
+    var factModel=apiDirectValue('FACT_EXTRACT_MODEL').trim();
+    var factMatches=factBase?providerLibraryList().filter(function(p){return normalizedProviderBase(p.url)===factBase}):[];
+    if(factMatches.length>1&&factModel){
+      var factModelMatches=factMatches.filter(function(p){return cleanModelList(p.models,p.model).indexOf(factModel)>=0});
+      if(factModelMatches.length===1)factMatches=factModelMatches;
+    }
+    if(factMatches.length===1)factSlot.current=factMatches[0].id;
+    if(!factSlot.model&&factModel)factSlot.model=factModel;
   }
 }
 function providerLibraryList(){return apiProviderLibrarySlot().providers}
@@ -9039,26 +9032,8 @@ function renderApiAssignments(tab){
     html+='<div class="api-empty-callout"><b>先添加供应商</b><p>功能页只负责选择供应商；请到供应商页新增 API URL / Key。</p><button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
     return html;
   }
-  groups.forEach(function(g){
-    if(g.kind==='rewrite')html+=rewriteConfigCardHtml(g);
-    else if(list.length)html+=assignmentCardHtml(g);
-  });
+  groups.forEach(function(g){if(list.length)html+=assignmentCardHtml(g)});
   return html;
-}
-function rewriteConfigCardHtml(g){
-  var slot=apiGroupSlot(g.key),p=findLibraryProvider(slot.current);
-  var selectedModel=slot.model||apiDirectValue('RECALL_REWRITE_MODEL')||(p&&p.model)||'';
-  var models=p?cleanModelList(p.models,selectedModel):[];
-  var providerText=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
-  return '<div class="api-assign-card api-rewrite-card" data-group="'+escAttr(g.key)+'">'+
-    '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
-    '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
-    '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="rewrite-provider" onchange="onRewriteProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><input class="assign-model rewrite-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="从下方模型列表选择" readonly aria-readonly="true"></label></div>'+
-    '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select rewrite-model-select" onchange="pickRewriteModel(this)"'+(p?'':' disabled')+'>'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchRewriteModels(this)"'+(p?'':' disabled')+'>拉取模型</button></div>'+
-    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，模型名无需手动填写。')+'</div>'+
-    '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveRewriteConfig(this)">保存意图改写配置</button></div>'+
-  '</div>';
 }
 function assignmentCardHtml(g){
   var slot=apiGroupSlot(g.key),p=findLibraryProvider(slot.current);
@@ -9069,10 +9044,10 @@ function assignmentCardHtml(g){
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label><label><span>API Key</span><input class="assign-key" type="text" value="'+escAttr((p&&p.key)||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></label><label><span>站点地址</span><input class="assign-url" type="url" value="'+escAttr((p&&p.url)||'')+'" placeholder="https://.../v1" autocapitalize="off" spellcheck="false"></label></div>'+
     '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
-    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。')+'</div>'+
-    '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存选择</button></div>'+
+    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择；Key 和站点地址与供应商库同步。':'填写 Key 和站点地址后可拉取模型，也可以直接填写模型名。')+'</div>'+
+    '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存配置</button></div>'+
   '</div>';
 }
 function readProvCard(card){
@@ -9149,98 +9124,54 @@ function confirmProvDel(){
 }
 function readAssignmentRow(row){
   function v(sel){var el=row.querySelector(sel);return el?el.value:''}
-  return {group:row.getAttribute('data-group'),providerId:v('.assign-provider'),model:v('.assign-model')};
+  return {group:row.getAttribute('data-group'),providerId:v('.assign-provider'),model:v('.assign-model'),key:v('.assign-key'),url:v('.assign-url')};
 }
 function onAssignProviderChange(sel){
   var row=sel.closest('.api-assign-card');if(!row)return;
   var p=findLibraryProvider(sel.value);
   var input=row.querySelector('.assign-model');if(input)input.value=(p&&p.model)||'';
+  var keyInput=row.querySelector('.assign-key');if(keyInput)keyInput.value=(p&&p.key)||'';
+  var urlInput=row.querySelector('.assign-url');if(urlInput)urlInput.value=(p&&p.url)||'';
   var ms=row.querySelector('.assign-model-select');if(ms)ms.innerHTML=modelOptionsHtml(p?p.models:[],(p&&p.model)||'');
   setModelSearchState(row,p?p.models:[]);
   var summary=row.querySelector('.api-assign-summary');if(summary)summary.textContent=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
   var hint=row.querySelector('.prov-model-hint');
   if(hint){
     var models=p?cleanModelList(p.models,(p&&p.model)||''):[];
-    hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，也可以手填模型名。';
+    hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择；Key 和站点地址与供应商库同步。':'填写 Key 和站点地址后可拉取模型，也可以直接填写模型名。';
   }
-}
-function onRewriteProviderChange(sel){
-  var row=sel.closest('.api-rewrite-card');if(!row)return;
-  var p=findLibraryProvider(sel.value);
-  var models=p?cleanModelList(p.models,p.model):[];
-  var selected=(p&&p.model)||models[0]||'';
-  var modelInput=row.querySelector('.rewrite-model');if(modelInput)modelInput.value=selected;
-  var modelSelect=row.querySelector('.rewrite-model-select');
-  if(modelSelect){modelSelect.innerHTML=modelOptionsHtml(models,selected);modelSelect.disabled=!p}
-  setModelSearchState(row,models);
-  var summary=row.querySelector('.api-assign-summary');
-  if(summary){
-    summary.textContent=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
-    summary.classList.toggle('empty',!p);
-  }
-  var hint=row.querySelector('.prov-model-hint');
-  if(hint)hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择。':'选择供应商后可拉取模型，模型名无需手动填写。';
-  var fetchBtn=row.querySelector('.prov-fetch-models');if(fetchBtn)fetchBtn.disabled=!p;
-}
-function pickRewriteModel(sel){
-  var row=sel.closest('.api-rewrite-card');if(!row)return;
-  var input=row.querySelector('.rewrite-model');if(input&&sel.value)input.value=sel.value;
 }
 function saveAssignment(btn){
   var row=btn.closest('.api-assign-card');if(!row)return;
-  var d=readAssignmentRow(row),slot=apiGroupSlot(d.group);
+  var d=readAssignmentRow(row),slot=apiGroupSlot(d.group),p=findLibraryProvider(d.providerId);
+  if(!p){toast('请选择供应商');return}
+  if(!d.model.trim()){toast('请填写模型名');return}
+  if(!d.key.trim()){toast('请填写 API Key');return}
+  if(!d.url.trim()){toast('请填写站点地址');return}
+  p.key=d.key.trim();p.url=d.url.trim().replace(/\/+$/,'');
   slot.current=d.providerId;slot.model=d.model.trim();
   btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
-  persistAndReload(d.providerId?'选择已保存':'已清空选择').then(function(){btn.disabled=false;btn.textContent=old;renderApiConfig()});
-}
-function saveRewriteConfig(btn){
-  var row=btn.closest('.api-rewrite-card');if(!row)return;
-  var providerId=String((row.querySelector('.rewrite-provider')||{}).value||'');
-  var model=String((row.querySelector('.rewrite-model')||{}).value||'').trim();
-  var p=findLibraryProvider(providerId);
-  if(!p){toast('请选择意图改写供应商');return}
-  if(!model){toast('请选择意图改写模型');return}
-  if(!p.url){toast('所选供应商缺少 API URL');return}
-  if(!p.key){toast('所选供应商缺少 API Key');return}
-  var slot=apiGroupSlot('recall_rewrite');slot.current=providerId;slot.model=model;
-  var updates={
-    API_PROVIDERS:apiProviders,
-    RECALL_REWRITE_MODEL:model,
-    RECALL_REWRITE_BASE:String(p.url).trim().replace(/\/+$/,''),
-    RECALL_REWRITE_API_KEY:String(p.key).trim()
-  };
-  btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
+  var updates={API_PROVIDERS:apiProviders};
+  if(d.group==='recall_rewrite'){
+    updates.RECALL_REWRITE_MODEL=slot.model;updates.RECALL_REWRITE_BASE=p.url;updates.RECALL_REWRITE_API_KEY=p.key;
+  }
+  if(d.group==='fact_extract'){
+    updates.FACT_EXTRACT_MODEL=slot.model;updates.FACT_EXTRACT_BASE=p.url;updates.FACT_EXTRACT_API_KEY=p.key;
+  }
   keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})
     .then(function(res){if(!res.ok)throw new Error((res.j&&res.j.error)||'保存失败');return reloadGatewayConfig()})
-    .then(function(){toast('意图改写配置已保存并生效');apiProvidersLoaded=false;return loadApiProviders()})
+    .then(function(){toast('配置已保存并生效');apiProvidersLoaded=false;return loadApiProviders()})
     .catch(function(e){toast((e&&e.message)?e.message:'保存失败，检查网络')})
-    .finally(function(){btn.disabled=false;btn.textContent=old});
-}
-function fetchRewriteModels(btn){
-  var row=btn.closest('.api-rewrite-card');if(!row)return;
-  var providerId=String((row.querySelector('.rewrite-provider')||{}).value||'');
-  var p=findLibraryProvider(providerId);
-  if(!p){toast('先选择供应商');return}
-  if(!p.url){toast('供应商缺少 API URL');return}
-  if(!p.key){toast('供应商缺少 API Key');return}
-  var slot=apiGroupSlot('recall_rewrite');slot.current=providerId;
-  btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
-  fetchModelsForProvider(p).then(function(models){
-    p.models=cleanModelList(models,p.model);
-    if(!p.model&&p.models.length)p.model=p.models[0];
-    if(!slot.model||p.models.indexOf(slot.model)<0)slot.model=p.model||p.models[0]||'';
-    return persistAndReload('模型已拉取并保存');
-  }).then(function(){renderApiConfig()})
-    .catch(function(e){toast((e&&e.message)?e.message:'拉取模型失败')})
     .finally(function(){btn.disabled=false;btn.textContent=old});
 }
 function fetchAssignmentModels(btn){
   var row=btn.closest('.api-assign-card');if(!row)return;
   var d=readAssignmentRow(row),p=findLibraryProvider(d.providerId);
   if(!p){toast('先选择供应商');return}
-  if(!p.url){toast('供应商缺少 API URL');return}
-  if(!p.key){toast('供应商缺少 API Key');return}
+  p.url=d.url.trim();p.key=d.key.trim();
+  if(!p.url){toast('请先填写站点地址');return}
+  if(!p.key){toast('请先填写 API Key');return}
   var slot=apiGroupSlot(d.group);
   slot.current=d.providerId;slot.model=d.model.trim()||slot.model;
   btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';

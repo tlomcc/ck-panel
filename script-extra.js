@@ -3,6 +3,7 @@
 
   function applyTheme(theme){
     var isDark=theme==='dark';
+    document.documentElement.classList.toggle('dark',isDark);
     document.body.classList.toggle('dark',isDark);
     var themeMeta=document.querySelector('meta[name="theme-color"]');
     if(themeMeta)themeMeta.setAttribute('content',isDark?'#1c1c1e':'#f7f7f7');

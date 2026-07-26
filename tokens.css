@@ -68,7 +68,8 @@
   --ck-motion-medium:220ms;
 }
 
-body.dark{
+body.dark,
+html.dark{
   color-scheme:dark;
 
   --ck-bg:#101512;

@@ -6914,9 +6914,9 @@ body.dark .entry-card-main .entry-text.collapsed{
 #tab-facts{padding-bottom:34px}
 .facts-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin:0 0 12px;padding-bottom:14px;border-bottom:1px solid var(--ck-border,#e3ebe6)}
 .facts-title-block{min-width:0}
-.facts-kicker{display:flex;align-items:center;gap:7px;color:var(--ck-accent,#43a047);font-size:10px;font-weight:800;letter-spacing:1.15px;text-transform:uppercase;margin-bottom:7px}
+.facts-kicker{display:flex;align-items:center;gap:7px;color:var(--ck-accent,#43a047);font-size:10px;font-weight:800;letter-spacing:0;text-transform:uppercase;margin-bottom:7px}
 .facts-kicker>span{width:22px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--ck-accent,#43a047),transparent)}
-.facts-title-block h2{font-size:23px;line-height:1.15;color:var(--ck-text,#1c2028);letter-spacing:-.4px;margin:0 0 5px}
+.facts-title-block h2{font-size:23px;line-height:1.15;color:var(--ck-text,#1c2028);letter-spacing:0;margin:0 0 5px}
 .facts-title-block p{font-size:12.5px;line-height:1.6;color:var(--ck-muted,#7b828c);margin:0;max-width:480px}
 .facts-head-actions{flex:0 0 auto;padding-top:2px}
 .facts-rail{display:flex;align-items:center;gap:7px;min-height:30px;margin:0 0 12px;padding:7px 10px;border:1px solid rgba(var(--ck-accent-rgb,67,160,71),.18);border-radius:9px;background:rgba(var(--ck-accent-rgb,67,160,71),.055);color:var(--ck-text-soft,#5d6a64);font-size:11px;line-height:1.4}
@@ -6938,7 +6938,7 @@ body.dark .entry-card-main .entry-text.collapsed{
 .facts-search input:focus{border-color:var(--ck-accent,#43a047);box-shadow:0 0 0 3px rgba(var(--ck-accent-rgb,67,160,71),.13)}
 .facts-search button{position:absolute;right:9px;width:22px;height:22px;border:0;border-radius:50%;background:var(--ck-border,#e3ebe6);color:var(--ck-muted,#8c939e);cursor:pointer;line-height:1;display:none}
 .facts-search button.show{display:block}
-.facts-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.facts-filter-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .facts-filter-grid label{display:flex;flex-direction:column;gap:5px;min-width:0;color:var(--ck-muted,#8c939e);font-size:10px;font-weight:700}
 .facts-filter-grid select{width:100%;height:34px;padding:0 8px;border:1px solid var(--ck-border,#dfe8e3);border-radius:8px;background:var(--ck-surface,#fff);color:var(--ck-text,#1c2028);font:inherit;font-size:11px;outline:none;min-width:0}
 .facts-filter-grid select:focus{border-color:var(--ck-accent,#43a047)}
@@ -6987,8 +6987,57 @@ body.dark .fact-card-value,body.dark .fact-detail-value strong,body.dark .fact-d
 body.dark .fact-card-spine i{background:var(--ck-surface,#111821)}
 body.dark .fact-health-ok{background:#173524;color:#8bd8a5}body.dark .fact-health-missing,body.dark .fact-health-zero,body.dark .fact-health-dimension_error,body.dark .fact-health-invalid{background:#3b2e18;color:#f0c477}
 @media(min-width:560px){.facts-cards{grid-template-columns:1fr 1fr}.fact-detail-panel{width:560px;max-width:94vw}}
-@media(max-width:559px){.facts-page-head{align-items:flex-start}.facts-title-block h2{font-size:21px}.facts-statbar{gap:6px}.facts-stat{padding:10px 4px}.facts-stat b{font-size:18px}.facts-stat span{font-size:9px}.facts-filter-grid{grid-template-columns:1fr 1fr}.facts-filter-grid label:nth-child(4){grid-column:span 2}.facts-rail{align-items:flex-start}.facts-rail-note{font-size:9px}.fact-card-top strong{max-width:38%}.fact-card-alias{display:none}.fact-detail-grid{gap:6px}}
+@media(max-width:559px){.facts-page-head{align-items:flex-start}.facts-title-block h2{font-size:21px}.facts-statbar{gap:6px}.facts-stat{padding:10px 4px}.facts-stat b{font-size:18px}.facts-stat span{font-size:9px}.facts-filter-grid{grid-template-columns:1fr 1fr}.facts-filter-grid label:nth-child(5){grid-column:span 2}.facts-rail{align-items:flex-start}.facts-rail-note{font-size:9px}.fact-card-top strong{max-width:38%}.fact-card-alias{display:none}.fact-detail-grid{gap:6px}}
 @media(prefers-reduced-motion:reduce){.fact-card,.facts-search input{transition:none}}
+
+/* 独立 Fact 库 v2：分类是目录，Fact 才是卡片。 */
+.facts-statbar{grid-template-columns:repeat(6,minmax(0,1fr))}
+.facts-cards{display:block;min-height:80px}
+.fact-category-group{margin:0 0 22px;padding:0;border:0;background:transparent}
+.fact-category-group>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 9px;padding:0 2px 8px;border-bottom:1px solid var(--ck-border,#e3ebe6)}
+.fact-category-group>header>div{display:flex;align-items:center;gap:8px;min-width:0}
+.fact-category-group>header h3{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ck-text,#1c2028);font-size:14px;font-weight:850;line-height:1.3}
+.fact-category-group>header>b{min-width:28px;color:var(--ck-muted,#8c939e);font-family:var(--ck-font-data,monospace);font-size:11px;text-align:right}
+.fact-category-mark{width:3px;height:16px;border-radius:2px;background:var(--ck-accent,#43a047);flex:0 0 auto}
+.fact-category-items{display:grid;grid-template-columns:1fr;gap:8px}
+.fact-card{display:grid;grid-template-columns:minmax(68px,92px) minmax(0,1fr) 18px;align-items:start;gap:12px;padding:13px 12px;border-radius:var(--ck-radius-md,8px)}
+.fact-card.is-expired{opacity:.74;background:var(--ck-surface-2,#f8faf9)}
+.fact-card-time{padding-top:2px;color:var(--ck-accent-strong,#257a4c);font-family:var(--ck-font-data,monospace);font-size:11px;font-weight:800;line-height:1.45;word-break:break-word}
+.fact-card-main{display:block;min-width:0}
+.fact-card-top{display:flex;align-items:center;gap:7px;margin:0 0 7px;white-space:normal}
+.fact-category-label{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ck-muted,#8c939e);font-size:10px;font-weight:800}
+.fact-state{display:inline-flex;align-items:center;min-height:19px;padding:2px 6px;border:1px solid var(--ck-border,#e3ebe6);border-radius:999px;font-size:9px;font-weight:800;line-height:1;white-space:nowrap}
+.fact-state.is-active{border-color:rgba(40,142,92,.24);background:rgba(40,142,92,.08);color:#23774e}
+.fact-state.is-expired{background:var(--ck-surface-2,#f5f7f6);color:var(--ck-muted,#8c939e)}
+.fact-card-value{min-height:0;font-size:13px;font-weight:650;line-height:1.65}
+.fact-people-row{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:8px}
+.fact-person-chip{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border:1px solid var(--ck-line-soft,var(--ck-border,#e3ebe6));border-radius:999px;background:var(--ck-accent-wash,var(--ck-surface-2,#f4f8f5));color:var(--ck-accent-strong,#257a4c);font-size:9px;font-weight:750}
+.fact-person-empty{color:var(--ck-muted,#8c939e);font-size:9px}
+.fact-card-meta{margin-top:8px}
+.fact-card-meta>span{min-width:0}
+.fact-source-link{display:inline-block;max-width:280px;overflow:hidden;text-overflow:ellipsis;color:var(--ck-accent,#2c8c5b);font-weight:750;text-decoration:none;vertical-align:bottom;white-space:nowrap}
+.fact-source-link:hover{text-decoration:underline}
+.fact-source-missing{color:var(--ck-muted,#8c939e)}
+.fact-card-arrow{align-self:center;color:var(--ck-muted,#8c939e);font-size:20px;line-height:1}
+.fact-source-detail p{margin:0 0 4px}.fact-source-detail a{color:var(--ck-accent,#2c8c5b);font-weight:750;text-decoration:none;word-break:break-all}.fact-source-detail a:hover{text-decoration:underline}.fact-source-detail small{color:var(--ck-muted,#8c939e);font-family:var(--ck-font-data,monospace);font-size:10px}
+body.dark .fact-category-group>header h3{color:var(--ck-text,#e8eef7)}
+body.dark .fact-card.is-expired{background:var(--ck-surface-2,#151d1a)}
+body.dark .fact-state.is-active{color:#8ed1aa}
+
+@media(min-width:760px){
+  .fact-category-items{grid-template-columns:1fr 1fr}
+}
+@media(max-width:720px){
+  .facts-statbar{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .fact-card{grid-template-columns:64px minmax(0,1fr) 14px;gap:9px}
+  .fact-source-link{max-width:190px}
+}
+@media(max-width:390px){
+  .fact-card{grid-template-columns:1fr 14px}
+  .fact-card-time{grid-column:1/-1;padding:0}
+  .fact-card-main{grid-column:1}
+  .fact-card-arrow{grid-column:2;grid-row:2}
+}
 
 /* ===== 档案与事实总览 · 记忆脊线 ===== */
 #tab-overview{padding-bottom:38px}

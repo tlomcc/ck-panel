@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v148-rewrite-vector-style').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v149-standalone-facts-api-center').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

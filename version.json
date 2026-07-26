@@ -1,8 +1,8 @@
 {
-  "version": "chat-v148-rewrite-vector-style",
+  "version": "chat-v149-standalone-facts-api-center",
   "notes": [
-    "意图改写完整复用向量化配置区块的布局和模型选择交互",
-    "选择供应商后自动展示可搜索的模型下拉列表，当前模型只读且无需手填",
-    "保存时自动使用所选供应商的 API URL 和 API Key，并兼容旧配置"
+    "新增独立只读 Fact 页面，按动态分类展示时间、正文、人物、来源、召回与状态",
+    "Fact 召回升级为独立索引 Top 8，并记录最终注入后的真实召回次数",
+    "API 配置统一管理主链路、记忆、滚动、Fact 提取和召回服务"
   ]
 }
