@@ -1,8 +1,8 @@
 {
-  "version": "chat-v155-memory-owner",
+  "version": "chat-v156-api-owner",
   "notes": [
-    "记忆中心成为单一来源：archive-*/facts-*/fact-*/eg-* 的最终视觉全部收敛进 style.css 本体",
-    "删除 wechat/polish/visual-overrides 三层中对应覆盖，类型徽章与脊线统一 Loom 降饱和色板",
-    "信息网卡片、筛选胶囊、详情底板全面 token 化；深色模式同步收敛"
+    "API 控制室与实体详情面板成为单一来源：prov-*/api-*/entity-* 最终视觉全部收敛进 style.css 本体",
+    "删除 wechat/polish/visual-overrides 三层全部 API 覆盖；修复 v153 遗留的深色选择器悬空块",
+    "全站原生 select 统一自绘箭头（原仅 API 页有）；API 主行动按钮统一 Loom 实心翡翠"
   ]
 }

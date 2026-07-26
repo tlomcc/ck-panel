@@ -92,10 +92,7 @@ button,input,select,textarea{font-family:var(--ck-font-body)!important}
 /* 基础按钮 .btn/.btn-blue/.btn-outline/.btn-red 已迁入 components.css（Phase 6 第二组），
    此处仅保留未迁移组件 */
 .chat-wide-btn,
-.chat-cache-save-btn,
-.prov-add,
-.prov-fetch-models,
-.prov-save{
+.chat-cache-save-btn{
   border-radius:var(--ck-radius-sm)!important;
   transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease),color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease)!important;
 }
@@ -424,58 +421,7 @@ body.dark #tab-search .search-result-item,
 body.dark #tab-search .search-entry,
 body.dark #tab-search .search-empty-card{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
 
-/* ---- API control room: clearer hierarchy without dashboard theatrics ---- */
-#tab-apiconfig .api-page-head{
-  border:1px solid var(--ck-line)!important;
-  border-radius:var(--ck-radius-lg)!important;
-  background:var(--ck-surface)!important;
-  box-shadow:var(--ck-shadow-xs)!important;
-}
-#tab-apiconfig .api-page-head h2{color:var(--ck-text)!important}
-#tab-apiconfig .api-page-head p{color:var(--ck-muted)!important}
-#tab-apiconfig .api-info-main,
-#tab-apiconfig .api-info-text{
-  border:1px solid var(--ck-line)!important;
-  border-left:2px solid var(--ck-accent)!important;
-  border-radius:var(--ck-radius-sm)!important;
-  background:var(--ck-accent-wash)!important;
-  color:var(--ck-text-soft)!important;
-}
-#tab-apiconfig .prov-card,
-#tab-apiconfig .api-assign-card,
-#tab-apiconfig .api-empty-callout{
-  position:relative!important;
-  overflow:hidden!important;
-  border:1px solid var(--ck-line)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  box-shadow:var(--ck-shadow-xs)!important;
-}
-#tab-apiconfig .prov-card::before,
-#tab-apiconfig .api-assign-card::before{
-  content:"";
-  position:absolute;
-  inset:0 auto 0 0;
-  width:2px;
-  background:var(--ck-accent);
-}
-#tab-apiconfig .prov-name,
-#tab-apiconfig .api-group-title{color:var(--ck-text)!important}
-#tab-apiconfig .prov-title-wrap small,
-#tab-apiconfig .prov-model-hint,
-#tab-apiconfig .prov-row>label,
-#tab-apiconfig .api-assign-grid label>span{color:var(--ck-muted)!important}
-#tab-apiconfig .prov-usage span,
-#tab-apiconfig .prov-status,
-#tab-apiconfig .api-page-stats span{
-  border:1px solid var(--ck-line-soft)!important;
-  border-radius:var(--ck-radius-pill)!important;
-  background:var(--ck-surface-soft)!important;
-  color:var(--ck-muted)!important;
-}
-#tab-apiconfig .prov-status-on,
-#tab-apiconfig .prov-status-model{border-color:transparent!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
-#tab-apiconfig .api-assign-summary{border:1px solid var(--ck-line-soft)!important;background:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important}
+/* ---- API control room 皮肤已回归 style.css 单一来源（Phase 6） ---- */
 
 /* ---- Dialogs, toasts and startup surface ---- */
 /* 模态框 / 确认框 已迁入 components.css（Phase 6 第二组）；此处仅保留 panel-update */
@@ -545,13 +491,7 @@ body.dark.chat-active .chat-settings-head{
   background:var(--ck-surface)!important;
   color:var(--ck-text)!important;
 }
-body.dark #tab-apiconfig .api-page-head,
-body.dark #tab-apiconfig .api-info-main,
-body.dark #tab-apiconfig .api-info-text,
-body.dark #tab-apiconfig .prov-card,
-body.dark #tab-apiconfig .api-assign-card,
-body.dark #tab-apiconfig .api-empty-callout,
-/* 深色通用输入已迁入 components.css（Phase 6 第二组） */
+/* 深色 API 面板与通用输入均已回归 style.css / components.css 单一来源（Phase 6） */
 
 /* ---- Chat attachment tray: CK tool sheet, not a WeChat grid ---- */
 body.chat-active .chat-plus-panel{background:var(--ck-surface-overlay)!important;backdrop-filter:blur(18px) saturate(118%)!important;-webkit-backdrop-filter:blur(18px) saturate(118%)!important}
@@ -652,20 +592,18 @@ body.chat-active .chat-plus-page>button:focus-visible span{
 }
 body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
 
-/* Give secondary pages the same title-to-content rhythm as the overview. */
-#tab-graph .graph-hero,
-#tab-apiconfig .api-page-head{
+/* Give secondary pages the same title-to-content rhythm as the overview.
+   （API 控制室一侧已回归 style.css 单一来源，此处仅保留信息网/状态页） */
+#tab-graph .graph-hero{
   position:relative!important;
   overflow:hidden!important;
   padding:20px 22px!important;
 }
-#tab-graph .graph-hero>div:first-child,
-#tab-apiconfig .api-page-title{
+#tab-graph .graph-hero>div:first-child{
   position:relative!important;
   padding-left:15px!important;
 }
-#tab-graph .graph-hero>div:first-child::before,
-#tab-apiconfig .api-page-title::before{
+#tab-graph .graph-hero>div:first-child::before{
   content:"";
   position:absolute;
   left:0;
@@ -675,16 +613,13 @@ body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
   border-radius:var(--ck-radius-pill);
   background:linear-gradient(180deg,var(--ck-accent),rgba(var(--ck-accent-rgb),.12));
 }
-#tab-graph .graph-hero h2,
-#tab-apiconfig .api-page-head h2{
+#tab-graph .graph-hero h2{
   font-size:22px!important;
   line-height:1.2!important;
   letter-spacing:-.2px!important;
 }
-#tab-graph .graph-hero p,
-#tab-apiconfig .api-page-head p{line-height:1.65!important}
-#tab-graph .graph-hero::after,
-#tab-apiconfig .api-page-head::after{
+#tab-graph .graph-hero p{line-height:1.65!important}
+#tab-graph .graph-hero::after{
   content:"";
   position:absolute;
   right:24px;
@@ -715,10 +650,7 @@ body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
 /* Auth gate 细化规则已迁入 components.css（Phase 6 第二组） */
 
 @media(max-width:760px){
-  #tab-graph .graph-hero,
-  #tab-apiconfig .api-page-head{padding:17px 16px!important}
-  #tab-graph .graph-hero::after,
-  #tab-apiconfig .api-page-head::after{right:14px;top:16px;width:44px;height:44px}
-  #tab-graph .graph-hero h2,
-  #tab-apiconfig .api-page-head h2{font-size:20px!important}
+  #tab-graph .graph-hero{padding:17px 16px!important}
+  #tab-graph .graph-hero::after{right:14px;top:16px;width:44px;height:44px}
+  #tab-graph .graph-hero h2{font-size:20px!important}
 }

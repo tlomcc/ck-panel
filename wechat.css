@@ -782,9 +782,7 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
 
 /* —— 主题绿：按钮/强调统一为微信绿 #07c160 扁平（压过精致绿渐变）——
    基础 .btn-blue/.btn-outline 已迁入 components.css（Phase 6 第二组），此处仅保留未迁移组件 */
-.chat-wide-btn,
-.prov-add,
-.prov-fetch-models{
+.chat-wide-btn{
   background:var(--wx-primary)!important;
   background-image:none!important;
   border:0!important;
@@ -818,17 +816,7 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
 
 /* —— 开关：已由 style.css 用 #07c160 微信绿轨道，勿覆盖以免染错整行 —— */
 
-/* —— API 配置页：灰底 + 白卡 + 微信绿 tab —— */
-.api-config-page{background:var(--wx-group-bg)!important}
-.api-config-page .prov-card,
-.api-config-page .api-group{
-  background:#fff!important;border:1px solid var(--wx-line)!important;
-  border-radius:10px!important;box-shadow:none!important;
-}
-/* 统计小 chip */
-.api-config-page .prov-stat,.api-stat-chip{
-  background:#fff!important;border:1px solid var(--wx-line)!important;border-radius:999px!important;
-}
+/* API 配置页皮肤已回归 style.css 单一来源（Phase 6） */
 
 /* —— 弹窗 / Toast / 基础按钮 已迁入 components.css（Phase 6 第二组） —— */
 
@@ -869,12 +857,11 @@ body.dark.chat-active .chat-plus-btn{border-color:#3a3a3c!important;color:#c0c0c
 /* 全局卡片/设置/API 配置 深色兜底 */
 body.dark .chat-memory-card,body.dark .chat-route-card,body.dark .chat-worldbook-list,
 body.dark .cat-card,body.dark .entry-item,body.dark .stat-box,body.dark .home-console,
-body.dark .home-insight-block,body.dark .mini-item,
-body.dark .api-config-page .prov-card,body.dark .api-config-page .api-group{
+body.dark .home-insight-block,body.dark .mini-item{
   background:#1c1c1e!important;border-color:#2a2a2c!important;
 }
 body.dark .chat-settings,body.dark .chat-settings-head,
-body.dark .chat-side-panel,body.dark .api-config-page{background:#000000!important}
+body.dark .chat-side-panel{background:#000000!important}
 
 /* Dark overlay surfaces mirror the light hierarchy without losing contrast. */
 body.dark.chat-active .chat-drawer,
@@ -1252,141 +1239,13 @@ body.dark #tab-search .search-entry-meta span{background:#303033!important;color
 #tab-status .ds-day-chips i{background:#eee!important;color:#777!important}
 
 /* API configuration: clear section tabs, readable help, and flat form groups. */
-#tab-apiconfig .api-config-page{
-  padding:0!important;
-  background:transparent!important;
-}
-#tab-apiconfig .api-page-head{
-  margin-bottom:10px!important;
-  padding:16px!important;
-  border:0!important;
-  border-radius:10px!important;
-  background:#fff!important;
-}
-#tab-apiconfig .api-page-head h2{color:#222!important;font-size:21px!important;font-weight:600!important}
-#tab-apiconfig .api-page-head p{color:#888!important}
-#tab-apiconfig .api-page-stats span{
-  border:0!important;
-  border-radius:5px!important;
-  background:#eee!important;
-  color:#777!important;
-  font-weight:500!important;
-}
-#tab-apiconfig .api-page-actions .prov-add.compact{
-  min-width:auto!important;
-  padding:9px 13px!important;
-  border:0!important;
-  border-radius:6px!important;
-  background:var(--wx-primary)!important;
-  color:#fff!important;
-  box-shadow:none!important;
-}
-#tab-apiconfig .api-info-row{margin:0 0 10px!important}
-#tab-apiconfig .api-info-btn{
-  width:auto!important;
-  height:28px!important;
-  padding:0 9px!important;
-  border:1px solid #ddd!important;
-  border-radius:6px!important;
-  background:#fff!important;
-  color:#777!important;
-  font-family:inherit!important;
-  font-size:11px!important;
-  font-style:normal!important;
-  font-weight:500!important;
-}
-#tab-apiconfig .api-info-btn.active{border-color:#bbb!important;background:#eee!important;color:#333!important}
-#tab-apiconfig .api-info-main{
-  width:100%!important;
-  height:40px!important;
-  padding:0 12px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:space-between!important;
-  border:0!important;
-  border-radius:7px!important;
-  background:#fff!important;
-  color:#666!important;
-  font-size:12px!important;
-}
-#tab-apiconfig .api-info-main i{
-  font-size:20px!important;
-  font-style:normal!important;
-  line-height:1!important;
-  transition:transform .16s ease!important;
-}
-#tab-apiconfig .api-info-main.active i{transform:rotate(90deg)!important}
-#tab-apiconfig .api-info-text{
-  padding:11px 12px!important;
-  border:0!important;
-  border-radius:7px!important;
-  background:#fff!important;
-  color:#666!important;
-}
-#tab-apiconfig .api-provider-list{gap:10px!important}
-#tab-apiconfig .prov-card,
-#tab-apiconfig .api-assign-card,
-#tab-apiconfig .api-empty-callout{
-  border:0!important;
-  border-radius:10px!important;
-  background:#fff!important;
-  box-shadow:none!important;
-}
-#tab-apiconfig .prov-card-head{padding:14px!important}
-#tab-apiconfig .prov-name,
-#tab-apiconfig .api-group-title{color:#222!important;font-weight:600!important}
-#tab-apiconfig .prov-title-wrap small,
-#tab-apiconfig .prov-model-hint{color:#888!important}
-#tab-apiconfig .prov-usage span,
-#tab-apiconfig .prov-status{
-  border:0!important;
-  border-radius:5px!important;
-  background:#eee!important;
-  color:#777!important;
-  font-weight:500!important;
-}
-#tab-apiconfig .prov-status-on,
-#tab-apiconfig .prov-status-model{background:#e9f7ef!important;color:var(--wx-primary-ink)!important}
-#tab-apiconfig .prov-card-body{padding:14px!important;border-color:var(--wx-line-soft)!important}
-#tab-apiconfig .prov-row > label,
-#tab-apiconfig .api-assign-grid label > span{color:#777!important;font-weight:500!important}
-#tab-apiconfig input:not([type=checkbox]):not([type=radio]),
-#tab-apiconfig select{
-  min-height:40px!important;
-  border:1px solid #ddd!important;
-  border-radius:7px!important;
-  background:#f7f7f7!important;
-  color:#222!important;
-  box-shadow:none!important;
-}
-#tab-apiconfig input:focus,
-#tab-apiconfig select:focus{border-color:#aaa!important;background:#fff!important;box-shadow:none!important}
-#tab-apiconfig .prov-fetch-models,
-#tab-apiconfig .prov-save{
-  border:0!important;
-  border-radius:6px!important;
-  background:var(--wx-primary)!important;
-  color:#fff!important;
-  box-shadow:none!important;
-}
-#tab-apiconfig .api-assign-summary{
-  border:0!important;
-  border-radius:7px!important;
-  background:#f2f2f2!important;
-  color:#666!important;
-}
-#tab-apiconfig .prov-del{color:#d65757!important}
+/* #tab-apiconfig 全部皮肤已回归 style.css 单一来源（Phase 6） */
 
 body.dark #tab-graph .graph-hero,
 body.dark #tab-status .ds-tile,
 body.dark #tab-status .ds-note,
 body.dark #tab-status .ds-stat,
-body.dark #tab-status .ds-meta,
-body.dark #tab-apiconfig .api-page-head,
-body.dark #tab-apiconfig .api-info-text,
-body.dark #tab-apiconfig .prov-card,
-body.dark #tab-apiconfig .api-assign-card,
-body.dark #tab-apiconfig .api-empty-callout{
+body.dark #tab-status .ds-meta{
   border-color:#2c2c2e!important;
   background:#1c1c1e!important;
   box-shadow:none!important;
@@ -1394,41 +1253,16 @@ body.dark #tab-apiconfig .api-empty-callout{
 body.dark #tab-graph .graph-hero h2,
 body.dark #tab-status .ds-tile-title,
 body.dark #tab-status .ds-stat b,
-body.dark #tab-status .ds-meta-row > b,
-body.dark #tab-apiconfig .api-page-head h2,
-body.dark #tab-apiconfig .prov-name,
-body.dark #tab-apiconfig .api-group-title{color:#eee!important}
+body.dark #tab-status .ds-meta-row > b{color:#eee!important}
 body.dark #tab-graph .graph-hero p,
 body.dark #tab-status .ds-note,
-body.dark #tab-status .ds-tile-sub,
-body.dark #tab-apiconfig .api-page-head p,
-body.dark #tab-apiconfig .api-info-text,
-body.dark #tab-apiconfig .prov-title-wrap small,
-body.dark #tab-apiconfig .prov-model-hint{color:#999!important}
+body.dark #tab-status .ds-tile-sub{color:#999!important}
 body.dark #tab-status .ds-grid,
 body.dark #tab-status .ds-stats{background:#2a2a2c!important}
-body.dark #tab-apiconfig input:not([type=checkbox]):not([type=radio]),
-body.dark #tab-apiconfig select{
-  border-color:#39393c!important;
-  background:#242426!important;
-  color:#eee!important;
-}
-body.dark #tab-status .ds-day-chips i,
-body.dark #tab-apiconfig .api-page-stats span,
-body.dark #tab-apiconfig .prov-usage span,
-body.dark #tab-apiconfig .prov-status,
-body.dark #tab-apiconfig .api-assign-summary{background:#303033!important;color:#999!important}
-body.dark #tab-apiconfig .prov-status-on,
-body.dark #tab-apiconfig .prov-status-model{background:#173324!important;color:#70d89c!important}
-body.dark #tab-apiconfig .api-info-btn{border-color:#3a3a3c!important;background:#242426!important;color:#aaa!important}
-body.dark #tab-apiconfig .api-info-main{border:0!important;background:#1c1c1e!important;color:#aaa!important}
-body.dark #tab-apiconfig .prov-card-body,
+body.dark #tab-status .ds-day-chips i{background:#303033!important;color:#999!important}
 body.dark #tab-status .ds-meta-row{border-color:#2a2a2c!important}
 @media(max-width:560px){
   #tab-graph .graph-hero{min-height:100px!important}
-  #tab-apiconfig .api-page-head{display:block!important;padding:14px!important}
-  #tab-apiconfig .api-page-actions{margin-top:12px!important}
-  #tab-apiconfig .api-page-actions .prov-add.compact{width:100%!important}
 }
 
 /* ======================= Memory detail states ======================= */
@@ -2030,68 +1864,10 @@ body.dark .panel-update-confirm{background:var(--wx-primary)!important;color:#ff
 .ck-action-dialog .btn-red:focus-visible{outline-color:rgba(250,81,81,.36)!important}
 body.dark .ck-action-dialog .ck-action-message{color:#aaa!important}
 
-#tab-apiconfig .entity-error,
-#tab-status .entity-error,
-#tab-graph .entity-error{
-  padding:13px 14px!important;
-  border:0!important;
-  border-radius:8px!important;
-  background:#fff!important;
-  color:#777!important;
-  line-height:1.6!important;
-}
-#tab-apiconfig .api-error-actions{
-  margin-top:10px!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:8px!important;
-  flex-wrap:wrap!important;
-}
-#tab-apiconfig .api-error-actions .btn{
-  width:auto!important;
-  min-width:112px!important;
-  min-height:38px!important;
-  padding:0 14px!important;
-  border-radius:7px!important;
-  box-shadow:none!important;
-}
-#tab-apiconfig .api-error-actions .btn-outline{border:1px solid #ddd!important;background:#fff!important;color:#666!important}
-body.dark #tab-apiconfig .entity-error,
-body.dark #tab-status .entity-error,
-body.dark #tab-graph .entity-error{background:#1c1c1e!important;color:#999!important}
-body.dark #tab-apiconfig .api-error-actions .btn-outline{border-color:#39393c!important;background:#242426!important;color:#aaa!important}
+/* entity-error 与 api-error-actions 已回归 style.css 单一来源（Phase 6） */
 
-/* eg-detail 外壳已回归 style.css 单一来源（Phase 6）；下方仅剩面板内部 entity-* 皮肤待迁移 */
-.eg-detail-body .entity-detail-title{padding-right:42px!important;color:#222!important;font-size:18px!important;font-weight:600!important}
-.eg-detail-body .entity-detail-sub{color:#999!important;font-size:11px!important}
-.eg-detail-body .entity-chip-row{gap:5px!important}
-.eg-detail-body .entity-chip-row span,
-.eg-detail-body .entity-detail-grid span{border:0!important;border-radius:5px!important;background:#eee!important;color:#777!important}
-.eg-detail-body .entity-detail-block{padding:12px 0!important;border-color:var(--wx-line-soft)!important}
-.eg-detail-body .entity-detail-block b{color:var(--wx-primary-ink)!important;font-size:12px!important;font-weight:600!important}
-.eg-detail-body .entity-detail-block p{color:#444!important;font-size:12px!important;line-height:1.7!important}
-.eg-detail-body .entity-facts{gap:8px!important}
-.eg-detail-body .entity-fact{padding:10px!important;border:0!important;border-radius:7px!important;background:#f5f5f5!important}
-.eg-detail-body .entity-fact span{color:#888!important;font-size:10px!important}
-.eg-detail-body .entity-fact p{margin-top:3px!important;color:#333!important}
-.eg-detail-body .entity-raw{border-color:var(--wx-line-soft)!important}
-.eg-detail-body .entity-raw summary{color:#999!important;font-size:11px!important}
-body.dark .eg-detail-body .entity-detail-title{color:#eee!important}
-body.dark .eg-detail-body .entity-detail-sub{color:#888!important}
-body.dark .eg-detail-body .entity-chip-row span,
-body.dark .eg-detail-body .entity-detail-grid span{background:#303033!important;color:#999!important}
-body.dark .eg-detail-body .entity-detail-block{border-color:#2a2a2c!important}
-body.dark .eg-detail-body .entity-detail-block p{color:#bbb!important}
-body.dark .eg-detail-body .entity-fact{background:#242426!important}
-body.dark .eg-detail-body .entity-fact span{color:#999!important}
-body.dark .eg-detail-body .entity-fact p{color:#ddd!important}
+/* eg-detail 外壳与面板内部 entity-* 皮肤均已回归 style.css 单一来源（Phase 6） */
 
-@media(min-width:560px){
-}
-@media(max-width:560px){
-  #tab-apiconfig .api-error-actions{display:grid!important;grid-template-columns:1fr 1fr!important}
-  #tab-apiconfig .api-error-actions .btn{width:100%!important;min-width:0!important}
-}
 
 /* Full-width workspaces and a WeChat-style attachment tray. */
 body:not(.chat-active) .panel-tab{
