@@ -149,15 +149,10 @@ body{
 }
 .entry-badge.imp-high{background:var(--pg-emerald-soft);color:var(--pg-emerald-600)}
 
-/* —— 弹窗 / 确认框 / Toast —— */
+/* —— 弹窗 / 确认框 ——（Toast 已迁入 components.css） */
 .modal{border-radius:20px;box-shadow:var(--pg-shadow-lg)}
 .confirm-box{border-radius:18px;box-shadow:var(--pg-shadow-lg)}
 .modal input,.modal textarea{border-radius:12px}
-.toast{
-  background:linear-gradient(135deg,#1f3f30,#2c6047);
-  border-radius:22px;
-  box-shadow:0 12px 30px rgba(24,58,42,.30);
-}
 
 /* —— 加载条 —— */
 .loading-bar-inner{background:var(--pg-grad)}
@@ -206,7 +201,6 @@ body.dark .search-wrap input:focus,
 body.dark .eg-search input:focus{border-color:var(--pg-emerald-400);box-shadow:0 0 0 4px rgba(76,195,138,.12)}
 body.dark .entry-badge.imp-high{background:#163024;color:#7fe3ad}
 body.dark .eg-card:hover{border-left-color:var(--pg-emerald-400)}
-body.dark .toast{background:linear-gradient(135deg,#1f3f30,#2c6047)}
 
 /* 聊天气泡状态：放在 polish.css 最后，确保 WhatsApp 风格对号最终生效。 */
 body.chat-active .chat-bubble.user{

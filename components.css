@@ -1,0 +1,197 @@
+/* ============================================================
+   CK Memory Loom components
+   共享基础组件的唯一视觉来源（Phase 6 第二组起）。
+   本文件在所有旧样式表之后加载；迁入一个组件时，必须同步删除
+   旧文件（style / polish / chat / wechat / visual-overrides）中
+   同组件的重复规则，因此本文件保持 0 个 !important。
+   当前已迁入：Toast。
+   ============================================================ */
+
+/* ---- Toast：安静纸面 + 左侧状态线 ---- */
+
+.toast{
+  position:fixed;
+  left:50%;
+  right:auto;
+  bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));
+  transform:translateX(-50%);
+  display:none;
+  z-index:200;
+  width:max-content;
+  max-width:min(320px,calc(100vw - 32px));
+  min-height:40px;
+  padding:10px 16px;
+  border:1px solid var(--ck-line);
+  border-left:3px solid var(--ck-accent);
+  border-radius:var(--ck-radius-md);
+  background:var(--ck-surface);
+  color:var(--ck-text);
+  box-shadow:var(--ck-shadow-md);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  font-size:12px;
+  line-height:1.45;
+  text-align:center;
+}
+.toast.show{display:block;animation:slideup .3s}
+.toast .toast-message{color:var(--ck-text)}
+.toast .toast-close,
+.toast .toast-copy{display:none;color:var(--ck-muted)}
+.toast .toast-copy:hover,
+.toast .toast-close:hover{color:var(--ck-accent-strong)}
+.toast.toast-error{border-left-color:var(--ck-danger)}
+
+/* 聊天页里 Toast 抬高，避开输入区 */
+body.chat-active .toast{bottom:max(76px,calc(env(safe-area-inset-bottom) + 68px))}
+
+@keyframes slideup{
+  from{opacity:0;transform:translateX(-50%) translateY(8px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}
+}
+
+/* ---- 聊天页错误 Toast：可复制、可关闭的宽面板 ---- */
+
+body.chat-active .toast.toast-error{
+  top:calc(118px + env(safe-area-inset-top));
+  bottom:auto;
+  width:min(640px,calc(100vw - 28px));
+  max-width:none;
+  min-height:0;
+  padding:8px 7px 0 16px;
+  box-sizing:border-box;
+  display:none;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  column-gap:6px;
+  overflow:hidden;
+  background:#fff1f2;
+  color:#8f1d2c;
+  border:1px solid #ef9aa5;
+  border-left:3px solid var(--ck-danger);
+  border-radius:var(--ck-radius-sm);
+  box-shadow:0 12px 30px rgba(127,29,45,.18);
+  font-size:14px;
+  line-height:1.55;
+  text-align:left;
+  z-index:26;
+  user-select:text;
+  -webkit-user-select:text;
+  animation:chatErrorToastIn .18s ease-out;
+}
+body.chat-active .toast.toast-error.show{display:grid}
+
+body.chat-active .toast.toast-error .toast-message{
+  grid-column:1 / -1;
+  grid-row:2;
+  max-height:min(34vh,260px);
+  padding:5px 9px 14px 0;
+  overflow-y:auto;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  color:inherit;
+  user-select:text;
+  -webkit-user-select:text;
+}
+
+body.chat-active .toast.toast-error .toast-copy{
+  position:static;
+  grid-column:2;
+  grid-row:1;
+  min-width:70px;
+  height:28px;
+  padding:0 9px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #e2a0aa;
+  border-radius:6px;
+  background:#fff9fa;
+  color:#8f1d2c;
+  font:650 12px/1 Arial,"Microsoft YaHei",sans-serif;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+}
+body.chat-active .toast.toast-error .toast-copy:hover{
+  background:#ffe4e7;
+  border-color:#d77d8a;
+  color:#751421;
+}
+body.chat-active .toast.toast-error .toast-copy:focus-visible{
+  outline:2px solid #b42336;
+  outline-offset:1px;
+}
+body.chat-active .toast.toast-error .toast-copy.copied{
+  background:#e9f8ee;
+  border-color:#8bc9a0;
+  color:#21643a;
+}
+
+body.chat-active .toast.toast-closable.toast-error .toast-close{
+  position:static;
+  grid-column:3;
+  grid-row:1;
+  width:30px;
+  height:30px;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:#9f2f3d;
+  font:700 22px/1 Arial,sans-serif;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+}
+body.chat-active .toast.toast-closable.toast-error .toast-close:hover{
+  background:#ffe0e3;
+  color:#751421;
+}
+body.chat-active .toast.toast-closable.toast-error .toast-close:focus-visible{
+  outline:2px solid #b42336;
+  outline-offset:1px;
+}
+
+body.dark.chat-active .toast.toast-error{
+  background:#32191d;
+  color:#ffd1d6;
+  border-color:#8f3b49;
+  border-left-color:var(--ck-danger);
+  box-shadow:0 14px 34px rgba(0,0,0,.34);
+}
+body.dark.chat-active .toast.toast-closable.toast-error .toast-close{
+  color:#ffb2bd;
+}
+body.dark.chat-active .toast.toast-error .toast-copy{
+  border-color:#7b3c46;
+  background:#402027;
+  color:#ffc0c8;
+}
+body.dark.chat-active .toast.toast-error .toast-copy:hover{
+  border-color:#9d4d5a;
+  background:#51242b;
+  color:#ffe8eb;
+}
+body.dark.chat-active .toast.toast-error .toast-copy.copied{
+  border-color:#39714b;
+  background:#173923;
+  color:#9ce3b4;
+}
+body.dark.chat-active .toast.toast-closable.toast-error .toast-close:hover{
+  background:#51242b;
+  color:#ffe8eb;
+}
+
+@keyframes chatErrorToastIn{
+  from{opacity:0;transform:translateX(-50%) translateY(-6px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .toast.show{animation:none}
+  body.chat-active .toast.toast-error{animation:none}
+}

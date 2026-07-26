@@ -1,8 +1,8 @@
 {
-  "version": "chat-v149-standalone-facts-api-center",
+  "version": "chat-v150-components-css",
   "notes": [
-    "新增独立只读 Fact 页面，按动态分类展示时间、正文、人物、来源、召回与状态",
-    "Fact 召回升级为独立索引 Top 8，并记录最终注入后的真实召回次数",
-    "API 配置统一管理主链路、记忆、滚动、Fact 提取和召回服务"
+    "Phase 6 第二组启动：新增 components.css 作为共享基础组件唯一视觉来源",
+    "Toast（含聊天页错误 Toast）迁入 components.css，全部基于 token、0 个 !important",
+    "删除 style/polish/chat/wechat/visual-overrides 五个旧文件中的全部 Toast 重复规则"
   ]
 }

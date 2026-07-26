@@ -837,9 +837,8 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
   background:#fff!important;border:1px solid var(--wx-line)!important;border-radius:999px!important;
 }
 
-/* —— 弹窗 / Toast：微信风 —— */
+/* —— 弹窗：微信风 ——（Toast 已迁入 components.css） */
 .modal,.confirm-box{border-radius:14px!important;box-shadow:0 12px 40px rgba(0,0,0,.16)!important}
-.toast{background:rgba(0,0,0,.82)!important;border-radius:8px!important;box-shadow:none!important}
 .btn-blue,.btn{transition:background .15s ease!important}
 
 /* ======================= 深色模式守卫（微信深色）======================= */
@@ -2212,29 +2211,7 @@ body.dark .panel-update-confirm{background:var(--wx-primary)!important;color:#ff
 /* The loading indicator should never remain faintly visible after completion. */
 .loading-bar-wrap.done{display:none!important}
 
-.toast,
-body.chat-active .toast,
-body.dark .toast,
-body.dark.chat-active .toast{
-  left:50%!important;
-  right:auto!important;
-  bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px))!important;
-  width:max-content!important;
-  max-width:min(320px,calc(100vw - 32px))!important;
-  min-height:40px!important;
-  padding:10px 16px!important;
-  border:0!important;
-  border-radius:7px!important;
-  background:rgba(32,32,32,.9)!important;
-  color:#fff!important;
-  box-shadow:none!important;
-  backdrop-filter:blur(8px)!important;
-  -webkit-backdrop-filter:blur(8px)!important;
-  font-size:12px!important;
-  line-height:1.45!important;
-  text-align:center!important;
-}
-body.chat-active .toast{bottom:max(76px,calc(env(safe-area-inset-bottom) + 68px))!important}
+/* Toast 已迁入 components.css（Phase 6 第二组） */
 
 @media(max-width:560px){
   .modal,

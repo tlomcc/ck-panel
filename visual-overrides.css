@@ -539,14 +539,6 @@ body.dark #tab-search .search-empty-card{border-color:var(--ck-line)!important;b
 .modal h3,
 .confirm-box p,
 .panel-update-card h3{color:var(--ck-text)!important}
-.toast,
-body.chat-active .toast{
-  border:1px solid var(--ck-line)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-text)!important;
-  box-shadow:var(--ck-shadow-md)!important;
-}
 body.chat-active .loading-bar-wrap{
   background:
     radial-gradient(circle at 50% 42%,rgba(47,143,98,.1),transparent 18rem),
@@ -731,27 +723,7 @@ body.dark #tab-graph .eg-chip{background:var(--ck-accent-wash)!important;color:v
 .fact-card-alias{color:var(--ck-muted)!important}
 body.dark .fact-chip{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important;border-color:var(--ck-line)!important}
 
-/* ---- Toast: quiet paper with a status line, not a black pill ---- */
-.toast,
-body.chat-active .toast,
-body.dark .toast,
-body.dark.chat-active .toast{
-  border:1px solid var(--ck-line)!important;
-  border-left:3px solid var(--ck-accent)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-text)!important;
-  box-shadow:var(--ck-shadow-md)!important;
-}
-.toast .toast-message,
-body.chat-active .toast .toast-message{color:var(--ck-text)!important}
-.toast.toast-error,
-body.chat-active .toast.toast-error,
-body.dark .toast.toast-error{border-left-color:var(--ck-danger)!important}
-.toast .toast-copy,
-.toast .toast-close{color:var(--ck-muted)!important}
-.toast .toast-copy:hover,
-.toast .toast-close:hover{color:var(--ck-accent-strong)!important}
+/* ---- Toast 已迁入 components.css（Phase 6 第二组） ---- */
 
 /* ---- Empty states: quiet muted copy ---- */
 .empty-state{color:var(--ck-muted)!important}
