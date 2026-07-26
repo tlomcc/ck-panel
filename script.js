@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v156-api-owner';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v157-loom-finish';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -741,6 +741,7 @@ function init(){
 function startPanelDataApp(){
   if(panelAppStarted)return;
   panelAppStarted=true;
+  ckInitScrollControls();
   document.getElementById('day-num').textContent=daysSince();
   var d=new Date(),w=['周日','周一','周二','周三','周四','周五','周六'];
   document.getElementById('mem-date').textContent=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate()+' '+w[d.getDay()];
@@ -1438,10 +1439,21 @@ function renderFactCards(){
   }
   var groups=[],byCategory=Object.create(null);
   factLibraryItems.forEach(function(row){var category=factRowCategory(row);if(!byCategory[category]){byCategory[category]=[];groups.push(category)}byCategory[category].push(row)});
+  if(!window.factCollapsedCategories)window.factCollapsedCategories={};
   box.innerHTML=groups.map(function(category){
     var rows=byCategory[category];
-    return '<section class="fact-category-group"><header><div><span class="fact-category-mark" aria-hidden="true"></span><h3>'+esc(category)+'</h3></div><b>'+rows.length+'</b></header><div class="fact-category-items">'+rows.map(renderFactCard).join('')+'</div></section>';
+    var collapsed=window.factCollapsedCategories[category]===true;
+    return '<details class="fact-category-group"'+(collapsed?'':' open')+' data-fact-category="'+escAttr(category)+'"><summary><div><span class="fact-category-mark" aria-hidden="true"></span><h3>'+esc(category)+'</h3></div><b>'+rows.length+'</b><span class="fact-category-caret" aria-hidden="true">›</span></summary><div class="fact-category-items">'+rows.map(renderFactCard).join('')+'</div></details>';
   }).join('');
+  if(!box.dataset.factGroupDelegated){
+    box.dataset.factGroupDelegated='1';
+    box.addEventListener('toggle',function(ev){
+      var group=ev.target;
+      if(!group||!group.classList||!group.classList.contains('fact-category-group'))return;
+      var cat=group.getAttribute('data-fact-category');
+      if(cat)window.factCollapsedCategories[cat]=!group.open;
+    },true);
+  }
 }
 function loadFactLibrary(reset,force){
   reset=reset!==false;if(factLibraryLoading&&!reset)return Promise.resolve();
@@ -3650,7 +3662,7 @@ function chatRenderMainRouteSummary(){
   }
   var route=chatMainRouteConfig();
   if(route.ok){
-    el.textContent='已同步：'+route.providerName+' · '+route.model+' · '+route.providerHost+'；聊天仍通过 CK 网关，记忆召回按开关设置执行。';
+    el.textContent='已同步：'+route.providerName+' · '+route.model+'；聊天仍通过 CK 网关，记忆召回按开关设置执行。';
     el.classList.remove('empty');
   }else{
     el.textContent='未就绪：'+route.reason+'。请到 API 配置 -> 主链路设置。';
@@ -6914,6 +6926,7 @@ function chatLayoutCompose(opts){
     var composeHeight=Math.ceil((composeRect&&composeRect.height)||compose.offsetHeight||64);
     document.documentElement.style.setProperty('--ck-chat-compose-height',composeHeight+'px');
   }
+  chatScheduleJumpNavUpdate();
   var btn=document.getElementById('chat-send-btn');
   if(!btn)return;
   btn.style.position='';
@@ -7352,6 +7365,47 @@ document.addEventListener('visibilitychange',function(){
 function chatMessagesBox(){
   return document.getElementById('chat-messages');
 }
+var chatJumpNavRaf=0;
+function ckPrefersReducedMotion(){
+  return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function chatUpdateJumpNav(){
+  var nav=document.getElementById('chat-jump-nav');
+  var box=chatMessagesBox();
+  var body=document.body;
+  if(!nav||!body)return;
+  var active=currentPanelTab==='chat'&&body.classList.contains('chat-active');
+  var scrollable=!!(box&&box.scrollHeight-box.clientHeight>48);
+  var show=active&&scrollable;
+  nav.classList.toggle('show',show);
+  nav.setAttribute('aria-hidden',show?'false':'true');
+  body.classList.toggle('chat-jump-visible',show);
+  var topBtn=document.getElementById('chat-jump-top');
+  var bottomBtn=document.getElementById('chat-jump-bottom');
+  if(topBtn)topBtn.disabled=!show||!box||box.scrollTop<=8;
+  if(bottomBtn)bottomBtn.disabled=!show||!box||chatIsMessagesNearBottom(12);
+}
+function chatScheduleJumpNavUpdate(){
+  if(chatJumpNavRaf)cancelAnimationFrame(chatJumpNavRaf);
+  chatJumpNavRaf=requestAnimationFrame(function(){
+    chatJumpNavRaf=0;
+    chatUpdateJumpNav();
+  });
+}
+function chatJumpTop(){
+  var box=chatMessagesBox();
+  if(!box)return;
+  try{box.scrollTo({top:0,behavior:ckPrefersReducedMotion()?'auto':'smooth'})}
+  catch(e){box.scrollTop=0}
+  chatSetNewMessageHint(false);
+  chatScheduleJumpNavUpdate();
+  setTimeout(chatScheduleJumpNavUpdate,240);
+}
+function chatJumpBottom(){
+  chatScrollMessagesBottom(ckPrefersReducedMotion());
+  chatScheduleJumpNavUpdate();
+  setTimeout(chatScheduleJumpNavUpdate,240);
+}
 function chatIsMessagesNearBottom(threshold){
   var box=chatMessagesBox();
   if(!box)return true;
@@ -7368,12 +7422,22 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
+  chatScheduleJumpNavUpdate();
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
   if(!box||box.__ckMessagesScrollAttached)return;
   box.__ckMessagesScrollAttached=true;
   box.addEventListener('scroll',chatHandleMessagesScroll,{passive:true});
+  if(window.MutationObserver){
+    box.__ckJumpMutationObserver=new MutationObserver(chatScheduleJumpNavUpdate);
+    box.__ckJumpMutationObserver.observe(box,{childList:true,subtree:true,characterData:true});
+  }
+  if(window.ResizeObserver){
+    box.__ckJumpResizeObserver=new ResizeObserver(chatScheduleJumpNavUpdate);
+    box.__ckJumpResizeObserver.observe(box);
+  }
+  chatScheduleJumpNavUpdate();
 }
 function chatFollowMessagesBottom(shouldStick,instant,showHint){
   if(shouldStick){
@@ -7464,6 +7528,8 @@ function chatScrollMessagesBottom(instant){
         try{box.scrollTo({top:box.scrollHeight,behavior:'smooth'});}
         catch(e){box.scrollTop=box.scrollHeight}
       });
+      chatScheduleJumpNavUpdate();
+      setTimeout(chatScheduleJumpNavUpdate,240);
       return;
     }catch(e){}
   }
@@ -7474,6 +7540,7 @@ function chatScrollMessagesBottom(instant){
       if(old)box.style.scrollBehavior=old;
       else box.style.removeProperty('scroll-behavior');
     }
+    chatScheduleJumpNavUpdate();
   });
 }
 function chatIsRealMessage(m){
@@ -8487,6 +8554,10 @@ function switchPanelTab(tab,opts) {
   }else{
     window.scrollTo(0,0);
   }
+  setTimeout(function(){
+    ckUpdateScrollControls();
+    chatScheduleJumpNavUpdate();
+  },0);
 }
 var memoryRealtimeTimer=null;
 var memoryLoadInFlight=false;
@@ -8648,6 +8719,73 @@ document.addEventListener('click',function(e){
   popup.textContent=badge.getAttribute('data-score');
   badge.appendChild(popup);
   setTimeout(function(){popup.remove()},3000);
+});
+
+/* ===================== 页面滚动快捷键 ===================== */
+var ckScrollControlsRaf=0;
+function ckUpdateScrollControls(){
+  var btn=document.getElementById('ck-backtop');
+  if(!btn)return;
+  var top=window.pageYOffset||document.documentElement.scrollTop||document.body.scrollTop||0;
+  var show=!document.body.classList.contains('chat-active')&&top>360;
+  btn.classList.toggle('show',show);
+  btn.setAttribute('aria-hidden',show?'false':'true');
+}
+function ckScheduleScrollControlsUpdate(){
+  if(ckScrollControlsRaf)cancelAnimationFrame(ckScrollControlsRaf);
+  ckScrollControlsRaf=requestAnimationFrame(function(){
+    ckScrollControlsRaf=0;
+    ckUpdateScrollControls();
+  });
+}
+function ckInitScrollControls(){
+  if(window.__ckScrollControlsReady)return;
+  window.__ckScrollControlsReady=true;
+  window.addEventListener('scroll',ckScheduleScrollControlsUpdate,{passive:true});
+  window.addEventListener('resize',ckScheduleScrollControlsUpdate,{passive:true});
+  ckUpdateScrollControls();
+}
+function ckBackToTop(){
+  try{window.scrollTo({top:0,left:0,behavior:ckPrefersReducedMotion()?'auto':'smooth'})}
+  catch(e){window.scrollTo(0,0)}
+  ckScheduleScrollControlsUpdate();
+  setTimeout(ckScheduleScrollControlsUpdate,240);
+}
+
+/* ===================== CK 品牌页 ===================== */
+var ckBrandReturnFocus=null;
+function openCkBrand(){
+  var veil=document.getElementById('ck-brand-veil');if(!veil)return;
+  var ver=document.getElementById('ck-brand-ver');
+  if(ver){
+    var m=String(CK_PANEL_VERSION||'').match(/(?:^|-)v(\d+)(?:-|$)/i);
+    ver.textContent=m?('Memory Loom · v'+m[1]):'Memory Loom';
+  }
+  ckBrandReturnFocus=document.activeElement;
+  veil.classList.add('show');
+  veil.setAttribute('aria-hidden','false');
+  document.body.classList.add('ck-brand-open');
+  requestAnimationFrame(function(){
+    var close=veil.querySelector('.ck-brand-close');
+    if(close)close.focus();
+  });
+}
+function closeCkBrand(ev){
+  if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.ck-brand-sheet'))return;
+  var veil=document.getElementById('ck-brand-veil');if(!veil)return;
+  veil.classList.remove('show');
+  veil.setAttribute('aria-hidden','true');
+  document.body.classList.remove('ck-brand-open');
+  if(ckBrandReturnFocus&&ckBrandReturnFocus.focus){
+    try{ckBrandReturnFocus.focus()}catch(e){}
+  }
+  ckBrandReturnFocus=null;
+}
+document.addEventListener('keydown',function(ev){
+  if(ev.key==='Escape'){
+    var veil=document.getElementById('ck-brand-veil');
+    if(veil&&veil.classList.contains('show'))closeCkBrand();
+  }
 });
 
 /* ===================== 导航：汉堡侧栏 + API 配置页 (v4) ===================== */
@@ -9039,14 +9177,14 @@ function assignmentCardHtml(g){
   var slot=apiGroupSlot(g.key),p=findLibraryProvider(slot.current);
   var selectedModel=slot.model||(p&&p.model)||'';
   var models=p?cleanModelList(p.models,selectedModel):[];
-  var providerText=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
+  var providerText=p?('当前供应商：'+providerDisplayName(p)):'当前未选择供应商';
   return '<div class="api-assign-card" data-group="'+escAttr(g.key)+'">'+
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label><label><span>API Key</span><input class="assign-key" type="text" value="'+escAttr((p&&p.key)||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></label><label><span>站点地址</span><input class="assign-url" type="url" value="'+escAttr((p&&p.url)||'')+'" placeholder="https://.../v1" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
     '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
-    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择；Key 和站点地址与供应商库同步。':'填写 Key 和站点地址后可拉取模型，也可以直接填写模型名。')+'</div>'+
+    '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。Key 和站点地址在「供应商库」里管理。':'选择供应商后可拉取模型，也可以直接填写模型名。Key 和站点地址在「供应商库」里管理。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存配置</button></div>'+
   '</div>';
 }
@@ -9124,21 +9262,21 @@ function confirmProvDel(){
 }
 function readAssignmentRow(row){
   function v(sel){var el=row.querySelector(sel);return el?el.value:''}
-  return {group:row.getAttribute('data-group'),providerId:v('.assign-provider'),model:v('.assign-model'),key:v('.assign-key'),url:v('.assign-url')};
+  var providerId=v('.assign-provider');
+  var p=findLibraryProvider(providerId);
+  return {group:row.getAttribute('data-group'),providerId:providerId,model:v('.assign-model'),key:(p&&p.key)||'',url:(p&&p.url)||''};
 }
 function onAssignProviderChange(sel){
   var row=sel.closest('.api-assign-card');if(!row)return;
   var p=findLibraryProvider(sel.value);
   var input=row.querySelector('.assign-model');if(input)input.value=(p&&p.model)||'';
-  var keyInput=row.querySelector('.assign-key');if(keyInput)keyInput.value=(p&&p.key)||'';
-  var urlInput=row.querySelector('.assign-url');if(urlInput)urlInput.value=(p&&p.url)||'';
   var ms=row.querySelector('.assign-model-select');if(ms)ms.innerHTML=modelOptionsHtml(p?p.models:[],(p&&p.model)||'');
   setModelSearchState(row,p?p.models:[]);
-  var summary=row.querySelector('.api-assign-summary');if(summary)summary.textContent=p?('当前供应商：'+providerDisplayName(p)+' · '+(providerHost(p.url)||'未填写 URL')):'当前未选择供应商';
+  var summary=row.querySelector('.api-assign-summary');if(summary)summary.textContent=p?('当前供应商：'+providerDisplayName(p)):'当前未选择供应商';
   var hint=row.querySelector('.prov-model-hint');
   if(hint){
     var models=p?cleanModelList(p.models,(p&&p.model)||''):[];
-    hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择；Key 和站点地址与供应商库同步。':'填写 Key 和站点地址后可拉取模型，也可以直接填写模型名。';
+    hint.textContent=models.length?'已缓存 '+models.length+' 个模型，可直接选择。Key 和站点地址在「供应商库」里管理。':'选择供应商后可拉取模型，也可以直接填写模型名。Key 和站点地址在「供应商库」里管理。';
   }
 }
 function saveAssignment(btn){
@@ -9146,9 +9284,8 @@ function saveAssignment(btn){
   var d=readAssignmentRow(row),slot=apiGroupSlot(d.group),p=findLibraryProvider(d.providerId);
   if(!p){toast('请选择供应商');return}
   if(!d.model.trim()){toast('请填写模型名');return}
-  if(!d.key.trim()){toast('请填写 API Key');return}
-  if(!d.url.trim()){toast('请填写站点地址');return}
-  p.key=d.key.trim();p.url=d.url.trim().replace(/\/+$/,'');
+  if(!d.key.trim()){toast('该供应商还没填 API Key，请到「供应商库」补全');return}
+  if(!d.url.trim()){toast('该供应商还没填站点地址，请到「供应商库」补全');return}
   slot.current=d.providerId;slot.model=d.model.trim();
   btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
   var updates={API_PROVIDERS:apiProviders};
@@ -9169,9 +9306,8 @@ function fetchAssignmentModels(btn){
   var row=btn.closest('.api-assign-card');if(!row)return;
   var d=readAssignmentRow(row),p=findLibraryProvider(d.providerId);
   if(!p){toast('先选择供应商');return}
-  p.url=d.url.trim();p.key=d.key.trim();
-  if(!p.url){toast('请先填写站点地址');return}
-  if(!p.key){toast('请先填写 API Key');return}
+  if(!p.url){toast('该供应商还没填站点地址，请到「供应商库」补全');return}
+  if(!p.key){toast('该供应商还没填 API Key，请到「供应商库」补全');return}
   var slot=apiGroupSlot(d.group);
   slot.current=d.providerId;slot.model=d.model.trim()||slot.model;
   btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';

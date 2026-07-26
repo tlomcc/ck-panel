@@ -522,3 +522,237 @@ body.dark .confirm-bg{background:rgba(0,0,0,.62)}
 .modal-bg.panel-auth-gate .modal-btns .btn-blue{min-width:96px}
 body.panel-auth-locked{overflow:hidden}
 body.panel-auth-locked .page{visibility:hidden}
+
+/* ---- CK 品牌标识：单线 C + K 织线字标 ---- */
+
+.brand-mark{cursor:pointer;padding:0}
+.brand-mark .ck-mark{
+  width:22px;
+  height:22px;
+  display:block;
+}
+.ck-mark path,.ck-mark circle{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2.6;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.ck-mark .ck-mark-node{
+  fill:currentColor;
+  stroke:none;
+}
+.brand-mark:hover .ck-mark{transform:scale(1.06)}
+.brand-mark .ck-mark{transition:transform var(--ck-motion-fast) var(--ck-ease)}
+
+/* ---- CK 品牌页：点击标识弹出的身份卡 ---- */
+
+.ck-brand-veil{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:150000;
+  align-items:center;
+  justify-content:center;
+  padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom));
+  background:rgba(15,29,21,.5);
+  backdrop-filter:blur(10px) saturate(112%);
+  -webkit-backdrop-filter:blur(10px) saturate(112%);
+}
+.ck-brand-veil.show{display:flex;animation:ckVeilIn .22s var(--ck-ease)}
+.ck-brand-sheet{
+  position:relative;
+  width:min(400px,calc(100vw - 40px));
+  max-height:calc(100vh - 80px);
+  overflow-y:auto;
+  padding:34px 30px 24px;
+  border:1px solid var(--ck-line);
+  border-radius:var(--ck-radius-xl);
+  background:
+    radial-gradient(circle at 82% -10%,rgba(var(--ck-accent-rgb),.09),transparent 15rem),
+    var(--ck-surface);
+  color:var(--ck-text);
+  box-shadow:var(--ck-shadow-overlay);
+  text-align:left;
+}
+.ck-brand-veil.show .ck-brand-sheet{animation:ckSheetIn .3s var(--ck-ease)}
+.ck-brand-close{
+  position:absolute;
+  top:14px;
+  right:14px;
+  width:32px;
+  height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:0;
+  border-radius:var(--ck-radius-sm);
+  background:transparent;
+  color:var(--ck-muted);
+  cursor:pointer;
+}
+.ck-brand-close:hover{background:var(--ck-surface-soft);color:var(--ck-text)}
+.ck-brand-close svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+
+/* 顶部的织线组：五根渐隐记忆线，一根被点亮 */
+.ck-brand-loom{
+  display:flex;
+  gap:7px;
+  margin-bottom:22px;
+}
+.ck-brand-loom i{
+  width:26px;
+  height:2px;
+  border-radius:var(--ck-radius-pill);
+  background:var(--ck-line-strong);
+  opacity:.55;
+}
+.ck-brand-loom i:nth-child(2){
+  width:44px;
+  background:var(--ck-accent);
+  opacity:1;
+}
+.ck-brand-loom i:nth-child(4){opacity:.35}
+.ck-brand-loom i:nth-child(5){width:16px;opacity:.25}
+
+.ck-brand-monogram svg{
+  width:52px;
+  height:52px;
+  color:var(--ck-accent-strong);
+  margin-bottom:14px;
+}
+.ck-brand-monogram path,.ck-brand-monogram circle{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2.4;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.ck-brand-monogram .ck-mark-node{fill:currentColor;stroke:none}
+
+.ck-brand-sheet h2{
+  margin:0 0 4px;
+  font-size:26px;
+  font-weight:800;
+  letter-spacing:-.4px;
+  color:var(--ck-text);
+}
+.ck-brand-sheet h2 span{
+  margin-left:2px;
+  font-size:17px;
+  font-weight:700;
+  color:var(--ck-accent-strong);
+  letter-spacing:.4px;
+}
+.ck-brand-motto{
+  margin:0 0 18px;
+  color:var(--ck-muted);
+  font-size:13px;
+  letter-spacing:2px;
+}
+.ck-brand-thread{
+  width:100%;
+  height:1px;
+  margin:0 0 18px;
+  background:linear-gradient(90deg,var(--ck-accent),var(--ck-line) 40%,transparent);
+}
+.ck-brand-desc{
+  margin:0 0 20px;
+  color:var(--ck-text-soft);
+  font-size:13px;
+  line-height:1.85;
+}
+.ck-brand-tenets{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-bottom:22px;
+}
+.ck-brand-tenets>div{
+  padding:12px 8px 10px;
+  border:1px solid var(--ck-line-soft);
+  border-radius:var(--ck-radius-md);
+  background:var(--ck-surface-soft);
+  text-align:center;
+}
+.ck-brand-tenets b{
+  display:block;
+  margin-bottom:3px;
+  font-size:19px;
+  font-weight:800;
+  color:var(--ck-accent-strong);
+}
+.ck-brand-tenets span{
+  color:var(--ck-muted);
+  font-size:10.5px;
+  letter-spacing:.5px;
+}
+.ck-brand-sheet footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding-top:14px;
+  border-top:1px solid var(--ck-line-soft);
+}
+.ck-brand-ver{
+  color:var(--ck-accent-strong);
+  font-size:10.5px;
+  font-weight:700;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  letter-spacing:.4px;
+}
+.ck-brand-sig{
+  color:var(--ck-faint);
+  font-size:10.5px;
+  letter-spacing:1px;
+}
+body.dark .ck-brand-veil{background:rgba(0,0,0,.6)}
+@media(prefers-reduced-motion:reduce){
+  .ck-brand-veil.show,
+  .ck-brand-veil.show .ck-brand-sheet{animation:none}
+}
+@media(max-width:390px){
+  .ck-brand-sheet{padding:28px 22px 20px}
+  .ck-brand-sheet h2{font-size:23px}
+}
+
+/* ---- 普通页面回顶：悬在内容边缘，不与 Toast / 对话框争层级 ---- */
+
+body.ck-brand-open{overflow:hidden}
+.ck-backtop{
+  position:fixed;
+  right:max(18px,env(safe-area-inset-right));
+  bottom:max(20px,calc(env(safe-area-inset-bottom) + 14px));
+  z-index:85;
+  width:42px;
+  height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  border:1px solid var(--ck-line);
+  border-radius:50%;
+  background:var(--ck-surface-overlay);
+  color:var(--ck-accent-strong);
+  box-shadow:var(--ck-shadow-md);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  cursor:pointer;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transform:translateY(8px);
+  transition:opacity var(--ck-motion-fast) var(--ck-ease),transform var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease),background var(--ck-motion-fast) var(--ck-ease);
+}
+.ck-backtop.show{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
+.ck-backtop:hover{border-color:var(--ck-accent);background:var(--ck-accent-wash)}
+.ck-backtop:focus-visible{outline:2px solid var(--ck-accent);outline-offset:3px}
+.ck-backtop svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+body.chat-active .ck-backtop{display:none}
+@media(max-width:560px){
+  .ck-backtop{right:max(14px,env(safe-area-inset-right));width:40px;height:40px}
+}
+@media(prefers-reduced-motion:reduce){
+  .ck-backtop{transition:none}
+}
