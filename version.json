@@ -1,8 +1,8 @@
 {
-  "version": "chat-v160-fact-direct-edit",
+  "version": "chat-v161-fact-optimistic-edit",
   "notes": [
-    "Fact 正文支持直接编辑保存，并在保存后立即更新向量",
-    "Fact 保存增加版本冲突保护，不会覆盖另一处刚完成的修改",
-    "召回只使用有效 Fact，过期 Fact 继续保留在面板供查看"
+    "Fact 保存采用乐观更新，列表和详情会立即显示新正文",
+    "保存失败或版本冲突时自动回滚列表，同时保留编辑框内容",
+    "generation 冲突保护继续阻止旧版本覆盖远端修改"
   ]
 }

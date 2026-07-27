@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v160-fact-direct-edit';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v161-fact-optimistic-edit';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1536,8 +1536,11 @@ function saveFactDetail(){
   var editor=document.getElementById('fact-detail-editor'),value=String((editor&&editor.value)||'').trim();
   if(!value){setFactSaveState('正文不能为空','error',false);return}
   if(value.length>220){setFactSaveState('正文不能超过 220 字','error',false);return}
-  var factId=factRowId(factDetailItem),generation=String(factDetailItem.generation||(factLibraryData&&factLibraryData.generation)||'');
+  var previousItem=Object.assign({},factDetailItem);
+  var factId=factRowId(previousItem),generation=String(previousItem.generation||(factLibraryData&&factLibraryData.generation)||'');
   var conflictSeen=false;
+  factDetailItem=Object.assign({},previousItem,{text:value,value:value,summary:value});
+  replaceFactLibraryItem(factDetailItem);
   factDetailSaving=true;setFactSaveState('保存中…','',false);
   panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(factId),{
     method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
@@ -1559,6 +1562,8 @@ function saveFactDetail(){
   }).catch(function(err){
     var conflict=err&&err.status===409;
     conflictSeen=conflict;
+    factDetailItem=previousItem;
+    replaceFactLibraryItem(previousItem);
     setFactSaveState(conflict?'这条 Fact 已有更新，未覆盖当前版本':('保存失败：'+(err&&err.message?err.message:'请稍后重试')),conflict?'error':'error',conflict);
   }).finally(function(){
     factDetailSaving=false;
