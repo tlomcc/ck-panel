@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v159-chat-width-restore';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v160-fact-direct-edit';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -589,7 +589,7 @@ function rpcStrict(tool,args){var name=mcpToolName(tool);return apiFetch({method
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
 var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='chat',returnPanelTab='chat',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
-var factLibraryData=null,factLibraryItems=[],factLibraryLoading=false,factLibraryRequestId=0,factLibraryOffset=0,factLibraryHasMore=false,factLibrarySearchTimer=null,factLibrarySort='recent',factPendingEntityKey='';
+var factLibraryData=null,factLibraryItems=[],factLibraryLoading=false,factLibraryRequestId=0,factLibraryOffset=0,factLibraryHasMore=false,factLibrarySearchTimer=null,factLibrarySort='recent',factPendingEntityKey='',factDetailItem=null,factDetailSaving=false;
 var entityGraphData=null,entityGraphView='nodes',entityGraphMode='home',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false,entityGraphZoom=1;
 var entityGraphQuery='',entityGraphType='all',entityGraphSort='importance';
 var archiveOverviewData={graph:null,facts:null},archiveOverviewLoading=false,archiveOverviewRequestId=0;
@@ -1469,7 +1469,7 @@ function loadFactLibrary(reset,force){
     factLibraryOffset=numOr(data.pagination.next_offset,offset+data.items.length);factLibraryHasMore=!!data.pagination.has_more;
     renderFactLibrary(data);
     if(status)status.textContent=data.source==='standalone'
-      ?'只读展示独立 Fact；分类由提取模型按实际内容生成。'
+      ?'独立 Fact 已同步；打开任意 Fact 可直接修正正文。'
       :'独立 Fact 尚未初始化，当前临时显示旧小档案 Fact；新库生成后会自动切换。';
   }).catch(function(err){
     if(requestId!==factLibraryRequestId)return;
@@ -1492,15 +1492,16 @@ function renderFactSourceDetail(source){
 function renderFactHistory(history){
   if(!Array.isArray(history)||!history.length)return '<p class="fact-detail-muted">暂无被覆盖的旧值</p>';
   return history.slice().reverse().map(function(item){
-    var value=item&&typeof item==='object'?String(item.text||item.value||''):String(item||''),date=item&&typeof item==='object'?String(item.expired_at||item.time||item.last_seen||''):'';
+    var value=item&&typeof item==='object'?String(item.text||item.value||''):String(item||''),date=item&&typeof item==='object'?String(item.edited_at||item.expired_at||item.time||item.last_seen||''):'';
     return '<div class="fact-history-row"><span>'+esc(value||'旧值')+'</span><small>'+esc(date||'历史版本')+'</small></div>';
   }).join('');
 }
-function renderFactDetail(item){
+function renderFactDetail(item,saveStatus){
   item=item||{};var source=factRowSource(item),people=factRowPeople(item),state=String(item.status||item.state||'active').toLowerCase();
   var recallTotal=numOr(item.recall_count,item.recall_count_total||0),health=String(item.vector_status||'missing');
   var html='<div class="fact-detail-head"><div class="facts-kicker"><span></span>FACT · '+(state==='expired'?'EXPIRED':'ACTIVE')+'</div><h3>'+esc(factRowCategory(item))+'</h3><p>'+esc(item.time||item.last_seen||'时间待确认')+' · '+factStateLabel(state)+'</p></div>';
-  html+='<div class="fact-detail-value"><small>正文</small><strong>'+esc(factRowText(item)||'暂无正文')+'</strong></div>';
+  var value=factRowText(item)||'',changedStatus=saveStatus||'';
+  html+='<div class="fact-detail-value fact-detail-editor-wrap"><label for="fact-detail-editor">正文</label><textarea id="fact-detail-editor" maxlength="220" rows="5" oninput="onFactEditorInput()" '+(factDetailSaving?'disabled':'')+'>'+esc(value)+'</textarea><div class="fact-detail-editor-foot"><span id="fact-detail-char-count">'+value.length+'/220</span><span id="fact-detail-save-status" class="'+(changedStatus?'is-visible':'')+'" aria-live="polite">'+esc(changedStatus)+'</span><button id="fact-detail-reload" class="fact-detail-reload" type="button" onclick="reloadFactDetail()" hidden>载入最新</button><button id="fact-detail-save" class="fact-detail-save" type="button" onclick="saveFactDetail()" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 16h8"/></svg><span>保存</span></button></div></div>';
   if(state==='expired')html+='<div class="fact-detail-block"><b>过期原因</b><p>'+esc(item.expired_reason||'被后续更新事实替代')+'</p></div>';
   if(people.length)html+='<div class="fact-detail-chips">'+people.map(function(name){return '<span>'+esc(name)+'</span>'}).join('')+'</div>';
   html+='<div class="fact-detail-grid"><div><span>证据次数</span><b>'+numOr(item.evidence_count,1)+'</b></div><div><span>召回次数</span><b>'+recallTotal+'</b></div><div><span>最新召回</span><b>'+esc(item.last_recalled_at||'-')+'</b></div><div><span>状态</span><b>'+factStateLabel(state)+'</b></div></div>';
@@ -1509,10 +1510,70 @@ function renderFactDetail(item){
   html+='<details class="entity-raw"><summary>技术信息</summary><pre>'+esc(JSON.stringify({fact_id:factRowId(item),category:factRowCategory(item),status:state,vector_status:health,vector_dimension:item.vector_dimension||0,recall_count:recallTotal,source:source},null,2))+'</pre></details>';
   return html;
 }
+function onFactEditorInput(){
+  var editor=document.getElementById('fact-detail-editor'),count=document.getElementById('fact-detail-char-count'),save=document.getElementById('fact-detail-save'),status=document.getElementById('fact-detail-save-status'),reload=document.getElementById('fact-detail-reload');
+  if(!editor)return;var value=String(editor.value||''),original=factRowText(factDetailItem);
+  if(count)count.textContent=value.length+'/220';
+  if(save)save.disabled=factDetailSaving||!value.trim()||value.trim()===String(original||'').trim();
+  if(status){status.textContent='';status.classList.remove('is-visible','is-error','is-ok')}
+  if(reload)reload.hidden=true;
+}
+function setFactSaveState(message,tone,showReload){
+  var editor=document.getElementById('fact-detail-editor'),save=document.getElementById('fact-detail-save'),status=document.getElementById('fact-detail-save-status'),reload=document.getElementById('fact-detail-reload');
+  if(editor)editor.disabled=factDetailSaving;
+  if(save){save.disabled=factDetailSaving||!editor||!String(editor.value||'').trim();save.classList.toggle('is-saving',factDetailSaving)}
+  if(status){status.textContent=message||'';status.className='is-visible'+(tone?(' is-'+tone):'')}
+  if(reload)reload.hidden=!showReload;
+}
+function replaceFactLibraryItem(item){
+  var id=factRowId(item),found=false;
+  factLibraryItems=factLibraryItems.map(function(row){if(factRowId(row)!==id)return row;found=true;return Object.assign({},row,item)});
+  if(!found&&id)factLibraryItems.push(item);
+  renderFactCards();
+}
+function saveFactDetail(){
+  if(factDetailSaving||!factDetailItem)return;
+  var editor=document.getElementById('fact-detail-editor'),value=String((editor&&editor.value)||'').trim();
+  if(!value){setFactSaveState('正文不能为空','error',false);return}
+  if(value.length>220){setFactSaveState('正文不能超过 220 字','error',false);return}
+  var factId=factRowId(factDetailItem),generation=String(factDetailItem.generation||(factLibraryData&&factLibraryData.generation)||'');
+  var conflictSeen=false;
+  factDetailSaving=true;setFactSaveState('保存中…','',false);
+  panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(factId),{
+    method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text:value,expected_generation:generation})
+  },{label:'保存 Fact'}).then(function(resp){
+    return resp.json().catch(function(){return {error:'HTTP '+resp.status}}).then(function(data){return {ok:resp.ok,status:resp.status,data:data}});
+  }).then(function(result){
+    if(!result.ok){
+      var err=new Error(result.data&&result.data.error?result.data.error:('HTTP '+result.status));
+      err.status=result.status;err.payload=result.data;throw err;
+    }
+    if(!result.data||!result.data.item)throw new Error('Fact 保存返回格式无效');
+    factDetailItem=result.data.item;
+    if(factLibraryData)factLibraryData.generation=String(result.data.generation||factDetailItem.generation||'');
+    replaceFactLibraryItem(factDetailItem);
+    var body=document.getElementById('eg-detail-body');
+    if(body){body.innerHTML=renderFactDetail(factDetailItem,result.data.changed===false?'内容未变化':'已保存');body.scrollTop=0}
+    var saved=document.getElementById('fact-detail-save-status');if(saved)saved.classList.add('is-ok');
+  }).catch(function(err){
+    var conflict=err&&err.status===409;
+    conflictSeen=conflict;
+    setFactSaveState(conflict?'这条 Fact 已有更新，未覆盖当前版本':('保存失败：'+(err&&err.message?err.message:'请稍后重试')),conflict?'error':'error',conflict);
+  }).finally(function(){
+    factDetailSaving=false;
+    var editorNow=document.getElementById('fact-detail-editor');if(editorNow)editorNow.disabled=false;
+    var saveNow=document.getElementById('fact-detail-save');if(saveNow){
+      var currentValue=String((editorNow&&editorNow.value)||'').trim(),savedValue=String(factRowText(factDetailItem)||'').trim();
+      saveNow.classList.remove('is-saving');saveNow.disabled=conflictSeen||!currentValue||currentValue===savedValue;
+    }
+  });
+}
+function reloadFactDetail(){if(factDetailItem)openFactDetail(factRowId(factDetailItem))}
 function openFactDetail(factId){
   var sheet=document.getElementById('eg-detail-sheet'),body=document.getElementById('eg-detail-body');if(!sheet||!body)return;
-  body.innerHTML='<div class="fact-detail-loading">正在读取这条 Fact…</div>';body.scrollTop=0;sheet.classList.add('show');document.body.classList.add('eg-sheet-open');
-  panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(String(factId||'')),{cache:'no-store'},{label:'CK Fact 详情'}).then(function(resp){if(!resp.ok)throw new Error('HTTP '+resp.status);return resp.json()}).then(function(data){if(!data||!data.item)throw new Error('Fact 详情格式无效');body.innerHTML=renderFactDetail(data.item);body.scrollTop=0}).catch(function(err){body.innerHTML='<div class="facts-empty facts-empty-error"><b>这条 Fact 暂时读不到</b><span>'+esc(err&&err.message?err.message:'请稍后重试')+'</span></div>'});
+  factDetailSaving=false;factDetailItem=null;body.innerHTML='<div class="fact-detail-loading">正在读取这条 Fact…</div>';body.scrollTop=0;sheet.classList.add('show');document.body.classList.add('eg-sheet-open');
+  panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(String(factId||'')),{cache:'no-store'},{label:'CK Fact 详情'}).then(function(resp){if(!resp.ok)throw new Error('HTTP '+resp.status);return resp.json()}).then(function(data){if(!data||!data.item)throw new Error('Fact 详情格式无效');factDetailItem=data.item;if(!factDetailItem.generation)factDetailItem.generation=data.generation||'';body.innerHTML=renderFactDetail(factDetailItem);body.scrollTop=0}).catch(function(err){body.innerHTML='<div class="facts-empty facts-empty-error"><b>这条 Fact 暂时读不到</b><span>'+esc(err&&err.message?err.message:'请稍后重试')+'</span></div>'});
 }
 function rawEntityBlock(obj){
   return '<details class="entity-raw"><summary>结构原文</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>';
