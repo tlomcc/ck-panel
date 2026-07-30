@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v161-fact-optimistic-edit';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v162-profile-only-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3516,7 +3516,7 @@ function chatRecallModeMeta(value){
   var mode=chatNormalizeRecallMode(value);
   return mode==='fact_only'
     ? {value:'fact_only',label:'仅 Fact',shortLabel:'Fact',debugText:'只检索并注入小档案原子事实'}
-    : {value:'full',label:'全量召回',shortLabel:'全量',debugText:'检索普通记忆、聊天原文、开发日记和小档案'};
+    : {value:'full',label:'小档案召回',shortLabel:'档案',debugText:'只检索并注入小档案卡片与关系，最多 2 条'};
 }
 function chatRecallModeDisplayLabel(value){
   var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
@@ -5203,8 +5203,8 @@ function chatFormatRecallDiag(data){
     lines.push('📐 选择预算｜Top '+(factSelection.target||8)+'｜硬上限 '+(factSelection.hard_limit||8)+'｜字符 '+(factSelection.selected_chars||0)+'/'+(factSelection.char_budget||3200)+'｜预算淘汰 '+(diag.dropped_by_budget||0));
     lines.push('🔑 Fact keys｜'+selectedKeys.length+' 个'+(selectedKeys.length?'｜'+selectedKeys.slice(0,8).join('，'):''));
   }else{
-    lines.push('📦 拉取数量｜'+src('embeddings','普通CK记忆')+'｜'+src('chatlog','chatlog索引')+'｜'+src('devlog','开发日记索引')+'｜'+src('entity_profiles','小档案','个')+'｜小档案向量 '+(vec.items||0)+'项/'+(vec.relations||0)+'关系/'+(vec.facts||0)+'Fact（'+(vec.source||'未知')+'，'+sec(vec.seconds)+'）');
-    lines.push('🎯 最终注入｜普通记忆 '+(final.memory||0)+' 条｜chatlog '+(final.chatlog||0)+' 条｜开发日记 '+(final.devlog||0)+' 条｜小档案卡片 '+(final.entity_profiles||0)+' 条｜Fact '+(final.entity_facts||0)+' 条｜合计 '+(final.total||0)+' 条');
+    lines.push('📦 拉取数量｜'+src('entity_profiles','小档案','个')+'｜小档案向量 '+(vec.items||0)+'项/'+(vec.relations||0)+'关系/'+(vec.facts||0)+'Fact（'+(vec.source||'未知')+'，'+sec(vec.seconds)+'）');
+    lines.push('🎯 最终注入｜小档案卡片/关系 '+(final.entity_profiles||final.entity||0)+' 条｜硬上限 2 条');
   }
   lines.push('⏱ 耗时明细｜'+phaseText);
   lines.push('🧮 明细合计 '+sec(diag.phase_sum_seconds)+'｜实际总耗时 '+sec(diag.total_seconds));
