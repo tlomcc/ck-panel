@@ -747,6 +747,9 @@ body.chat-active .chat-cache-save-status{color:#888!important;font-size:11px!imp
 body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;line-height:1.5!important}
 
 @media(max-width:760px){
+  body.chat-active .chat-shell.chat-settings-open .chat-compose{
+    display:none!important;
+  }
   body.chat-active .chat-drawer{left:8px!important;top:8px!important;bottom:8px!important;width:min(320px,calc(100vw - 16px))!important;max-width:none!important}
   body.chat-active .chat-session-del{opacity:1!important}
   body.chat-active .chat-settings{

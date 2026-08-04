@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v162-profile-only-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v163-fact-quality-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3424,7 +3424,7 @@ function chatDefaultConfig(){
     ncContextInjection:true,
     backendSwitchNotification:true,
     recall:true,
-    recallMode:'full',
+    recallMode:'fact_only',
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:'system_after_anchor',
@@ -3509,14 +3509,10 @@ function chatCacheStrategyTtlDetail(meta){
   return 'cache_control TTL：'+chatCacheStrategyTtlLabel(meta)+'（只影响上游缓存有效期，不截断历史）';
 }
 function chatNormalizeRecallMode(value){
-  var mode=String(value||'').trim().toLowerCase().replace(/[-\s]+/g,'_');
-  return mode==='fact_only'||mode==='fact'?'fact_only':'full';
+  return 'fact_only';
 }
 function chatRecallModeMeta(value){
-  var mode=chatNormalizeRecallMode(value);
-  return mode==='fact_only'
-    ? {value:'fact_only',label:'仅 Fact',shortLabel:'Fact',debugText:'只检索并注入小档案原子事实'}
-    : {value:'full',label:'小档案召回',shortLabel:'档案',debugText:'只检索并注入小档案卡片与关系，最多 2 条'};
+  return {value:'fact_only',label:'Fact 召回',shortLabel:'Fact',debugText:'只检索并注入有效独立 Fact'};
 }
 function chatRecallModeDisplayLabel(value){
   var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
@@ -3537,8 +3533,8 @@ function chatRecallMeta(enabled,mode){
   var on=enabled!==false;
   var modeMeta=chatRecallModeMeta(mode);
   return on
-    ? {enabled:true,label:'召回开启 · '+modeMeta.shortLabel,debugText:modeMeta.debugText,mode:modeMeta.value,modeLabel:modeMeta.label}
-    : {enabled:false,label:'召回关闭',debugText:'经过网关但不召回；保留 '+modeMeta.label+' 选择',mode:modeMeta.value,modeLabel:modeMeta.label};
+    ? {enabled:true,label:'Fact 召回开启',debugText:modeMeta.debugText,mode:modeMeta.value,modeLabel:modeMeta.label}
+    : {enabled:false,label:'Fact 召回关闭',debugText:'不加载 Fact、不调用召回 API、不注入记忆',mode:modeMeta.value,modeLabel:modeMeta.label};
 }
 function chatRenderRecallState(statusText,statusKind){
   var cfg=chatLoadConfig()||{};
@@ -3554,7 +3550,9 @@ function chatRenderRecallState(statusText,statusKind){
   }
   document.querySelectorAll('input[name="chat-recall-mode"]').forEach(function(radio){radio.disabled=!meta.enabled});
   var detail=document.getElementById('chat-recall-mode-detail');
-  if(detail)detail.textContent=(meta.enabled?'当前模式：':'已保留模式：')+modeMeta.label+'｜'+modeMeta.debugText;
+  if(detail)detail.textContent=meta.enabled
+    ? '当前状态：只召回有效独立 Fact'
+    : '当前状态：完全关闭，不读取或注入 Fact';
   var status=document.getElementById('chat-recall-save-status');
   if(status){
     status.textContent=statusText||('已保存：'+meta.label+'｜'+meta.debugText);
@@ -4768,7 +4766,7 @@ function chatSaveRecallSetting(auto){
   var meta=chatRecallMeta(cfg.recall!==false,cfg.recallMode);
   chatRenderCacheStrategyState();
   chatRenderRecallState('已保存成功：'+meta.label+'｜'+meta.debugText,'ok');
-  if(!auto)toast('记忆召回已保存：'+meta.label);
+  if(!auto)toast('Fact 召回已保存：'+meta.label);
   return cfg;
 }
 function chatSaveNcContextInjection(auto){
@@ -5163,13 +5161,14 @@ function chatScrollDebugBottom(){
 function chatFormatRecallDiag(data){
   data=data||{};
   var diag=(data.recall_diag&&typeof data.recall_diag==='object')?data.recall_diag:null;
-  if(!diag)return '🧠 召回记忆｜本轮召回 '+(data.memory_chars||0)+' 字';
-  var recallMode=diag.recall_mode||data.recall_mode||'full';
+  if(!diag)return '🧠 Fact 召回｜本轮注入 '+(data.memory_chars||0)+' 字';
+  var recallMode=diag.recall_mode||data.recall_mode||'fact_only';
   var modeMeta=chatRecallModeMeta(recallMode);
   var sources=(diag.sources&&typeof diag.sources==='object')?diag.sources:{};
   var hasSources=Object.keys(sources).length>0;
   if(!hasSources){
-    return '🧠 召回记忆｜'+modeMeta.label+'｜本轮召回 '+(data.memory_chars||diag.memory_chars||0)+' 字\n📦 拉取数量｜网关未返回明细，请上传带召回诊断的新网关代码。';
+    var skipped=diag.low_information_skipped?'｜低信息消息，已跳过查询':'';
+    return '🧠 Fact 召回｜本轮注入 '+(data.memory_chars||diag.memory_chars||0)+' 字'+skipped;
   }
   var final=(diag.final_injected&&typeof diag.final_injected==='object')?diag.final_injected:{};
   var counts=(diag.counts&&typeof diag.counts==='object')?diag.counts:{};
@@ -5185,27 +5184,38 @@ function chatFormatRecallDiag(data){
     if(count===undefined||count===null)count=item.total||0;
     return title+' '+count+(unit||'条')+'（'+(item.source||'未知')+'，'+sec(item.seconds)+'）';
   }
-  var vec=(sources.entity_vectors&&typeof sources.entity_vectors==='object')?sources.entity_vectors:{};
+  var factStore=(sources.fact_store&&typeof sources.fact_store==='object')?sources.fact_store:{};
+  var factVectors=(sources.fact_vectors&&typeof sources.fact_vectors==='object')?sources.fact_vectors:{};
   var phaseText=phases.filter(function(p){return p&&typeof p==='object'}).map(function(p){
     return String(p.name||'未知阶段')+' '+sec(p.seconds);
   }).join('｜')||'无';
-  var lines=['🧠 召回记忆｜'+modeMeta.label+'｜本轮召回 '+(data.memory_chars||diag.memory_chars||0)+' 字｜总耗时 '+sec(diag.total_seconds)];
-  if(modeMeta.value==='fact_only'){
-    var factSelection=(diag.fact_selection&&typeof diag.fact_selection==='object')?diag.fact_selection:{};
-    var candidateSources=(diag.candidate_sources&&typeof diag.candidate_sources==='object')?diag.candidate_sources:{};
-    var sourceNames={vector_original:'原始向量',vector_rewrite:'改写向量',vector_expanded:'扩大向量',keyword_fallback:'关键词',exact_alias:'实体/别名',fact_field:'字段',fact_value:'事实值',explicit_all:'全部事实'};
-    var sourceText=Object.keys(candidateSources).map(function(key){return (sourceNames[key]||key)+' '+candidateSources[key]}).join('｜')||'无';
-    var selectedKeys=Array.isArray(diag.selected_fact_keys)?diag.selected_fact_keys:[];
-    lines.push('📦 Fact 索引｜'+src('entity_profiles','实体','个')+'｜Fact '+(counts.entity_fact_entries||vec.facts||0)+' 条｜向量 '+(vec.facts||0)+' 条（'+(vec.source||'未知')+'，'+sec(vec.seconds)+'）｜版本 '+(diag.fact_index_version||'-'));
-    lines.push('🔎 Fact 候选｜向量 '+(counts.vector_matched||0)+'｜关键词 '+(counts.keyword_matched||0)+'｜扩大搜索 '+(counts.expanded_vector_added||0)+'｜候选 '+(counts.candidate_count||0)+'｜must-keep '+(diag.must_keep_count||0));
-    lines.push('🧷 命中来源｜'+sourceText);
-    lines.push('🎯 最终注入｜entity-facts '+(final.entity_facts||0)+' 条｜其它类别 '+Math.max(0,(final.total||0)-(final.entity_facts||0))+' 条｜无命中 '+(diag.fact_miss?'是':'否'));
-    lines.push('📐 选择预算｜Top '+(factSelection.target||8)+'｜硬上限 '+(factSelection.hard_limit||8)+'｜字符 '+(factSelection.selected_chars||0)+'/'+(factSelection.char_budget||3200)+'｜预算淘汰 '+(diag.dropped_by_budget||0));
-    lines.push('🔑 Fact keys｜'+selectedKeys.length+' 个'+(selectedKeys.length?'｜'+selectedKeys.slice(0,8).join('，'):''));
-  }else{
-    lines.push('📦 拉取数量｜'+src('entity_profiles','小档案','个')+'｜小档案向量 '+(vec.items||0)+'项/'+(vec.relations||0)+'关系/'+(vec.facts||0)+'Fact（'+(vec.source||'未知')+'，'+sec(vec.seconds)+'）');
-    lines.push('🎯 最终注入｜小档案卡片/关系 '+(final.entity_profiles||final.entity||0)+' 条｜硬上限 2 条');
-  }
+  var lines=['🧠 Fact 召回｜'+modeMeta.label+'｜本轮注入 '+(data.memory_chars||diag.memory_chars||0)+' 字｜总耗时 '+sec(diag.total_seconds)];
+  var factSelection=(diag.fact_selection&&typeof diag.fact_selection==='object')?diag.fact_selection:{};
+  var candidateSources=(diag.candidate_sources&&typeof diag.candidate_sources==='object')?diag.candidate_sources:{};
+  var filterReasons=(diag.filter_reasons&&typeof diag.filter_reasons==='object')?diag.filter_reasons:{};
+  var selectedStats=(diag.selected_fact_stats&&typeof diag.selected_fact_stats==='object')?diag.selected_fact_stats:{};
+  var sourceNames={vector_original:'原始向量',vector_expand_1:'扩展向量1',vector_expand_2:'扩展向量2',vector_expanded:'扩大向量',keyword_fallback:'关键词',exact_phrase:'精确短语',exact_phrase_weak:'单轴短语',exact_alias:'对象/别名',fact_field:'属性',exact_number:'数字/型号',polarity_match:'极性一致',polarity_conflict:'极性冲突',explicit_all:'完整查询'};
+  var reasonNames={duplicate_version_group:'版本组重复',result_limit:'结果上限',polarity_conflict:'极性冲突',insufficient_topic_evidence:'缺少主题证据',stale_current_state:'当前状态已陈旧',below_quality_floor:'低于质量门槛',near_duplicate:'正文近重复',character_budget:'字符预算'};
+  var sourceText=Object.keys(candidateSources).map(function(key){return (sourceNames[key]||key)+' '+candidateSources[key]}).join('｜')||'无';
+  var filterText=Object.keys(filterReasons).map(function(key){return (reasonNames[key]||key)+' '+filterReasons[key]}).join('｜')||'无';
+  var selectedKeys=Array.isArray(diag.selected_fact_keys)?diag.selected_fact_keys:[];
+  var seenGroups={};
+  var evidenceText=Object.keys(selectedStats).map(function(key){
+    var stat=selectedStats[key]||{};
+    var group=String(stat.version_group_id||key);
+    if(seenGroups[group])return '';
+    seenGroups[group]=true;
+    var matched=(Array.isArray(stat.match_sources)?stat.match_sources:[]).slice(0,3).map(function(source){return sourceNames[source]||source}).join('+');
+    return key+' '+Number(stat.score||0).toFixed(3)+(matched?'（'+matched+'）':'');
+  }).filter(Boolean).slice(0,5).join('｜')||'无';
+  lines.push('📦 Fact 数据｜'+src('fact_store','正文')+'｜'+src('fact_vectors','向量')+'｜有效 '+(factStore.active||counts.entity_fact_entries||0)+' 条｜版本 '+(diag.fact_index_version||'-'));
+  lines.push('🔎 候选生成｜精确 '+(counts.exact_candidates||0)+'｜向量 '+(counts.vector_matched||0)+'｜关键词 '+(counts.keyword_matched||0)+'｜扩大 '+(counts.expanded_vector_added||0)+'｜版本组 '+(counts.fact_version_groups||0));
+  lines.push('🧷 候选证据｜'+sourceText);
+  lines.push('🛡 过滤原因｜'+filterText);
+  lines.push('🎯 最终注入｜Fact 版本组 '+(final.entity_facts||0)+'｜无命中 '+(diag.fact_miss?'是':'否')+'｜字符 '+(factSelection.selected_chars||0)+'/'+(factSelection.char_budget||0));
+  lines.push('📐 质量门槛｜分数 '+Number(factSelection.score_floor||0).toFixed(3)+'｜最多 '+(factSelection.selected_limit||0)+' 组｜过滤 '+(diag.dropped_by_budget||0));
+  lines.push('🔑 入选证据｜'+evidenceText);
+  lines.push('🔑 Fact keys｜'+selectedKeys.length+' 个'+(selectedKeys.length?'｜'+selectedKeys.slice(0,8).join('，'):''));
   lines.push('⏱ 耗时明细｜'+phaseText);
   lines.push('🧮 明细合计 '+sec(diag.phase_sum_seconds)+'｜实际总耗时 '+sec(diag.total_seconds));
   return lines.join('\n');
