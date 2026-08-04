@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v163-fact-quality-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v164-daily-fact-status';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1817,6 +1817,7 @@ function egSheetTouchEnd(){
 
 /* ===== 每日状态页 ===== */
 var DAILY_STATUS_URL=GRAPH_API_BASE+'/daily-status';
+var DAILY_FACT_RETRY_URL=GRAPH_API_BASE+'/fact-daily-retry';
 var dailyStatusTimer=null,dailyStatusLoading=false;
 function dailyStatusFetch(){
   return panelDataFetch(DAILY_STATUS_URL+'?_t='+Date.now(),{cache:'no-store'});
@@ -1835,6 +1836,43 @@ function loadDailyStatus(force){
 function dsTile(ok,title,date,doneLabel,waitLabel){
   return '<div class="ds-tile '+(ok?'ds-ok':'ds-wait')+'"><div class="ds-tile-icon" aria-hidden="true">'+(ok?'✓':'·')+'</div><div class="ds-tile-body"><div class="ds-tile-title">'+esc(title)+'</div><div class="ds-tile-sub">'+esc(date||'')+' · '+(ok?esc(doneLabel):esc(waitLabel))+'</div></div></div>';
 }
+function dailyFactStatusLabel(status){
+  return ({not_created:'未触发',queued:'已排队',running:'运行中',retry_wait:'等待重试',blocked:'已阻止',published:'已发布',no_content:'无有效内容',superseded:'来源已变化',unavailable:'状态不可用'})[status]||status||'未知';
+}
+function retryDailyFact(targetDate){
+  var button=document.getElementById('daily-fact-retry');
+  if(button){button.disabled=true;button.textContent='正在恢复';}
+  panelDataFetch(DAILY_FACT_RETRY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_date:targetDate||''})},{label:'CK 网关面板 Key'})
+    .then(function(r){return r.json().then(function(d){if(!r.ok||d.ok===false)throw new Error(d.error||('HTTP '+r.status));return d;});})
+    .then(function(){loadDailyStatus(true);})
+    .catch(function(e){if(button){button.disabled=false;button.textContent='重试';}alert('恢复失败：'+String(e&&e.message||e));});
+}
+function renderDailyFactStatus(f){
+  f=f||{};
+  var status=String(f.status||'not_created');
+  var position=Math.max(0,Number(f.stage_position||0));
+  var total=Math.max(0,Number(f.stage_total||0));
+  var progress=total?Math.min(100,Math.round(position*100/total)):0;
+  var retryable=['blocked','retry_wait','superseded'].indexOf(status)>=0;
+  var stats=f.stats||{};
+  var provider=[f.provider_name||f.provider_id||'',f.provider_host||'',f.model||''].filter(Boolean).join(' · ');
+  var html='<section class="ds-fact ds-fact-'+escAttr(status)+'">';
+  html+='<div class="ds-fact-head"><div><span>昨日 Fact 更新</span><b>'+esc(dailyFactStatusLabel(status))+'</b></div>';
+  if(retryable)html+='<button class="btn btn-outline btn-sm" id="daily-fact-retry" type="button" onclick="retryDailyFact(\''+escAttr(f.target_date||'')+'\')">重试</button>';
+  html+='</div>';
+  html+='<div class="ds-fact-progress"><i style="width:'+progress+'%"></i></div>';
+  html+='<div class="ds-fact-stage"><b>'+esc(f.stage||'-')+'</b><span>'+(total?(position+' / '+total):'等待阶段进度')+'</span></div>';
+  html+='<div class="ds-fact-meta">';
+  html+='<div><span>目标 / 来源</span><b>'+esc(f.target_date||'-')+' · '+esc(f.source_sha_short||'-')+'</b></div>';
+  html+='<div><span>当前 API</span><b>'+esc(provider||'尚未调用')+'</b></div>';
+  html+='<div><span>最近断点</span><b>'+esc(f.last_checkpoint_at||f.updated_at||'-')+'</b></div>';
+  html+='<div><span>Generation</span><b>'+esc(f.base_generation_short||'-')+' → '+esc(f.published_generation_short||'-')+'</b></div>';
+  html+='<div><span>结果统计</span><b>候选 '+Number(stats.candidates||0)+' · 审计 '+Number(stats.audited||0)+' · 复核 '+Number(stats.verified||0)+' · 最终 '+Number(stats.final_facts||0)+'</b></div>';
+  if(f.last_error)html+='<div class="ds-fact-error"><span>最近错误</span><b>'+esc(f.last_error)+' '+(f.next_retry_at?'· '+esc(f.next_retry_at):'')+'</b></div>';
+  if(f.commit_sha_short)html+='<div><span>Commit</span><b>'+esc(f.commit_sha_short)+'</b></div>';
+  html+='</div></section>';
+  return html;
+}
 function renderDailyStatus(d){
   var body=document.getElementById('daily-status-body');
   var sub=document.getElementById('status-sub');
@@ -1845,6 +1883,7 @@ function renderDailyStatus(d){
   html+=dsTile(!!c.yesterday_vectorized,'前一天聊天 · 向量化',d.yesterday,'已完成','还没生成');
   html+=dsTile(!!e.yesterday_done,'前一天 · 小档案整理',d.yesterday,'已整理','还没整理');
   html+='</div>';
+  html+=renderDailyFactStatus(d.fact_daily||{});
   html+='<div class="ds-note">今天 '+esc(d.today||'')+'：聊天向量化 '+(c.today_vectorized?'✅':'—')+' · 档案整理 '+(e.today_done?'✅':'—')+'。<br>当天内容一般在“第二天首次聊天”时才离线整理，今天显示“—”属正常。</div>';
   html+='<div class="ds-stats">'+
     '<div class="ds-stat"><b>'+(e.nodes||0)+'</b><span>小档案</span></div>'+
