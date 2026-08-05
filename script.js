@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v164-daily-fact-status';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v165-cache-stability-1h';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3497,25 +3497,25 @@ function chatCacheStrategyMeta(value){
   if(strategy==='prefix_24h'){
     return {
       value:'prefix_24h',
-      label:'24h 共同缓存',
-      shortLabel:'24h',
-      ttl:'5m',
-      ttlLabel:'5m',
+      label:'共同前缀自动缓存',
+      shortLabel:'前缀',
+      ttl:'',
+      ttlLabel:'上游自动',
       retentionSeconds:0,
-      sendText:'四个稳定断点；旧召回和旧图片每轮剔除',
-      debugText:'四个稳定断点 + 清旧召回/旧图片'
+      sendText:'不发送显式 cache_control；旧召回和旧图片每轮剔除，由上游复用共同前缀',
+      debugText:'无显式断点 + 清旧召回/旧图片'
     };
   }
   if(strategy==='native_stable'){
     return {
       value:'native_stable',
-      label:'原生稳定缓存',
-      shortLabel:'原生',
-      ttl:'',
-      ttlLabel:'上游默认（通常 5min）',
-      retentionSeconds:300,
-      sendText:'已验证的 Uocode Claude /messages 形状：固定 system + 最新完成助手双锚点；当前用户和动态召回放在锚点后',
-      debugText:'system + 最新完成助手双锚点'
+      label:'原生稳定缓存 1h',
+      shortLabel:'原生1h',
+      ttl:'1h',
+      ttlLabel:'1h',
+      retentionSeconds:3600,
+      sendText:'Claude /messages：固定 system + 最近两个完成助手锚点；旧锚点负责读取，最新锚点负责增量创建',
+      debugText:'1h system + 最近两个助手锚点'
     };
   }
   if(strategy==='assistant_latest'){
@@ -4015,6 +4015,9 @@ function chatResetUserMessageCacheState(m){
   m.cacheHit=false;
   delete m.cacheRead;
   delete m.cacheCreate;
+  delete m.cacheState;
+  delete m.cacheInputTotal;
+  delete m.cacheRatio;
 }
 function chatInvalidateTransportForEdit(){
   var s=chatCurrentSession();
@@ -5964,6 +5967,9 @@ function chatFinalizeStoppedRequest(request){
     delete message.failedAt;
     delete message.cacheRead;
     delete message.cacheCreate;
+    delete message.cacheState;
+    delete message.cacheInputTotal;
+    delete message.cacheRatio;
     chatMarkMessageFresh(message);
   });
   var session=chatCurrentSession();
@@ -7624,15 +7630,16 @@ function chatHasCacheNoticeAfter(ts){
 function chatCacheExpiryInfo(){
   var meta=chatCacheStrategyMeta((chatLoadConfig()||{}).cacheStrategy);
   if(meta&&meta.value==='prefix_24h'){
-    return {ttlMs:24*60*60*1000,text:'已超过24h，下一次会重新创建缓存'};
+    return {ttlMs:0,text:''};
   }
+  if(meta&&meta.ttl==='1h')return {ttlMs:60*60*1000,text:'已超过1h，下一次会重新创建缓存'};
   var seconds=(meta&&meta.retentionSeconds)||300;
   return {ttlMs:seconds*1000,text:CHAT_CACHE_NOTICE_TEXT};
 }
 function chatEnsureCacheExpiryNotice(){
   var lastTs=chatLastMessageTs();
   var info=chatCacheExpiryInfo();
-  var expired=!!(lastTs&&chatMessages.length&&!chatSending&&(Date.now()-lastTs>=info.ttlMs));
+  var expired=!!(info.ttlMs>0&&lastTs&&chatMessages.length&&!chatSending&&(Date.now()-lastTs>=info.ttlMs));
   if(!expired||chatHasCacheNoticeAfter(lastTs))return false;
   chatInsertMessagesBeforePending([{role:'notice',kind:'cache-expired',text:info.text,ts:Date.now(),afterTs:lastTs}]);
   chatSaveLocalMessages();
@@ -7712,7 +7719,7 @@ function chatRenderMessageRow(m,i){
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-  var signature=[m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
+  var signature=[m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;
@@ -7747,11 +7754,27 @@ function chatUserMessageMetaHtml(m,showTimestamp){
   return chatMessageTimingHtml(m,'user',showTimestamp);
 }
 function chatCacheTickHtml(m){
-  var hit=!!(m&&m.cacheHit);
-  var title=hit?'命中缓存':'消息发送成功';
+  var state=String((m&&m.cacheState)||((m&&m.cacheHit)?'full':'sent'));
+  var hit=state==='full'||state==='partial';
+  var read=Math.max(0,Number(m&&m.cacheRead)||0);
+  var create=Math.max(0,Number(m&&m.cacheCreate)||0);
+  var total=Math.max(0,Number(m&&m.cacheInputTotal)||0);
+  var ratio=Math.max(0,Math.min(100,Number(m&&m.cacheRatio)||0));
+  var titles={
+    full:'高比例缓存命中',
+    partial:'部分缓存命中',
+    created:'已创建缓存，下一条可读取',
+    below_minimum:'未达到约 4096 tokens 缓存门槛',
+    miss:'未读取缓存（可缓存前缀可能尚未达到门槛）',
+    sent:'消息发送成功'
+  };
+  var title=titles[state]||titles.sent;
+  if(hit)title+='｜读取 '+Math.round(read)+'｜创建 '+Math.round(create)+'｜读取占比 '+Math.round(ratio)+'%';
+  else if(state==='created')title+='｜创建 '+Math.round(create);
+  else if(state==='below_minimum')title+='｜输入总量 '+Math.round(total);
   var one='<path d="M2.1 7.1 5.4 10.3 12.7 3.1"></path>';
   var two='<path class="chat-cache-tick-back" d="M1.8 7.2 4.8 10.2 11.2 3.8"></path><path d="M5.6 7.3 8.8 10.4 16.4 2.9"></path>';
-  return '<span class="chat-cache-tick '+(hit?'hit':'miss')+'" title="'+title+'" aria-label="'+title+'"><svg viewBox="0 0 '+(hit?'18':'15')+' 14" focusable="false" aria-hidden="true">'+(hit?two:one)+'</svg></span>';
+  return '<span class="chat-cache-tick '+(hit?'hit ':'')+esc(state)+'" title="'+esc(title)+'" aria-label="'+esc(title)+'"><svg viewBox="0 0 '+(hit?'18':'15')+' 14" focusable="false" aria-hidden="true">'+(hit?two:one)+'</svg></span>';
 }
 function chatUsageCacheRead(usage){
   return chatUsageNumber(usage,[
@@ -7818,9 +7841,22 @@ function chatApplyCacheTick(userIndex,usage,userBubble){
   if(userIndex<0||!chatMessages[userIndex]||chatMessages[userIndex].role!=='user')return;
   var read=chatUsageCacheRead(usage);
   var create=chatUsageCacheCreate(usage);
-  chatMessages[userIndex].cacheHit=chatUsageCacheHit(usage);
+  var total=chatUsageInputTotal(usage);
+  var ratio=total>0?Math.max(0,Math.min(100,read*100/total)):0;
+  var state=(total>0||read>0||create>0)?'miss':'sent';
+  if(read>0){
+    state=create<=Math.max(256,total*.1)?'full':'partial';
+  }else if(create>0){
+    state='created';
+  }else if(total>0&&total<4096){
+    state='below_minimum';
+  }
+  chatMessages[userIndex].cacheHit=read>0||chatUsageCacheHit(usage);
   chatMessages[userIndex].cacheRead=read;
   chatMessages[userIndex].cacheCreate=create;
+  chatMessages[userIndex].cacheInputTotal=total;
+  chatMessages[userIndex].cacheRatio=ratio;
+  chatMessages[userIndex].cacheState=state;
   if(!userBubble)userBubble=chatMessageBubbleByIndex(userIndex);
   if(userBubble){
     var row=userBubble.closest?userBubble.closest('.chat-msg-row.user'):null;
@@ -8103,6 +8139,9 @@ function chatRegenerateFromUser(i){
   chatMessages[i].cacheHit=false;
   delete chatMessages[i].cacheRead;
   delete chatMessages[i].cacheCreate;
+  delete chatMessages[i].cacheState;
+  delete chatMessages[i].cacheInputTotal;
+  delete chatMessages[i].cacheRatio;
   var session=chatCurrentSession();
   session.transportMessages=[];
   session.transportUpdated=0;

@@ -453,6 +453,22 @@ body.chat-active .chat-cache-tick.hit{
   color:#53bdeb!important;
 }
 
+body.chat-active .chat-cache-tick.partial{
+  color:#c8892f!important;
+}
+
+body.chat-active .chat-cache-tick.created{
+  color:#8b72c8!important;
+}
+
+body.chat-active .chat-cache-tick.below_minimum{
+  color:#98a19c!important;
+}
+
+body.chat-active .chat-cache-tick.miss{
+  color:#c46b64!important;
+}
+
 body.chat-active .chat-cache-tick svg{
   width:100%!important;
   height:100%!important;

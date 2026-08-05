@@ -1,9 +1,12 @@
 {
-  "version": "chat-v164-daily-fact-status",
+  "version": "chat-v165-cache-stability-1h",
   "notes": [
     "聊天召回收敛为单一 Fact 开关，小档案不再参与聊天召回",
     "关闭开关时不加载 Fact、不调用召回 API，也不注入记忆",
     "调试页展示候选证据、过滤原因、质量门槛和最终版本组",
-    "每日状态页展示 Fact 任务阶段、进度、provider、generation 和错误恢复"
+    "每日状态页展示 Fact 任务阶段、进度、provider、generation 和错误恢复",
+    "原生 Claude 缓存使用真实 1h TTL，并保留最近两个助手断点",
+    "缓存图标区分冷创建、未达门槛、部分命中和高比例命中",
+    "共同前缀模式不再伪装成 24h 或发送 5m 显式断点"
   ]
 }
