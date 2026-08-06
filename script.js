@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v165-cache-stability-1h';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v166-fact-quality-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1337,6 +1337,7 @@ function factStateClass(state){
 }
 function factRowId(row){return String(row&&((row.fact_id||row.fact_key))||'')}
 function factRowText(row){return String(row&&((row.text||row.value||row.summary))||'')}
+function factRowSituation(row){return String(row&&row.situation||'').trim()}
 function factRowCategory(row){return String(row&&((row.category||row.field_label||row.field))||'未分类').trim()||'未分类'}
 function factRowPeople(row){
   var people=Array.isArray(row&&row.people)?row.people:[];
@@ -1408,7 +1409,7 @@ function renderFactStats(data){
   if(updated)updated.textContent=data&&data.updated?('更新于 '+data.updated):'已读取当前 Fact 库';
 }
 function renderFactCard(row){
-  var id=factRowId(row),text=factRowText(row),category=factRowCategory(row),people=factRowPeople(row),source=factRowSource(row);
+  var id=factRowId(row),text=factRowText(row),situation=factRowSituation(row),category=factRowCategory(row),people=factRowPeople(row),source=factRowSource(row);
   var encoded=encodeURIComponent(id),state=String(row.status||row.state||'active').toLowerCase(),recallCount=numOr(row.recall_count,row.recall_count_total||0);
   var recalled=recallCount?('召回 '+recallCount+' 次'+(row.last_recalled_at?' · '+row.last_recalled_at:'')):'从未召回';
   var sourceUrl=factSourceUrl(source),sourceHtml=sourceUrl?'<a class="fact-source-link" href="'+escAttr(sourceUrl)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">'+esc(factSourceLabel(source))+'</a>':'<span class="fact-source-missing">'+esc(factSourceLabel(source))+'</span>';
@@ -1416,6 +1417,7 @@ function renderFactCard(row){
   return '<article class="fact-card '+factStateClass(state)+'" data-fact-key="'+escAttr(encoded)+'" role="button" tabindex="0" aria-label="查看 '+escAttr(category+' '+text)+'">'+
     '<span class="fact-card-time">'+esc(row.time||row.last_seen||row.first_seen||'时间待确认')+'</span>'+
     '<span class="fact-card-main"><span class="fact-card-top"><span class="fact-category-label">'+esc(category)+'</span><span class="fact-state '+factStateClass(state)+'">'+factStateLabel(state)+'</span></span>'+
+    (situation?'<span class="fact-card-situation">场景 · '+esc(situation)+'</span>':'')+
     '<strong class="fact-card-value">'+esc(text||'暂无正文')+'</strong><span class="fact-people-row">'+peopleHtml+'</span>'+
     '<span class="fact-card-meta"><span>证据 '+numOr(row.evidence_count,1)+' 次</span><span>'+esc(recalled)+'</span><span>'+sourceHtml+'</span></span></span><span class="fact-card-arrow" aria-hidden="true">›</span></article>';
 }
@@ -1500,27 +1502,29 @@ function renderFactDetail(item,saveStatus){
   item=item||{};var source=factRowSource(item),people=factRowPeople(item),state=String(item.status||item.state||'active').toLowerCase();
   var recallTotal=numOr(item.recall_count,item.recall_count_total||0),health=String(item.vector_status||'missing');
   var html='<div class="fact-detail-head"><div class="facts-kicker"><span></span>FACT · '+(state==='expired'?'EXPIRED':'ACTIVE')+'</div><h3>'+esc(factRowCategory(item))+'</h3><p>'+esc(item.time||item.last_seen||'时间待确认')+' · '+factStateLabel(state)+'</p></div>';
-  var value=factRowText(item)||'',changedStatus=saveStatus||'';
-  html+='<div class="fact-detail-value fact-detail-editor-wrap"><label for="fact-detail-editor">正文</label><textarea id="fact-detail-editor" maxlength="220" rows="5" oninput="onFactEditorInput()" '+(factDetailSaving?'disabled':'')+'>'+esc(value)+'</textarea><div class="fact-detail-editor-foot"><span id="fact-detail-char-count">'+value.length+'/220</span><span id="fact-detail-save-status" class="'+(changedStatus?'is-visible':'')+'" aria-live="polite">'+esc(changedStatus)+'</span><button id="fact-detail-reload" class="fact-detail-reload" type="button" onclick="reloadFactDetail()" hidden>载入最新</button><button id="fact-detail-save" class="fact-detail-save" type="button" onclick="saveFactDetail()" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 16h8"/></svg><span>保存</span></button></div></div>';
+  var value=factRowText(item)||'',situation=factRowSituation(item),changedStatus=saveStatus||'';
+  html+='<div class="fact-detail-value fact-detail-editor-wrap"><label for="fact-detail-situation">场景</label><input id="fact-detail-situation" class="fact-detail-situation-input" maxlength="80" value="'+escAttr(situation)+'" oninput="onFactEditorInput()" '+(factDetailSaving?'disabled':'')+' placeholder="当时在做什么或处于什么情境"><label for="fact-detail-editor">正文</label><textarea id="fact-detail-editor" maxlength="220" rows="5" oninput="onFactEditorInput()" '+(factDetailSaving?'disabled':'')+'>'+esc(value)+'</textarea><div class="fact-detail-editor-foot"><span id="fact-detail-char-count">'+value.length+'/220</span><span id="fact-detail-save-status" class="'+(changedStatus?'is-visible':'')+'" aria-live="polite">'+esc(changedStatus)+'</span><button id="fact-detail-reload" class="fact-detail-reload" type="button" onclick="reloadFactDetail()" hidden>载入最新</button><button id="fact-detail-save" class="fact-detail-save" type="button" onclick="saveFactDetail()" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 16h8"/></svg><span>保存</span></button></div></div>';
   if(state==='expired')html+='<div class="fact-detail-block"><b>过期原因</b><p>'+esc(item.expired_reason||'被后续更新事实替代')+'</p></div>';
   if(people.length)html+='<div class="fact-detail-chips">'+people.map(function(name){return '<span>'+esc(name)+'</span>'}).join('')+'</div>';
   html+='<div class="fact-detail-grid"><div><span>证据次数</span><b>'+numOr(item.evidence_count,1)+'</b></div><div><span>召回次数</span><b>'+recallTotal+'</b></div><div><span>最新召回</span><b>'+esc(item.last_recalled_at||'-')+'</b></div><div><span>状态</span><b>'+factStateLabel(state)+'</b></div></div>';
   html+='<div class="fact-detail-block"><b>来源原文</b>'+renderFactSourceDetail(source)+'</div>';
   html+='<div class="fact-detail-block"><b>历史旧值</b>'+renderFactHistory(item.history)+'</div>';
-  html+='<details class="entity-raw"><summary>技术信息</summary><pre>'+esc(JSON.stringify({fact_id:factRowId(item),category:factRowCategory(item),status:state,vector_status:health,vector_dimension:item.vector_dimension||0,recall_count:recallTotal,source:source},null,2))+'</pre></details>';
+  html+='<details class="entity-raw"><summary>技术信息</summary><pre>'+esc(JSON.stringify({fact_id:factRowId(item),category:factRowCategory(item),situation:factRowSituation(item),status:state,vector_status:health,vector_dimension:item.vector_dimension||0,recall_count:recallTotal,source:source},null,2))+'</pre></details>';
   return html;
 }
 function onFactEditorInput(){
-  var editor=document.getElementById('fact-detail-editor'),count=document.getElementById('fact-detail-char-count'),save=document.getElementById('fact-detail-save'),status=document.getElementById('fact-detail-save-status'),reload=document.getElementById('fact-detail-reload');
+  var editor=document.getElementById('fact-detail-editor'),situationEditor=document.getElementById('fact-detail-situation'),count=document.getElementById('fact-detail-char-count'),save=document.getElementById('fact-detail-save'),status=document.getElementById('fact-detail-save-status'),reload=document.getElementById('fact-detail-reload');
   if(!editor)return;var value=String(editor.value||''),original=factRowText(factDetailItem);
   if(count)count.textContent=value.length+'/220';
-  if(save)save.disabled=factDetailSaving||!value.trim()||value.trim()===String(original||'').trim();
+  var situation=String((situationEditor&&situationEditor.value)||'').trim(),originalSituation=factRowSituation(factDetailItem);
+  if(save)save.disabled=factDetailSaving||!value.trim()||value.trim()===String(original||'').trim()&&situation===originalSituation;
   if(status){status.textContent='';status.classList.remove('is-visible','is-error','is-ok')}
   if(reload)reload.hidden=true;
 }
 function setFactSaveState(message,tone,showReload){
-  var editor=document.getElementById('fact-detail-editor'),save=document.getElementById('fact-detail-save'),status=document.getElementById('fact-detail-save-status'),reload=document.getElementById('fact-detail-reload');
+  var editor=document.getElementById('fact-detail-editor'),situationEditor=document.getElementById('fact-detail-situation'),save=document.getElementById('fact-detail-save'),status=document.getElementById('fact-detail-save-status'),reload=document.getElementById('fact-detail-reload');
   if(editor)editor.disabled=factDetailSaving;
+  if(situationEditor)situationEditor.disabled=factDetailSaving;
   if(save){save.disabled=factDetailSaving||!editor||!String(editor.value||'').trim();save.classList.toggle('is-saving',factDetailSaving)}
   if(status){status.textContent=message||'';status.className='is-visible'+(tone?(' is-'+tone):'')}
   if(reload)reload.hidden=!showReload;
@@ -1533,18 +1537,19 @@ function replaceFactLibraryItem(item){
 }
 function saveFactDetail(){
   if(factDetailSaving||!factDetailItem)return;
-  var editor=document.getElementById('fact-detail-editor'),value=String((editor&&editor.value)||'').trim();
+  var editor=document.getElementById('fact-detail-editor'),situationEditor=document.getElementById('fact-detail-situation'),value=String((editor&&editor.value)||'').trim(),situation=String((situationEditor&&situationEditor.value)||'').trim();
   if(!value){setFactSaveState('正文不能为空','error',false);return}
   if(value.length>220){setFactSaveState('正文不能超过 220 字','error',false);return}
+  if(situation.length>80){setFactSaveState('场景不能超过 80 字','error',false);return}
   var previousItem=Object.assign({},factDetailItem);
   var factId=factRowId(previousItem),generation=String(previousItem.generation||(factLibraryData&&factLibraryData.generation)||'');
   var conflictSeen=false;
-  factDetailItem=Object.assign({},previousItem,{text:value,value:value,summary:value});
+  factDetailItem=Object.assign({},previousItem,{text:value,value:value,summary:value,situation:situation});
   replaceFactLibraryItem(factDetailItem);
   factDetailSaving=true;setFactSaveState('保存中…','',false);
   panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(factId),{
     method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text:value,expected_generation:generation})
+    body:JSON.stringify({text:value,situation:situation,expected_generation:generation})
   },{label:'保存 Fact'}).then(function(resp){
     return resp.json().catch(function(){return {error:'HTTP '+resp.status}}).then(function(data){return {ok:resp.ok,status:resp.status,data:data}});
   }).then(function(result){
@@ -1569,8 +1574,8 @@ function saveFactDetail(){
     factDetailSaving=false;
     var editorNow=document.getElementById('fact-detail-editor');if(editorNow)editorNow.disabled=false;
     var saveNow=document.getElementById('fact-detail-save');if(saveNow){
-      var currentValue=String((editorNow&&editorNow.value)||'').trim(),savedValue=String(factRowText(factDetailItem)||'').trim();
-      saveNow.classList.remove('is-saving');saveNow.disabled=conflictSeen||!currentValue||currentValue===savedValue;
+      var situationNow=document.getElementById('fact-detail-situation'),currentValue=String((editorNow&&editorNow.value)||'').trim(),savedValue=String(factRowText(factDetailItem)||'').trim(),currentSituation=String((situationNow&&situationNow.value)||'').trim();
+      saveNow.classList.remove('is-saving');saveNow.disabled=conflictSeen||!currentValue||currentValue===savedValue&&currentSituation===factRowSituation(factDetailItem);
     }
   });
 }

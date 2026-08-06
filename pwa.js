@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v165-cache-stability-1h').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v166-fact-quality-recall').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
