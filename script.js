@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v166-fact-quality-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v168-debug-copy';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5169,14 +5169,14 @@ function chatDecorateDebugBody(html,record){
   html=html.replace(/(cache_creation(?:_input)?_tokens[=:：]\s*)([0-9][0-9,]*)/gi,'$1<span class="chat-debug-cache-number">$2</span>');
   return html;
 }
-function chatDebugRecordHtml(record){
+function chatDebugRecordHtml(record,index){
   var line=chatDebugLine(record);
   var m=line.match(/^\[([0-9:]+)\]\s*([\s\S]*)$/);
   var time=m?m[1]:'--:--:--';
   var body=m?m[2]:line;
   var kind=chatDebugRecordKind(record,body);
   var html=chatDecorateDebugBody(esc(body),record);
-  return '<div class="chat-debug-record chat-debug-'+kind+'"><span class="chat-debug-time">['+esc(time)+']</span><div class="chat-debug-body">'+html+'</div></div>';
+  return '<div class="chat-debug-record chat-debug-'+kind+'"><span class="chat-debug-time">['+esc(time)+']</span><button class="chat-debug-copy" type="button" data-debug-copy-index="'+index+'" aria-label="复制此调试模块" title="复制此调试模块"><svg class="chat-debug-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="1.5"/><path d="M16 8V6.5A1.5 1.5 0 0 0 14.5 5h-8A1.5 1.5 0 0 0 5 6.5v8A1.5 1.5 0 0 0 6.5 16H8"/></svg><svg class="chat-debug-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.5"/></svg></button><div class="chat-debug-body">'+html+'</div></div>';
 }
 function chatRenderDebugRecords(){
   var el=document.getElementById('chat-debug');
@@ -7379,6 +7379,30 @@ document.addEventListener('click',function(e){
   }
   var cb=e.target.closest('.cb-copy');
   if(cb){var code=cb.closest('.cb')?cb.closest('.cb').querySelector('pre code'):null;if(code){chatCopyText(code.textContent);cb.textContent='已复制';setTimeout(function(){cb.textContent='复制'},1200)}return;}
+  var debugCopy=e.target.closest('.chat-debug-copy');
+  if(debugCopy){
+    e.preventDefault();
+    e.stopPropagation();
+    if(debugCopy.__copyBusy)return;
+    var debugIndex=Number(debugCopy.getAttribute('data-debug-copy-index'));
+    var debugRecord=Number.isInteger(debugIndex)?chatDebugRecords[debugIndex]:null;
+    if(!debugRecord)return;
+    debugCopy.__copyBusy=true;
+    ckCopyText(chatDebugLine(debugRecord)).then(function(copied){
+      if(!document.contains(debugCopy))return;
+      debugCopy.classList.toggle('copied',!!copied);
+      debugCopy.setAttribute('aria-label',copied?'已复制调试模块':'复制失败');
+      debugCopy.setAttribute('title',copied?'已复制调试模块':'复制失败');
+      setTimeout(function(){
+        if(!document.contains(debugCopy))return;
+        debugCopy.classList.remove('copied');
+        debugCopy.setAttribute('aria-label','复制此调试模块');
+        debugCopy.setAttribute('title','复制此调试模块');
+        debugCopy.__copyBusy=false;
+      },1200);
+    });
+    return;
+  }
   var fileCopy=e.target.closest('.chat-file-copy');
   if(fileCopy){
     e.preventDefault();

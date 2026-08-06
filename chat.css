@@ -441,7 +441,7 @@ body.chat-active .chat-cache-tick{
   align-items:center!important;
   justify-content:center!important;
   margin:0!important;
-  color:#92a58c!important;
+  color:#64748b!important;
   line-height:0!important;
   letter-spacing:0!important;
   text-shadow:none!important;
@@ -450,23 +450,23 @@ body.chat-active .chat-cache-tick{
 
 body.chat-active .chat-cache-tick.hit{
   width:19px!important;
-  color:#53bdeb!important;
+  color:#0aa660!important;
 }
 
 body.chat-active .chat-cache-tick.partial{
-  color:#c8892f!important;
+  color:#d97706!important;
 }
 
 body.chat-active .chat-cache-tick.created{
-  color:#8b72c8!important;
+  color:#7c3aed!important;
 }
 
 body.chat-active .chat-cache-tick.below_minimum{
-  color:#98a19c!important;
+  color:#e24a21!important;
 }
 
 body.chat-active .chat-cache-tick.miss{
-  color:#c46b64!important;
+  color:#e11d48!important;
 }
 
 body.chat-active .chat-cache-tick svg{
@@ -1861,6 +1861,55 @@ body.chat-active .chat-debug-empty{
   color:#475569!important;
   box-shadow:0 6px 18px rgba(15,23,42,.06)!important;
 }
+
+body.chat-active .chat-debug-record{
+  position:relative!important;
+  padding-right:42px!important;
+}
+
+body.chat-active .chat-debug-copy{
+  position:absolute!important;
+  top:8px!important;
+  right:8px!important;
+  width:26px!important;
+  height:26px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0!important;
+  border:1px solid rgba(148,163,184,.28)!important;
+  border-radius:7px!important;
+  background:rgba(255,255,255,.72)!important;
+  color:#64748b!important;
+  cursor:pointer!important;
+  transition:color .16s ease,background .16s ease,border-color .16s ease!important;
+}
+
+body.chat-active .chat-debug-copy:hover{
+  border-color:rgba(79,141,247,.45)!important;
+  background:#fff!important;
+  color:#2563eb!important;
+}
+
+body.chat-active .chat-debug-copy.copied{
+  border-color:rgba(10,166,96,.38)!important;
+  background:#f0fff7!important;
+  color:#0aa660!important;
+}
+
+body.chat-active .chat-debug-copy svg{
+  width:14px!important;
+  height:14px!important;
+  fill:none!important;
+  stroke:currentColor!important;
+  stroke-width:1.8!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+}
+
+body.chat-active .chat-debug-copy-check{display:none!important}
+body.chat-active .chat-debug-copy.copied .chat-debug-copy-icon{display:none!important}
+body.chat-active .chat-debug-copy.copied .chat-debug-copy-check{display:block!important}
 
 body.chat-active .chat-debug-cache{border-left-color:#4f8df7!important;background:#f7fbff!important}
 body.chat-active .chat-debug-intent{border-left-color:#8b5cf6!important;background:#fbf8ff!important}
