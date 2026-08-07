@@ -6992,3 +6992,34 @@ body.dark .archive-roadmap-panel p{color:var(--ck-text-soft,#c5d1df)}
   .archive-record-date{display:none}
 }
 @media(prefers-reduced-motion:reduce){.archive-spine-node::before,.archive-ledger-meter i{transition:none}}
+
+/* Speech preference editor: a compact operational surface below the plus tray. */
+body.chat-active .chat-speech-console{display:none;grid-column:1/-1;gap:10px;width:min(760px,100%);margin:0 auto;padding:12px;border:1px solid var(--chat-line,#dbe4e2);border-radius:8px;background:var(--chat-panel,#fff);color:var(--chat-text,#1c2028);box-shadow:0 8px 20px rgba(15,23,42,.08)}
+body.chat-active .chat-speech-console.open{display:grid}
+body.chat-active .chat-speech-console header,body.chat-active .chat-speech-console footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+body.chat-active .chat-speech-console header>div:first-child{min-width:0}
+body.chat-active .chat-speech-console header b{display:block;font-size:13px;line-height:1.3}
+body.chat-active .chat-speech-console header span,body.chat-active .chat-speech-state,body.chat-active .chat-speech-console footer>span{display:block;color:var(--chat-muted,#6f7b84);font-size:11px;line-height:1.45}
+body.chat-active .chat-speech-tools{display:flex;gap:3px}
+body.chat-active .chat-speech-tools button{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--chat-muted,#6f7b84);cursor:pointer}
+body.chat-active .chat-speech-tools button:hover,body.chat-active .chat-speech-tools button:focus-visible{background:var(--chat-panel-2,#f2f6f5);color:var(--chat-text,#1c2028);outline:none}
+body.chat-active .chat-speech-tools svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}
+body.chat-active .chat-speech-state{padding:7px 8px;border-left:2px solid var(--chat-accent,#2f8f7b);background:var(--chat-panel-2,#f2f6f5)}
+body.chat-active .chat-speech-console textarea{box-sizing:border-box;width:100%;min-height:154px;max-height:300px;resize:vertical;margin:0;padding:10px;border:1px solid var(--chat-line,#dbe4e2);border-radius:7px;background:var(--chat-panel-2,#fbfcfc);color:var(--chat-text,#1c2028);font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}
+body.chat-active .chat-speech-console textarea:focus{border-color:var(--chat-accent,#2f8f7b);box-shadow:0 0 0 3px rgba(47,143,123,.12)}
+body.chat-active .chat-speech-diff{display:grid;gap:5px;border-top:1px solid var(--chat-line-soft,#e8eeee);padding-top:9px}
+body.chat-active .chat-speech-diff div{display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px;font-size:11px;line-height:1.45}
+body.chat-active .chat-speech-diff b{color:var(--chat-text,#1c2028);font-size:10px}
+body.chat-active .chat-speech-diff span{overflow:hidden;color:var(--chat-muted,#6f7b84);text-overflow:ellipsis;white-space:nowrap}
+body.chat-active .chat-speech-publish{min-width:62px;height:32px;border:0;border-radius:7px;background:#172026;color:#fff;font:700 12px/1 inherit;cursor:pointer}
+body.chat-active .chat-speech-publish:hover{background:#24313a}
+body.chat-active .chat-speech-publish:disabled{cursor:wait;opacity:.55}
+body.dark.chat-active .chat-speech-console{border-color:var(--chat-line,#26313a);background:var(--chat-panel,#151b21);box-shadow:none}
+body.dark.chat-active .chat-speech-state,body.dark.chat-active .chat-speech-console textarea{background:#101820}
+body.dark.chat-active .chat-speech-tools button:hover,body.dark.chat-active .chat-speech-tools button:focus-visible{background:#202a32;color:var(--chat-text,#eef3f6)}
+body.dark.chat-active .chat-speech-publish{background:#edf3f6;color:#101820}
+@media(max-width:640px){
+  body.chat-active .chat-speech-console{width:100%;padding:10px;border-right:0;border-left:0;border-radius:0}
+  body.chat-active .chat-speech-console textarea{min-height:132px;font-size:10px}
+  body.chat-active .chat-speech-diff span{white-space:normal}
+}

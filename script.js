@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v168-debug-copy';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v169-speech-preference-console';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4919,6 +4919,112 @@ function chatSpeechPreferencePrepareEndpoint(cfg){
   if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
   return base+'/speech-preferences/prepare';
 }
+function chatSpeechPreferencesEndpoint(cfg){
+  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
+  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
+  return base+'/ck/speech-preferences';
+}
+var chatSpeechConsoleState={data:null,loading:false,saving:false,editorSnapshot:''};
+function chatSpeechConsoleRulesText(rules){
+  return JSON.stringify(Array.isArray(rules)?rules:[],null,2);
+}
+function chatSpeechConsoleDiffHtml(diff){
+  diff=diff&&typeof diff==='object'?diff:{};
+  var groups=[
+    ['新增',Array.isArray(diff.added)?diff.added:[],function(item){return item.instruction||item.key||''}],
+    ['删除',Array.isArray(diff.deleted)?diff.deleted:[],function(item){return item.instruction||item.key||''}],
+    ['调整',Array.isArray(diff.adjusted)?diff.adjusted:[],function(item){return (item.after&&item.after.instruction)||item.key||''}]
+  ];
+  var html=[];
+  groups.forEach(function(group){
+    if(!group[1].length)return;
+    html.push('<div><b>'+group[0]+' '+group[1].length+'</b><span>'+group[1].map(function(item){return esc(group[2](item))}).join('；')+'</span></div>');
+  });
+  return html.length?html.join(''):'<div><b>对比</b><span>与上一版本没有规则变化</span></div>';
+}
+function chatRenderSpeechPreferences(data,preserveEditor){
+  data=data&&typeof data==='object'?data:{};
+  chatSpeechConsoleState.data=data;
+  var rules=chatSpeechConsoleRulesText(data.rules);
+  var editor=document.getElementById('chat-speech-rules');
+  if(editor&&(!preserveEditor||editor.value===chatSpeechConsoleState.editorSnapshot))editor.value=rules;
+  chatSpeechConsoleState.editorSnapshot=rules;
+  var hasPublishedRules=Array.isArray(data.rules)&&data.rules.length>0&&String(data.current_revision||'r0')!=='r0';
+  var meta=document.getElementById('chat-speech-meta');
+  if(meta)meta.textContent=hasPublishedRules?'已发布 '+String(data.rules.length)+' 条 · '+(data.updated_at||'未知时间'):'尚未提取';
+  var state=document.getElementById('chat-speech-state');
+  if(state)state.textContent=(hasPublishedRules?'当前 '+(data.current_revision||'r0')+' · 上一版 '+(data.previous_revision||'r0')+' · ':'暂无已发布规则 · ')+(hasPublishedRules?'':'当前 ')+(hasPublishedRules?'':'r0 · ')+ '自动提取待激活 '+Number(data.pending_count||0)+' 条'+(data.warning?' · '+data.warning:'');
+  var diff=document.getElementById('chat-speech-diff');
+  if(diff)diff.innerHTML=chatSpeechConsoleDiffHtml(data.diff);
+  var status=document.getElementById('chat-speech-status');
+  if(status)status.textContent=data.source==='github'?'已同步':'本地读取';
+}
+function chatOpenSpeechPreferences(){
+  var panel=document.getElementById('chat-speech-console');
+  if(!panel)return;
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden','false');
+  chatLoadSpeechPreferences(false);
+}
+function chatCloseSpeechPreferences(){
+  var panel=document.getElementById('chat-speech-console');
+  if(!panel)return;
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden','true');
+}
+function chatLoadSpeechPreferences(preserveEditor){
+  if(chatSpeechConsoleState.loading)return Promise.resolve();
+  var cfg=chatLoadConfig();
+  var status=document.getElementById('chat-speech-status');
+  chatSpeechConsoleState.loading=true;
+  if(status)status.textContent='读取中';
+  return panelDataFetch(chatSpeechPreferencesEndpoint(cfg)+'?_t='+Date.now(),{cache:'no-store'},{label:'CK 网关面板 Key'})
+    .then(function(resp){return resp.json().then(function(data){return {ok:resp.ok,data:data}},function(){return {ok:resp.ok,data:{}}})})
+    .then(function(result){
+      if(!result.ok||result.data.ok===false)throw new Error(result.data.error||('HTTP '+(result.data.status||'')));
+      chatRenderSpeechPreferences(result.data,!!preserveEditor);
+    }).catch(function(error){
+      if(status)status.textContent='读取失败';
+      toast('措辞偏好读取失败：'+(error&&error.message?error.message:'请稍后重试'));
+    }).finally(function(){chatSpeechConsoleState.loading=false});
+}
+function chatPublishSpeechPreferences(){
+  if(chatSpeechConsoleState.saving)return;
+  var data=chatSpeechConsoleState.data;
+  var editor=document.getElementById('chat-speech-rules');
+  if(!data||!editor)return;
+  var rules;
+  try{rules=JSON.parse(editor.value||'[]')}catch(error){toast('规则内容必须是 JSON 数组');return}
+  if(!Array.isArray(rules)){toast('规则内容必须是 JSON 数组');return}
+  var button=document.getElementById('chat-speech-publish');
+  var status=document.getElementById('chat-speech-status');
+  chatSpeechConsoleState.saving=true;
+  if(button)button.disabled=true;
+  if(status)status.textContent='发布中';
+  var cfg=chatLoadConfig();
+  panelDataFetch(chatSpeechPreferencesEndpoint(cfg),{
+    method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({base_revision:data.current_revision||'r0',rules:rules})
+  },{label:'CK 网关面板 Key'}).then(function(resp){
+    return resp.json().then(function(body){return {ok:resp.ok,status:resp.status,data:body}},function(){return {ok:resp.ok,status:resp.status,data:{}}})
+  }).then(function(result){
+    if(!result.ok){
+      if(result.status===409){
+        toast('已有新版本，已重新读取');
+        return chatLoadSpeechPreferences(false);
+      }
+      throw new Error(result.data.error||('HTTP '+result.status));
+    }
+    chatRenderSpeechPreferences(result.data,false);
+    toast(result.data.no_op?'没有需要发布的变化':'措辞偏好已发布');
+  }).catch(function(error){
+    if(status)status.textContent='发布失败';
+    toast('措辞偏好发布失败：'+(error&&error.message?error.message:'请稍后重试'));
+  }).finally(function(){
+    chatSpeechConsoleState.saving=false;
+    if(button)button.disabled=false;
+  });
+}
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
   if(!el)return;
@@ -7301,6 +7407,8 @@ function chatTogglePlus(force){
   var open=typeof force==='boolean'?force:!panel.classList.contains('open');
   if(open){
     chatPlusRenderPager(chatPlusPager.currentPage||0);
+  }else{
+    chatCloseSpeechPreferences();
   }
   panel.classList.toggle('open',open);
   if(document.body)document.body.classList.toggle('chat-plus-open',open);
