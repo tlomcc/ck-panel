@@ -1882,22 +1882,19 @@ function renderDailyStatus(d){
   var body=document.getElementById('daily-status-body');
   var sub=document.getElementById('status-sub');
   if(!body)return;
-  d=d||{};var e=d.entity||{},c=d.chatlog||{};
+  d=d||{};var e=d.entity||{};
   if(sub)sub.textContent='更新于 '+(d.now||'-');
   var html='<div class="ds-grid">';
-  html+=dsTile(!!c.yesterday_vectorized,'前一天聊天 · 向量化',d.yesterday,'已完成','还没生成');
   html+=dsTile(!!e.yesterday_done,'前一天 · 小档案整理',d.yesterday,'已整理','还没整理');
   html+='</div>';
   html+=renderDailyFactStatus(d.fact_daily||{});
-  html+='<div class="ds-note">今天 '+esc(d.today||'')+'：聊天向量化 '+(c.today_vectorized?'✅':'—')+' · 档案整理 '+(e.today_done?'✅':'—')+'。<br>当天内容一般在“第二天首次聊天”时才离线整理，今天显示“—”属正常。</div>';
+  html+='<div class="ds-note">今天 '+esc(d.today||'')+'：档案整理 '+(e.today_done?'✅':'—')+'。<br>当天内容一般在“第二天首次聊天”时才离线整理，今天显示“—”属正常。</div>';
   html+='<div class="ds-stats">'+
     '<div class="ds-stat"><b>'+(e.nodes||0)+'</b><span>小档案</span></div>'+
     '<div class="ds-stat"><b>'+(e.relations||0)+'</b><span>关系</span></div>'+
-    '<div class="ds-stat"><b>'+(c.vectorized_days||0)+'</b><span>已向量化天数</span></div>'+
     '</div>';
   html+='<div class="ds-meta">';
   html+='<div class="ds-meta-row"><span>档案最近更新</span><b>'+esc(e.updated||e.last_processed||'-')+'</b></div>';
-  html+='<div class="ds-meta-row"><span>最近向量化到</span><b>'+esc(c.last_vectorized||'-')+'</b></div>';
   if((e.recent_processed||[]).length)html+='<div class="ds-meta-row ds-meta-list"><span>最近整理的日子</span><div class="ds-day-chips">'+e.recent_processed.slice().reverse().map(function(x){return '<i>'+esc(x)+'</i>'}).join('')+'</div></div>';
   html+='</div>';
   body.innerHTML=html;
@@ -4573,6 +4570,10 @@ function chatNormalizeSession(s){
     messages:Array.isArray(s.messages)?s.messages.slice():[],
     transportMessages:Array.isArray(s.transportMessages)?s.transportMessages.slice():[],
     transportUpdated:Number(s.transportUpdated||0)||0,
+    speechPreferenceRevision:s.speechPreferenceRevision===undefined?'':s.speechPreferenceRevision,
+    speechPreferenceAppliedRevision:s.speechPreferenceAppliedRevision===undefined?'':s.speechPreferenceAppliedRevision,
+    speechPreferencePendingActivationId:String(s.speechPreferencePendingActivationId||''),
+    speechPreferencePendingTrimEventId:String(s.speechPreferencePendingTrimEventId||''),
     firstUserText:String(s.firstUserText||'').slice(0,3000),
     firstUserTs:Number(s.firstUserTs||0)||0
   };
@@ -4912,6 +4913,11 @@ function chatWorldbooksEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
   if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
   return base+'/ck/worldbooks';
+}
+function chatSpeechPreferencePrepareEndpoint(cfg){
+  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
+  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
+  return base+'/speech-preferences/prepare';
 }
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
@@ -5659,6 +5665,10 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       messages:chatLimitArray(s.messages,maxVisible),
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
       transportUpdated:Number(s.transportUpdated||0)||0,
+      speechPreferenceRevision:s.speechPreferenceRevision,
+      speechPreferenceAppliedRevision:s.speechPreferenceAppliedRevision,
+      speechPreferencePendingActivationId:s.speechPreferencePendingActivationId,
+      speechPreferencePendingTrimEventId:s.speechPreferencePendingTrimEventId,
       firstUserText:String(s.firstUserText||'').slice(0,3000),
       firstUserTs:s.firstUserTs||0
     };
@@ -6038,18 +6048,22 @@ function chatIsAutoTrimTurn(m){
 function chatAutoTrimRoundCount(list){
   return (Array.isArray(list)?list:[]).filter(chatIsAutoTrimTurn).length;
 }
-function chatDropFirstAutoTrimRounds(list,drop){
+function chatAutoTrimCutIndex(list,drop){
   list=Array.isArray(list)?list:[];
   drop=Math.max(0,Math.floor(Number(drop)||0));
-  if(!drop)return list.slice();
+  if(!drop)return 0;
   var dropped=0;
   for(var i=0;i<list.length;i++){
     if(chatIsAutoTrimTurn(list[i])){
       dropped++;
-      if(dropped>drop)return list.slice(i);
+      if(dropped>drop)return i;
     }
   }
-  return list.length?list.slice(-1):[];
+  return Math.max(0,list.length-1);
+}
+function chatDropFirstAutoTrimRounds(list,drop){
+  list=Array.isArray(list)?list:[];
+  return list.slice(chatAutoTrimCutIndex(list,drop));
 }
 function chatResetSessionAnchorFromMessages(s){
   s=s||chatCurrentSession();
@@ -6064,45 +6078,248 @@ function chatResetSessionAnchorFromMessages(s){
     s.firstUserTs=0;
   }
 }
-function chatApplyAutoTrimBeforeRequest(cfg){
+function chatPlanAutoTrimForPendingBatch(cfg,submittedPending){
+  var selected=new Set(submittedPending||[]);
+  var deferred=chatPendingMessages().filter(function(message){return !selected.has(message)});
+  var deferredSet=new Set(deferred);
+  var working=deferred.length?chatMessages.filter(function(message){return !deferredSet.has(message)}):chatMessages.slice();
   var trim=chatAutoTrimConfigFrom(cfg||chatLoadConfig());
-  var before=chatAutoTrimRoundCount(chatMessages);
+  var before=chatAutoTrimRoundCount(working);
   if(!trim.enabled||before<=trim.threshold){
-    chatRenderTrimState(cfg);
-    return {trimmed:false,before:before,after:before,dropped:0};
+    return {trimmed:false,before:before,after:before,dropped:0,deferred:deferred};
   }
   var drop=Math.min(trim.drop,Math.max(0,before-1));
-  if(drop<=0)return {trimmed:false,before:before,after:before,dropped:0};
+  if(drop<=0)return {trimmed:false,before:before,after:before,dropped:0,deferred:deferred};
+  var cutIndex=chatAutoTrimCutIndex(working,drop);
+  var keptMessages=working.slice(cutIndex);
+  var after=chatAutoTrimRoundCount(keptMessages);
+  return {
+    trimmed:true,
+    before:before,
+    after:after,
+    dropped:before-after,
+    droppedMessages:working.slice(0,cutIndex),
+    keptMessages:keptMessages,
+    deferred:deferred,
+    editingMessage:chatEditingIndex>=0?chatMessages[chatEditingIndex]:null
+  };
+}
+function chatSpeechPreferencePrepareMessages(list){
+  var rows=(Array.isArray(list)?list:[]).filter(function(m){
+    if(!m||typeof m!=='object')return false;
+    if(m.role!=='user'&&m.role!=='pending_user'&&m.role!=='assistant')return false;
+    if(m.role==='assistant'&&m.stopped===true)return false;
+    return !!String(m.text||'').trim();
+  }).map(function(m){
+    return {
+      role:m.role==='pending_user'?'user':m.role,
+      text:String(m.text||'').trim().slice(0,5000),
+      ts:Number(m.ts||0)||0
+    };
+  });
+  if(!rows.length)return [];
+  // The backend performs a second compression pass.  This first pass keeps
+  // every likely long-term wording boundary plus nearby context, instead of
+  // uploading hundreds of unrelated rounds before a large trim.
+  var signal=/(不要|别再|别这样|不准|不许|禁止|不得|少说|别说|别叫|别用|别提|别拿|以后|永远|每次|必须|要求|记住|请你|希望你|不喜欢|讨厌|反感|恶心|膈应|不舒服|受不了|烦死|冒犯|伤人|扎心|雷区|忌讳|撤回|收回|取消|不用再|可以说|可以叫|改成|换成|纠正|说话|回复|回答|语气|口气|口吻|称呼|叫我|怎么叫|调侃|玩笑|开玩笑|讽刺|阴阳|说教|教育我|安慰|哄|道歉|反问|复述|重复|敷衍|套话|模板|免责声明|评价我|定义我|归因|猜测|揣测|分析我|心理)/i;
+  var selected={};
+  rows.forEach(function(row,index){
+    if(row.role==='user'&&signal.test(row.text)){
+      selected[index]=10;
+      if(index>0)selected[index-1]=Math.max(selected[index-1]||0,2);
+      if(index+1<rows.length)selected[index+1]=Math.max(selected[index+1]||0,2);
+    }
+  });
+  // Preserve a small recent tail for newly worded corrections that do not
+  // contain one of the obvious keywords above.
+  for(var i=Math.max(0,rows.length-20);i<rows.length;i++)selected[i]=Math.max(selected[i]||0,1);
+  var order=Object.keys(selected).map(Number).sort(function(a,b){
+    return (selected[b]-selected[a])||(b-a);
+  });
+  var chosen={},chars=0,maxChars=24000;
+  order.forEach(function(index){
+    var size=rows[index].text.length+40;
+    if(chars+size<=maxChars||!Object.keys(chosen).length){chosen[index]=true;chars+=size}
+  });
+  return Object.keys(chosen).map(Number).sort(function(a,b){return a-b}).map(function(index){return rows[index]});
+}
+function chatSpeechPreferenceRevisionValue(value){
+  if(value===undefined||value===null||value==='')return '';
+  if(typeof value==='number'&&isFinite(value))return value;
+  var text=String(value).trim();
+  if(!text)return '';
+  if(/^\d+$/.test(text)){
+    var number=Number(text);
+    if(Number.isSafeInteger(number))return number;
+  }
+  return text;
+}
+function chatSpeechPreferenceResponseMeta(data){
+  data=data&&typeof data==='object'?data:{};
+  var nested=(data.speech_preference&&typeof data.speech_preference==='object')?data.speech_preference:
+    ((data.speech_preferences&&typeof data.speech_preferences==='object')?data.speech_preferences:{});
+  return {
+    revision:chatSpeechPreferenceRevisionValue(
+      data.speech_preference_current_revision!==undefined?data.speech_preference_current_revision:
+        (data.speech_preference_revision!==undefined?data.speech_preference_revision:
+          (data.active_revision!==undefined?data.active_revision:nested.current_revision!==undefined?nested.current_revision:nested.revision))
+    ),
+    pendingRevision:chatSpeechPreferenceRevisionValue(
+      data.speech_preference_pending_revision!==undefined?data.speech_preference_pending_revision:
+        (data.pending_revision!==undefined?data.pending_revision:nested.pending_revision)
+    ),
+    appliedRevision:chatSpeechPreferenceRevisionValue(data.speech_preference_applied_revision!==undefined?data.speech_preference_applied_revision:nested.applied_revision),
+    activationId:String(data.speech_preference_activation_id||data.activation_id||nested.activation_id||'').trim(),
+    // 只有后端明确回报 activation_applied=true 才能清掉 pending。
+    // “active” 只表示当前版本存在，不代表本轮已应用，不能作为推断。
+    activationApplied:data.speech_preference_activation_applied===true||data.activation_applied===true||nested.activation_applied===true
+  };
+}
+function chatCaptureSpeechPreferenceRevisions(data,sessionId,opts){
+  opts=opts||{};
+  var meta=chatSpeechPreferenceResponseMeta(data);
+  if(meta.revision===''&&meta.appliedRevision===''&&!meta.activationApplied)return meta;
+  var session=chatSessions.find(function(item){return item&&String(item.id)===String(sessionId||'')});
+  if(!session&&String(chatActiveSessionId||'')===String(sessionId||''))session=chatCurrentSession();
+  if(!session)return meta;
+  var changed=false;
+  if(meta.revision!==''&&String(session.speechPreferenceRevision) !== String(meta.revision)){
+    session.speechPreferenceRevision=meta.revision;changed=true;
+  }
+  if(meta.appliedRevision!==''&&String(session.speechPreferenceAppliedRevision)!==String(meta.appliedRevision)){
+    session.speechPreferenceAppliedRevision=meta.appliedRevision;changed=true;
+  }
+  var pendingId=String(session.speechPreferencePendingActivationId||'');
+  var activationConfirmed=meta.activationApplied&&(!meta.activationId||!pendingId||meta.activationId===pendingId);
+  if(opts.allowClear!==false&&pendingId&&activationConfirmed){
+    session.speechPreferencePendingActivationId='';
+    session.speechPreferencePendingTrimEventId='';
+    changed=true;
+  }
+  if(changed)chatSaveSessions();
+  return meta;
+}
+function chatSpeechPreferenceTrimEventId(cfg,plan){
+  var first=plan&&plan.droppedMessages&&plan.droppedMessages[0];
+  var last=plan&&plan.droppedMessages&&plan.droppedMessages[plan.droppedMessages.length-1];
+  return ['trim',String(cfg&&cfg.sessionId||'session'),Number(first&&first.ts||0)||0,Number(last&&last.ts||0)||0,Number(plan&&plan.dropped||0),Date.now().toString(36)].join('-');
+}
+// 言语要求采用 prepare -> trim/chat 两阶段：prepare 只写待激活草稿，
+// 直到同一轮真正截断并把 activation_id 带进 /ck/chat 才让网关应用。
+// 网关为本次提取保留约 25–30s；前端只再留少量网络/JSON 余量。
+// 超时只取消本次截断并保留完整历史，不会提交 pending activation。
+var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=35000;
+async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
+  var messages=chatSpeechPreferencePrepareMessages(plan&&plan.droppedMessages);
+  var eventId=chatSpeechPreferenceTrimEventId(cfg,plan);
+  var started=Date.now();
+  chatSetStatus('正在请求网关：截断前更新言语要求...');
+  var controller=null,timer=0,parentSignal=requestState&&requestState.controller?requestState.controller.signal:null,relay=null,timedOut=false;
+  try{
+    if(typeof AbortController!=='undefined'){
+      controller=new AbortController();
+      if(parentSignal){
+        relay=function(){try{controller.abort()}catch(e){}};
+        if(parentSignal.aborted)relay();
+        else if(parentSignal.addEventListener)parentSignal.addEventListener('abort',relay,{once:true});
+      }
+      timer=setTimeout(function(){timedOut=true;try{controller.abort()}catch(e){}},CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS);
+    }
+    var response=await fetch(chatSpeechPreferencePrepareEndpoint(cfg),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal:controller?controller.signal:parentSignal||undefined,
+      body:JSON.stringify({
+        key:cfg.panelKey,
+        session_id:cfg.sessionId,
+        event_id:eventId,
+        messages:messages,
+        reason:'auto_trim',
+        activate_on:'trim'
+      })
+    });
+    var data={};
+    try{data=await response.json()}catch(e){}
+    if(!response.ok||data.ok===false||(data.prepared!==undefined&&data.prepared!==true))throw new Error((data&&data.error)||('HTTP '+response.status));
+    var activationId=String(
+      (data&&data.speech_preference_activation_id)||
+      (data&&data.activation_id)||
+      (data&&data.prepared&&data.prepared.activation_id)||
+      (data&&data.result&&data.result.activation_id)||''
+    ).trim();
+    if(!activationId)throw new Error('prepare 未返回 activation_id');
+    var responseMeta=chatCaptureSpeechPreferenceRevisions(data,cfg.sessionId,{allowClear:false});
+    chatDebug('speech_preference_prepare',{
+      ok:true,event_id:eventId,activation_id:activationId,
+      speech_preference_revision:responseMeta.revision,
+      speech_preference_pending_revision:responseMeta.pendingRevision,
+      speech_preference_applied_revision:responseMeta.appliedRevision,
+      dropped_rounds:Number(plan&&plan.dropped||0),messages:messages.length,duration_ms:Date.now()-started
+    });
+    return {ok:true,eventId:eventId,activationId:activationId,revision:responseMeta.revision,pendingRevision:responseMeta.pendingRevision,appliedRevision:responseMeta.appliedRevision,durationMs:Date.now()-started};
+  }catch(error){
+    var stopped=!!(requestState&&requestState.stopped);
+    if(timedOut&&!stopped)error=new Error('prepare 超时（'+Math.round(CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS/1000)+' 秒）');
+    var errorText=String((error&&error.message)||error).slice(0,300);
+    chatDebug('speech_preference_prepare',{
+      ok:false,event_id:eventId,dropped_rounds:Number(plan&&plan.dropped||0),messages:messages.length,
+      duration_ms:Date.now()-started,stopped:stopped,error:errorText
+    });
+    if(!stopped)toast('言语要求更新失败，本次不截断并保留完整历史',5000);
+    return {ok:false,eventId:eventId,error:errorText,stopped:stopped};
+  }finally{
+    if(timer)clearTimeout(timer);
+    if(parentSignal&&relay&&parentSignal.removeEventListener)parentSignal.removeEventListener('abort',relay);
+  }
+}
+function chatCommitAutoTrimPlan(cfg,plan,prepared){
   var s=chatCurrentSession();
   var oldTransport=(s.transportMessages||[]).length;
-  chatMessages=chatDropFirstAutoTrimRounds(chatMessages,drop);
-  var after=chatAutoTrimRoundCount(chatMessages);
+  chatMessages=(plan.keptMessages||[]).concat(plan.deferred||[]);
   s.messages=chatMessages;
   s.transportMessages=[];
   s.transportUpdated=0;
+  if(prepared&&prepared.activationId){
+    s.speechPreferencePendingActivationId=String(prepared.activationId);
+    s.speechPreferencePendingTrimEventId=String(prepared.eventId||'');
+  }
   chatResetSessionAnchorFromMessages(s);
   s.updated=Date.now();
   chatSaveSessions();
   chatRenderSessions();
   chatRenderTrimState(cfg);
-  return {trimmed:true,before:before,after:after,dropped:before-after,transportCleared:oldTransport};
+  if(plan.editingMessage)chatEditingIndex=chatMessages.indexOf(plan.editingMessage);
+  return {
+    trimmed:true,
+    before:plan.before,
+    after:plan.after,
+    dropped:plan.dropped,
+    transportCleared:oldTransport,
+    speechPreferenceActivationId:prepared.activationId,
+    speechPreferenceTrimEventId:prepared.eventId,
+    speechPreferencePrepareMs:prepared.durationMs||0
+  };
 }
-function chatApplyAutoTrimForPendingBatch(cfg,submittedPending){
-  var selected=new Set(submittedPending||[]);
-  var deferred=chatPendingMessages().filter(function(message){return !selected.has(message)});
-  var editingMessage=chatEditingIndex>=0?chatMessages[chatEditingIndex]:null;
-  if(deferred.length){
-    var deferredSet=new Set(deferred);
-    chatMessages=chatMessages.filter(function(message){return !deferredSet.has(message)});
-    chatCurrentSession().messages=chatMessages;
+async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestState){
+  var plan=chatPlanAutoTrimForPendingBatch(cfg,submittedPending);
+  if(!plan.trimmed){
+    chatRenderTrimState(cfg);
+    return plan;
   }
-  var result=chatApplyAutoTrimBeforeRequest(cfg);
-  if(deferred.length){
-    chatMessages=chatMessages.concat(deferred);
-    chatCurrentSession().messages=chatMessages;
+  if(!chatSpeechPreferencePrepareMessages(plan.droppedMessages).length){
+    chatDebug('speech_preference_prepare',{ok:true,skipped:'no_text',event_id:'',dropped_rounds:plan.dropped});
+    return chatCommitAutoTrimPlan(cfg,plan,{activationId:'',eventId:'',durationMs:0});
   }
-  if(editingMessage)chatEditingIndex=chatMessages.indexOf(editingMessage);
-  return result;
+  var prepared=await chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState);
+  if((requestState&&requestState.stopped)||!prepared.ok){
+    chatRenderTrimState(cfg);
+    return {
+      trimmed:false,before:plan.before,after:plan.before,dropped:0,
+      plannedDropped:plan.dropped,prepareFailed:!prepared.ok,prepareStopped:!!prepared.stopped,
+      speechPreferenceTrimEventId:prepared.eventId||''
+    };
+  }
+  return chatCommitAutoTrimPlan(cfg,plan,prepared);
 }
 function chatWindowContextMessages(){
   return (chatMessages||[]).filter(function(m){
@@ -8291,7 +8508,8 @@ async function chatSubmitPendingMessages(options){
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
-  var trimResult=chatApplyAutoTrimForPendingBatch(cfg,pending);
+  var trimResult=await chatApplyAutoTrimForPendingBatch(cfg,pending,requestState);
+  if(requestState&&requestState.stopped)return;
   var windowMessagesForRequest=chatWindowContextMessages();
   var userMessageIndexes=[];
   pending.forEach(function(m){
@@ -8355,6 +8573,16 @@ async function chatSubmitPendingMessages(options){
       first_user_ts:currentSession.firstUserTs||0
     }
   };
+  var pendingSpeechActivationId=String(currentSession.speechPreferencePendingActivationId||'')||
+    (trimResult.trimmed?String(trimResult.speechPreferenceActivationId||''):'');
+  if(pendingSpeechActivationId){
+    body.speech_preference_activation_id=pendingSpeechActivationId;
+    body.speech_preference_trimmed=true;
+    body.speech_preference_trim_event_id=String(currentSession.speechPreferencePendingTrimEventId||trimResult.speechPreferenceTrimEventId||'');
+  }
+  if(currentSession.speechPreferenceAppliedRevision!==undefined&&currentSession.speechPreferenceAppliedRevision!==''){
+    body.speech_preference_applied_revision=currentSession.speechPreferenceAppliedRevision;
+  }
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
   // 原生稳定策略必须走 Anthropic 原生 /messages 形状；其它策略继续
   // 由网关按供应商地址自动判断 OpenAI/Anthropic 协议。
@@ -8513,6 +8741,7 @@ async function chatSubmitPendingMessages(options){
           if(data&&data.latency_probe&&typeof data.latency_probe==='object')latencyTrace.gateway_latency=data.latency_probe;
           if(ev==='usage')data=chatEnrichUsageRoute(data||{},cfg);
           if(ev==='done'&&data&&data.usage)data.usage=chatEnrichUsageRoute(data.usage,cfg);
+          if(ev==='meta'||ev==='done')chatCaptureSpeechPreferenceRevisions(data,cfg.sessionId,{allowClear:true});
           chatDebug(ev,data);
           if(ev==='tool'){
             markFirstReplyTs();
@@ -9019,14 +9248,16 @@ function apiConfigErrorHtml(reason){
 
 /* ---- API 配置：供应商库 + 功能选择（新版） ---- */
 var API_PROVIDER_LIBRARY_KEY='provider_library';
+var SPEECH_PREFERENCE_DEFAULT_MODEL='gemini-3.1-pro-preview';
 var API_TABS=[
   {key:'providers',label:'供应商',kind:'providers',info:'在这里维护可复用的 API 供应商和模型缓存。各功能页也会完整显示并保存当前供应商的 Key、站点地址和模型。'},
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
-  {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：一是把聊天里提到的人和事，自动整理成一张张小卡片；二是把每天聊的内容存起来、剪成一小段一小段、每段配一句简短说明，方便以后回看。',groups:[
+  {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：整理人物与事件小档案、提取独立 Fact、保存每日聊天切片，也会在上下文截断前更新你对助手说话方式的长期要求。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
     {key:'fact_extract',label:'Fact 提取',info:'按话题切分 chatlog、提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
+    {key:'speech_preference_extract',label:'言语要求提取',info:'只在聊天上下文即将截断时调用，提取并更新你对称呼、语气、禁忌和回复方式的长期要求。提取结果会等到截断真正发生时再交给助手，避免提前改变稳定缓存；普通每轮聊天不会额外调用这个 API。'},
     {key:'mem_chatlog',label:'Chatlog离线切片',info:'把每天的聊天记录存档，并剪成一小段一小段。这里直接选择负责切片和写摘要的供应商和模型。'}
   ]},
   {key:'rolling',label:'滚动',info:'这一栏管“自动整理近况”：放久了的旧近况会被自动概括一下、收进长期记录里，让“最近怎么样”这块始终干净。',groups:[
@@ -9089,6 +9320,14 @@ function providerFingerprint(p){
   var url=String(p&&p.url||'').trim().toLowerCase();
   var key=String(p&&p.key||'').trim();
   return (url||key)?(url+'\n'+key):String(p&&p.id||'');
+}
+function isGgProvider(p){
+  var name=String(p&&p.name||'').trim().toLowerCase();
+  var host=providerHost(p&&p.url).toLowerCase();
+  return /(^|[^a-z0-9])gg([^a-z0-9]|$)/.test(name)||host==='gcli.ggchan.dev'||/(^|\.)ggchan\.dev$/.test(host);
+}
+function isGgGeminiProvider(p,model){
+  return isGgProvider(p)&&cleanModelList(p&&p.models,p&&p.model).indexOf(model)>=0;
 }
 function addProviderToLibrary(raw){
   var slot=apiProviderLibrarySlot();
@@ -9170,6 +9409,28 @@ function normalizeApiProviders(raw){
     }
     if(factMatches.length===1)factSlot.current=factMatches[0].id;
     if(!factSlot.model&&factModel)factSlot.model=factModel;
+  }
+  var speechSlot=apiGroupSlot('speech_preference_extract');
+  if(!findLibraryProvider(speechSlot.current)){
+    var speechBase=normalizedProviderBase(apiDirectValue('SPEECH_PREFERENCE_EXTRACT_BASE'));
+    var speechModel=String(speechSlot.model||'').trim()||apiDirectValue('SPEECH_PREFERENCE_EXTRACT_MODEL').trim()||SPEECH_PREFERENCE_DEFAULT_MODEL;
+    var speechMatches=speechBase?providerLibraryList().filter(function(p){return normalizedProviderBase(p.url)===speechBase}):[];
+    if(speechMatches.length>1&&speechModel){
+      var speechModelMatches=speechMatches.filter(function(p){return cleanModelList(p.models,p.model).indexOf(speechModel)>=0});
+      if(speechModelMatches.length===1)speechMatches=speechModelMatches;
+    }
+    if(speechMatches.length===1)speechSlot.current=speechMatches[0].id;
+    if(!speechSlot.current&&speechModel===SPEECH_PREFERENCE_DEFAULT_MODEL){
+      var ggMatches=providerLibraryList().filter(function(p){return isGgGeminiProvider(p,SPEECH_PREFERENCE_DEFAULT_MODEL)});
+      if(ggMatches.length===1)speechSlot.current=ggMatches[0].id;
+      // 模型列表可能只是过期缓存。若库中明确只有一个 GG 供应商，
+      // 直接绑定现有 URL/Key，再使用用户指定的 3.1 Pro 模型名。
+      if(!speechSlot.current){
+        var allGgMatches=providerLibraryList().filter(isGgProvider);
+        if(allGgMatches.length===1)speechSlot.current=allGgMatches[0].id;
+      }
+    }
+    if(!speechSlot.model)speechSlot.model=speechModel;
   }
 }
 function providerLibraryList(){return apiProviderLibrarySlot().providers}
@@ -9425,6 +9686,11 @@ function saveAssignment(btn){
   }
   if(d.group==='fact_extract'){
     updates.FACT_EXTRACT_MODEL=slot.model;updates.FACT_EXTRACT_BASE=p.url;updates.FACT_EXTRACT_API_KEY=p.key;
+  }
+  if(d.group==='speech_preference_extract'){
+    updates.SPEECH_PREFERENCE_EXTRACT_MODEL=slot.model;
+    updates.SPEECH_PREFERENCE_EXTRACT_BASE=p.url;
+    updates.SPEECH_PREFERENCE_EXTRACT_API_KEY=p.key;
   }
   keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})

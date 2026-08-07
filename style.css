@@ -4251,7 +4251,7 @@ body.dark .eg-detail-panel::before{background:var(--ck-line-strong)}
 .ds-ok{background:#eef9f1;border-color:#bfe6cb}
 .ds-wait{background:#fff7ea;border-color:#f0dcb0}
 .ds-note{font-size:12px;color:#7b828c;line-height:1.7;background:#f6f7f2;border:1px solid #e8ebe6;border-radius:10px;padding:11px 12px;margin-bottom:12px}
-.ds-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.ds-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
 .ds-stat{background:#f4f8f4;border:1px solid #e6efe7;border-radius:12px;padding:12px 6px;text-align:center}
 .ds-stat b{display:block;font-size:22px;font-weight:700;color:#1c2028;line-height:1.1}
 .ds-stat span{font-size:11px;color:#8c939e}
