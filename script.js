@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v169-speech-preference-console';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v170-speech-preference-drawer';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4960,17 +4960,8 @@ function chatRenderSpeechPreferences(data,preserveEditor){
   if(status)status.textContent=data.source==='github'?'已同步':'本地读取';
 }
 function chatOpenSpeechPreferences(){
-  var panel=document.getElementById('chat-speech-console');
-  if(!panel)return;
-  panel.classList.add('open');
-  panel.setAttribute('aria-hidden','false');
+  chatOpenSettingTab('speech');
   chatLoadSpeechPreferences(false);
-}
-function chatCloseSpeechPreferences(){
-  var panel=document.getElementById('chat-speech-console');
-  if(!panel)return;
-  panel.classList.remove('open');
-  panel.setAttribute('aria-hidden','true');
 }
 function chatLoadSpeechPreferences(preserveEditor){
   if(chatSpeechConsoleState.loading)return Promise.resolve();
@@ -7407,8 +7398,6 @@ function chatTogglePlus(force){
   var open=typeof force==='boolean'?force:!panel.classList.contains('open');
   if(open){
     chatPlusRenderPager(chatPlusPager.currentPage||0);
-  }else{
-    chatCloseSpeechPreferences();
   }
   panel.classList.toggle('open',open);
   if(document.body)document.body.classList.toggle('chat-plus-open',open);
@@ -7511,7 +7500,7 @@ function chatInitPlusPager(){
   }
 }
 function chatSettingTitle(tab){
-  return ({model:'提示词设置',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';
+  return ({model:'提示词设置',speech:'措辞偏好',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
