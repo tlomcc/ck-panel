@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v168-debug-copy').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v172-cache-boundary-trim').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
