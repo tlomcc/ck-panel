@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v170-speech-preference-drawer';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v171-fact-recall-diagnostics';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5214,6 +5214,8 @@ function chatIntentRewriteFromDebug(data){
   var out={};
   Object.keys(source).forEach(function(k){out[k]=source[k]});
   if(out.original_query===undefined)out.original_query=data.recall_query||'';
+  if(out.semantic_query===undefined&&out.rewritten_query!==undefined)out.semantic_query=out.rewritten_query;
+  if(out.rewritten_query===undefined&&out.semantic_query!==undefined)out.rewritten_query=out.semantic_query;
   if(out.debug_id===undefined)out.debug_id=data.debug_id||'';
   if(out.elapsed_ms===undefined&&data.recall_diag&&Array.isArray(data.recall_diag.phases)){
     var phase=data.recall_diag.phases.find(function(item){return item&&item.name==='意图改写'});
@@ -5228,8 +5230,24 @@ function chatIntentOneLine(value,fallback){
 function chatFormatIntentRewrite(data){
   data=data&&typeof data==='object'?data:{};
   var original=chatIntentOneLine(data.original_query,'无');
-  var rewritten=chatIntentOneLine(data.rewritten_query,'（未改写，使用原始 query）');
+  var semantic=chatIntentOneLine(data.semantic_query!==undefined?data.semantic_query:data.rewritten_query,'（无语义查询）');
   var keywords=Array.isArray(data.keywords)?data.keywords.map(function(x){return chatIntentOneLine(x,'')}).filter(Boolean).join('、'):'无';
+  function listText(value){
+    return Array.isArray(value)?(value.map(function(x){return chatIntentOneLine(x,'')}).filter(Boolean).join('、')||'无'):'无';
+  }
+  var topics=listText(data.topics);
+  var situations=listText(data.situations);
+  var entities=listText(data.entities);
+  var timeScope=chatIntentOneLine(data.time_scope,'未知');
+  var intent=chatIntentOneLine(data.intent,'未知');
+  var sourceNames={remote_analyzer:'远程分析器',local_structured:'本地结构化',local_structured_fallback:'远程失败后的本地结构化',local_intent_gate:'本地意图门',pending:'待处理'};
+  var source=sourceNames[data.source]||chatIntentOneLine(data.source,'未知');
+  var routeNames={original:'原始句',exact:'精确核心词',semantic:'语义查询',context:'最近上下文'};
+  var routes=Array.isArray(data.embedding_queries)?data.embedding_queries:[];
+  var routeText=routes.length?routes.map(function(item){
+    item=item&&typeof item==='object'?item:{};
+    return (routeNames[item.kind]||item.kind||'未知')+'＝'+chatIntentOneLine(item.query,'无');
+  }).join('｜'):'无';
   var need=data.need_recall===false?'否':(data.need_recall===true?'是':'未知');
   var confidence=Number(data.confidence);
   var confidenceText=isFinite(confidence)?Math.max(0,Math.min(1,confidence)).toFixed(2):'未知';
@@ -5241,17 +5259,32 @@ function chatFormatIntentRewrite(data){
   }
   var elapsedText=elapsed==='-'?'未知':Math.max(0,Math.round(Number(elapsed)||0))+'ms';
   var status=chatIntentOneLine(data.status,data.used===true?'已完成':'未改写（回退原始查询）');
+  var failureCode=chatIntentOneLine(data.failure_code,'无');
+  var failureReason=chatIntentOneLine(data.failure_reason,'无');
+  var decision=chatIntentOneLine(data.decision_reason||data.local_intent_reason,'无');
+  var flags=[];
+  if(data.requested===false)flags.push('未请求远程改写');
+  if(data.downgraded)flags.push('已降级');
+  if(data.model_veto_ignored)flags.push('忽略模型误否决');
+  if(data.dual_hit_count!==undefined)flags.push('多路共同命中 '+(Number(data.dual_hit_count)||0)+' 条');
   return '🧠 意图改写｜'+status+'\n'
     +'📝 原始 query：'+original+'\n'
-    +'✍️ 改写结果：'+rewritten+'\n'
+    +'✍️ 语义 query：'+semantic+'\n'
+    +'🧭 结构化意图：'+intent+'｜时间 '+timeScope+'\n'
+    +'🏷️ 主题：'+topics+'\n'
+    +'🎬 场景：'+situations+'\n'
+    +'👤 实体：'+entities+'\n'
     +'🔑 提取关键词：'+keywords+'\n'
+    +'🛣️ Embedding 路由：'+routeText+'\n'
     +'🎯 是否需要召回：'+need+'\n'
     +'🎚️ 改写确信度：'+confidenceText+'\n'
+    +'🧩 改写来源：'+source+'｜决策 '+decision+(flags.length?'｜'+flags.join('｜'):'')+'\n'
+    +'⚠️ 失败诊断：'+failureCode+(failureReason!=='无'?'｜'+failureReason:'')+'\n'
     +'⏱️ 改写耗时：'+elapsedText;
 }
 function chatIntentRewriteSignature(data){
   data=data&&typeof data==='object'?data:{};
-  return [data.debug_id||'',data.original_query||'',data.rewritten_query||'',data.need_recall,data.confidence,data.elapsed_ms,data.keywords||[]].join('|');
+  return [data.debug_id||'',data.original_query||'',data.semantic_query||data.rewritten_query||'',data.need_recall,data.confidence,data.elapsed_ms,JSON.stringify(data.embedding_queries||[]),JSON.stringify(data.topics||[]),JSON.stringify(data.situations||[])].join('|');
 }
 function chatHasIntentRewriteRecord(data){
   var sig=chatIntentRewriteSignature(data);
@@ -5344,8 +5377,8 @@ function chatFormatRecallDiag(data){
   var candidateSources=(diag.candidate_sources&&typeof diag.candidate_sources==='object')?diag.candidate_sources:{};
   var filterReasons=(diag.filter_reasons&&typeof diag.filter_reasons==='object')?diag.filter_reasons:{};
   var selectedStats=(diag.selected_fact_stats&&typeof diag.selected_fact_stats==='object')?diag.selected_fact_stats:{};
-  var sourceNames={vector_original:'原始向量',vector_expand_1:'扩展向量1',vector_expand_2:'扩展向量2',vector_expanded:'扩大向量',keyword_fallback:'关键词',exact_phrase:'精确短语',exact_phrase_weak:'单轴短语',exact_alias:'对象/别名',fact_field:'属性',exact_number:'数字/型号',polarity_match:'极性一致',polarity_conflict:'极性冲突',explicit_all:'完整查询'};
-  var reasonNames={duplicate_version_group:'版本组重复',result_limit:'结果上限',polarity_conflict:'极性冲突',insufficient_topic_evidence:'缺少主题证据',stale_current_state:'当前状态已陈旧',below_quality_floor:'低于质量门槛',near_duplicate:'正文近重复',character_budget:'字符预算'};
+  var sourceNames={vector_original:'原始向量',vector_exact:'精确核心词向量',vector_semantic:'语义向量',vector_context:'上下文向量',vector_expand_1:'扩展向量1',vector_expand_2:'扩展向量2',vector_expanded:'扩大向量',lexical_ngram:'中文词法',lexical_exact_rare:'稀有词精确命中',keyword_fallback:'关键词',exact_original:'原句精确路由',quoted_phrase:'用户引用短语',exact_phrase:'精确短语',exact_phrase_weak:'单轴短语',exact_alias:'对象/别名',fact_field:'属性',exact_number:'数字/型号',polarity_match:'极性一致',polarity_conflict:'极性冲突',explicit_all:'完整查询'};
+  var reasonNames={duplicate_version_group:'版本组重复',result_limit:'结果上限',polarity_conflict:'极性冲突',insufficient_topic_evidence:'缺少主题证据',missing_target_axis:'缺少目标主题轴',missing_speech_evidence:'正文没有“说什么”证据',missing_query_anchor:'缺少查询锚点',current_property_not_asserted:'正文未明确陈述当前属性',time_scope_today_mismatch:'不符合今天时间范围',time_scope_recent_mismatch:'不符合近期时间范围',stale_current_state:'当前状态已陈旧',insufficient_hybrid_evidence:'词法/向量联合证据不足',below_quality_floor:'低于质量门槛',near_duplicate:'正文近重复',character_budget:'字符预算'};
   var sourceText=Object.keys(candidateSources).map(function(key){return (sourceNames[key]||key)+' '+candidateSources[key]}).join('｜')||'无';
   var filterText=Object.keys(filterReasons).map(function(key){return (reasonNames[key]||key)+' '+filterReasons[key]}).join('｜')||'无';
   var selectedKeys=Array.isArray(diag.selected_fact_keys)?diag.selected_fact_keys:[];
@@ -5358,13 +5391,42 @@ function chatFormatRecallDiag(data){
     var matched=(Array.isArray(stat.match_sources)?stat.match_sources:[]).slice(0,3).map(function(source){return sourceNames[source]||source}).join('+');
     return key+' '+Number(stat.score||0).toFixed(3)+(matched?'（'+matched+'）':'');
   }).filter(Boolean).slice(0,5).join('｜')||'无';
-  lines.push('📦 Fact 数据｜'+src('fact_store','正文')+'｜'+src('fact_vectors','向量')+'｜有效 '+(factStore.active||counts.entity_fact_entries||0)+' 条｜版本 '+(diag.fact_index_version||'-'));
+  var rewrite=(diag.rewrite&&typeof diag.rewrite==='object')?diag.rewrite:{};
+  var embeddingRoutes=Array.isArray(rewrite.embedding_queries)?rewrite.embedding_queries:[];
+  var routeNames={original:'原始句',exact:'精确词',semantic:'语义',context:'上下文'};
+  var embeddingText=embeddingRoutes.map(function(item){
+    item=item&&typeof item==='object'?item:{};
+    return (routeNames[item.kind]||item.kind||'未知')+'＝'+String(item.query||'').replace(/\s+/g,' ').slice(0,90);
+  }).join('｜')||'无';
+  var lexicalQuery=(diag.lexical_query&&typeof diag.lexical_query==='object')?diag.lexical_query:{};
+  var lexicalText='核心词 '+((lexicalQuery.core_terms||[]).join('、')||'无')+'｜锚点 '+((lexicalQuery.query_anchors||[]).join('、')||'无');
+  var preview=Array.isArray(diag.candidate_preview)?diag.candidate_preview:[];
+  var candidateText=preview.slice(0,8).map(function(item){
+    item=item&&typeof item==='object'?item:{};
+    var vectors=(item.vector_scores&&typeof item.vector_scores==='object')?item.vector_scores:{};
+    var ranks=(item.vector_ranks&&typeof item.vector_ranks==='object')?item.vector_ranks:{};
+    var vectorText=Object.keys(vectors).slice(0,4).map(function(key){
+      var rank=ranks[key]?('#'+ranks[key]):'';
+      return (routeNames[key]||key)+' '+Number(vectors[key]||0).toFixed(3)+rank;
+    }).join('，')||'无向量';
+    var verdict=item.selected?'入选':(reasonNames[item.rejection_reason]||item.rejection_reason||'未入选');
+    var content=String(item.content_preview||'').replace(/\s+/g,' ').slice(0,96);
+    return (item.selected?'✅ ':'❌ ')+(item.fact_id||'-')+'｜'+verdict+'｜证据 '+(item.evidence_class||'-')+'｜总分 '+Number(item.score||0).toFixed(3)+'｜相似 '+Number(item.similarity||0).toFixed(3)+'｜词法 '+Number(item.lexical_score||0).toFixed(3)+'｜路由 '+(item.route_count||Object.keys(vectors).length)+'｜'+vectorText+(content?'｜'+content:'');
+  }).join('\n')||'无候选';
+  var factGeneration=String(diag.fact_generation||factStore.generation||'');
+  var vectorGeneration=String(diag.vector_generation||factVectors.generation||'');
+  function shortGeneration(value){return value?value.slice(0,12):'-'}
+  lines.push('📦 Fact 数据｜'+src('fact_store','正文')+'｜'+src('fact_vectors','向量')+'｜有效 '+(factStore.active||counts.entity_fact_entries||0)+' 条｜generation '+shortGeneration(factGeneration)+'/'+shortGeneration(vectorGeneration)+'｜索引 '+(diag.fact_index_version||'-'));
+  lines.push('✍️ 检索改写｜'+String(rewrite.semantic_query||'无')+'｜来源 '+String(rewrite.source||'未知'));
+  lines.push('🛣️ 向量查询｜'+embeddingText);
+  lines.push('🔤 词法查询｜'+lexicalText);
   lines.push('🔎 候选生成｜精确 '+(counts.exact_candidates||0)+'｜向量 '+(counts.vector_matched||0)+'｜关键词 '+(counts.keyword_matched||0)+'｜扩大 '+(counts.expanded_vector_added||0)+'｜版本组 '+(counts.fact_version_groups||0));
   lines.push('🧷 候选证据｜'+sourceText);
   lines.push('🛡 过滤原因｜'+filterText);
   lines.push('🎯 最终注入｜Fact 版本组 '+(final.entity_facts||0)+'｜无命中 '+(diag.fact_miss?'是':'否')+'｜字符 '+(factSelection.selected_chars||0)+'/'+(factSelection.char_budget||0));
   lines.push('📐 质量门槛｜分数 '+Number(factSelection.score_floor||0).toFixed(3)+'｜最多 '+(factSelection.selected_limit||0)+' 组｜过滤 '+(diag.dropped_by_budget||0));
   lines.push('🔑 入选证据｜'+evidenceText);
+  lines.push('🧪 候选逐条诊断｜\n'+candidateText);
   lines.push('🔑 Fact keys｜'+selectedKeys.length+' 个'+(selectedKeys.length?'｜'+selectedKeys.slice(0,8).join('，'):''));
   lines.push('⏱ 耗时明细｜'+phaseText);
   lines.push('🧮 明细合计 '+sec(diag.phase_sum_seconds)+'｜实际总耗时 '+sec(diag.total_seconds));

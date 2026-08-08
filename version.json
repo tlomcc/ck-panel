@@ -1,6 +1,8 @@
 {
-  "version": "chat-v170-speech-preference-drawer",
+  "version": "chat-v171-fact-recall-diagnostics",
   "notes": [
+    "意图改写面板展示语义 query、结构化主题/场景/实体、来源、失败原因与多路 Embedding 查询",
+    "Fact 召回调试逐条展示候选的词法证据、各路向量分数/排名、入选或淘汰原因",
     "聊天召回收敛为单一 Fact 开关，小档案不再参与聊天召回",
     "关闭开关时不加载 Fact、不调用召回 API，也不注入记忆",
     "调试页展示候选证据、过滤原因、质量门槛和最终版本组",
