@@ -130,6 +130,30 @@
     };
   }
 
+  function conversationRoundCount(localMessages,transportMessages){
+    var transportCount=transportTurnGroups(transportMessages).length;
+    return transportCount||localTurnGroups(localMessages).length;
+  }
+
+  function positiveTimestamp(value){
+    value=Number(value);
+    return isFinite(value)&&value>0?value:0;
+  }
+
+  function cacheActivityReference(session,fallbackTimestamp){
+    session=session&&typeof session==='object'?session:{};
+    var fullCreate=positiveTimestamp(session.cacheFullCreatedAt);
+    var lastRead=positiveTimestamp(session.cacheLastReadAt);
+    if(fullCreate>=lastRead&&fullCreate>0){
+      return {timestamp:fullCreate,source:'full_create'};
+    }
+    if(lastRead>0){
+      return {timestamp:lastRead,source:'cache_read'};
+    }
+    var fallback=positiveTimestamp(fallbackTimestamp);
+    return {timestamp:fallback,source:fallback?'last_message':'none'};
+  }
+
   function usageNumber(usage,keys){
     usage=usage&&usage.usage&&typeof usage.usage==='object'?usage.usage:(usage||{});
     for(var index=0;index<keys.length;index++){
@@ -155,6 +179,8 @@
     isConversationUser:isConversationUser,
     transportTurnGroups:transportTurnGroups,
     trimTransportTurns:trimTransportTurns,
+    conversationRoundCount:conversationRoundCount,
+    cacheActivityReference:cacheActivityReference,
     cacheLifecycle:cacheLifecycle
   };
 });

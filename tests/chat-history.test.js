@@ -44,6 +44,18 @@ assert.strictEqual(transportTrim.dropped,50);
 assert.strictEqual(transportTrim.keptMessages[0].content[0].text,'request-51');
 assert.strictEqual(transportTrim.keptMessages[1].content[0].type,'tool_use');
 
+assert.strictEqual(history.conversationRoundCount(local,transport),250);
+assert.strictEqual(history.conversationRoundCount(local,[]),300);
+assert.deepStrictEqual(history.cacheActivityReference({
+  cacheFullCreatedAt:1000,
+  cacheLastReadAt:2500
+},500),{timestamp:2500,source:'cache_read'});
+assert.deepStrictEqual(history.cacheActivityReference({
+  cacheFullCreatedAt:3000,
+  cacheLastReadAt:2500
+},500),{timestamp:3000,source:'full_create'});
+assert.deepStrictEqual(history.cacheActivityReference({},500),{timestamp:500,source:'last_message'});
+
 assert.strictEqual(history.cacheLifecycle({
   input_tokens_total:29121,
   cache_read_input_tokens:944,

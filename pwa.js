@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v173-canonical-cache-trim').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v174-scroll-cache-activity').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
