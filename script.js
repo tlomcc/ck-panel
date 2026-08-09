@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v172-cache-boundary-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v173-canonical-cache-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2846,6 +2846,7 @@ var CHAT_FILE_WARNING_BYTES=100*1024;
 var CHAT_INDEXEDDB_NAME='ckPanelChatStoreV1';
 var CHAT_INDEXEDDB_VERSION=1;
 var CHAT_INDEXEDDB_SESSION_STORE='sessions';
+var CHAT_HISTORY_TOOLS=window.CKChatHistory||null;
 var CHAT_CACHE_NOTICE_TEXT='已超过5min，下一次会重新创建缓存';
 var CHAT_BOTTOM_THRESHOLD=100;
 var CHAT_ASSISTANT_REVEAL_MIN_DELAY=800;
@@ -4582,6 +4583,11 @@ function chatNormalizeSession(s){
     speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
     speechPreferencePendingBoundaryReason:String(s.speechPreferencePendingBoundaryReason||''),
     cacheRebuildPending:s.cacheRebuildPending===true,
+    cacheFullCreatedAt:Number(s.cacheFullCreatedAt||0)||0,
+    cacheFullCreateTokens:Number(s.cacheFullCreateTokens||0)||0,
+    cacheLastReadAt:Number(s.cacheLastReadAt||0)||0,
+    cacheLastReadTokens:Number(s.cacheLastReadTokens||0)||0,
+    cacheGeneration:Number(s.cacheGeneration||0)||0,
     firstUserText:String(s.firstUserText||'').slice(0,3000),
     firstUserTs:Number(s.firstUserTs||0)||0
   };
@@ -5501,7 +5507,7 @@ function chatFormatDebug(ev,data){
     var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
     var backendNoticeState=data.backend_switch_notification_enabled===false?'通知关闭':(data.backend_switch_notification_injected?'已注入切换通知':(data.backend_switch_detected?'切换但静默':'未切换'));
     var backendText=data.backend_name?('｜后端：'+data.backend_name+' · '+(data.backend_model||data.model||'-')+'（'+backendNoticeState+'）'):'';
-    var boundaryLabels={idle_1h:'1h 到期首条消息',manual:'手动截断',pending_rebuild:'手动操作后的下一条消息'};
+    var boundaryLabels={cache_1h:'真实缓存 generation 到期',manual_trim:'手动完整轮次截断',manual_sync:'仅同步措辞偏好',pending_rebuild:'已准备操作后的下一条消息'};
     var boundaryText=data.cache_rebuild_boundary?('｜缓存重建边界：'+(boundaryLabels[data.cache_rebuild_boundary]||data.cache_rebuild_boundary)):'';
     return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+backendText+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+injectionText+targetText+recallText+'｜缓存策略：'+strategyText+boundaryText+idleText+cleanText+mcpText;
   }
@@ -5747,18 +5753,23 @@ function chatRenderTrimState(cfg){
   var current=document.getElementById('chat-trim-current');
   var next=document.getElementById('chat-trim-next');
   var manual=document.getElementById('chat-manual-trim-btn');
+  var speech=document.getElementById('chat-manual-speech-btn');
   if(!current&&!next)return;
   cfg=cfg||chatLoadConfig();
   var trim=chatAutoTrimConfigFrom(cfg);
-  var count=chatAutoTrimRoundCount(chatMessages);
-  if(current)current.textContent='当前 '+count+' 轮';
+  var count=chatCurrentConversationRoundCount();
+  if(current)current.textContent='当前 '+count+' 个真实轮次';
+  if(speech){
+    speech.disabled=chatSending||count<=0;
+    speech.title=count<=0?'当前没有可检查的对话':'检查尚未审阅的用户措辞，不主动删除历史';
+  }
   if(manual){
     manual.disabled=chatSending||count<=0;
     manual.title=count<=0
       ?'当前没有可处理的对话'
       :(count>trim.keep
-        ?'先更新措辞偏好，再保留最近 '+trim.keep+' 轮；下一条消息重建缓存'
-        :'先同步措辞偏好，不删除当前历史；下一条消息重建缓存');
+        ?'先更新措辞偏好，再保留最近 '+trim.keep+' 个完整真实轮次'
+        :'当前不足 '+trim.keep+' 个真实轮次，只同步措辞偏好');
   }
   if(!next)return;
   if(!trim.enabled){
@@ -5770,16 +5781,17 @@ function chatRenderTrimState(cfg){
     next.textContent='自动截断仅在「原生稳定缓存 1h」模式生效；仍可手动同步并按需截断。';
     return;
   }
-  var lastTs=chatLastMessageTs();
-  var expired=!!(lastTs&&Date.now()-lastTs>=CHAT_AUTO_TRIM_IDLE_MS);
+  var session=chatCurrentSession();
+  var referenceTs=Number(session&&session.cacheFullCreatedAt||0)||chatLastMessageTs();
+  var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
   if(expired){
     if(count>trim.keep){
-      next.textContent='缓存已超过 1h：下一次发送前先更新措辞偏好，再保留最近 '+trim.keep+' 轮。';
+      next.textContent='当前缓存 generation 已超过 1h：下一次发送前先审阅措辞偏好，再保留最近 '+trim.keep+' 个真实轮次。';
     }else{
-      next.textContent='缓存已超过 1h：下一次发送前更新措辞偏好；历史不足 '+trim.keep+' 轮，不删除内容。';
+      next.textContent='当前缓存 generation 已超过 1h：下一次发送前更新措辞偏好；真实轮次不足 '+trim.keep+'，不删除内容。';
     }
   }else{
-    next.textContent='超过 1h 后，第一条消息回复前更新措辞偏好；历史超过 '+trim.keep+' 轮时保留最近 '+trim.keep+' 轮。';
+    next.textContent='按最近一次真实 full-create 计时；到边界后保留最近 '+trim.keep+' 个完整真实轮次。';
   }
 }
 function chatNowTitle(){
@@ -5863,6 +5875,11 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
       speechPreferencePendingBoundaryReason:s.speechPreferencePendingBoundaryReason||'',
       cacheRebuildPending:s.cacheRebuildPending===true,
+      cacheFullCreatedAt:s.cacheFullCreatedAt||0,
+      cacheFullCreateTokens:s.cacheFullCreateTokens||0,
+      cacheLastReadAt:s.cacheLastReadAt||0,
+      cacheLastReadTokens:s.cacheLastReadTokens||0,
+      cacheGeneration:s.cacheGeneration||0,
       firstUserText:String(s.firstUserText||'').slice(0,3000),
       firstUserTs:s.firstUserTs||0
     };
@@ -6194,7 +6211,8 @@ function chatFinalizeStoppedRequest(request){
     recall:snapshot.recallInfo||null,
     tools:chatCloneToolEvents(snapshot.toolEvents||[]),
     stopped:true,
-    ts:firstReplyTs
+    ts:firstReplyTs,
+    turnId:String(request.turnId||'')
   },responseUserTs,firstReplyTs);
   chatAttachAssistantCost(stopped,snapshot.requestUsage||null);
   chatInsertMessagesBeforePending([stopped]);
@@ -6217,6 +6235,8 @@ function chatBeginSendingUi(){
     finished:false,
     pendingMessages:[],
     transportSnapshot:null,
+    turnId:'',
+    cacheLifecycleCaptured:false,
     submitTs:Date.now(),
     out:null,
     stopSnapshot:null
@@ -6240,24 +6260,17 @@ function chatIsAutoTrimTurn(m){
   return chatMessageHasContent(m);
 }
 function chatAutoTrimRoundCount(list){
+  if(CHAT_HISTORY_TOOLS)return CHAT_HISTORY_TOOLS.localTurnGroups(list||[]).length;
   return (Array.isArray(list)?list:[]).filter(chatIsAutoTrimTurn).length;
 }
-function chatAutoTrimCutIndex(list,drop){
-  list=Array.isArray(list)?list:[];
-  drop=Math.max(0,Math.floor(Number(drop)||0));
-  if(!drop)return 0;
-  var dropped=0;
-  for(var i=0;i<list.length;i++){
-    if(chatIsAutoTrimTurn(list[i])){
-      dropped++;
-      if(dropped>drop)return i;
-    }
-  }
-  return Math.max(0,list.length-1);
+function chatTransportRoundCount(list){
+  if(CHAT_HISTORY_TOOLS)return CHAT_HISTORY_TOOLS.transportTurnGroups(list||[]).length;
+  return (Array.isArray(list)?list:[]).filter(function(message){return message&&message.role==='user'}).length;
 }
-function chatDropFirstAutoTrimRounds(list,drop){
-  list=Array.isArray(list)?list:[];
-  return list.slice(chatAutoTrimCutIndex(list,drop));
+function chatCurrentConversationRoundCount(){
+  var session=chatCurrentSession();
+  var transportCount=chatTransportRoundCount((session&&session.transportMessages)||[]);
+  return transportCount||chatAutoTrimRoundCount(chatMessages);
 }
 function chatResetSessionAnchorFromMessages(s){
   s=s||chatCurrentSession();
@@ -6279,9 +6292,16 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   var deferredSet=new Set(deferred);
   var working=deferred.length?chatMessages.filter(function(message){return !deferredSet.has(message)}):chatMessages.slice();
   var trim=chatAutoTrimConfigFrom(cfg||chatLoadConfig());
-  var before=chatAutoTrimRoundCount(working);
-  var selectedRounds=working.filter(function(message){return selected.has(message)&&chatIsAutoTrimTurn(message)}).length;
-  var historyRounds=Math.max(0,before-selectedRounds);
+  var session=chatCurrentSession();
+  var localPlan=CHAT_HISTORY_TOOLS
+    ?CHAT_HISTORY_TOOLS.trimLocalTurns(working,trim.keep,{excluded:selected})
+    :{before:chatAutoTrimRoundCount(working),after:chatAutoTrimRoundCount(working),dropped:0,keptMessages:working.slice(),droppedMessages:[]};
+  var transportMessages=Array.isArray(session&&session.transportMessages)?session.transportMessages:[];
+  var transportPlan=CHAT_HISTORY_TOOLS
+    ?CHAT_HISTORY_TOOLS.trimTransportTurns(transportMessages,trim.keep)
+    :{before:chatTransportRoundCount(transportMessages),after:chatTransportRoundCount(transportMessages),dropped:0,keptMessages:transportMessages.slice(),droppedMessages:[]};
+  var canonicalTransport=transportPlan.before>0;
+  var historyRounds=canonicalTransport?transportPlan.before:localPlan.before;
   var lastActivityTs=0;
   for(var i=working.length-1;i>=0;i--){
     var message=working[i];
@@ -6290,38 +6310,45 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   }
   var cacheMeta=chatCacheStrategyMeta((cfg||{}).cacheStrategy);
   var manual=opts.force===true||opts.trigger==='manual';
-  var session=chatCurrentSession();
   var pendingBoundary=!!(selected.size>0&&session&&session.cacheRebuildPending===true);
-  var idleMs=lastActivityTs?Math.max(0,Date.now()-lastActivityTs):0;
-  var idleBoundary=!!(
+  var cacheReferenceTs=Number(session&&session.cacheFullCreatedAt||0)||lastActivityTs;
+  var cacheAgeMs=cacheReferenceTs?Math.max(0,Date.now()-cacheReferenceTs):0;
+  var cacheAgeBoundary=!!(
     trim.enabled&&selected.size>0&&cacheMeta.ttl==='1h'&&
-    lastActivityTs&&idleMs>=CHAT_AUTO_TRIM_IDLE_MS
+    cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
   );
-  var boundary=manual||pendingBoundary||idleBoundary;
-  var trigger=manual?'manual':(pendingBoundary?'pending_rebuild':'idle_1h');
+  var boundary=manual||pendingBoundary||cacheAgeBoundary;
+  var trigger=manual?String(opts.trigger||'manual'):(pendingBoundary?'pending_rebuild':'cache_1h');
   var base={
     boundary:boundary,
     cacheBoundary:boundary,
     trigger:trigger,
     manual:manual,
-    idleBoundary:idleBoundary,
-    idleMs:idleMs,
+    cacheAgeBoundary:cacheAgeBoundary,
+    cacheAgeMs:cacheAgeMs,
+    cacheReferenceTs:cacheReferenceTs,
+    cacheReferenceSource:Number(session&&session.cacheFullCreatedAt||0)?'full_create':'last_message',
     lastActivityTs:lastActivityTs,
     cacheNoticePresent:lastActivityTs?chatHasCacheNoticeAfter(lastActivityTs):false,
-    trimmed:false,before:before,after:before,dropped:0,
+    trimmed:false,before:historyRounds,after:historyRounds,dropped:0,
     historyBefore:historyRounds,historyAfter:historyRounds,
     keep:trim.keep,deferred:deferred,
     keptMessages:working,droppedMessages:[],
+    keptTransportMessages:transportMessages.slice(),
+    canonicalTransport:canonicalTransport,
+    transportBefore:transportPlan.before,transportAfter:transportPlan.before,transportDropped:0,
+    localBefore:localPlan.before,localAfter:localPlan.before,localDropped:0,
     editingMessage:chatEditingIndex>=0?chatMessages[chatEditingIndex]:null,
-    forceCacheRebuild:manual||pendingBoundary,
+    forceCacheRebuild:false,
   };
   if(!boundary)return base;
 
-  var drop=pendingBoundary?0:Math.max(0,historyRounds-trim.keep);
-  var cutIndex=drop>0?chatAutoTrimCutIndex(working,drop):0;
-  var keptMessages=drop>0?working.slice(cutIndex):working.slice();
-  var droppedMessages=drop>0?working.slice(0,cutIndex):[];
-  var after=chatAutoTrimRoundCount(keptMessages);
+  var shouldTrim=!pendingBoundary&&opts.skipTrim!==true&&historyRounds>trim.keep;
+  var keptMessages=shouldTrim?localPlan.keptMessages:working.slice();
+  var droppedMessages=shouldTrim?localPlan.droppedMessages:[];
+  var keptTransportMessages=shouldTrim&&canonicalTransport?transportPlan.keptMessages:transportMessages.slice();
+  var drop=shouldTrim?(canonicalTransport?transportPlan.dropped:localPlan.dropped):0;
+  var after=Math.max(0,historyRounds-drop);
   var preparedThrough=Number(session&&session.speechPreferencePreparedThroughTs||0)||0;
   var preferenceMessages=pendingBoundary?[]:working.filter(function(message){
     if(!message||typeof message!=='object')return false;
@@ -6331,72 +6358,104 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     return !preparedThrough||!ts||ts>preparedThrough;
   });
   var preferenceThroughTs=preferenceMessages.reduce(function(latest,message){
-    return Math.max(latest,Number(message&&message.ts||0)||0);
+    return message&&(message.role==='user'||message.role==='pending_user')
+      ?Math.max(latest,Number(message.ts||0)||0)
+      :latest;
+  },preparedThrough);
+  var requiredPreferenceThroughTs=droppedMessages.reduce(function(latest,message){
+    return message&&(message.role==='user'||message.role==='pending_user')
+      ?Math.max(latest,Number(message.ts||0)||0)
+      :latest;
   },preparedThrough);
   return {
     boundary:true,
     cacheBoundary:true,
     trigger:trigger,
     manual:manual,
-    idleBoundary:idleBoundary,
-    idleMs:idleMs,
+    cacheAgeBoundary:cacheAgeBoundary,
+    cacheAgeMs:cacheAgeMs,
+    cacheReferenceTs:cacheReferenceTs,
+    cacheReferenceSource:base.cacheReferenceSource,
     lastActivityTs:lastActivityTs,
     cacheNoticePresent:base.cacheNoticePresent,
-    trimmed:drop>0,
-    before:before,
+    trimmed:shouldTrim&&drop>0,
+    before:historyRounds,
     after:after,
     dropped:drop,
     historyBefore:historyRounds,
-    historyAfter:Math.max(0,historyRounds-drop),
+    historyAfter:after,
     keep:trim.keep,
     droppedMessages:droppedMessages,
     keptMessages:keptMessages,
+    keptTransportMessages:keptTransportMessages,
+    canonicalTransport:canonicalTransport,
+    transportBefore:transportPlan.before,
+    transportAfter:shouldTrim&&canonicalTransport?transportPlan.after:transportPlan.before,
+    transportDropped:shouldTrim&&canonicalTransport?transportPlan.dropped:0,
+    localBefore:localPlan.before,
+    localAfter:shouldTrim?localPlan.after:localPlan.before,
+    localDropped:shouldTrim?localPlan.dropped:0,
     deferred:deferred,
     editingMessage:base.editingMessage,
     preferenceMessages:preferenceMessages,
     preferenceThroughTs:preferenceThroughTs,
+    requiredPreferenceThroughTs:requiredPreferenceThroughTs,
     preparedThroughTs:preparedThrough,
-    forceCacheRebuild:manual||pendingBoundary||drop>0,
+    forceCacheRebuild:pendingBoundary||drop>0,
+  };
+}
+function chatSpeechPreferenceMessageId(message,index){
+  if(!message||typeof message!=='object')return '';
+  if(!message.messageId){
+    message.messageId='msg-'+String(Number(message.ts||0)||Date.now())+'-'+String(index||0)+'-'+Math.random().toString(36).slice(2,7);
+  }
+  return String(message.messageId);
+}
+function chatSpeechPreferencePrepareBatch(list){
+  list=Array.isArray(list)?list:[];
+  var candidates=[];
+  var previousAssistant='';
+  list.forEach(function(message,index){
+    if(!message||typeof message!=='object')return;
+    if(message.role==='assistant'&&message.stopped!==true&&String(message.text||'').trim()){
+      previousAssistant=String(message.text||'').trim().slice(-600);
+      return;
+    }
+    if(message.role!=='user'&&message.role!=='pending_user')return;
+    var text=String(message.text||'').trim();
+    if(!text)return;
+    candidates.push({
+      role:'user',
+      message_id:chatSpeechPreferenceMessageId(message,index),
+      turn_id:String(message.turnId||''),
+      text:text.slice(0,2400),
+      assistant_context:previousAssistant,
+      ts:Number(message.ts||0)||0
+    });
+    previousAssistant='';
+  });
+  var messages=[];
+  var chars=0;
+  var maxChars=60000;
+  for(var i=0;i<candidates.length;i++){
+    var row=candidates[i];
+    var size=row.text.length+row.assistant_context.length+100;
+    if(messages.length&&chars+size>maxChars)break;
+    messages.push(row);
+    chars+=size;
+  }
+  var reviewedThroughTs=messages.reduce(function(latest,row){return Math.max(latest,Number(row.ts||0)||0)},0);
+  return {
+    messages:messages,
+    candidateMessages:candidates.length,
+    selectedMessages:messages.length,
+    chars:chars,
+    reviewedThroughTs:reviewedThroughTs,
+    complete:messages.length===candidates.length
   };
 }
 function chatSpeechPreferencePrepareMessages(list){
-  var rows=(Array.isArray(list)?list:[]).filter(function(m){
-    if(!m||typeof m!=='object')return false;
-    if(m.role!=='user'&&m.role!=='pending_user'&&m.role!=='assistant')return false;
-    if(m.role==='assistant'&&m.stopped===true)return false;
-    return !!String(m.text||'').trim();
-  }).map(function(m){
-    return {
-      role:m.role==='pending_user'?'user':m.role,
-      text:String(m.text||'').trim().slice(0,5000),
-      ts:Number(m.ts||0)||0
-    };
-  });
-  if(!rows.length)return [];
-  // The backend performs a second compression pass.  This first pass keeps
-  // every likely long-term wording boundary plus nearby context, instead of
-  // uploading hundreds of unrelated rounds before a large trim.
-  var signal=/(不要|别再|别这样|不准|不许|禁止|不得|少说|别说|别叫|别用|别提|别拿|以后|永远|每次|必须|要求|记住|请你|希望你|不喜欢|讨厌|反感|恶心|膈应|不舒服|受不了|烦死|冒犯|伤人|扎心|雷区|忌讳|撤回|收回|取消|不用再|可以说|可以叫|改成|换成|纠正|说话|回复|回答|语气|口气|口吻|称呼|叫我|怎么叫|调侃|玩笑|开玩笑|讽刺|阴阳|说教|教育我|安慰|哄|道歉|反问|复述|重复|敷衍|套话|模板|免责声明|评价我|定义我|归因|猜测|揣测|分析我|心理)/i;
-  var selected={};
-  rows.forEach(function(row,index){
-    if(row.role==='user'&&signal.test(row.text)){
-      selected[index]=10;
-      if(index>0)selected[index-1]=Math.max(selected[index-1]||0,2);
-      if(index+1<rows.length)selected[index+1]=Math.max(selected[index+1]||0,2);
-    }
-  });
-  // Preserve a small recent tail for newly worded corrections that do not
-  // contain one of the obvious keywords above.
-  for(var i=Math.max(0,rows.length-20);i<rows.length;i++)selected[i]=Math.max(selected[i]||0,1);
-  var order=Object.keys(selected).map(Number).sort(function(a,b){
-    return (selected[b]-selected[a])||(b-a);
-  });
-  var chosen={},chars=0,maxChars=24000;
-  order.forEach(function(index){
-    var size=rows[index].text.length+40;
-    if(chars+size<=maxChars||!Object.keys(chosen).length){chosen[index]=true;chars+=size}
-  });
-  return Object.keys(chosen).map(Number).sort(function(a,b){return a-b}).map(function(index){return rows[index]});
+  return chatSpeechPreferencePrepareBatch(list).messages;
 }
 function chatSpeechPreferenceRevisionValue(value){
   if(value===undefined||value===null||value==='')return '';
@@ -6492,9 +6551,10 @@ function chatSpeechPreferenceTrimEventId(cfg,plan){
 // 超时只取消本次截断并保留完整历史，不会提交 pending activation。
 var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=35000;
 async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
-  var messages=chatSpeechPreferencePrepareMessages(
+  var batch=chatSpeechPreferencePrepareBatch(
     (plan&&plan.preferenceMessages)||(plan&&plan.droppedMessages)
   );
+  var messages=batch.messages;
   var eventId=chatSpeechPreferenceTrimEventId(cfg,plan);
   var started=Date.now();
   chatSetStatus('正在请求网关：缓存重建前更新措辞偏好...');
@@ -6540,7 +6600,20 @@ async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
       speech_preference_applied_revision:responseMeta.appliedRevision,
       dropped_rounds:Number(plan&&plan.dropped||0),messages:messages.length,duration_ms:Date.now()-started
     });
-    return {ok:true,eventId:eventId,activationId:activationId,revision:responseMeta.revision,pendingRevision:responseMeta.pendingRevision,appliedRevision:responseMeta.appliedRevision,durationMs:Date.now()-started};
+    var hasBackendReviewed=Object.prototype.hasOwnProperty.call(data,'reviewed_through_ts')||
+      Object.prototype.hasOwnProperty.call(data,'speech_preference_reviewed_through_ts');
+    var backendReviewed=Number(
+      Object.prototype.hasOwnProperty.call(data,'reviewed_through_ts')
+        ?data.reviewed_through_ts:data.speech_preference_reviewed_through_ts
+    )||0;
+    var reviewedThroughTs=hasBackendReviewed?backendReviewed:(batch.reviewedThroughTs||0);
+    return {
+      ok:true,eventId:eventId,activationId:activationId,
+      revision:responseMeta.revision,pendingRevision:responseMeta.pendingRevision,appliedRevision:responseMeta.appliedRevision,
+      durationMs:Date.now()-started,reviewedThroughTs:reviewedThroughTs,
+      reviewComplete:data.review_complete!==false&&batch.complete,
+      candidateMessages:batch.candidateMessages,selectedMessages:batch.selectedMessages,inputChars:batch.chars
+    };
   }catch(error){
     var stopped=!!(requestState&&requestState.stopped);
     if(timedOut&&!stopped)error=new Error('prepare 超时（'+Math.round(CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS/1000)+' 秒）');
@@ -6565,13 +6638,19 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
   prepared=prepared||{};
   var s=chatCurrentSession();
   var oldTransport=(s.transportMessages||[]).length;
-  if(plan.trimmed){
+  var reviewedThroughTs=Number(prepared.reviewedThroughTs||0)||0;
+  var requiredThroughTs=Number(plan.requiredPreferenceThroughTs||0)||0;
+  var reviewCoversTrim=!plan.trimmed||!requiredThroughTs||reviewedThroughTs>=requiredThroughTs;
+  var trimCommitted=!!(plan.trimmed&&reviewCoversTrim);
+  if(trimCommitted){
     chatMessages=(plan.keptMessages||[]).concat(plan.deferred||[]);
     s.messages=chatMessages;
-  }
-  if(plan.forceCacheRebuild){
-    s.transportMessages=[];
-    s.transportUpdated=0;
+    if(plan.canonicalTransport){
+      s.transportMessages=chatLimitArray(plan.keptTransportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
+    }else{
+      s.transportMessages=[];
+      s.transportUpdated=0;
+    }
   }
   if(prepared&&prepared.activationId){
     s.speechPreferencePendingActivationId=String(prepared.activationId);
@@ -6580,7 +6659,7 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     s.speechPreferenceRetryAtBoundary=false;
     s.speechPreferencePendingThroughTs=Math.max(
       Number(s.speechPreferencePendingThroughTs||0)||0,
-      Number(plan.preferenceThroughTs||0)||0
+      reviewedThroughTs
     );
   }
   if(plan.cacheBoundary)s.cacheRebuildPending=true;
@@ -6595,15 +6674,23 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     cacheBoundary:true,
     trigger:String(plan.trigger||''),
     manual:!!plan.manual,
-    trimmed:!!plan.trimmed,
+    trimmed:trimCommitted,
+    trimDeferredForSpeechReview:!!(plan.trimmed&&!reviewCoversTrim),
     before:plan.before,
-    after:plan.after,
-    dropped:plan.dropped,
+    after:trimCommitted?plan.after:plan.before,
+    dropped:trimCommitted?plan.dropped:0,
     historyBefore:plan.historyBefore,
-    historyAfter:plan.historyAfter,
+    historyAfter:trimCommitted?plan.historyAfter:plan.historyBefore,
     keep:plan.keep,
-    transportCleared:plan.forceCacheRebuild?oldTransport:0,
-    forceCacheRebuild:!!plan.forceCacheRebuild,
+    transportCleared:trimCommitted&&!plan.canonicalTransport?oldTransport:0,
+    forceCacheRebuild:!!(plan.forceCacheRebuild&&trimCommitted),
+    canonicalTransport:!!plan.canonicalTransport,
+    transportBefore:plan.transportBefore||0,
+    transportAfter:trimCommitted?(plan.transportAfter||0):(plan.transportBefore||0),
+    localBefore:plan.localBefore||0,
+    localAfter:trimCommitted?(plan.localAfter||0):(plan.localBefore||0),
+    speechPreferenceReviewedThroughTs:reviewedThroughTs,
+    speechPreferenceReviewComplete:prepared.reviewComplete!==false,
     speechPreferenceActivationId:prepared.activationId||'',
     speechPreferenceTrimEventId:prepared.eventId||'',
     speechPreferencePrepareMs:prepared.durationMs||0
@@ -6617,7 +6704,10 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   }
   if(!chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages).length){
     chatDebug('speech_preference_prepare',{ok:true,skipped:'no_text',event_id:'',dropped_rounds:plan.dropped});
-    return chatCommitAutoTrimPlan(cfg,plan,{ok:true,activationId:'',eventId:'',durationMs:0});
+    return chatCommitAutoTrimPlan(cfg,plan,{
+      ok:true,activationId:'',eventId:'',durationMs:0,
+      reviewedThroughTs:Number(plan.preferenceThroughTs||0)||0,reviewComplete:true
+    });
   }
   var prepared=await chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState);
   if((requestState&&requestState.stopped)||!prepared.ok){
@@ -6631,42 +6721,81 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   }
   return chatCommitAutoTrimPlan(cfg,plan,prepared);
 }
+async function chatManualSyncSpeechPreferences(){
+  chatInit();
+  if(chatSending){toast('当前正在回复，完成后再同步');return}
+  var cfg=chatSaveConfig(true);
+  var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_sync',skipTrim:true});
+  if(plan.historyBefore<=0){toast('当前没有可检查的对话');chatRenderTrimState(cfg);return}
+  var button=document.getElementById('chat-manual-speech-btn');
+  if(button){button.disabled=true;button.textContent='正在审阅措辞偏好...'}
+  try{
+    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_sync',skipTrim:true});
+    if(result&&result.prepareFailed){chatSetStatus('措辞偏好更新失败，历史和游标均未改变');return}
+    toast(
+      result&&result.speechPreferenceReviewComplete===false
+        ?'已审阅一部分措辞偏好；未审阅消息仍会保留，下一次继续'
+        :'措辞偏好已审阅；下一条消息会原子应用变更',
+      5000
+    );
+    chatSetStatus('措辞偏好已准备');
+  }catch(error){
+    chatSetStatus('措辞偏好同步失败');
+    toast('措辞偏好同步失败：'+chatFriendlyError(error),5000,{type:'error',closable:true});
+  }finally{
+    if(button){button.textContent='只同步措辞偏好';chatRenderTrimState(cfg)}
+  }
+}
 async function chatManualTrimNow(){
   chatInit();
   if(chatSending){toast('当前正在回复，完成后再手动截断');return}
   var cfg=chatSaveConfig(true);
-  var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual'});
+  var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(plan.historyBefore<=0){
     toast('当前没有可处理的对话');
     chatRenderTrimState(cfg);
     return;
   }
+  var session=chatCurrentSession();
+  var fullCreateAge=Number(session&&session.cacheFullCreatedAt||0)?Date.now()-Number(session.cacheFullCreatedAt):0;
+  if(plan.historyBefore>plan.keep&&fullCreateAge>0&&fullCreateAge<10*60*1000){
+    var proceed=await ckConfirmDialog(
+      '这份缓存刚刚完整创建过。现在截断会让保留后的历史再次建立缓存。',
+      {title:'刚刚创建过缓存',confirmText:'仍然截断',cancelText:'先不截断'}
+    );
+    if(!proceed)return;
+  }
   var button=document.getElementById('chat-manual-trim-btn');
-  if(button){button.disabled=true;button.textContent='正在更新措辞偏好...'}
+  if(button){button.disabled=true;button.textContent='正在审阅并按真实轮次裁剪...'}
   try{
-    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual'});
+    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim'});
     if(result&&result.prepareFailed){chatSetStatus('措辞偏好更新失败，未进行手动重建');return}
+    if(result&&result.trimDeferredForSpeechReview){
+      toast('仍有措辞消息尚未审阅，本次保留完整历史；下一次会从断点继续',6000);
+      chatSetStatus('偏好审阅未完成，未截断历史');
+      return;
+    }
     if(result&&result.trimmed){
       chatSaveLocalMessages();
       chatRenderMessages();
       toast(
-        '已手动保留最近 '+result.historyAfter+' 轮；措辞偏好已同步，下一条消息会应用并重建缓存',
+        '已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息应用偏好并建立新缓存',
         5000
       );
       chatSetStatus('已截断，下一条消息重建缓存');
     }else if(result&&result.cacheBoundary){
       toast(
-        '当前 '+result.historyAfter+' 轮，未删除历史；措辞偏好已同步，下一条消息会重建缓存',
+        '当前 '+result.historyAfter+' 个真实轮次，未删除历史；措辞偏好已同步',
         5000
       );
-      chatSetStatus('已准备，下一条消息重建缓存');
+      chatSetStatus('已准备，下一条消息应用偏好');
     }
     chatRenderTrimState(cfg);
   }catch(error){
     chatSetStatus('手动操作失败');
     toast('手动操作失败：'+chatFriendlyError(error),5000,{type:'error',closable:true});
   }finally{
-    if(button){button.textContent='现在手动同步并准备重建缓存';chatRenderTrimState(cfg)}
+    if(button){button.textContent='立即按真实轮次截断并同步偏好';chatRenderTrimState(cfg)}
   }
 }
 function chatWindowContextMessages(){
@@ -6692,6 +6821,9 @@ function chatPendingMessages(){
 function chatPendingMessageId(){
   chatPendingMessageSeq=(chatPendingMessageSeq+1)%1000000;
   return 'pending-'+Date.now().toString(36)+'-'+chatPendingMessageSeq.toString(36)+'-'+Math.random().toString(36).slice(2,8);
+}
+function chatConversationTurnId(){
+  return 'turn-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9);
 }
 function chatEnsurePendingMessageId(message){
   if(!message||typeof message!=='object')return '';
@@ -7522,7 +7654,7 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
     var ts=i===0?firstReplyTs:Math.max(Date.now(),firstReplyTs+i);
-    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts};
+    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts,turnId:String(opts.turnId||'')};
     if(i===parts.length-1&&userSentTs){
       msg.userSentTs=userSentTs;
       msg.firstReplyTs=firstReplyTs;
@@ -8233,9 +8365,11 @@ function chatCacheExpiryInfo(){
 function chatEnsureCacheExpiryNotice(){
   var lastTs=chatLastMessageTs();
   var info=chatCacheExpiryInfo();
-  var expired=!!(info.ttlMs>0&&lastTs&&chatMessages.length&&!chatSending&&(Date.now()-lastTs>=info.ttlMs));
-  if(!expired||chatHasCacheNoticeAfter(lastTs))return false;
-  chatInsertMessagesBeforePending([{role:'notice',kind:'cache-expired',text:info.text,ts:Date.now(),afterTs:lastTs}]);
+  var session=chatCurrentSession();
+  var referenceTs=Number(session&&session.cacheFullCreatedAt||0)||lastTs;
+  var expired=!!(info.ttlMs>0&&referenceTs&&chatMessages.length&&!chatSending&&(Date.now()-referenceTs>=info.ttlMs));
+  if(!expired||chatHasCacheNoticeAfter(referenceTs))return false;
+  chatInsertMessagesBeforePending([{role:'notice',kind:'cache-expired',text:info.text,ts:Date.now(),afterTs:referenceTs}]);
   chatSaveLocalMessages();
   return true;
 }
@@ -8405,6 +8539,31 @@ function chatUsageCacheCreate(usage){
     'cacheCreate',
     'cacheCreation'
   ]);
+}
+function chatCaptureCacheLifecycle(usage,session){
+  if(!CHAT_HISTORY_TOOLS)return null;
+  var lifecycle=CHAT_HISTORY_TOOLS.cacheLifecycle(usage||{});
+  session=session||chatCurrentSession();
+  if(!session)return lifecycle;
+  var changed=false;
+  var now=Date.now();
+  if(lifecycle.read>0){
+    session.cacheLastReadAt=now;
+    session.cacheLastReadTokens=lifecycle.read;
+    changed=true;
+  }
+  if(lifecycle.fullCreate){
+    session.cacheFullCreatedAt=now;
+    session.cacheFullCreateTokens=lifecycle.create;
+    session.cacheGeneration=(Number(session.cacheGeneration||0)||0)+1;
+    changed=true;
+  }
+  if(changed){
+    session.updated=now;
+    chatSaveSessions();
+    chatRenderTrimState(chatLoadConfig());
+  }
+  return lifecycle;
 }
 function chatUsageCacheHit(usage){
   if(chatUsageCacheRead(usage)>0)return true;
@@ -8825,6 +8984,9 @@ async function chatSubmitPendingMessages(options){
   }
   chatQueueFailedUserMessagesForRetry();
   pending=chatResolvePendingBatch(pendingBatch);
+  var requestTurnId=String((pending.find(function(message){return message&&message.turnId})||{}).turnId||'')||chatConversationTurnId();
+  pending.forEach(function(message){if(message)message.turnId=requestTurnId});
+  if(requestState)requestState.turnId=requestTurnId;
   pending.forEach(function(m){delete m.sendFailed;delete m.failedAt;chatMarkMessageFresh(m)});
   pending.forEach(function(m){chatUpdateMessageRowOnly(chatMessages.indexOf(m))});
   chatSaveLocalMessagesDeferred();
@@ -8920,7 +9082,9 @@ async function chatSubmitPendingMessages(options){
     session_anchor:{
       first_user_text:anchorText,
       first_user_ts:currentSession.firstUserTs||0
-    }
+    },
+    client_cache_generation:Number(currentSession.cacheGeneration||0)||0,
+    client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0
   };
   var speechBoundaryNow=!!(trimResult.cacheBoundary||currentSession.cacheRebuildPending);
   var pendingSpeechActivationId='';
@@ -9115,6 +9279,10 @@ async function chatSubmitPendingMessages(options){
           if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
           if(ev==='done'&&data&&data.usage)userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data.usage,null)});
           if(ev==='done'){
+            if(data&&data.usage&&requestState&&!requestState.cacheLifecycleCaptured){
+              chatCaptureCacheLifecycle(data.usage,chatCurrentSession());
+              requestState.cacheLifecycleCaptured=true;
+            }
             if(data&&Array.isArray(data.transport_messages)){
               var s=chatCurrentSession();
               s.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
@@ -9167,7 +9335,7 @@ async function chatSubmitPendingMessages(options){
     stopStreamRender();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId});
     chatSetStatus('完成');
   }catch(e){
     if(requestState&&(requestState.stopped||chatRequestWasAborted(e,requestSignal))){
