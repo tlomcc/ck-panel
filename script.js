@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v174-scroll-cache-activity';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v175-rikkahub-scroll-jumper';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2838,6 +2838,7 @@ var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
 var CHAT_SCROLL_JUMP_VISIBLE_MS=5000;
+var CHAT_SCROLL_JUMP_INTENT_MS=1200;
 var CHAT_IMAGE_MAX_COUNT=4;
 var CHAT_IMAGE_MAX_SOURCE_BYTES=12*1024*1024;
 var CHAT_IMAGE_MAX_DATA_URL_CHARS=5*1024*1024;
@@ -2866,6 +2867,10 @@ var chatActiveSessionId='';
 var chatDebugRecords=[];
 var chatCacheTimer=null;
 var chatScrollJumpTimer=null;
+var chatScrollJumpManualUntil=0;
+var chatScrollJumpPointerActive=false;
+var chatScrollJumpPointerX=0;
+var chatScrollJumpPointerY=0;
 var chatWorldbookActiveId='';
 var chatEditingIndex=-1;
 var chatEditingDraftText='';
@@ -8270,6 +8275,30 @@ function chatRevealScrollJumps(){
   chatUpdateScrollJumpState();
   chatScheduleScrollJumpHide();
 }
+function chatMarkScrollJumpManualIntent(){
+  chatScrollJumpManualUntil=Date.now()+CHAT_SCROLL_JUMP_INTENT_MS;
+}
+function chatHasScrollJumpManualIntent(){
+  return chatScrollJumpManualUntil>=Date.now();
+}
+function chatBeginScrollJumpPointer(event){
+  if(event&&event.button!==undefined&&event.button!==0)return;
+  chatScrollJumpPointerActive=true;
+  chatScrollJumpPointerX=Number(event&&event.clientX)||0;
+  chatScrollJumpPointerY=Number(event&&event.clientY)||0;
+}
+function chatContinueScrollJumpPointer(event){
+  if(!chatScrollJumpPointerActive)return;
+  var x=Number(event&&event.clientX)||0;
+  var y=Number(event&&event.clientY)||0;
+  if(Math.abs(x-chatScrollJumpPointerX)<3&&Math.abs(y-chatScrollJumpPointerY)<3)return;
+  chatScrollJumpPointerX=x;
+  chatScrollJumpPointerY=y;
+  chatMarkScrollJumpManualIntent();
+}
+function chatEndScrollJumpPointer(){
+  chatScrollJumpPointerActive=false;
+}
 function chatJumpToEdge(edge,event){
   if(event)event.preventDefault();
   var box=chatMessagesBox();
@@ -8284,13 +8313,15 @@ function chatJumpToEdge(edge,event){
 }
 function chatAttachScrollJumpControls(){
   var controls=chatScrollJumpControls();
-  if(!controls||controls.__ckAttached)return;
+  var box=chatMessagesBox();
+  if(!controls||!box||controls.__ckAttached)return;
   controls.__ckAttached=true;
-  var interact=function(){chatRevealScrollJumps()};
-  document.addEventListener('pointerdown',interact,{passive:true});
-  document.addEventListener('touchstart',interact,{passive:true});
-  document.addEventListener('wheel',interact,{passive:true});
-  document.addEventListener('keydown',interact);
+  box.addEventListener('wheel',chatMarkScrollJumpManualIntent,{passive:true});
+  box.addEventListener('touchmove',chatMarkScrollJumpManualIntent,{passive:true});
+  box.addEventListener('pointerdown',chatBeginScrollJumpPointer,{passive:true});
+  window.addEventListener('pointermove',chatContinueScrollJumpPointer,{passive:true});
+  window.addEventListener('pointerup',chatEndScrollJumpPointer,{passive:true});
+  window.addEventListener('pointercancel',chatEndScrollJumpPointer,{passive:true});
   controls.addEventListener('mouseenter',chatScheduleScrollJumpHide);
   controls.addEventListener('focusin',chatScheduleScrollJumpHide);
 }
@@ -8313,7 +8344,8 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
-  chatUpdateScrollJumpState();
+  if(chatHasScrollJumpManualIntent())chatRevealScrollJumps();
+  else chatUpdateScrollJumpState();
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
@@ -8858,7 +8890,6 @@ function chatInit(){
   chatRenderDraftFiles();
   chatAttachMessagesScroll();
   chatAttachScrollJumpControls();
-  chatRevealScrollJumps();
   var input=document.getElementById('chat-input');
   chatLayoutCompose();
   window.addEventListener('resize',chatHandleViewportChange);
