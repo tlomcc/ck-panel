@@ -4145,7 +4145,7 @@ body.chat-active .chat-scroll-jumps{
 
 body.chat-active .chat-scroll-jumps.show{
   transform:translate3d(0,-50%,0)!important;
-  opacity:1!important;
+  opacity:.2!important;
   visibility:visible!important;
   pointer-events:auto!important;
   transition-delay:0s!important;

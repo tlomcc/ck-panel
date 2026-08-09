@@ -3,6 +3,10 @@ const fs=require('fs');
 const vm=require('vm');
 
 const source=fs.readFileSync(require.resolve('../script.js'),'utf8');
+const css=fs.readFileSync(require.resolve('../chat.css'),'utf8');
+
+assert(/var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;/.test(source),'production auto-hide delay must be 1.5 seconds');
+assert(/\.chat-scroll-jumps\.show\{[\s\S]{0,180}opacity:\.2!important/.test(css),'visible controls must be 80% transparent');
 
 function extractFunction(name){
   const start=source.indexOf(`function ${name}(`);
