@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v177-speech-timeout-auth-recheck';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v178-free-trim-and-style';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2848,7 +2848,7 @@ var CHAT_MAX_VISIBLE_MESSAGES=0;
 var CHAT_MAX_TRANSPORT_MESSAGES=0;
 var CHAT_LOCAL_SUMMARY_VISIBLE_MESSAGES=40;
 var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
-var CHAT_AUTO_TRIM_KEEP_ROUNDS=200;
+var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
 var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
 var CHAT_SCROLL_JUMP_INTENT_MS=1200;
@@ -3162,12 +3162,9 @@ function chatNormalizeAutoTrimConfig(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
   return {
     enabled:raw.enabled!==false,
-    keep:Math.max(
-      CHAT_AUTO_TRIM_KEEP_ROUNDS,
-      chatPositiveIntOrDefault(
-        raw.keep!==undefined?raw.keep:(raw.keepRounds!==undefined?raw.keepRounds:raw.retain),
-        CHAT_AUTO_TRIM_KEEP_ROUNDS
-      )
+    keep:chatPositiveIntOrDefault(
+      raw.keep!==undefined?raw.keep:(raw.keepRounds!==undefined?raw.keepRounds:raw.retain),
+      CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS
     )
   };
 }
@@ -3486,7 +3483,6 @@ function chatDefaultConfig(){
     model:'',
     sessionId:chatSessionId(),
     system:'',
-    systemPromptPosition:'before_style',
     ncContextInjection:true,
     backendSwitchNotification:true,
     recall:true,
@@ -3502,7 +3498,7 @@ function chatDefaultConfig(){
     fullWindowContext:true,
     splitAssistantReplies:true,
     autoTrimEnabled:true,
-    autoTrimKeepRounds:CHAT_AUTO_TRIM_KEEP_ROUNDS,
+    autoTrimKeepRounds:CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
     settingsOpen:false,
     chatSideTab:'model',
     memoryPreview:'',
@@ -3671,27 +3667,8 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   chatRenderNcContextState();
   chatRenderBackendSwitchNotificationState();
 }
-function chatStyleSystemPrompt(){
-  return [
-    '【CK聊天输出规则】',
-    '你要像熟人微信聊天，不要写成文章、报告、客服回复或网页说明。',
-    '优先短句、自然接话、有来有回。不要每次都总结，不要频繁讲大道理。',
-    '如果用户是在闲聊、抱怨、撒娇、情绪表达或普通对话，通常回复2-3条短消息；每条之间必须用一个空行分隔。',
-    '如果内容确实很少，可以只回一条；如果用户明确要求解释、分析、教程，再用更完整的段落。',
-    '默认只回复用户最新发来的消息。历史聊天、世界书和网关召回只作为背景；除非用户明确要求回顾、补答、对比旧消息，否则不要主动回复旧消息。',
-    '每条消息都要像真的单独发出去的聊天气泡，不要把一段文章机械切开。',
-    '口吻：聪明、松弛、直接，有熟人感；可以轻微调侃、嘴欠一点，但不要刻薄伤人。',
-    '安慰用户时要平静准确，不喊口号，不煽情过度。',
-    '如果启用了世界书，其中关于人物口吻/说话风格的内容是高优先级风格参考；不要复述世界书标签。'
-  ].join('\n');
-}
 function chatComposeSystemPrompt(cfg){
-  var userSystem=String((cfg&&cfg.system)||'').trim();
-  var style=chatStyleSystemPrompt();
-  if(!userSystem)return style;
-  return (cfg&&cfg.systemPromptPosition)==='after_style'
-    ? (style+'\n\n'+userSystem)
-    : (userSystem+'\n\n'+style);
+  return String((cfg&&cfg.system)||'').trim();
 }
 function chatNormalizeInjectionPosition(value,fallback){
   var raw=String(value||'').trim();
@@ -3703,9 +3680,6 @@ function chatNormalizeInjectionPosition(value,fallback){
     latest_user_suffix:1
   };
   return allowed[raw]?raw:fallback;
-}
-function chatNormalizeSystemPromptPosition(value){
-  return String(value||'').trim()==='after_style'?'after_style':'before_style';
 }
 function chatMainRouteConfig(){
   if(!apiProvidersLoaded){
@@ -3853,7 +3827,6 @@ function chatLoadConfig(){
   cfg.fakeThinking=cfg.fakeThinking===true;
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
-  cfg.systemPromptPosition=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   var trim=chatAutoTrimConfigFrom(cfg);
@@ -4730,7 +4703,7 @@ function chatReadForm(){
   var cacheMeta=chatCacheStrategyMeta(cacheStrategyValue);
   var trimCfg=chatNormalizeAutoTrimConfig({
     enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
-    keep:chatFieldValue('chat-auto-trim-keep',saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_KEEP_ROUNDS)
+    keep:chatFieldValue('chat-auto-trim-keep',saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS)
   });
   var cfg={
     gatewayUrl:GRAPH_API_BASE,
@@ -4740,7 +4713,6 @@ function chatReadForm(){
     model:'',
     sessionId:String(chatFieldValue('chat-session-id',saved.sessionId||chatSessionId())||saved.sessionId||chatSessionId()),
     system:chatFieldValue('chat-system',saved.system||'')||'',
-    systemPromptPosition:chatNormalizeSystemPromptPosition(chatFieldValue('chat-system-prompt-position',saved.systemPromptPosition)),
     ncContextInjection:chatFieldChecked('chat-nc-context-injection',saved.ncContextInjection!==false),
     backendSwitchNotification:chatFieldChecked('chat-backend-switch-notification',saved.backendSwitchNotification!==false),
     recall:chatFieldChecked('chat-recall-enabled',saved.recall!==false),
@@ -4774,7 +4746,6 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-panel-key',cfg.panelKey||'');
   chatSetFieldValue('chat-session-id',cfg.sessionId||chatSessionId());
   chatSetFieldValue('chat-system',cfg.system||'');
-  if(document.getElementById('chat-system-prompt-position'))document.getElementById('chat-system-prompt-position').value=chatNormalizeSystemPromptPosition(cfg.systemPromptPosition);
   chatSetFieldChecked('chat-nc-context-injection',cfg.ncContextInjection!==false);
   chatSetFieldChecked('chat-backend-switch-notification',cfg.backendSwitchNotification!==false);
   chatSetFieldValue('chat-memory-pack',cfg.memoryPreview||'');
@@ -9194,7 +9165,6 @@ async function chatSubmitPendingMessages(options){
     provider_name:cfg.mainRouteProvider||'',
     system:chatComposeSystemPrompt(cfg),
     worldbook_pack:chatWorldbookPack(cfg),
-    system_prompt_position:chatNormalizeSystemPromptPosition(cfg.systemPromptPosition),
     worldbook_injection_position:chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail'),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,

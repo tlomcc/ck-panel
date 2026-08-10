@@ -73,10 +73,28 @@ function testMemoryAuthenticationSurvivesStorageFailure(){
   assert.strictEqual(context.isPanelAuthenticated(),true,'verified in-memory auth must survive localStorage failure');
 }
 
+function testTrimConfigAndSystemPrompt(){
+  const context={console,CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS:200};
+  vm.createContext(context);
+  vm.runInContext([
+    extractFunction('chatPositiveIntOrDefault'),
+    extractFunction('chatNormalizeAutoTrimConfig'),
+    extractFunction('chatComposeSystemPrompt')
+  ].join('\n'),context);
+  assert.strictEqual(context.chatNormalizeAutoTrimConfig({keep:120}).keep,120,'120 rounds must remain configurable');
+  assert.strictEqual(context.chatNormalizeAutoTrimConfig({keep:1}).keep,1,'one round must remain configurable');
+  assert.strictEqual(context.chatNormalizeAutoTrimConfig({keep:9999}).keep,9999,'large round counts must remain configurable');
+  assert.strictEqual(context.chatNormalizeAutoTrimConfig({keep:0}).keep,200,'zero must fall back to the default');
+  assert.strictEqual(context.chatNormalizeAutoTrimConfig({keep:'invalid'}).keep,200,'invalid values must fall back to the default');
+  assert.strictEqual(context.chatComposeSystemPrompt({system:''}),'','empty custom system prompt must stay empty');
+  assert.strictEqual(context.chatComposeSystemPrompt({system:'只按我填写的内容'}),'只按我填写的内容','custom system prompt must pass through unchanged');
+}
+
 const prepareTimeoutMatch=source.match(/var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=(\d+);/);
 assert(prepareTimeoutMatch,'missing speech preference prepare timeout');
 assert(Number(prepareTimeoutMatch[1])>60000,'frontend timeout must exceed the default backend prepare budget');
 testMemoryAuthenticationSurvivesStorageFailure();
+testTrimConfigAndSystemPrompt();
 testPanelDataFetch().then(()=>console.log('panel auth tests: OK')).catch(error=>{
   console.error(error);
   process.exit(1);
