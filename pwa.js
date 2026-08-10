@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v178-free-trim-and-style').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v179-speech-activation-status').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

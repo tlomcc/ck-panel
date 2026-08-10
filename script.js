@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v178-free-trim-and-style';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v179-speech-activation-status';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -4927,6 +4927,7 @@ function chatSpeechPreferencesEndpoint(cfg){
   return base+'/ck/speech-preferences';
 }
 var chatSpeechConsoleState={data:null,loading:false,saving:false,editorSnapshot:''};
+var chatSpeechPreferenceManualBusy=false;
 function chatSpeechConsoleRulesText(rules){
   return JSON.stringify(Array.isArray(rules)?rules:[],null,2);
 }
@@ -4953,9 +4954,17 @@ function chatRenderSpeechPreferences(data,preserveEditor){
   chatSpeechConsoleState.editorSnapshot=rules;
   var hasPublishedRules=Array.isArray(data.rules)&&data.rules.length>0&&String(data.current_revision||'r0')!=='r0';
   var meta=document.getElementById('chat-speech-meta');
-  if(meta)meta.textContent=hasPublishedRules?'已发布 '+String(data.rules.length)+' 条 · '+(data.updated_at||'未知时间'):'尚未提取';
+  if(meta)meta.textContent=hasPublishedRules
+    ?'已发布 '+String(data.rules.length)+' 条 · 规则更新 '+(data.updated_at||'未知时间')
+      +(data.last_activation_at?' · 最近激活 '+data.last_activation_at:'')
+    :'尚未提取';
   var state=document.getElementById('chat-speech-state');
-  if(state)state.textContent=(hasPublishedRules?'当前 '+(data.current_revision||'r0')+' · 上一版 '+(data.previous_revision||'r0')+' · ':'暂无已发布规则 · ')+(hasPublishedRules?'':'当前 ')+(hasPublishedRules?'':'r0 · ')+ '自动提取待激活 '+Number(data.pending_count||0)+' 条'+(data.warning?' · '+data.warning:'');
+  if(state)state.textContent=(hasPublishedRules
+    ?'当前 '+(data.current_revision||'r0')+' · 上一版 '+(data.previous_revision||'r0')
+      +(data.last_activation_at?' · 最近成功激活 '+data.last_activation_at:'')
+      +' · '
+    :'暂无已发布规则 · 当前 r0 · ')
+    +'自动提取待激活 '+Number(data.pending_count||0)+' 条'+(data.warning?' · '+data.warning:'');
   var diff=document.getElementById('chat-speech-diff');
   if(diff)diff.innerHTML=chatSpeechConsoleDiffHtml(data.diff);
   var status=document.getElementById('chat-speech-status');
@@ -5751,11 +5760,11 @@ function chatRenderTrimState(cfg){
   var count=chatCurrentConversationRoundCount();
   if(current)current.textContent='当前 '+count+' 个真实轮次';
   if(speech){
-    speech.disabled=chatSending||count<=0;
+    speech.disabled=chatSending||chatSpeechPreferenceManualBusy||count<=0;
     speech.title=count<=0?'当前没有可检查的对话':'检查尚未审阅的用户措辞，不主动删除历史';
   }
   if(manual){
-    manual.disabled=chatSending||count<=0;
+    manual.disabled=chatSending||chatSpeechPreferenceManualBusy||count<=0;
     manual.title=count<=0
       ?'当前没有可处理的对话'
       :(count>trim.keep
@@ -6521,7 +6530,8 @@ function chatCaptureSpeechPreferenceRevisions(data,sessionId,opts){
     session.speechPreferenceAppliedRevision=meta.appliedRevision;changed=true;
   }
   var pendingId=String(session.speechPreferencePendingActivationId||'');
-  var activationConfirmed=meta.activationApplied&&(!meta.activationId||!pendingId||meta.activationId===pendingId);
+  var activationConfirmed=(meta.activationApplied||/stale_pending_discarded|superseded/i.test(meta.activationStatus))
+    &&(!meta.activationId||!pendingId||meta.activationId===pendingId);
   if(opts.allowClear!==false&&pendingId&&activationConfirmed){
     if(Number(session.speechPreferencePendingThroughTs||0)>Number(session.speechPreferencePreparedThroughTs||0)){
       session.speechPreferencePreparedThroughTs=Number(session.speechPreferencePendingThroughTs||0)||0;
@@ -6739,9 +6749,12 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
 async function chatManualSyncSpeechPreferences(){
   chatInit();
   if(chatSending){toast('当前正在回复，完成后再同步');return}
+  if(chatSpeechPreferenceManualBusy){toast('正在审阅措辞偏好，请等待本次完成');return}
   var cfg=chatSaveConfig(true);
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_sync',skipTrim:true});
   if(plan.historyBefore<=0){toast('当前没有可检查的对话');chatRenderTrimState(cfg);return}
+  chatSpeechPreferenceManualBusy=true;
+  chatRenderTrimState(cfg);
   var button=document.getElementById('chat-manual-speech-btn');
   if(button){button.disabled=true;button.textContent='正在审阅措辞偏好...'}
   try{
@@ -6758,12 +6771,14 @@ async function chatManualSyncSpeechPreferences(){
     chatSetStatus('措辞偏好同步失败');
     toast('措辞偏好同步失败：'+chatFriendlyError(error),5000,{type:'error',closable:true});
   }finally{
+    chatSpeechPreferenceManualBusy=false;
     if(button){button.textContent='只同步措辞偏好';chatRenderTrimState(cfg)}
   }
 }
 async function chatManualTrimNow(){
   chatInit();
   if(chatSending){toast('当前正在回复，完成后再手动截断');return}
+  if(chatSpeechPreferenceManualBusy){toast('正在审阅措辞偏好，请等待本次完成');return}
   var cfg=chatSaveConfig(true);
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(plan.historyBefore<=0){
@@ -6780,6 +6795,8 @@ async function chatManualTrimNow(){
     );
     if(!proceed)return;
   }
+  chatSpeechPreferenceManualBusy=true;
+  chatRenderTrimState(cfg);
   var button=document.getElementById('chat-manual-trim-btn');
   if(button){button.disabled=true;button.textContent='正在审阅并按真实轮次裁剪...'}
   try{
@@ -6810,6 +6827,7 @@ async function chatManualTrimNow(){
     chatSetStatus('手动操作失败');
     toast('手动操作失败：'+chatFriendlyError(error),5000,{type:'error',closable:true});
   }finally{
+    chatSpeechPreferenceManualBusy=false;
     if(button){button.textContent='立即按真实轮次截断并同步偏好';chatRenderTrimState(cfg)}
   }
 }
@@ -8920,6 +8938,10 @@ async function chatSendMessage(){
   chatFlushAssistantRevealQueue();
   if(chatSending){
     chatStopMessage();
+    return;
+  }
+  if(chatSpeechPreferenceManualBusy){
+    toast('正在审阅措辞偏好，请完成后再发送');
     return;
   }
   if(chatEditingIndex>=0){

@@ -90,11 +90,45 @@ function testTrimConfigAndSystemPrompt(){
   assert.strictEqual(context.chatComposeSystemPrompt({system:'只按我填写的内容'}),'只按我填写的内容','custom system prompt must pass through unchanged');
 }
 
+function testSpeechPreferenceStatusRendering(){
+  const elements={
+    'chat-speech-rules':{value:''},
+    'chat-speech-meta':{textContent:''},
+    'chat-speech-state':{textContent:''},
+    'chat-speech-diff':{innerHTML:''},
+    'chat-speech-status':{textContent:''}
+  };
+  const context={
+    console,
+    chatSpeechConsoleState:{data:null,loading:false,saving:false,editorSnapshot:''},
+    document:{getElementById:id=>elements[id]||null},
+    esc:value=>String(value)
+  };
+  vm.createContext(context);
+  vm.runInContext([
+    extractFunction('chatSpeechConsoleRulesText'),
+    extractFunction('chatSpeechConsoleDiffHtml'),
+    extractFunction('chatRenderSpeechPreferences')
+  ].join('\n'),context);
+  context.chatRenderSpeechPreferences({
+    rules:[{key:'tone',instruction:'保持清晰'}],
+    current_revision:'r7-test',previous_revision:'r6-test',
+    updated_at:'2026-08-10T23:45:54+08:00',
+    last_activation_at:'2026-08-11T00:10:00+08:00',
+    pending_count:0,source:'github',diff:{}
+  },false);
+  assert(elements['chat-speech-meta'].textContent.includes('规则更新 2026-08-10T23:45:54+08:00'));
+  assert(elements['chat-speech-meta'].textContent.includes('最近激活 2026-08-11T00:10:00+08:00'));
+  assert(elements['chat-speech-state'].textContent.includes('最近成功激活 2026-08-11T00:10:00+08:00'));
+  assert(elements['chat-speech-state'].textContent.includes('待激活 0 条'));
+}
+
 const prepareTimeoutMatch=source.match(/var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=(\d+);/);
 assert(prepareTimeoutMatch,'missing speech preference prepare timeout');
 assert(Number(prepareTimeoutMatch[1])>60000,'frontend timeout must exceed the default backend prepare budget');
 testMemoryAuthenticationSurvivesStorageFailure();
 testTrimConfigAndSystemPrompt();
+testSpeechPreferenceStatusRendering();
 testPanelDataFetch().then(()=>console.log('panel auth tests: OK')).catch(error=>{
   console.error(error);
   process.exit(1);
