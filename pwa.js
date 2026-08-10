@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v176-scroll-jumper-1p5s').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v177-speech-timeout-auth-recheck').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;

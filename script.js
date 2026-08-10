@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v176-scroll-jumper-1p5s';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v177-speech-timeout-auth-recheck';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -328,7 +328,7 @@ function readStoredPanelKey(){
   try{return String(localStorage.getItem(API_KEY_STORAGE)||'').trim()}catch(e){return ''}
 }
 function isPanelAuthenticated(){
-  return !!panelAuthKey&&readStoredPanelKey()===panelAuthKey;
+  return !!panelAuthKey;
 }
 function setPanelAuthLocked(locked,message){
   if(document.body)document.body.classList.toggle('panel-auth-locked',!!locked);
@@ -364,7 +364,9 @@ function verifyPanelKey(key){
   if(!key)return Promise.resolve(false);
   var url=urlWithPanelKey(GRAPH_API_BASE+'/config?__ck_auth='+Date.now(),key);
   return fetch(url,{cache:'no-store',headers:{'Cache-Control':'no-cache'}}).then(function(r){
-    return r.ok;
+    if(r.ok)return true;
+    if(r.status===401||r.status===403)return false;
+    throw new Error('CK 网关 Key 验证暂时不可用：HTTP '+r.status);
   });
 }
 function promptPanelKey(label,message){
@@ -380,11 +382,11 @@ function promptPanelKey(label,message){
   });
 }
 function saveVerifiedPanelKey(key){
-  if(!saveRequestedApiKey(key))return false;
   panelAuthKey=String(key||'').trim();
+  var persisted=saveRequestedApiKey(panelAuthKey);
   setPanelAuthLocked(false,'验证通过，正在加载...');
   resumePanelDataTimers();
-  return true;
+  return persisted;
 }
 function ensurePanelAuthenticated(opts){
   opts=opts||{};
@@ -428,15 +430,26 @@ function panelDataFetch(url,init,opts){
   return ensurePanelAuthenticated().then(function(key){
     return run(key).then(function(r){
       if(r.status!==401&&r.status!==403)return r;
-      clearPanelAuthentication(key);
-      return ensurePanelAuthenticated({label:opts.label}).then(function(nextKey){
+      // 业务接口可能原样转发供应商的 401/403。只有专用 /config
+      // 也拒绝当前 CK Key 时，才清除认证并要求用户重新输入。
+      return verifyPanelKey(key).then(function(valid){return valid},function(){return null}).then(function(valid){
+        if(valid!==false)return r;
+        clearPanelAuthentication(key);
+        return ensurePanelAuthenticated({
+          label:opts.label,
+          forcePrompt:true,
+          message:'面板 Key 已失效，请重新输入。'
+        }).then(function(nextKey){
         return run(nextKey).then(function(retry){
-          if(retry.status===401||retry.status===403){
+          if(retry.status!==401&&retry.status!==403)return retry;
+          return verifyPanelKey(nextKey).then(function(nextValid){return nextValid},function(){return null}).then(function(nextValid){
+            if(nextValid!==false)return retry;
             clearPanelAuthentication(nextKey);
-            ensurePanelAuthenticated({label:opts.label,forcePrompt:true,message:'面板 Key 已失效，请重新输入。'});
-          }
-          return retry;
+            ensurePanelAuthenticated({label:opts.label,forcePrompt:true,message:'面板 Key 验证失败，请重新输入。'}).catch(function(){});
+            return retry;
+          });
         });
+      });
       });
     });
   });
@@ -6578,9 +6591,9 @@ function chatSpeechPreferenceTrimEventId(cfg,plan){
 }
 // 措辞偏好采用 prepare -> cache-boundary/chat 两阶段：prepare 只写待激活草稿，
 // 直到 1h 自动边界或手动截断后的下一轮把 activation_id 带进 /ck/chat 才应用。
-// 网关为本次提取保留约 25–30s；前端只再留少量网络/JSON 余量。
+// 网关为本次提取保留最多 60s；前端再留网络传输和 JSON 处理余量。
 // 超时只取消本次截断并保留完整历史，不会提交 pending activation。
-var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=35000;
+var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=75000;
 async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
   var batch=chatSpeechPreferencePrepareBatch(
     (plan&&plan.preferenceMessages)||(plan&&plan.droppedMessages)
