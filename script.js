@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v179-speech-activation-status';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v180-tiered-cache-billing';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3107,9 +3107,12 @@ function chatDefaultCostPricing(){
     mode:'auto',
     currency:'¥',
     inputPerMTokens:5,
-    outputPerMTokens:0,
+    outputPerMTokens:25,
     cacheReadPerMTokens:.5,
-    cacheCreatePerMTokens:6.25,
+    cacheCreate5mPerMTokens:6.25,
+    cacheCreate1hPerMTokens:10,
+    cacheCreateLegacyPerMTokens:6.25,
+    ttlCreatePricingConfigured:true,
     multiplier:.2
   };
 }
@@ -3136,6 +3139,10 @@ function chatRenderCostPricingModeHint(mode){
   }else{
     el.textContent='本模式优先采用上游明确总价；上游只返回 token 时，按下方当前计价标准计算并标注“按面板单价”。';
   }
+  var pricing=chatCurrentCostPricing();
+  if(pricing.ttlCreatePricingConfigured===false){
+    el.textContent+=' 检测到旧版单一缓存创建价，5m/1h 暂沿用旧价；请核对两档价格后保存。';
+  }
 }
 function chatNumberOrDefault(value,fallback){
   var n=Number(value);
@@ -3148,13 +3155,28 @@ function chatPositiveIntOrDefault(value,fallback){
 function chatNormalizeCostPricing(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
   var d=chatDefaultCostPricing();
+  var hasOwn=function(key){return Object.prototype.hasOwnProperty.call(raw,key)&&raw[key]!==null&&raw[key]!==''};
+  var has5m=hasOwn('cacheCreate5mPerMTokens')||hasOwn('cacheCreate5m');
+  var has1h=hasOwn('cacheCreate1hPerMTokens')||hasOwn('cacheCreate1h');
+  var hasLegacy=hasOwn('cacheCreatePerMTokens')||hasOwn('cacheCreate')||hasOwn('cacheCreateLegacyPerMTokens');
+  var legacyValue=raw.cacheCreateLegacyPerMTokens!==undefined?raw.cacheCreateLegacyPerMTokens:(raw.cacheCreatePerMTokens!==undefined?raw.cacheCreatePerMTokens:raw.cacheCreate);
+  var legacyPrice=Math.max(0,chatNumberOrDefault(legacyValue,d.cacheCreateLegacyPerMTokens));
   return {
     mode:chatNormalizeCostMode(raw.mode!==undefined?raw.mode:(raw.billingMode!==undefined?raw.billingMode:raw.pricingMode)),
     currency:String(raw.currency||d.currency||'¥').trim()||'¥',
     inputPerMTokens:Math.max(0,chatNumberOrDefault(raw.inputPerMTokens!==undefined?raw.inputPerMTokens:raw.input,d.inputPerMTokens)),
     outputPerMTokens:Math.max(0,chatNumberOrDefault(raw.outputPerMTokens!==undefined?raw.outputPerMTokens:raw.output,d.outputPerMTokens)),
     cacheReadPerMTokens:Math.max(0,chatNumberOrDefault(raw.cacheReadPerMTokens!==undefined?raw.cacheReadPerMTokens:raw.cacheRead,d.cacheReadPerMTokens)),
-    cacheCreatePerMTokens:Math.max(0,chatNumberOrDefault(raw.cacheCreatePerMTokens!==undefined?raw.cacheCreatePerMTokens:raw.cacheCreate,d.cacheCreatePerMTokens)),
+    cacheCreate5mPerMTokens:Math.max(0,chatNumberOrDefault(
+      raw.cacheCreate5mPerMTokens!==undefined?raw.cacheCreate5mPerMTokens:raw.cacheCreate5m,
+      hasLegacy?legacyPrice:d.cacheCreate5mPerMTokens
+    )),
+    cacheCreate1hPerMTokens:Math.max(0,chatNumberOrDefault(
+      raw.cacheCreate1hPerMTokens!==undefined?raw.cacheCreate1hPerMTokens:raw.cacheCreate1h,
+      hasLegacy?legacyPrice:d.cacheCreate1hPerMTokens
+    )),
+    cacheCreateLegacyPerMTokens:legacyPrice,
+    ttlCreatePricingConfigured:hasLegacy?(has5m&&has1h):true,
     multiplier:Math.max(0,chatNumberOrDefault(raw.multiplier,d.multiplier))
   };
 }
@@ -3191,7 +3213,9 @@ function chatReadCostPricing(saved){
     inputPerMTokens:chatFieldValue('chat-cost-input-price',base.inputPerMTokens),
     outputPerMTokens:chatFieldValue('chat-cost-output-price',base.outputPerMTokens),
     cacheReadPerMTokens:chatFieldValue('chat-cost-cache-read-price',base.cacheReadPerMTokens),
-    cacheCreatePerMTokens:chatFieldValue('chat-cost-cache-create-price',base.cacheCreatePerMTokens),
+    cacheCreate5mPerMTokens:chatFieldValue('chat-cost-cache-create-5m-price',base.cacheCreate5mPerMTokens),
+    cacheCreate1hPerMTokens:chatFieldValue('chat-cost-cache-create-1h-price',base.cacheCreate1hPerMTokens),
+    cacheCreateLegacyPerMTokens:base.cacheCreateLegacyPerMTokens,
     multiplier:chatFieldValue('chat-cost-multiplier',base.multiplier)
   });
 }
@@ -3353,7 +3377,7 @@ function chatUsageExplicitBillingAmount(usage){
 }
 function chatUsageHasTokenFields(usage){
   var obj=chatUsagePayload(usage);
-  var keys=['input_tokens','input_tokens_total','input_tokens_uncached','billable_input_tokens','output_tokens','prompt_tokens','completion_tokens','total_tokens','cache_read_input_tokens','cache_hit_input_tokens','cache_creation_input_tokens','cached_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens'];
+  var keys=['input_tokens','input_tokens_total','input_tokens_uncached','billable_input_tokens','output_tokens','prompt_tokens','completion_tokens','total_tokens','cache_read_input_tokens','cache_hit_input_tokens','cache_creation_input_tokens','cache_creation_5m_input_tokens','cache_creation_1h_input_tokens','cached_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens'];
   for(var i=0;i<keys.length;i++)if(Object.prototype.hasOwnProperty.call(obj,keys[i])&&obj[keys[i]]!==null&&obj[keys[i]]!==undefined)return true;
   return !!(chatUsageCacheRead(usage)||chatUsageCacheCreate(usage)||chatUsageNumber(usage,['input_tokens','prompt_tokens','output_tokens','completion_tokens']));
 }
@@ -3373,10 +3397,16 @@ function chatUsageCost(usage){
   var output=chatUsageNumber(usage,'output_tokens','completion_tokens');
   var read=chatUsageCacheRead(usage);
   var create=chatUsageCacheCreate(usage);
+  var create5m=chatUsageCacheCreate5m(usage);
+  var create1h=chatUsageCacheCreate1h(usage);
+  var legacyCreate=Math.max(0,create-create5m-create1h);
   var inputCost=input*pricing.inputPerMTokens/1000000;
   var outputCost=output*pricing.outputPerMTokens/1000000;
   var readCost=read*pricing.cacheReadPerMTokens/1000000;
-  var createCost=create*pricing.cacheCreatePerMTokens/1000000;
+  var create5mCost=create5m*pricing.cacheCreate5mPerMTokens/1000000;
+  var create1hCost=create1h*pricing.cacheCreate1hPerMTokens/1000000;
+  var legacyCreateCost=legacyCreate*pricing.cacheCreateLegacyPerMTokens/1000000;
+  var createCost=create5mCost+create1hCost+legacyCreateCost;
   var raw=inputCost+outputCost+readCost+createCost;
   var localEstimate=raw*pricing.multiplier;
   var billing=chatUsageBillingObject(usage);
@@ -3392,14 +3422,14 @@ function chatUsageCost(usage){
     status='calculated';
     total=localEstimate;
     currency=currency||pricing.currency;
-    reason='按当前面板计价标准计算';
+    reason='按当前面板计价标准计算'+(legacyCreate>0?'；创建 TTL 分项缺失，按旧缓存创建价估算':'');
   }else if(mode==='auto'&&hasUsage){
     // 任意供应商只要返回了规范化 token，就可以按当前面板计价标准计算；
     // 不再把“没有上游总价”限定成 NC 专属估算。
     status='calculated';
     total=localEstimate;
     currency=currency||pricing.currency;
-    reason='上游未返回总价，按当前面板计价标准计算';
+    reason='上游未返回总价，按当前面板计价标准计算'+(legacyCreate>0?'；创建 TTL 分项缺失，按旧缓存创建价估算':'');
   }else{
     reason=hasUsage?'上游返回了 token 用量，但未返回价格':'上游未返回 token 用量或价格';
   }
@@ -3411,9 +3441,15 @@ function chatUsageCost(usage){
     output:output,
     read:read,
     create:create,
+    create5m:create5m,
+    create1h:create1h,
+    legacyCreate:legacyCreate,
     inputCost:inputCost,
     outputCost:outputCost,
     readCost:readCost,
+    create5mCost:create5mCost,
+    create1hCost:create1hCost,
+    legacyCreateCost:legacyCreateCost,
     createCost:createCost,
     raw:raw,
     total:total===null?0:total,
@@ -3436,7 +3472,8 @@ function chatFormatUsageCost(usage){
 function chatUsageCostBreakdown(usage){
   var cost=chatUsageCost(usage);
   var currency=cost.pricing&&cost.pricing.currency?cost.pricing.currency:'';
-  return '输入未命中 '+cost.input+' · 输出 '+cost.output+' · 缓存命中 '+cost.read+' · 缓存创建 '+cost.create+
+  return '输入未命中 '+cost.input+' · 缓存读取 '+cost.read+' · 5m 创建 '+cost.create5m+' · 1h 创建 '+cost.create1h+
+    (cost.legacyCreate>0?' · TTL 未知创建 '+cost.legacyCreate:'')+' · 输出 '+cost.output+
     '｜计费输入总量 '+cost.inputTotal+'｜单价计算 '+chatCostAmountText(cost.raw,currency)+' × 倍率 '+cost.pricing.multiplier;
 }
 function chatDebugRecordCostAmount(record){
@@ -3511,6 +3548,7 @@ function chatNormalizeCacheStrategy(value){
   var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
   if(raw==='prefix_24h'||raw==='prefix24h'||raw==='partial_24h'||raw==='24h'||raw==='prefix')return 'prefix_24h';
   if(raw==='assistant_latest'||raw==='latest_assistant'||raw==='assistant'||raw==='assistant_breakpoint'||raw==='assistant_5m')return 'assistant_latest';
+  if(raw==='native_tiered'||raw==='tiered_native'||raw==='native_mixed'||raw==='native_1h_5m'||raw==='cost_optimized')return 'native_tiered';
   if(raw==='native_stable'||raw==='native'||raw==='native_cache'||raw==='stable_native'||raw==='anthropic_native'||raw==='anthropic_stable'||raw==='uocode_stable'||raw==='uocode_native'||raw==='native_5m')return 'native_stable';
   return 'single_5m';
 }
@@ -3526,6 +3564,19 @@ function chatCacheStrategyMeta(value){
       retentionSeconds:0,
       sendText:'不发送显式 cache_control；旧召回和旧图片每轮剔除，由上游复用共同前缀',
       debugText:'无显式断点 + 清旧召回/旧图片'
+    };
+  }
+  if(strategy==='native_tiered'){
+    return {
+      value:'native_tiered',
+      label:'分层省钱 1h+5m',
+      shortLabel:'1h+5m',
+      ttl:'mixed',
+      requestTtl:'1h',
+      ttlLabel:'1h+5m',
+      retentionSeconds:3600,
+      sendText:'Claude /messages：固定 system 与最近两个完成助手使用 1h，当前真实用户文本使用 5m 尾部断点',
+      debugText:'1h system/最近助手 + 5m 当前用户尾部'
     };
   }
   if(strategy==='native_stable'){
@@ -3829,6 +3880,7 @@ function chatLoadConfig(){
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
+  cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
@@ -3858,6 +3910,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.autoTrimThreshold;
   delete cfg.autoTrimDrop;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
+  cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   try{localStorage.setItem(CHAT_CACHE_STRATEGY_KEY,cfg.cacheStrategy)}catch(e){}
   try{localStorage.setItem(CHAT_CONFIG_KEY,JSON.stringify(cfg))}catch(e){}
 }
@@ -4725,7 +4778,7 @@ function chatReadForm(){
     mcpUrl:API_BASE,
     cacheStrategy:cacheStrategyValue,
     recallHistoryRetentionSeconds:cacheMeta.retentionSeconds,
-    promptCacheTtl:cacheMeta.ttl,
+    promptCacheTtl:cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl,
     fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
     splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
@@ -4768,7 +4821,8 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-cost-input-price',costPricing.inputPerMTokens);
   chatSetFieldValue('chat-cost-output-price',costPricing.outputPerMTokens);
   chatSetFieldValue('chat-cost-cache-read-price',costPricing.cacheReadPerMTokens);
-  chatSetFieldValue('chat-cost-cache-create-price',costPricing.cacheCreatePerMTokens);
+  chatSetFieldValue('chat-cost-cache-create-5m-price',costPricing.cacheCreate5mPerMTokens);
+  chatSetFieldValue('chat-cost-cache-create-1h-price',costPricing.cacheCreate1hPerMTokens);
   chatSetFieldValue('chat-cost-multiplier',costPricing.multiplier);
   chatRenderCostPricingModeHint(costPricing.mode);
   chatSyncCacheStrategyFields(true);
@@ -8643,7 +8697,7 @@ function chatUsageCacheRead(usage){
   ]);
 }
 function chatUsageCacheCreate(usage){
-  return chatUsageNumber(usage,[
+  var total=chatUsageNumber(usage,[
     'cache_creation_input_tokens',
     'cache_creation_tokens',
     'cache_creation',
@@ -8655,6 +8709,21 @@ function chatUsageCacheCreate(usage){
     'cacheCreationTokens',
     'cacheCreate',
     'cacheCreation'
+  ]);
+  return total||chatUsageCacheCreate5m(usage)+chatUsageCacheCreate1h(usage);
+}
+function chatUsageCacheCreate5m(usage){
+  return chatUsageNumber(usage,[
+    'cache_creation_5m_input_tokens',
+    'cacheCreation5mInputTokens',
+    'cache_creation.ephemeral_5m_input_tokens'
+  ]);
+}
+function chatUsageCacheCreate1h(usage){
+  return chatUsageNumber(usage,[
+    'cache_creation_1h_input_tokens',
+    'cacheCreation1hInputTokens',
+    'cache_creation.ephemeral_1h_input_tokens'
   ]);
 }
 function chatCaptureCacheLifecycle(usage,session){
@@ -9178,7 +9247,7 @@ async function chatSubmitPendingMessages(options){
   var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
   var cacheStrategy=cacheMeta.value;
   var recallRetention=cacheMeta.retentionSeconds;
-  var promptCacheTtl=cacheMeta.ttl;
+  var promptCacheTtl=cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl;
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
@@ -9229,7 +9298,7 @@ async function chatSubmitPendingMessages(options){
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
   // 原生稳定策略必须走 Anthropic 原生 /messages 形状；其它策略继续
   // 由网关按供应商地址自动判断 OpenAI/Anthropic 协议。
-  if(cacheStrategy==='native_stable')body.upstream_format='anthropic';
+  if(cacheStrategy==='native_stable'||cacheStrategy==='native_tiered')body.upstream_format='anthropic';
   if(regenerateRequest){
     currentSession.transportMessages=[];
     currentSession.transportUpdated=0;
