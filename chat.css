@@ -4025,6 +4025,14 @@ body.chat-active .chat-recall-mode-segment{
   background:#eaf5ee!important;
 }
 
+body.chat-active .chat-recall-mode-label{
+  margin:2px 0 6px!important;
+  color:#486356!important;
+  font-size:11px!important;
+  font-weight:700!important;
+  letter-spacing:.04em!important;
+}
+
 body.chat-active .chat-recall-mode-segment label{
   position:relative!important;
   min-width:0!important;
@@ -4105,6 +4113,10 @@ body.dark.chat-active .chat-recall-mode-segment input:checked+span{
 
 body.dark.chat-active .chat-recall-mode-detail{
   color:#9eafa6!important;
+}
+
+body.dark.chat-active .chat-recall-mode-label{
+  color:#a8bbb0!important;
 }
 
 body.chat-active #chat-side-debug{

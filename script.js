@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v180-tiered-cache-billing';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v181-fact-recall-ab';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3021,6 +3021,8 @@ async function chatCleanHistory(){
         upstream_key:cfg.upstreamKey,
         recall:cfg.recall!==false,
         recall_mode:chatNormalizeRecallMode(cfg.recallMode),
+        fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
+        RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
         transport_updated_at:currentSession.transportUpdated||0,
         transport_messages:transport,
         window_messages:windowMessages,
@@ -3524,6 +3526,7 @@ function chatDefaultConfig(){
     backendSwitchNotification:true,
     recall:true,
     recallMode:'fact_only',
+    factRecallMode:'a',
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:'system_after_anchor',
@@ -3623,6 +3626,26 @@ function chatCacheStrategyTtlDetail(meta){
 function chatNormalizeRecallMode(value){
   return 'fact_only';
 }
+function chatNormalizeFactRecallMode(value){
+  return String(value||'').trim().toLowerCase()==='b'?'b':'a';
+}
+function chatFactRecallModeMeta(value){
+  var mode=chatNormalizeFactRecallMode(value);
+  return mode==='b'
+    ? {value:'b',label:'B（宽松）',shortLabel:'B',debugText:'宽松过滤 + 强制保底 + 模型精筛'}
+    : {value:'a',label:'A（经典）',shortLabel:'A',debugText:'沿用现有经典 Fact 召回逻辑'};
+}
+function chatFactRecallModeFromForm(fallback){
+  var selected=document.querySelector('input[name="chat-fact-recall-mode"]:checked');
+  return chatNormalizeFactRecallMode(selected?selected.value:fallback);
+}
+function chatSetFactRecallModeField(value){
+  var mode=chatNormalizeFactRecallMode(value);
+  document.querySelectorAll('input[name="chat-fact-recall-mode"]').forEach(function(input){
+    input.checked=input.value===mode;
+  });
+  return mode;
+}
 function chatRecallModeMeta(value){
   return {value:'fact_only',label:'Fact 召回',shortLabel:'Fact',debugText:'只检索并注入有效独立 Fact'};
 }
@@ -3652,18 +3675,26 @@ function chatRenderRecallState(statusText,statusKind){
   var cfg=chatLoadConfig()||{};
   var modeMeta=chatRecallModeMeta(cfg.recallMode);
   var meta=chatRecallMeta(cfg.recall!==false,modeMeta.value);
+  var factMode=chatFactRecallModeMeta(cfg.factRecallMode);
   var input=document.getElementById('chat-recall-enabled');
   if(input)input.checked=meta.enabled;
   chatSetRecallModeField(modeMeta.value);
+  chatSetFactRecallModeField(factMode.value);
   var control=document.getElementById('chat-recall-mode-control');
   if(control){
     control.classList.toggle('is-disabled',!meta.enabled);
     control.setAttribute('aria-disabled',meta.enabled?'false':'true');
   }
   document.querySelectorAll('input[name="chat-recall-mode"]').forEach(function(radio){radio.disabled=!meta.enabled});
+  var factControl=document.getElementById('chat-fact-recall-mode-control');
+  if(factControl){
+    factControl.classList.toggle('is-disabled',!meta.enabled);
+    factControl.setAttribute('aria-disabled',meta.enabled?'false':'true');
+  }
+  document.querySelectorAll('input[name="chat-fact-recall-mode"]').forEach(function(radio){radio.disabled=!meta.enabled});
   var detail=document.getElementById('chat-recall-mode-detail');
   if(detail)detail.textContent=meta.enabled
-    ? '当前状态：只召回有效独立 Fact'
+    ? '当前状态：'+factMode.label+'｜'+factMode.debugText
     : '当前状态：完全关闭，不读取或注入 Fact';
   var status=document.getElementById('chat-recall-save-status');
   if(status){
@@ -3875,6 +3906,7 @@ function chatLoadConfig(){
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
   cfg.recall=cfg.recall!==false;
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
+  cfg.factRecallMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   cfg.fakeThinking=cfg.fakeThinking===true;
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
@@ -3923,6 +3955,7 @@ function chatMergeLiveToggleState(cfg){
   var recall=document.getElementById('chat-recall-enabled');
   if(recall)cfg.recall=recall.checked===true;
   cfg.recallMode=chatRecallModeFromForm(cfg.recallMode);
+  cfg.factRecallMode=chatFactRecallModeFromForm(cfg.factRecallMode);
   return cfg;
 }
 function chatStoreJson(key,value){
@@ -4770,6 +4803,7 @@ function chatReadForm(){
     backendSwitchNotification:chatFieldChecked('chat-backend-switch-notification',saved.backendSwitchNotification!==false),
     recall:chatFieldChecked('chat-recall-enabled',saved.recall!==false),
     recallMode:chatRecallModeFromForm(saved.recallMode),
+    factRecallMode:chatFactRecallModeFromForm(saved.factRecallMode),
     fakeThinking:chatFieldChecked('chat-fake-thinking',saved.fakeThinking===true),
     fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
@@ -4804,6 +4838,7 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-memory-pack',cfg.memoryPreview||'');
   chatSetFieldChecked('chat-recall-enabled',cfg.recall!==false);
   chatSetRecallModeField(cfg.recallMode);
+  chatSetFactRecallModeField(cfg.factRecallMode);
   chatSetFieldChecked('chat-fake-thinking',cfg.fakeThinking===true);
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
@@ -4969,6 +5004,17 @@ function chatWorldbooksEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
   if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
   return base+'/ck/worldbooks';
+}
+function chatSaveFactRecallMode(auto){
+  var cfg=chatSaveConfig(true);
+  var modeMeta=chatFactRecallModeMeta(cfg.factRecallMode);
+  chatRenderRecallState('已保存成功：召回模式 '+modeMeta.label+'｜'+modeMeta.debugText,'ok');
+  if(!auto)toast('召回模式已保存：'+modeMeta.label);
+  return cfg;
+}
+function chatSetFactRecallMode(value,auto){
+  chatSetFactRecallModeField(value);
+  return chatSaveFactRecallMode(auto);
 }
 function chatSpeechPreferencePrepareEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
@@ -5480,6 +5526,23 @@ function chatFormatRecallDiag(data){
   }).join('\n')||'无候选';
   var factGeneration=String(diag.fact_generation||factStore.generation||'');
   var vectorGeneration=String(diag.vector_generation||factVectors.generation||'');
+  var pathB=String(diag.fact_recall_path||'').toLowerCase()==='b';
+  var rewriteOutput=(diag.rewrite_output&&typeof diag.rewrite_output==='object')?diag.rewrite_output:{};
+  var pathBRewrite=pathB?JSON.stringify(rewriteOutput):'';
+  var exemptionEvents=Array.isArray(diag.exemption_events)?diag.exemption_events:[];
+  var fallbackRecovered=Array.isArray(diag.fallback_recovered)?diag.fallback_recovered:[];
+  var refine=(diag.refine&&typeof diag.refine==='object')?diag.refine:{};
+  var pathBExemptions=exemptionEvents.map(function(item){
+    return (item.fact_id||'-')+' '+Number(item.score||0).toFixed(3)+'｜'+(item.reason||'-')+'｜'+((item.waived_rules||[]).join(',')||'-');
+  }).join('；')||'无';
+  var pathBFallback=fallbackRecovered.map(function(item){
+    return (item.fact_id||'-')+' '+Number(item.score||0).toFixed(3)+'｜从 '+(item.recovered_from||'-')+' 捞回';
+  }).join('；')||'未触发';
+  var refineCandidates=Array.isArray(refine.candidates)?refine.candidates:[];
+  var pathBRefine=refineCandidates.map(function(item){
+    return '#'+(item.number||'-')+' '+(item.fact_id||'-')+' '+Number(item.score||0).toFixed(3);
+  }).join('；')||'无候选';
+  pathBRefine+='｜返回 '+((refine.returned_ids||[]).join(',')||'无')+'｜'+(refine.status||'-');
   function shortGeneration(value){return value?value.slice(0,12):'-'}
   lines.push('📦 Fact 数据｜'+src('fact_store','正文')+'｜'+src('fact_vectors','向量')+'｜有效 '+(factStore.active||counts.entity_fact_entries||0)+' 条｜generation '+shortGeneration(factGeneration)+'/'+shortGeneration(vectorGeneration)+'｜索引 '+(diag.fact_index_version||'-'));
   lines.push('✍️ 检索改写｜'+String(rewrite.semantic_query||'无')+'｜来源 '+String(rewrite.source||'未知'));
@@ -5492,6 +5555,12 @@ function chatFormatRecallDiag(data){
   lines.push('📐 质量门槛｜分数 '+Number(factSelection.score_floor||0).toFixed(3)+'｜最多 '+(factSelection.selected_limit||0)+' 组｜过滤 '+(diag.dropped_by_budget||0));
   lines.push('🔑 入选证据｜'+evidenceText);
   lines.push('🧪 候选逐条诊断｜\n'+candidateText);
+  if(pathB){
+    lines.push('🅱️ B 改写完整 JSON｜'+pathBRewrite);
+    lines.push('🪶 B 过滤豁免｜'+pathBExemptions);
+    lines.push('🛟 B 强制保底｜'+pathBFallback);
+    lines.push('🧹 B 精筛｜'+pathBRefine);
+  }
   lines.push('🔑 Fact keys｜'+selectedKeys.length+' 个'+(selectedKeys.length?'｜'+selectedKeys.slice(0,8).join('，'):''));
   lines.push('⏱ 耗时明细｜'+phaseText);
   lines.push('🧮 明细合计 '+sec(diag.phase_sum_seconds)+'｜实际总耗时 '+sec(diag.total_seconds));
@@ -5544,6 +5613,7 @@ function chatFormatDebug(ev,data){
     var ttl=data.prompt_cache_ttl||data.cache_control_ttl||chatCacheStrategyTtlLabel(strategyMeta);
     var strategyText=strategyMeta.label+'｜发送：'+strategyMeta.debugText+'｜TTL：'+ttl;
     var recallMeta=chatRecallMeta(data.recall_enabled!==false,data.recall_mode);
+    var factRecallMode=chatFactRecallModeMeta(data.fact_recall_mode);
     var currentRecallMode=chatRecallModeDisplayLabel(data.recall_mode||recallMeta.mode);
     var previousRecallMode=data.previous_recall_mode?chatRecallModeDisplayLabel(data.previous_recall_mode):'';
     var recallTransition=data.mode_switched
@@ -5553,7 +5623,7 @@ function chatFormatDebug(ev,data){
     var injectText=data.gateway_context_injected===true
       ? ('｜本轮注入：'+(data.gateway_context_chars||0)+'字')
       : (data.gateway_context_injected===false?'｜本轮无召回注入':'');
-    var recallText='｜记忆召回：'+recallMeta.label+'｜有效模式：'+currentRecallMode+recallTransition+recallEpoch+injectText;
+    var recallText='｜记忆召回：'+recallMeta.label+'｜路径：'+factRecallMode.label+'｜有效模式：'+currentRecallMode+recallTransition+recallEpoch+injectText;
     var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
     var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
     var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
@@ -5792,7 +5862,8 @@ function chatUpdateRuntime(cfg,usage){
   }
   if(recall){
     var recallMeta=chatRecallMeta(cfg.recall!==false,cfg.recallMode);
-    recall.textContent=recallMeta.label+(cfg.useMcp===true?' · MCP':'');
+    var factMode=chatFactRecallModeMeta(cfg.factRecallMode);
+    recall.textContent=recallMeta.label+(recallMeta.enabled?' · '+factMode.shortLabel:'')+(cfg.useMcp===true?' · MCP':'');
   }
   if(cache){
     var read=chatUsageCacheRead(usage||{});
@@ -9263,6 +9334,8 @@ async function chatSubmitPendingMessages(options){
     backend_switch_notification:cfg.backendSwitchNotification!==false,
     recall:cfg.recall!==false,
     recall_mode:chatNormalizeRecallMode(cfg.recallMode),
+    fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
+    RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
     ck_thinking_enabled:cfg.fakeThinking===true,
     ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
