@@ -90,12 +90,12 @@ function testTrimConfigAndSystemPrompt(){
   assert.strictEqual(context.chatComposeSystemPrompt({system:'只按我填写的内容'}),'只按我填写的内容','custom system prompt must pass through unchanged');
 }
 
+// 聊天抽屉的措辞偏好是纯预览：只显示条数和规则正文，
+// 不得出现版本号、diff、发布按钮或其他管理控件。管理入口在独立的规则管理页。
 function testSpeechPreferenceStatusRendering(){
   const elements={
-    'chat-speech-rules':{value:''},
     'chat-speech-meta':{textContent:''},
-    'chat-speech-state':{textContent:''},
-    'chat-speech-diff':{innerHTML:''},
+    'chat-speech-preview':{innerHTML:''},
     'chat-speech-status':{textContent:''}
   };
   const context={
@@ -105,22 +105,26 @@ function testSpeechPreferenceStatusRendering(){
     esc:value=>String(value)
   };
   vm.createContext(context);
-  vm.runInContext([
-    extractFunction('chatSpeechConsoleRulesText'),
-    extractFunction('chatSpeechConsoleDiffHtml'),
-    extractFunction('chatRenderSpeechPreferences')
-  ].join('\n'),context);
+  vm.runInContext(extractFunction('chatRenderSpeechPreferences'),context);
+
   context.chatRenderSpeechPreferences({
-    rules:[{key:'tone',instruction:'保持清晰'}],
+    rules:[{key:'tone',instruction:'保持清晰'},{key:'addr',instruction:'不要叫我宝宝'}],
     current_revision:'r7-test',previous_revision:'r6-test',
     updated_at:'2026-08-10T23:45:54+08:00',
     last_activation_at:'2026-08-11T00:10:00+08:00',
     pending_count:0,source:'github',diff:{}
   },false);
-  assert(elements['chat-speech-meta'].textContent.includes('规则更新 2026-08-10T23:45:54+08:00'));
-  assert(elements['chat-speech-meta'].textContent.includes('最近激活 2026-08-11T00:10:00+08:00'));
-  assert(elements['chat-speech-state'].textContent.includes('最近成功激活 2026-08-11T00:10:00+08:00'));
-  assert(elements['chat-speech-state'].textContent.includes('待激活 0 条'));
+  assert.strictEqual(elements['chat-speech-meta'].textContent,'条数：2','预览只显示条数');
+  assert(elements['chat-speech-preview'].innerHTML.includes('保持清晰'),'必须显示规则正文');
+  assert(elements['chat-speech-preview'].innerHTML.includes('不要叫我宝宝'),'必须显示全部规则正文');
+  const rendered=elements['chat-speech-meta'].textContent+elements['chat-speech-preview'].innerHTML;
+  assert(!rendered.includes('r7-test'),'预览不得出现版本号');
+  assert(!rendered.includes('r6-test'),'预览不得出现上一版版本号');
+  assert(!rendered.includes('待激活'),'预览不得出现待激活等管理信息');
+
+  context.chatRenderSpeechPreferences({rules:[],enabled:false,source:'github'},false);
+  assert.strictEqual(elements['chat-speech-meta'].textContent,'条数：0（已停用）','停用状态要能看出来');
+  assert(elements['chat-speech-preview'].innerHTML.includes('暂无生效规则'));
 }
 
 const prepareTimeoutMatch=source.match(/var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=(\d+);/);

@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v181-fact-recall-ab';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v183-polling-rules-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3026,6 +3026,7 @@ async function chatCleanHistory(){
         transport_updated_at:currentSession.transportUpdated||0,
         transport_messages:transport,
         window_messages:windowMessages,
+        chat_polling_enabled:chatPollingView().enabled===true,
         visible_counts:visibleCounts
       })
     });
@@ -4660,6 +4661,7 @@ function chatNormalizeSession(s){
     speechPreferencePreparedThroughTs:Number(s.speechPreferencePreparedThroughTs||0)||0,
     speechPreferencePendingThroughTs:Number(s.speechPreferencePendingThroughTs||0)||0,
     speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
+    speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
     speechPreferencePendingBoundaryReason:String(s.speechPreferencePendingBoundaryReason||''),
     cacheRebuildPending:s.cacheRebuildPending===true,
     cacheFullCreatedAt:Number(s.cacheFullCreatedAt||0)||0,
@@ -5045,30 +5047,212 @@ function chatSpeechConsoleDiffHtml(diff){
   });
   return html.length?html.join(''):'<div><b>对比</b><span>与上一版本没有规则变化</span></div>';
 }
+// 聊天抽屉里的措辞偏好只做纯预览：只显示条数和规则正文，
+// 不显示版本号、diff、标题栏或任何操作按钮组。修改、保存、发布、启停
+// 全部集中在独立的「规则管理」页，避免预览区堆满管理控件。
 function chatRenderSpeechPreferences(data,preserveEditor){
   data=data&&typeof data==='object'?data:{};
   chatSpeechConsoleState.data=data;
-  var rules=chatSpeechConsoleRulesText(data.rules);
-  var editor=document.getElementById('chat-speech-rules');
-  if(editor&&(!preserveEditor||editor.value===chatSpeechConsoleState.editorSnapshot))editor.value=rules;
-  chatSpeechConsoleState.editorSnapshot=rules;
-  var hasPublishedRules=Array.isArray(data.rules)&&data.rules.length>0&&String(data.current_revision||'r0')!=='r0';
+  var rules=Array.isArray(data.rules)?data.rules:[];
+  var disabled=data.enabled===false;
   var meta=document.getElementById('chat-speech-meta');
-  if(meta)meta.textContent=hasPublishedRules
-    ?'已发布 '+String(data.rules.length)+' 条 · 规则更新 '+(data.updated_at||'未知时间')
-      +(data.last_activation_at?' · 最近激活 '+data.last_activation_at:'')
-    :'尚未提取';
-  var state=document.getElementById('chat-speech-state');
-  if(state)state.textContent=(hasPublishedRules
-    ?'当前 '+(data.current_revision||'r0')+' · 上一版 '+(data.previous_revision||'r0')
-      +(data.last_activation_at?' · 最近成功激活 '+data.last_activation_at:'')
-      +' · '
-    :'暂无已发布规则 · 当前 r0 · ')
-    +'自动提取待激活 '+Number(data.pending_count||0)+' 条'+(data.warning?' · '+data.warning:'');
-  var diff=document.getElementById('chat-speech-diff');
-  if(diff)diff.innerHTML=chatSpeechConsoleDiffHtml(data.diff);
+  if(meta)meta.textContent='条数：'+rules.length+(disabled?'（已停用）':'');
+  var preview=document.getElementById('chat-speech-preview');
+  if(preview){
+    preview.innerHTML=rules.length
+      ?rules.map(function(rule){
+          return '<div class="chat-speech-line">'+esc(String((rule&&rule.instruction)||''))+'</div>';
+        }).join('')
+      :'<div class="chat-speech-empty">暂无生效规则</div>';
+  }
   var status=document.getElementById('chat-speech-status');
-  if(status)status.textContent=data.source==='github'?'已同步':'本地读取';
+  if(status)status.textContent=data.warning?String(data.warning):(data.source==='github'?'已同步':'本地读取');
+}
+/* ---- 规则管理页 ---- */
+// 页面上不出现任何版本号：revision 只是后端的并发控制标识，对用户没有意义。
+// 用户要看的是「上次发布时间 / 这次发布时间 / 条数 / 激活状态」这四项。
+var rulesPageState={data:null,loading:false,busy:false,dirty:false};
+var RULES_CATEGORIES=[
+  ['forbidden_language','禁用表达'],['tone','语气'],['addressing','称呼'],
+  ['response_style','回复方式'],['interaction_boundary','互动边界'],['format','格式'],['other','其他']
+];
+var RULES_PRIORITIES=[['hard','硬性'],['strong','要求'],['normal','普通']];
+function rulesSelectHtml(cls,label,options,selected){
+  return '<select class="'+cls+'" aria-label="'+escAttr(label)+'" onchange="rulesMarkDirty()">'+
+    options.map(function(item){
+      return '<option value="'+escAttr(item[0])+'"'+(item[0]===selected?' selected':'')+'>'+esc(item[1])+'</option>';
+    }).join('')+'</select>';
+}
+function rulesRowHtml(rule,index){
+  rule=rule&&typeof rule==='object'?rule:{};
+  var key=String(rule.key||('manual_'+Date.now().toString(36)+'_'+index));
+  return '<div class="rules-row" data-rule-key="'+escAttr(key)+'">'+
+    '<textarea class="rules-row-text" rows="2" maxlength="220" aria-label="规则内容" placeholder="例如：不要叫我宝宝" oninput="rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
+    '<div class="rules-row-side">'+
+      rulesSelectHtml('rules-row-category','类别',RULES_CATEGORIES,String(rule.category||'other'))+
+      rulesSelectHtml('rules-row-priority','强度',RULES_PRIORITIES,String(rule.priority||'strong'))+
+      '<button class="rules-row-del" type="button" title="删除这条规则" aria-label="删除这条规则" onclick="rulesDeleteRow(this)">×</button>'+
+    '</div></div>';
+}
+function rulesMarkDirty(){
+  rulesPageState.dirty=true;
+  var hint=document.getElementById('rules-dirty-hint');
+  if(hint)hint.textContent='有未保存的改动';
+}
+function rulesAddRow(){
+  var table=document.getElementById('rules-table');
+  if(!table)return;
+  var empty=table.querySelector('.rules-empty');
+  if(empty)empty.remove();
+  table.insertAdjacentHTML('beforeend',rulesRowHtml({},table.querySelectorAll('.rules-row').length));
+  rulesMarkDirty();
+  var rows=table.querySelectorAll('.rules-row-text');
+  if(rows.length)rows[rows.length-1].focus();
+}
+function rulesDeleteRow(button){
+  var row=button&&button.closest?button.closest('.rules-row'):null;
+  if(!row)return;
+  row.remove();
+  rulesMarkDirty();
+}
+// 从页面收集规则。内容为空的行直接跳过而不是报错——用户新增了一行又没填，
+// 不应该因此卡住整个保存。
+function rulesCollect(){
+  var rows=Array.prototype.slice.call(document.querySelectorAll('#rules-table .rules-row'));
+  var out=[],seen=Object.create(null);
+  for(var i=0;i<rows.length;i++){
+    var row=rows[i];
+    var textEl=row.querySelector('.rules-row-text');
+    var instruction=String((textEl&&textEl.value)||'').trim();
+    if(!instruction)continue;
+    var key=String(row.getAttribute('data-rule-key')||'').trim()||('manual_'+Date.now().toString(36)+'_'+i);
+    while(seen[key])key=key+'_'+i;
+    seen[key]=1;
+    var categoryEl=row.querySelector('.rules-row-category');
+    var priorityEl=row.querySelector('.rules-row-priority');
+    out.push({
+      key:key,
+      instruction:instruction,
+      category:String((categoryEl&&categoryEl.value)||'other'),
+      priority:String((priorityEl&&priorityEl.value)||'strong')
+    });
+  }
+  return out;
+}
+function renderRulesPage(){
+  var body=document.getElementById('rules-page-body');
+  if(!body)return;
+  if(rulesPageState.loading&&!rulesPageState.data){
+    body.innerHTML='<div class="empty-state small">读取中...</div>';
+    return;
+  }
+  var data=rulesPageState.data||{};
+  var draft=(data.draft&&typeof data.draft==='object')?data.draft:{};
+  var draftRules=Array.isArray(draft.rules)?draft.rules:(Array.isArray(data.rules)?data.rules:[]);
+  var enabled=data.enabled!==false;
+  var publishedCount=Number(data.rule_count||(Array.isArray(data.rules)?data.rules.length:0))||0;
+  var html='<header class="rules-head">'+
+    '<div><h2>规则管理</h2><p>改完先保存草稿，确认无误再发布成正式生效的规则。</p></div>'+
+    '<span class="rules-state '+(enabled?'on':'off')+'">'+(enabled?'已激活':'未激活')+'</span>'+
+    '</header>';
+  html+='<section class="rules-overview">'+
+    '<div><span>上次发布时间</span><b>'+esc(data.previous_updated_at||'未发布')+'</b></div>'+
+    '<div><span>这次发布时间</span><b>'+esc(data.updated_at||'未发布')+'</b></div>'+
+    '<div><span>条数</span><b>'+publishedCount+'</b></div>'+
+    '<div><span>激活状态</span><b>'+(enabled?'已激活':'未激活')+'</b></div>'+
+    '</section>';
+  html+='<div class="rules-actions">'+
+    '<button class="btn btn-outline btn-sm" type="button" onclick="rulesAddRow()">新增规则</button>'+
+    '<button class="btn btn-outline btn-sm" type="button" onclick="rulesSaveDraft()">保存草稿</button>'+
+    '<button class="btn btn-blue btn-sm" type="button" onclick="rulesPublish()">发布</button>'+
+    '<button class="btn btn-outline btn-sm" type="button" onclick="rulesToggleEnabled()">'+(enabled?'停用':'启用')+'</button>'+
+    '<button class="btn btn-outline btn-sm" type="button" onclick="loadRulesPage(true)">重新读取</button>'+
+    '<span class="rules-dirty-hint" id="rules-dirty-hint">'+(rulesPageState.dirty?'有未保存的改动':'')+'</span>'+
+    '</div>';
+  if(!enabled){
+    html+='<div class="rules-notice">规则已停用：当前不会注入给助手，但草稿和历史都保留着，随时可以重新启用。</div>';
+  }
+  html+='<div class="rules-table" id="rules-table">';
+  if(!draftRules.length){
+    html+='<div class="rules-empty">还没有规则。点「新增规则」写一条，比如“不要叫我宝宝”。</div>';
+  }else{
+    draftRules.forEach(function(rule,index){html+=rulesRowHtml(rule,index)});
+  }
+  html+='</div>';
+  if(data.warning)html+='<div class="rules-notice warn">'+esc(String(data.warning))+'</div>';
+  body.innerHTML=html;
+}
+function rulesEndpoint(){return chatSpeechPreferencesEndpoint(chatLoadConfig())}
+function loadRulesPage(force){
+  if(rulesPageState.loading)return Promise.resolve(false);
+  if(rulesPageState.data&&!force)return Promise.resolve(true);
+  rulesPageState.loading=true;
+  renderRulesPage();
+  return panelDataFetch(rulesEndpoint()+'?_t='+Date.now(),{cache:'no-store'},{label:'CK 网关面板 Key'})
+    .then(function(resp){return resp.json().then(function(data){
+      if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));
+      return data;
+    })})
+    .then(function(data){
+      rulesPageState.data=data;
+      rulesPageState.dirty=false;
+      renderRulesPage();
+      // 聊天抽屉的预览和这里共用同一份数据，顺手刷新，避免两处显示不一致
+      chatRenderSpeechPreferences(data,false);
+      return true;
+    })
+    .catch(function(error){
+      var body=document.getElementById('rules-page-body');
+      if(body)body.innerHTML='<div class="entity-error">规则读取失败：'+esc(String((error&&error.message)||error))+'</div>'+
+        '<div class="api-error-actions"><button class="btn btn-outline btn-sm" type="button" onclick="loadRulesPage(true)">重新读取</button></div>';
+      return false;
+    })
+    .then(function(result){rulesPageState.loading=false;return result});
+}
+function rulesRequest(action,payload,okMessage){
+  if(rulesPageState.busy)return Promise.resolve(false);
+  var data=rulesPageState.data||{};
+  var body=Object.assign({action:action,base_revision:data.current_revision||'r0'},payload||{});
+  rulesPageState.busy=true;
+  return panelDataFetch(rulesEndpoint(),{
+    method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  },{label:'CK 网关面板 Key'})
+    .then(function(resp){return resp.json().then(
+      function(json){return {ok:resp.ok,status:resp.status,data:json}},
+      function(){return {ok:resp.ok,status:resp.status,data:{}}}
+    )})
+    .then(function(result){
+      if(!result.ok||result.data.ok===false){
+        if(result.status===409){
+          // 冲突时保留用户正在编辑的内容，不静默覆盖
+          toast('规则已被其他页面更新，请点「重新读取」后再合并你的改动',6000);
+          return false;
+        }
+        throw new Error(result.data.error||('HTTP '+result.status));
+      }
+      rulesPageState.data=result.data;
+      rulesPageState.dirty=false;
+      renderRulesPage();
+      chatRenderSpeechPreferences(result.data,false);
+      toast(okMessage,4000);
+      return true;
+    })
+    .catch(function(error){
+      toast('操作失败：'+String((error&&error.message)||error),5000,{type:'error',closable:true});
+      return false;
+    })
+    .then(function(result){rulesPageState.busy=false;return result});
+}
+function rulesSaveDraft(){
+  return rulesRequest('save_draft',{rules:rulesCollect()},'草稿已保存，当前生效规则未改变');
+}
+function rulesPublish(){
+  return rulesRequest('publish',{rules:rulesCollect()},'规则已发布并生效');
+}
+function rulesToggleEnabled(){
+  var enabled=(rulesPageState.data||{}).enabled!==false;
+  return rulesRequest('set_enabled',{enabled:!enabled},enabled?'规则已停用':'规则已启用');
 }
 function chatOpenSpeechPreferences(){
   chatOpenSettingTab('speech');
@@ -5901,11 +6085,6 @@ function chatRenderTrimState(cfg){
     next.textContent='1h 缓存边界自动截断已关闭；仍可手动同步并按需截断。';
     return;
   }
-  var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
-  if(cacheMeta.ttl!=='1h'){
-    next.textContent='自动截断仅在「原生稳定缓存 1h」模式生效；仍可手动同步并按需截断。';
-    return;
-  }
   var session=chatCurrentSession();
   var reference=chatCacheActivityReference(session,chatLastMessageTs());
   var referenceTs=reference.timestamp;
@@ -6004,6 +6183,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       speechPreferencePreparedThroughTs:s.speechPreferencePreparedThroughTs||0,
       speechPreferencePendingThroughTs:s.speechPreferencePendingThroughTs||0,
       speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
+      speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
       speechPreferencePendingBoundaryReason:s.speechPreferencePendingBoundaryReason||'',
       cacheRebuildPending:s.cacheRebuildPending===true,
       cacheFullCreatedAt:s.cacheFullCreatedAt||0,
@@ -6456,14 +6636,18 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     if(selected.has(message))continue;
     if(chatIsRealMessage(message)){lastActivityTs=Number(message.ts||0)||0;break}
   }
-  var cacheMeta=chatCacheStrategyMeta((cfg||{}).cacheStrategy);
   var manual=opts.force===true||opts.trigger==='manual';
   var pendingBoundary=!!(selected.size>0&&session&&session.cacheRebuildPending===true);
   var cacheReference=chatCacheActivityReference(session,lastActivityTs);
   var cacheReferenceTs=cacheReference.timestamp;
   var cacheAgeMs=cacheReferenceTs?Math.max(0,Date.now()-cacheReferenceTs):0;
+  // 1h 边界对全部缓存策略一致生效。缓存策略只决定上游 cache_control 断点位置和
+  // 旧召回块保留方式，不决定是否允许清理历史；旧实现限定 ttl==='1h' 会让
+  // single_5m / assistant_latest / prefix_24h 永远不触发自动截断。
+  // idleCheck=true 是页面在线定时器的空闲兜底路径：此时没有待发送消息，
+  // 也要允许到点截断，否则 1h 自动截断只能等下一次发送才生效。
   var cacheAgeBoundary=!!(
-    trim.enabled&&selected.size>0&&cacheMeta.ttl==='1h'&&
+    trim.enabled&&(selected.size>0||opts.idleCheck===true)&&
     cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
   );
   var boundary=manual||pendingBoundary||cacheAgeBoundary;
@@ -6560,9 +6744,65 @@ function chatSpeechPreferenceMessageId(message,index){
   }
   return String(message.messageId);
 }
-function chatSpeechPreferencePrepareBatch(list){
+// 措辞偏好重试队列。
+// 截断不再等待偏好提取成功（见 chatCommitAutoTrimPlan），所以没来得及审阅的用户消息
+// 必须独立保存一份，否则聊天历史一裁掉就永远丢失、再也没机会提取。
+// 队列里存的是已经压缩过的 prepare 行，不是完整聊天消息；同时按条数和字符数双重封顶，
+// 避免偏好服务长期不可用时把 session 撑爆。
+var CHAT_SPEECH_QUEUE_MAX_ROWS=200;
+var CHAT_SPEECH_QUEUE_MAX_CHARS=40000;
+function chatSpeechPreferenceNormalizeQueue(list){
+  var out=[],seen=Object.create(null),chars=0;
+  (Array.isArray(list)?list:[]).forEach(function(row){
+    if(!row||typeof row!=='object')return;
+    if(out.length>=CHAT_SPEECH_QUEUE_MAX_ROWS)return;
+    var text=String(row.text||'').trim();
+    if(!text)return;
+    var id=String(row.message_id||'').trim();
+    if(id){
+      if(seen[id])return;
+      seen[id]=1;
+    }
+    var context=String(row.assistant_context||'');
+    var size=text.length+context.length+100;
+    if(out.length&&chars+size>CHAT_SPEECH_QUEUE_MAX_CHARS)return;
+    chars+=size;
+    out.push({
+      role:'user',
+      message_id:id,
+      turn_id:String(row.turn_id||''),
+      text:text.slice(0,2400),
+      assistant_context:context.slice(-600),
+      ts:Number(row.ts||0)||0
+    });
+  });
+  return out;
+}
+function chatSpeechPreferenceQueueRows(session){
+  return chatSpeechPreferenceNormalizeQueue(session&&session.speechPreferenceRetryQueue);
+}
+function chatSpeechPreferenceQueueCommit(session,prepared){
+  if(!session)return;
+  if(prepared&&Array.isArray(prepared.retryRows)){
+    session.speechPreferenceRetryQueue=chatSpeechPreferenceNormalizeQueue(prepared.retryRows);
+    return;
+  }
+  if(prepared&&prepared.ok===true&&prepared.reviewComplete!==false){
+    session.speechPreferenceRetryQueue=[];
+  }
+}
+function chatSpeechPreferencePrepareBatch(list,queued){
   list=Array.isArray(list)?list:[];
-  var candidates=[];
+  var candidates=[],seen=Object.create(null);
+  // 先放上一轮没审阅完的旧行，保证它们优先被消费，不会被新消息一直挤在后面。
+  chatSpeechPreferenceNormalizeQueue(queued).forEach(function(row){
+    var id=String(row.message_id||'').trim();
+    if(id){
+      if(seen[id])return;
+      seen[id]=1;
+    }
+    candidates.push(row);
+  });
   var previousAssistant='';
   list.forEach(function(message,index){
     if(!message||typeof message!=='object')return;
@@ -6573,9 +6813,14 @@ function chatSpeechPreferencePrepareBatch(list){
     if(message.role!=='user'&&message.role!=='pending_user')return;
     var text=String(message.text||'').trim();
     if(!text)return;
+    var messageId=chatSpeechPreferenceMessageId(message,index);
+    if(messageId){
+      if(seen[messageId])return;
+      seen[messageId]=1;
+    }
     candidates.push({
       role:'user',
-      message_id:chatSpeechPreferenceMessageId(message,index),
+      message_id:messageId,
       turn_id:String(message.turnId||''),
       text:text.slice(0,2400),
       assistant_context:previousAssistant,
@@ -6600,11 +6845,13 @@ function chatSpeechPreferencePrepareBatch(list){
     selectedMessages:messages.length,
     chars:chars,
     reviewedThroughTs:reviewedThroughTs,
-    complete:messages.length===candidates.length
+    complete:messages.length===candidates.length,
+    // 本次装不下、留到下一轮继续的行
+    leftoverRows:candidates.slice(messages.length)
   };
 }
-function chatSpeechPreferencePrepareMessages(list){
-  return chatSpeechPreferencePrepareBatch(list).messages;
+function chatSpeechPreferencePrepareMessages(list,queued){
+  return chatSpeechPreferencePrepareBatch(list,queued).messages;
 }
 function chatSpeechPreferenceRevisionValue(value){
   if(value===undefined||value===null||value==='')return '';
@@ -6702,7 +6949,8 @@ function chatSpeechPreferenceTrimEventId(cfg,plan){
 var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=75000;
 async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
   var batch=chatSpeechPreferencePrepareBatch(
-    (plan&&plan.preferenceMessages)||(plan&&plan.droppedMessages)
+    (plan&&plan.preferenceMessages)||(plan&&plan.droppedMessages),
+    chatSpeechPreferenceQueueRows(chatCurrentSession())
   );
   var messages=batch.messages;
   var eventId=chatSpeechPreferenceTrimEventId(cfg,plan);
@@ -6762,7 +7010,9 @@ async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
       revision:responseMeta.revision,pendingRevision:responseMeta.pendingRevision,appliedRevision:responseMeta.appliedRevision,
       durationMs:Date.now()-started,reviewedThroughTs:reviewedThroughTs,
       reviewComplete:data.review_complete!==false&&batch.complete,
-      candidateMessages:batch.candidateMessages,selectedMessages:batch.selectedMessages,inputChars:batch.chars
+      candidateMessages:batch.candidateMessages,selectedMessages:batch.selectedMessages,inputChars:batch.chars,
+      // 本次没装下的行留到下一次边界继续，已发送的行不再重复排队。
+      retryRows:batch.leftoverRows
     };
   }catch(error){
     var stopped=!!(requestState&&requestState.stopped);
@@ -6774,11 +7024,15 @@ async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
     });
     if(!stopped)toast(
       plan&&plan.trimmed
-        ?'措辞偏好更新失败，本次不截断并保留完整历史'
+        ?'措辞偏好更新失败，已保留旧规则；历史仍按真实轮次截断'
         :'措辞偏好更新失败，本轮继续使用旧版本',
       5000
     );
-    return {ok:false,eventId:eventId,error:errorText,stopped:stopped};
+    // 失败时把"已发送但没成功"的行和"没装下"的行一起排队，下一次边界重试。
+    return {
+      ok:false,eventId:eventId,error:errorText,stopped:stopped,
+      retryRows:batch.messages.concat(batch.leftoverRows||[])
+    };
   }finally{
     if(timer)clearTimeout(timer);
     if(parentSignal&&relay&&parentSignal.removeEventListener)parentSignal.removeEventListener('abort',relay);
@@ -6789,9 +7043,10 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
   var s=chatCurrentSession();
   var oldTransport=(s.transportMessages||[]).length;
   var reviewedThroughTs=Number(prepared.reviewedThroughTs||0)||0;
-  var requiredThroughTs=Number(plan.requiredPreferenceThroughTs||0)||0;
-  var reviewCoversTrim=!plan.trimmed||!requiredThroughTs||reviewedThroughTs>=requiredThroughTs;
-  var trimCommitted=!!(plan.trimmed&&reviewCoversTrim);
+  // 历史清理独立于措辞偏好提取。偏好服务失败、超时，或本次只审阅了一部分消息时，
+  // 仍然提交这次截断；没审阅到的内容进入独立的偏好重试队列（见 chatSpeechPreferenceQueue*），
+  // 不再靠"保留完整聊天历史"来兜底，否则偏好服务一挂，截断功能就整体失效。
+  var trimCommitted=!!plan.trimmed;
   if(trimCommitted){
     chatMessages=(plan.keptMessages||[]).concat(plan.deferred||[]);
     s.messages=chatMessages;
@@ -6813,6 +7068,7 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     );
   }
   if(plan.cacheBoundary)s.cacheRebuildPending=true;
+  chatSpeechPreferenceQueueCommit(s,prepared);
   chatResetSessionAnchorFromMessages(s);
   s.updated=Date.now();
   chatSaveSessions();
@@ -6825,7 +7081,7 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     trigger:String(plan.trigger||''),
     manual:!!plan.manual,
     trimmed:trimCommitted,
-    trimDeferredForSpeechReview:!!(plan.trimmed&&!reviewCoversTrim),
+    trimDeferredForSpeechReview:false,
     before:plan.before,
     after:trimCommitted?plan.after:plan.before,
     dropped:trimCommitted?plan.dropped:0,
@@ -6852,7 +7108,8 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     chatRenderTrimState(cfg);
     return plan;
   }
-  if(!chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages).length){
+  var queuedRows=chatSpeechPreferenceQueueRows(chatCurrentSession());
+  if(!chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages,queuedRows).length){
     chatDebug('speech_preference_prepare',{ok:true,skipped:'no_text',event_id:'',dropped_rounds:plan.dropped});
     return chatCommitAutoTrimPlan(cfg,plan,{
       ok:true,activationId:'',eventId:'',durationMs:0,
@@ -6860,14 +7117,31 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     });
   }
   var prepared=await chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState);
-  if((requestState&&requestState.stopped)||!prepared.ok){
+  // 用户主动中止：尊重中止，不提交任何改动。
+  if(requestState&&requestState.stopped){
     chatRenderTrimState(cfg);
     return {
       boundary:true,cacheBoundary:true,trigger:plan.trigger,manual:!!plan.manual,
       trimmed:false,before:plan.before,after:plan.before,dropped:0,
-      plannedDropped:plan.dropped,prepareFailed:!prepared.ok,prepareStopped:!!prepared.stopped,
+      plannedDropped:plan.dropped,prepareFailed:false,prepareStopped:true,
       speechPreferenceTrimEventId:prepared.eventId||''
     };
+  }
+  // 偏好服务失败不阻塞历史清理：保留旧规则，照常提交截断，未审阅内容进重试队列。
+  if(!prepared.ok){
+    chatDebug('speech_preference_prepare_failed_nonblocking',{
+      error:prepared.error||'unknown',
+      trim_trigger:plan.trigger,
+      planned_dropped:plan.dropped,
+      queued_rows:(prepared.retryRows||[]).length
+    });
+    var committedOnFailure=chatCommitAutoTrimPlan(cfg,plan,{
+      ok:false,activationId:'',eventId:prepared.eventId||'',durationMs:prepared.durationMs||0,
+      reviewedThroughTs:0,reviewComplete:false,retryRows:prepared.retryRows||[]
+    });
+    committedOnFailure.prepareFailed=true;
+    committedOnFailure.speechPreferencePrepareError=prepared.error||'';
+    return committedOnFailure;
   }
   return chatCommitAutoTrimPlan(cfg,plan,prepared);
 }
@@ -6884,7 +7158,7 @@ async function chatManualSyncSpeechPreferences(){
   if(button){button.disabled=true;button.textContent='正在审阅措辞偏好...'}
   try{
     var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_sync',skipTrim:true});
-    if(result&&result.prepareFailed){chatSetStatus('措辞偏好更新失败，历史和游标均未改变');return}
+    if(result&&result.prepareFailed){chatSetStatus('措辞偏好更新失败，本次内容已排队，下一次继续');return}
     toast(
       result&&result.speechPreferenceReviewComplete===false
         ?'已审阅一部分措辞偏好；未审阅消息仍会保留，下一次继续'
@@ -6926,15 +7200,12 @@ async function chatManualTrimNow(){
   if(button){button.disabled=true;button.textContent='正在审阅并按真实轮次裁剪...'}
   try{
     var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim'});
-    if(result&&result.prepareFailed){chatSetStatus('措辞偏好更新失败，未进行手动重建');return}
-    if(result&&result.trimDeferredForSpeechReview){
-      toast('仍有措辞消息尚未审阅，本次保留完整历史；下一次会从断点继续',6000);
-      chatSetStatus('偏好审阅未完成，未截断历史');
-      return;
-    }
+    // 偏好同步失败只提示，不再取消截断：手动截断的语义是"现在就清理历史"。
+    if(result&&result.prepareFailed)toast('措辞偏好暂时无法同步，已保留旧规则；历史仍按真实轮次截断',5000);
     if(result&&result.trimmed){
       chatSaveLocalMessages();
       chatRenderMessages();
+      await chatSyncTrimmedHistoryToGateway(cfg,result);
       toast(
         '已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息应用偏好并建立新缓存',
         5000
@@ -6954,6 +7225,98 @@ async function chatManualTrimNow(){
   }finally{
     chatSpeechPreferenceManualBusy=false;
     if(button){button.textContent='立即按真实轮次截断并同步偏好';chatRenderTrimState(cfg)}
+  }
+}
+// 截断后把裁剪结果同步到网关 session。
+// 复用既有的 /ck/clean-history：它本来就是"用面板提供的历史覆盖网关侧 session"的幂等接口，
+// 用同一份历史重复调用不会二次破坏，因此不需要为截断另开一个新接口。
+// 这里不会发起任何 AI 聊天请求，也不会调用上游模型。
+// 只在真的裁掉了内容时才调用；没裁掉就不碰网关，避免白白打断上游缓存前缀。
+async function chatSyncTrimmedHistoryToGateway(cfg,result){
+  cfg=cfg||chatLoadConfig();
+  if(!result||result.trimmed!==true)return false;
+  var session=chatCurrentSession();
+  var panelKey=cfg.panelKey||'';
+  if(!session||!panelKey)return false;
+  var targetSessionId=session.id;
+  try{
+    var resp=await fetch(chatCleanEndpoint(cfg),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        key:panelKey,
+        session_id:cfg.sessionId||chatSessionId(),
+        model:cfg.model,
+        api_base:cfg.apiBase,
+        upstream_key:cfg.upstreamKey,
+        recall:cfg.recall!==false,
+        recall_mode:chatNormalizeRecallMode(cfg.recallMode),
+        fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
+        RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
+        transport_updated_at:session.transportUpdated||0,
+        transport_messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),
+        window_messages:chatWindowContextMessages(),
+        // 轮询开启时聊天用的是固定 session scope，这里必须同样标注，
+        // 否则会清到另一个 scope，聊天侧历史根本不会被更新。
+        chat_polling_enabled:chatPollingView().enabled===true,
+        trim_event_id:String(result.speechPreferenceTrimEventId||''),
+        trim_trigger:String(result.trigger||'')
+      })
+    });
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var data=await resp.json();
+    var target=chatSessions.find(function(x){return x.id===targetSessionId});
+    if(target&&Array.isArray(data.transport_messages)){
+      target.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
+      target.transportUpdated=Date.now();
+      chatSaveSessions();
+    }
+    chatDebug('trim_gateway_sync',{ok:true,trigger:String(result.trigger||''),dropped:Number(result.dropped||0)});
+    return true;
+  }catch(error){
+    // 同步失败不回滚本地截断：本地已经是权威历史，下一次发送仍会把完整历史带给网关。
+    chatDebug('trim_gateway_sync',{ok:false,error:String((error&&error.message)||error).slice(0,200)});
+    return false;
+  }
+}
+var chatIdleTrimBusy=false;
+var chatIdleTrimLastCheckAt=0;
+// 1 小时自动截断的"页面在线"路径：到点就地执行本地完整轮次裁剪并同步网关，
+// 全程不发起 AI 聊天请求。页面关闭、休眠或断网时，由发送前既有的边界检查兜底补执行。
+async function chatMaybeAutoTrimAtIdleBoundary(){
+  if(chatIdleTrimBusy||chatSending||chatSpeechPreferenceManualBusy)return;
+  if(currentPanelTab!=='chat')return;
+  if(chatEditingIndex>=0)return;
+  var now=Date.now();
+  if(now-chatIdleTrimLastCheckAt<30000)return;
+  chatIdleTrimLastCheckAt=now;
+  var cfg=chatLoadConfig();
+  var trim=chatAutoTrimConfigFrom(cfg);
+  if(!trim.enabled)return;
+  var session=chatCurrentSession();
+  if(!session)return;
+  // 已经标记待重建，说明上一次边界处理过了，交给下一次真实发送即可。
+  if(session.cacheRebuildPending===true)return;
+  if(chatPendingMessages().length)return;
+  var reference=chatCacheActivityReference(session,chatLastMessageTs());
+  if(!reference.timestamp||now-reference.timestamp<CHAT_AUTO_TRIM_IDLE_MS)return;
+  if(chatCurrentConversationRoundCount()<=0)return;
+  chatIdleTrimBusy=true;
+  try{
+    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{trigger:'idle_1h',idleCheck:true});
+    if(result&&result.cacheBoundary){
+      chatSaveLocalMessages();
+      chatRenderMessages({respectUserScroll:true});
+      chatRenderTrimState(cfg);
+      if(result.trimmed){
+        await chatSyncTrimmedHistoryToGateway(cfg,result);
+        toast('已超过 1 小时无新消息：已保留最近 '+result.historyAfter+' 个完整真实轮次',5000);
+      }
+    }
+  }catch(error){
+    chatDebug('auto_trim_idle_error',{error:String((error&&error.message)||error).slice(0,200)});
+  }finally{
+    chatIdleTrimBusy=false;
   }
 }
 function chatWindowContextMessages(){
@@ -8709,11 +9072,11 @@ function chatMessageTimingHtml(m,role,showTimestamp){
   if(ts&&showTimestamp!==false)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
   if(role==='user'){
     if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
-    else if(showTimestamp!==false)bits.push(chatCacheTickHtml(m));
+    else if(showTimestamp!==false&&chatShouldShowMessageStatus())bits.push(chatCacheTickHtml(m));
   }else if(role==='assistant'&&showTimestamp!==false){
     var wait=chatAssistantWaitLabel(m);
     if(wait)bits.push('<span class="chat-msg-wait">'+esc(wait)+'</span>');
-    var cost=chatAssistantCostHtml(m);
+    var cost=chatShouldShowBillingPrice()?chatAssistantCostHtml(m):'';
     if(cost)bits.push(cost);
   }
   if(!bits.length)return '';
@@ -9039,7 +9402,12 @@ function chatInit(){
     window.visualViewport.addEventListener('resize',chatHandleViewportChange);
     window.visualViewport.addEventListener('scroll',chatHandleViewportChange);
   }
-  if(!chatCacheTimer)chatCacheTimer=setInterval(function(){chatUpdateCacheExpiryHint(true)},15000);
+  if(!chatCacheTimer)chatCacheTimer=setInterval(function(){
+    chatUpdateCacheExpiryHint(true);
+    // 1h 空闲自动截断的在线路径。函数内部自带 30s 节流和多重前置判断，
+    // 不满足条件时立即返回，不会每 15 秒做重活。
+    chatMaybeAutoTrimAtIdleBoundary();
+  },15000);
   if(input){
     chatAutosizeInput(input);
     input.addEventListener('input',function(){
@@ -9349,6 +9717,11 @@ async function chatSubmitPendingMessages(options){
     client_cache_generation:Number(currentSession.cacheGeneration||0)||0,
     client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0
   };
+  // 轮询只发开关和配置修订。候选的地址、Key、模型一律由网关自己从已加载配置解析，
+  // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。
+  var pollingView=chatPollingView();
+  body.chat_polling_enabled=pollingView.enabled===true;
+  body.chat_polling_revision=String(pollingView.revision||'');
   var speechBoundaryNow=!!(trimResult.cacheBoundary||currentSession.cacheRebuildPending);
   var pendingSpeechActivationId='';
   if(!currentSession.speechPreferenceRetryAtBoundary||speechBoundaryNow){
@@ -9676,6 +10049,10 @@ function switchPanelTab(tab,opts) {
   if(tab==='apiconfig'){
     renderApiConfig();
   }
+  if(tab==='rules'){
+    renderRulesPage();
+    loadRulesPage(false);
+  }
   if(tab==='overview'){
     loadArchiveFactOverview(false);
   }
@@ -9979,6 +10356,7 @@ var apiProvIdSeq=0;
 var pendingProvDel=null;
 var RELOAD_CONFIG_URL=GRAPH_API_BASE+'/reload-config';
 var PROVIDER_MODELS_URL=GRAPH_API_BASE+'/provider-models';
+var CHAT_POLLING_STATUS_URL=GRAPH_API_BASE+'/ck/chat-polling/status';
 function newProvId(){apiProvIdSeq++;return 'p'+Date.now().toString(36)+apiProvIdSeq}
 function findApiTab(k){for(var i=0;i<API_TABS.length;i++){if(API_TABS[i].key===k)return API_TABS[i]}return API_TABS[0]}
 function cleanModelList(list,selected){
@@ -9994,6 +10372,9 @@ function cleanModelList(list,selected){
 }
 
 function switchApiTab(k){
+  // 离开轮询页时丢弃未保存的草稿，避免下次进来看到上次没保存的排序，
+  // 误以为已经生效。
+  if(currentApiTab==='polling'&&k!=='polling')apiPollingDraftReset();
   currentApiTab=k;
   renderApiConfig();
 }
@@ -10052,6 +10433,7 @@ var API_TABS=[
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
+  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天设置一串备用 API：按你排好的顺序用，哪个报错就自动换下一个，全程不打扰你。只影响聊天，记忆、Fact、滚动、召回都还是各用各的绑定。这一页只保存供应商和模型的选择，Key 和地址始终由网关自己去供应商库里取。'},
   {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：整理人物与事件小档案、提取独立 Fact、保存每日聊天切片，也会在上下文截断前更新你对助手说话方式的长期要求。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
     {key:'fact_extract',label:'Fact 提取',info:'按话题切分 chatlog、提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
@@ -10118,6 +10500,146 @@ function providerFingerprint(p){
   var url=String(p&&p.url||'').trim().toLowerCase();
   var key=String(p&&p.key||'').trim();
   return (url||key)?(url+'\n'+key):String(p&&p.id||'');
+}
+
+/* ---- 聊天 API 轮询配置 ---- */
+// 设计约束（上一版就是踩了这几条才把面板搞崩的）：
+// 1. apiPollingConfig() 是纯读取，绝不修改 apiProviders。渲染时顺手写全局配置，
+//    会让"只是看了一眼页面"也把轮询字段混进下一次保存。写入一律走 apiPollingWrite()。
+// 2. 只存供应商 ID 和模型，Key/URL 永远从供应商库实时解析，不复制。
+// 3. 两个显示开关不参与 config_revision，否则用户勾一下复选框就会把网关的
+//    粘性游标重置掉，白白丢失当前正在用的可用 API。
+var API_POLLING_KEY='chat_polling';
+function apiPollingConfig(){
+  var raw=(apiProviders&&typeof apiProviders==='object'&&!Array.isArray(apiProviders))
+    ?apiProviders[API_POLLING_KEY]:null;
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))raw={};
+  var order=[],seen=Object.create(null);
+  (Array.isArray(raw.order)?raw.order:[]).forEach(function(item){
+    if(!item||typeof item!=='object')return;
+    var id=String(item.provider_id||item.providerId||'').trim();
+    if(!id||seen[id])return;
+    seen[id]=1;
+    order.push({provider_id:id,model:String(item.model||'').trim()});
+  });
+  return {
+    enabled:raw.enabled===true,
+    show_message_status:raw.show_message_status===true,
+    show_billing_price:raw.show_billing_price===true,
+    order:order,
+    config_revision:String(raw.config_revision||'').trim()
+  };
+}
+function apiPollingWrite(next){
+  next=next||{};
+  if(!apiProviders||typeof apiProviders!=='object'||Array.isArray(apiProviders))apiProviders={};
+  apiProviders[API_POLLING_KEY]={
+    enabled:next.enabled===true,
+    show_message_status:next.show_message_status===true,
+    show_billing_price:next.show_billing_price===true,
+    order:(Array.isArray(next.order)?next.order:[]).map(function(x){
+      return {provider_id:String(x&&x.provider_id||''),model:String(x&&x.model||'')};
+    }),
+    config_revision:String(next.config_revision||'')
+  };
+  chatPollingViewInvalidate();
+  return apiProviders[API_POLLING_KEY];
+}
+function apiPollingItemFor(p,model){
+  model=String(model||(p&&p.model)||'').trim();
+  var url=String(p&&p.url||'').trim();
+  var key=String(p&&p.key||'').trim();
+  var missing=!url?'URL':(!key?'Key':(!model?'模型':''));
+  return {provider_id:String(p&&p.id||''),provider:p,model:model,available:!missing,missing:missing};
+}
+// 已排序候选在前，供应商库里还没排进顺序的追加到末尾，
+// 保证新增供应商不会因为没排序就被静默漏掉。
+function apiPollingItems(){
+  var polling=apiPollingConfig();
+  var list=providerLibraryList();
+  var byId=Object.create(null),used=Object.create(null),out=[];
+  list.forEach(function(p){byId[String(p.id)]=p});
+  polling.order.forEach(function(item){
+    var p=byId[item.provider_id];
+    if(!p||used[item.provider_id])return;
+    used[item.provider_id]=1;
+    out.push(apiPollingItemFor(p,item.model));
+  });
+  list.forEach(function(p){
+    var id=String(p.id);
+    if(used[id])return;
+    used[id]=1;
+    out.push(apiPollingItemFor(p,''));
+  });
+  return out;
+}
+function apiPollingAvailableItems(){
+  return apiPollingItems().filter(function(x){return x.available});
+}
+function apiPollingRevision(polling,items){
+  polling=polling||apiPollingConfig();
+  items=items||apiPollingItems();
+  var payload=JSON.stringify({
+    enabled:polling.enabled===true,
+    order:items.filter(function(x){return x.available}).map(function(x){
+      return [x.provider_id,x.model,providerFingerprint(x.provider)];
+    })
+  });
+  var hash=2166136261;
+  for(var i=0;i<payload.length;i++){hash^=payload.charCodeAt(i);hash=Math.imul(hash,16777619)}
+  return (hash>>>0).toString(16)+'-'+payload.length.toString(36);
+}
+// 聊天页要在 API 配置还没读到（或读取失败）时也能正确渲染，所以把轮询显示相关的
+// 几个开关镜像一份到 localStorage。读不到时一律按"轮询关闭"处理，也就是强制显示
+// √ 和价格——聊天界面绝不能因为 API 配置没加载就少显示东西。
+var CHAT_POLLING_VIEW_KEY='ckChatPollingView';
+var chatPollingViewCache=null;
+function chatPollingViewInvalidate(){chatPollingViewCache=null}
+function chatPollingViewPersist(){
+  try{
+    var polling=apiPollingConfig();
+    localStorage.setItem(CHAT_POLLING_VIEW_KEY,JSON.stringify({
+      enabled:polling.enabled===true,
+      showMessageStatus:polling.show_message_status===true,
+      showBillingPrice:polling.show_billing_price===true,
+      revision:String(polling.config_revision||'')
+    }));
+  }catch(e){}
+  chatPollingViewInvalidate();
+}
+function chatPollingView(){
+  if(chatPollingViewCache)return chatPollingViewCache;
+  var view={enabled:false,showMessageStatus:false,showBillingPrice:false,revision:''};
+  if(typeof apiProvidersLoaded!=='undefined'&&apiProvidersLoaded){
+    var polling=apiPollingConfig();
+    view={
+      enabled:polling.enabled===true,
+      showMessageStatus:polling.show_message_status===true,
+      showBillingPrice:polling.show_billing_price===true,
+      revision:polling.config_revision||apiPollingRevision(polling)
+    };
+  }else{
+    try{
+      var raw=JSON.parse(localStorage.getItem(CHAT_POLLING_VIEW_KEY)||'{}');
+      view={
+        enabled:raw.enabled===true,
+        showMessageStatus:raw.showMessageStatus===true,
+        showBillingPrice:raw.showBillingPrice===true,
+        revision:String(raw.revision||'')
+      };
+    }catch(e){}
+  }
+  chatPollingViewCache=view;
+  return view;
+}
+// 轮询关闭时强制显示 √ 和价格，两个开关只在轮询开启时才起作用。
+function chatShouldShowMessageStatus(){
+  var view=chatPollingView();
+  return view.enabled!==true||view.showMessageStatus===true;
+}
+function chatShouldShowBillingPrice(){
+  var view=chatPollingView();
+  return view.enabled!==true||view.showBillingPrice===true;
 }
 function isGgProvider(p){
   var name=String(p&&p.name||'').trim().toLowerCase();
@@ -10312,10 +10834,194 @@ function renderApiConfig(){
     return;
   }
   var tab=findApiTab(currentApiTab);
-  body.innerHTML=tab.kind==='providers'?renderProviderLibrary():renderApiAssignments(tab);
+  body.innerHTML=tab.kind==='providers'
+    ?renderProviderLibrary()
+    :(tab.kind==='polling'?renderApiPolling():renderApiAssignments(tab));
   body.scrollTop=0;
   chatRenderMainRouteSummary();
   chatUpdateRuntime(chatLoadConfig());
+  // 状态读取放在 innerHTML 之后、且只写单个节点，绝不在渲染里再触发整页重渲染。
+  if(tab.kind==='polling')apiPollingRefreshStatus();
+}
+
+/* ---- 聊天轮询页 ---- */
+// 草稿：排序和开关改动先存在内存里，点"保存"才写回 apiProviders 并推给网关。
+// 这样页面上的任何操作都不会偷偷改动全局配置。
+var apiPollingDraft=null;
+function apiPollingDraftReset(){apiPollingDraft=null}
+function apiPollingDraftGet(){
+  if(!apiPollingDraft){
+    var polling=apiPollingConfig();
+    apiPollingDraft={
+      enabled:polling.enabled,
+      show_message_status:polling.show_message_status,
+      show_billing_price:polling.show_billing_price,
+      order:apiPollingItems().map(function(x){return {provider_id:x.provider_id,model:x.model}})
+    };
+  }
+  return apiPollingDraft;
+}
+function apiPollingDraftItems(){
+  var draft=apiPollingDraftGet();
+  var list=providerLibraryList();
+  var byId=Object.create(null),used=Object.create(null),out=[];
+  list.forEach(function(p){byId[String(p.id)]=p});
+  draft.order.forEach(function(item){
+    var p=byId[item.provider_id];
+    if(!p||used[item.provider_id])return;
+    used[item.provider_id]=1;
+    out.push(apiPollingItemFor(p,item.model));
+  });
+  list.forEach(function(p){
+    var id=String(p.id);
+    if(used[id])return;
+    used[id]=1;
+    out.push(apiPollingItemFor(p,''));
+  });
+  return out;
+}
+function renderApiPolling(){
+  var draft=apiPollingDraftGet();
+  var items=apiPollingDraftItems();
+  var available=items.filter(function(x){return x.available});
+  var saved=apiPollingConfig();
+  var html=apiPageHeadHtml('聊天 API 轮询','按顺序自动切换聊天供应商；某个 API 报错就静默换下一个。',
+    '<button class="btn btn-blue btn-sm" type="button" onclick="saveApiPolling()">保存轮询配置</button>');
+  html+=renderApiIntro(findApiTab('polling'));
+  html+='<section class="api-polling-overview">'+
+    '<div><b>当前模式</b><span>'+(saved.enabled?'聊天 API 轮询':'单链路')+'</span></div>'+
+    '<div><b>可用 API</b><span>'+available.length+' 个</span></div>'+
+    '<div class="api-polling-current"><b>正在使用</b><span id="api-polling-current-text">'+
+      (saved.enabled?'读取中…':'单链路（轮询未开启）')+'</span></div>'+
+    '</section>';
+  html+='<div class="api-polling-options">'+
+    '<label class="api-toggle"><input id="api-polling-enabled" type="checkbox"'+(draft.enabled?' checked':'')+'><span>启用聊天 API 轮询</span></label>'+
+    '<label class="api-toggle"><input id="api-polling-show-status" type="checkbox"'+(draft.show_message_status?' checked':'')+'><span>轮询时仍显示消息状态（√）</span></label>'+
+    '<label class="api-toggle"><input id="api-polling-show-price" type="checkbox"'+(draft.show_billing_price?' checked':'')+'><span>轮询时仍显示计费价格</span></label>'+
+    '</div>';
+  html+='<p class="api-polling-note">轮询关闭时，√ 和价格一律正常显示，上面两个开关不起作用。开启轮询后回复会等整段生成完再显示，不再逐字出现——这样某个 API 中途失败时才不会把半截回复留在屏幕上。</p>';
+  if(!items.length){
+    html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先到供应商页添加 API，再回来设置轮询顺序。</p>'+
+      '<button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
+    return html;
+  }
+  html+='<div class="api-polling-list">';
+  items.forEach(function(item,index){
+    var p=item.provider;
+    var status=item.available?'可用':('缺少 '+item.missing);
+    html+='<article class="api-polling-row'+(item.available?'':' is-unavailable')+'">'+
+      '<b class="api-polling-index">'+(index+1)+'</b>'+
+      '<div class="api-polling-main"><strong>'+esc(providerDisplayName(p))+'</strong>'+
+        '<span>'+esc(providerHost(p.url)||'未填写 URL')+' · '+esc(item.model||'未设置模型')+'</span></div>'+
+      '<span class="api-polling-status">'+esc(status)+'</span>'+
+      '<div class="api-polling-actions">'+
+        '<button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移"'+(index===0?' disabled':'')+' onclick="moveApiPolling('+index+',-1)">↑</button>'+
+        '<button class="btn btn-outline btn-sm" type="button" title="下移" aria-label="下移"'+(index===items.length-1?' disabled':'')+' onclick="moveApiPolling('+index+',1)">↓</button>'+
+      '</div></article>';
+  });
+  html+='</div>';
+  html+='<p class="api-polling-note">顺序从上到下依次尝试。不可用的 API 会被跳过，不会发给网关。这一页不显示也不发送任何 Key。</p>';
+  return html;
+}
+function apiPollingCollectSwitches(){
+  var draft=apiPollingDraftGet();
+  var enabled=document.getElementById('api-polling-enabled');
+  var status=document.getElementById('api-polling-show-status');
+  var price=document.getElementById('api-polling-show-price');
+  if(enabled)draft.enabled=!!enabled.checked;
+  if(status)draft.show_message_status=!!status.checked;
+  if(price)draft.show_billing_price=!!price.checked;
+  return draft;
+}
+function moveApiPolling(index,delta){
+  apiPollingCollectSwitches();
+  var items=apiPollingDraftItems();
+  var to=index+delta;
+  if(index<0||to<0||index>=items.length||to>=items.length)return;
+  var moved=items.splice(index,1)[0];
+  items.splice(to,0,moved);
+  apiPollingDraftGet().order=items.map(function(x){return {provider_id:x.provider_id,model:x.model}});
+  renderApiConfig();
+}
+function saveApiPolling(){
+  var draft=apiPollingCollectSwitches();
+  var items=apiPollingDraftItems();
+  var available=items.filter(function(x){return x.available});
+  if(draft.enabled&&!available.length){
+    toast('没有可用 API，无法启用聊天轮询');
+    return;
+  }
+  var next={
+    enabled:draft.enabled,
+    show_message_status:draft.show_message_status,
+    show_billing_price:draft.show_billing_price,
+    // 顺序保存全部现存供应商（含暂时不可用的），保留用户的优先级意图；
+    // 供应商库里已删除的引用在这一步自然消失。
+    order:items.map(function(x){return {provider_id:x.provider_id,model:x.model}})
+  };
+  next.config_revision=apiPollingRevision(next,items);
+  apiPollingWrite(next);
+  chatPollingViewPersist();
+  apiPollingStatusState={revision:'',text:'',loading:false};
+  persistAndReload(draft.enabled?'聊天轮询已保存并启用':'聊天轮询配置已保存').then(function(ok){
+    if(ok){
+      apiPollingDraftReset();
+      apiProvidersLoaded=false;
+      loadApiProviders();
+    }
+  });
+}
+// 只读状态。关键：失败也要把 revision 记下来，否则会"失败→重渲染→再请求"无限循环，
+// 这正是上一版把面板拖垮的原因之一。并且这里只改一个文本节点，不重渲染整页。
+var apiPollingStatusState={revision:'',text:'',loading:false};
+function apiPollingStatusApply(text){
+  apiPollingStatusState.text=text;
+  var node=document.getElementById('api-polling-current-text');
+  if(node)node.textContent=text;
+}
+function apiPollingRefreshStatus(){
+  var saved=apiPollingConfig();
+  if(!saved.enabled){
+    apiPollingStatusApply('单链路（轮询未开启）');
+    return;
+  }
+  var revision=saved.config_revision||apiPollingRevision(saved);
+  if(apiPollingStatusState.loading)return;
+  if(apiPollingStatusState.revision===revision){
+    apiPollingStatusApply(apiPollingStatusState.text||'读取中…');
+    return;
+  }
+  apiPollingStatusState.loading=true;
+  panelDataFetch(CHAT_POLLING_STATUS_URL+'?config_revision='+encodeURIComponent(revision)+'&_t='+Date.now(),
+    {cache:'no-store'},{label:'CK 网关面板 Key'})
+    .then(function(resp){return resp.json().then(function(data){
+      if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));
+      return data;
+    })})
+    .then(function(data){
+      var name=String(data.provider_name||'').trim();
+      apiPollingStatusApply(name?name:'尚未成功调用过任何 API');
+    })
+    .catch(function(){
+      apiPollingStatusApply('状态暂时读不到');
+    })
+    .then(function(){
+      // 成功或失败都记下 revision，保证同一份配置最多只请求一次。
+      apiPollingStatusState.revision=revision;
+      apiPollingStatusState.loading=false;
+    });
+}
+// 主链路页只做只读展示和跳转，不在这里放开关，避免两个页面各有一套状态互相打架。
+function renderMainPollingSummary(){
+  var saved=apiPollingConfig();
+  var available=apiPollingAvailableItems();
+  var orderText=available.map(function(x){return providerDisplayName(x.provider)}).join(' → ')||'暂无可用 API';
+  return '<section class="api-main-polling">'+
+    '<div class="api-main-polling-head"><div><b>聊天 API 轮询</b>'+
+      '<span>'+(saved.enabled?'已开启，聊天不再走上面的单链路':'未开启，聊天走上面的单链路')+'</span></div>'+
+      '<button class="btn btn-outline btn-sm" type="button" onclick="switchApiTab(\'polling\')">打开轮询配置</button></div>'+
+    '<div class="api-main-polling-order">'+esc(orderText)+'</div>'+
+    '</section>';
 }
 function renderApiIntro(tab){
   return '<div class="api-info-row"><button class="api-info-btn api-info-main" type="button" onclick="toggleInfo(this)" aria-label="查看说明"><span>页面说明</span><i aria-hidden="true">›</i></button><div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info||'')+'</div></div></div>';
@@ -10361,6 +11067,7 @@ function renderApiAssignments(tab){
     return html;
   }
   groups.forEach(function(g){if(list.length)html+=assignmentCardHtml(g)});
+  if(tab.key==='main')html+=renderMainPollingSummary();
   return html;
 }
 function assignmentCardHtml(g){
@@ -10525,6 +11232,8 @@ function loadApiProviders(opts){
     if(d&&Array.isArray(d.keys))d.keys.forEach(function(item){if(item&&item.key)apiDirectConfig[item.key]=item});
     normalizeApiProviders(prov);
     apiProvidersLoaded=true;
+    // 把轮询显示开关镜像到本地，聊天页在配置未加载时也能照旧渲染。
+    chatPollingViewPersist();
     renderApiConfig();
     chatRenderMainRouteSummary();
     chatUpdateRuntime(chatLoadConfig());

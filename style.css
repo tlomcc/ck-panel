@@ -7006,3 +7006,165 @@ body.chat-active .chat-settings .chat-speech-diff div span{min-width:0;color:var
 body.chat-active .chat-settings .chat-speech-read-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 body.chat-active .chat-settings .chat-speech-read-row span{color:var(--ck-muted,#7f8f88);font-size:11px}
 body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacity:.55}
+
+/* ---- 聊天 API 轮询页 ---- */
+.api-polling-overview{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  margin-bottom:12px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
+  background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);overflow:hidden;
+}
+.api-polling-overview>div{
+  display:grid;gap:4px;min-width:0;padding:12px 14px;
+  border-right:1px solid var(--ck-line-soft);border-bottom:1px solid var(--ck-line-soft);
+}
+.api-polling-overview>div:nth-child(2n){border-right:0}
+.api-polling-overview .api-polling-current{grid-column:1/-1;border-right:0;border-bottom:0}
+.api-polling-overview b{font-size:11px;font-weight:700;color:var(--ck-muted)}
+.api-polling-overview span{font-size:13px;color:var(--ck-text);overflow-wrap:anywhere}
+.api-polling-options{
+  display:flex;flex-wrap:wrap;gap:10px 20px;
+  margin-bottom:10px;padding:13px 15px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);background:var(--ck-surface);
+}
+.api-toggle{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ck-text);cursor:pointer}
+.api-toggle input{width:15px;height:15px;accent-color:var(--ck-accent);cursor:pointer}
+.api-polling-note{
+  margin:0 2px 12px;font-size:11.5px;line-height:1.65;color:var(--ck-muted);overflow-wrap:anywhere;
+}
+.api-polling-list{
+  display:grid;gap:0;margin-bottom:10px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
+  background:var(--ck-surface);overflow:hidden;
+}
+.api-polling-row{
+  display:grid;grid-template-columns:26px minmax(0,1fr) auto auto;
+  align-items:center;gap:10px;min-height:56px;padding:9px 13px;
+  border-bottom:1px solid var(--ck-line-soft);
+}
+.api-polling-row:last-child{border-bottom:0}
+.api-polling-row.is-unavailable{opacity:.55}
+.api-polling-index{
+  display:flex;width:24px;height:24px;align-items:center;justify-content:center;
+  border:1px solid rgba(var(--ck-accent-rgb),.35);border-radius:50%;
+  font-size:11px;font-weight:700;color:var(--ck-accent);
+}
+.api-polling-main{display:grid;min-width:0;gap:3px}
+.api-polling-main strong{
+  font-size:13px;font-weight:600;color:var(--ck-text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.api-polling-main span{font-size:11px;color:var(--ck-muted);overflow-wrap:anywhere}
+.api-polling-status{
+  font-size:11px;font-weight:700;color:var(--ck-muted);
+  background:var(--ck-surface-soft);border:1px solid var(--ck-line-soft);
+  border-radius:var(--ck-radius-pill);padding:3px 9px;white-space:nowrap;
+}
+.api-polling-actions{display:flex;gap:5px}
+.api-polling-actions .btn{min-width:32px;padding:5px 8px}
+.api-main-polling{
+  margin-top:14px;padding:14px 16px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
+  background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);
+}
+.api-main-polling-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.api-main-polling-head>div{display:grid;gap:3px;min-width:0}
+.api-main-polling-head b{font-size:13px;color:var(--ck-text)}
+.api-main-polling-head span{font-size:11.5px;color:var(--ck-muted)}
+.api-main-polling-order{
+  margin-top:10px;padding-top:10px;border-top:1px solid var(--ck-line-soft);
+  font-size:11.5px;color:var(--ck-muted);overflow-wrap:anywhere;
+}
+@media (max-width:640px){
+  .api-polling-overview{grid-template-columns:1fr}
+  .api-polling-overview>div{border-right:0}
+  .api-polling-row{grid-template-columns:24px minmax(0,1fr) auto;row-gap:6px}
+  .api-polling-status{grid-column:2/-1;justify-self:start}
+  .api-main-polling-head{flex-wrap:wrap}
+}
+
+/* ---- 规则管理页 ---- */
+.rules-page{width:min(1000px,100%);margin:0 auto;padding:18px}
+.rules-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  margin-bottom:14px;padding:18px 20px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
+  background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);
+}
+.rules-head h2{margin:0 0 4px;font-size:20px;line-height:1.2;letter-spacing:-.2px;color:var(--ck-text)}
+.rules-head p{margin:0;font-size:12.5px;line-height:1.65;color:var(--ck-muted)}
+.rules-state{
+  flex:none;padding:5px 11px;border-radius:var(--ck-radius-pill);
+  font-size:11px;font-weight:700;white-space:nowrap;
+  border:1px solid var(--ck-line-soft);background:var(--ck-surface-soft);color:var(--ck-muted);
+}
+.rules-state.on{border-color:rgba(var(--ck-accent-rgb),.35);color:var(--ck-accent)}
+.rules-overview{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  margin-bottom:12px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
+  background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);overflow:hidden;
+}
+.rules-overview>div{display:grid;gap:5px;min-width:0;padding:12px 14px;border-right:1px solid var(--ck-line-soft)}
+.rules-overview>div:last-child{border-right:0}
+.rules-overview span{font-size:11px;font-weight:700;color:var(--ck-muted)}
+.rules-overview b{font-size:12.5px;font-weight:600;color:var(--ck-text);overflow-wrap:anywhere}
+.rules-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px}
+.rules-dirty-hint{font-size:11.5px;color:var(--ck-accent)}
+.rules-notice{
+  margin-bottom:12px;padding:10px 13px;
+  border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
+  background:var(--ck-surface-soft);font-size:12px;line-height:1.65;color:var(--ck-muted);
+}
+.rules-notice.warn{border-color:rgba(180,59,59,.32);color:#b43b3b}
+.rules-table{
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
+  background:var(--ck-surface);overflow:hidden;
+}
+.rules-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;
+  padding:11px 13px;border-bottom:1px solid var(--ck-line-soft);
+}
+.rules-row:last-child{border-bottom:0}
+.rules-row-text{
+  width:100%;min-width:0;min-height:56px;padding:8px 10px;resize:vertical;
+  border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
+  background:var(--ck-surface);color:var(--ck-text);font-size:12.5px;line-height:1.6;
+}
+.rules-row-text:focus{outline:none;border-color:rgba(var(--ck-accent-rgb),.55)}
+.rules-row-side{display:flex;align-items:center;gap:6px}
+.rules-row-side select{
+  height:34px;padding:4px 6px;min-width:88px;
+  border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
+  background:var(--ck-surface);color:var(--ck-text);font-size:11.5px;
+}
+.rules-row-del{
+  display:flex;width:30px;height:30px;flex:none;align-items:center;justify-content:center;
+  border:0;border-radius:50%;background:transparent;color:var(--ck-muted);
+  font-size:19px;line-height:1;cursor:pointer;
+}
+.rules-row-del:hover{background:var(--ck-surface-soft);color:#b43b3b}
+.rules-empty{padding:16px 14px;font-size:12.5px;line-height:1.7;color:var(--ck-muted)}
+/* 聊天抽屉里的措辞偏好纯预览：只有条数和正文，没有边框卡片和按钮组 */
+body.chat-active .chat-settings .chat-speech-preview-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;
+}
+body.chat-active .chat-settings #chat-speech-meta{font-size:12.5px;font-weight:600;color:var(--ck-text,#1d2823)}
+body.chat-active .chat-settings #chat-speech-status{font-size:11px;color:var(--ck-muted,#7f8f88)}
+body.chat-active .chat-settings .chat-speech-preview{
+  display:grid;gap:8px;max-height:52vh;overflow:auto;padding:2px 0;
+}
+body.chat-active .chat-settings .chat-speech-line{
+  font-size:12.5px;line-height:1.7;color:var(--ck-text,#1d2823);overflow-wrap:anywhere;
+}
+body.chat-active .chat-settings .chat-speech-empty{font-size:12px;color:var(--ck-muted,#7f8f88)}
+body.chat-active .chat-settings .chat-speech-preview-foot{margin-top:12px}
+@media (max-width:640px){
+  .rules-page{padding:12px}
+  .rules-overview{grid-template-columns:1fr 1fr}
+  .rules-overview>div:nth-child(2n){border-right:0}
+  .rules-overview>div:nth-child(-n+2){border-bottom:1px solid var(--ck-line-soft)}
+  .rules-row{grid-template-columns:1fr}
+  .rules-row-side{justify-content:flex-start}
+  .rules-head{align-items:center}
+}
