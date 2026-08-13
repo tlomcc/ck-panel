@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v182-polling-rules-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v181-fact-recall-ab';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2919,7 +2919,6 @@ var chatFileSeq=0;
 var chatFileReadingCount=0;
 var chatPlusPager={currentPage:0,totalPages:0};
 var chatCleanHistoryResolver=null;
-var chatAutoTrimBusy=false;
 var chatDebugScrollRaf=0;
 var chatDebugScrollTimer=0;
 function chatSessionId(){
@@ -3776,24 +3775,6 @@ function chatMainRouteConfig(){
       model:'',
       source:'api_config_main_io',
       reason:'API 配置尚未读取'
-    };
-  }
-  var polling=apiPollingConfig(),pollingItems=apiPollingAvailableItems().filter(function(item){return item.available});
-  if(polling.enabled&&!pollingItems.length){
-    return {ok:false,provider:null,providerName:'',providerHost:'',apiBase:'',upstreamKey:'',model:'',source:'api_config_chat_polling',reason:'聊天轮询没有可用 API'};
-  }
-  if(polling.enabled&&pollingItems.length){
-    var firstPolling=pollingItems[0],pollingProvider=firstPolling.provider;
-    return {
-      ok:true,
-      provider:pollingProvider,
-      providerName:providerDisplayName(pollingProvider),
-      providerHost:providerHost(pollingProvider.url),
-      apiBase:String(pollingProvider.url||'').trim(),
-      upstreamKey:String(pollingProvider.key||'').trim(),
-      model:String(firstPolling.model||'').trim(),
-      source:'api_config_chat_polling',
-      reason:''
     };
   }
   var slot=null,p=null,model='';
@@ -4678,7 +4659,6 @@ function chatNormalizeSession(s){
     speechPreferencePendingTrimEventId:String(s.speechPreferencePendingTrimEventId||''),
     speechPreferencePreparedThroughTs:Number(s.speechPreferencePreparedThroughTs||0)||0,
     speechPreferencePendingThroughTs:Number(s.speechPreferencePendingThroughTs||0)||0,
-    speechPreferenceRetryMessages:Array.isArray(s.speechPreferenceRetryMessages)?s.speechPreferenceRetryMessages.slice(0,400):[],
     speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
     speechPreferencePendingBoundaryReason:String(s.speechPreferencePendingBoundaryReason||''),
     cacheRebuildPending:s.cacheRebuildPending===true,
@@ -5068,16 +5048,25 @@ function chatSpeechConsoleDiffHtml(diff){
 function chatRenderSpeechPreferences(data,preserveEditor){
   data=data&&typeof data==='object'?data:{};
   chatSpeechConsoleState.data=data;
-  var rules=Array.isArray(data.active_rules)?data.active_rules:(Array.isArray(data.rules)?data.rules:[]);
-  var hasPublishedRules=rules.length>0&&data.enabled!==false&&String(data.active_revision||data.current_revision||'r0')!=='r0';
+  var rules=chatSpeechConsoleRulesText(data.rules);
+  var editor=document.getElementById('chat-speech-rules');
+  if(editor&&(!preserveEditor||editor.value===chatSpeechConsoleState.editorSnapshot))editor.value=rules;
+  chatSpeechConsoleState.editorSnapshot=rules;
+  var hasPublishedRules=Array.isArray(data.rules)&&data.rules.length>0&&String(data.current_revision||'r0')!=='r0';
   var meta=document.getElementById('chat-speech-meta');
   if(meta)meta.textContent=hasPublishedRules
-    ?'条数：'+String(rules.length)
-    :'条数：0'+(data.enabled===false?' · 已停用':'');
+    ?'已发布 '+String(data.rules.length)+' 条 · 规则更新 '+(data.updated_at||'未知时间')
+      +(data.last_activation_at?' · 最近激活 '+data.last_activation_at:'')
+    :'尚未提取';
   var state=document.getElementById('chat-speech-state');
-  if(state)state.textContent=data.warning||'规则管理页负责编辑、保存、发布和启停。';
-  var preview=document.getElementById('chat-speech-preview');
-  if(preview)preview.innerHTML=rules.length?rules.map(function(rule){return '<div>'+esc(rule.instruction||'')+'</div>'}).join(''):'<span>暂无生效规则</span>';
+  if(state)state.textContent=(hasPublishedRules
+    ?'当前 '+(data.current_revision||'r0')+' · 上一版 '+(data.previous_revision||'r0')
+      +(data.last_activation_at?' · 最近成功激活 '+data.last_activation_at:'')
+      +' · '
+    :'暂无已发布规则 · 当前 r0 · ')
+    +'自动提取待激活 '+Number(data.pending_count||0)+' 条'+(data.warning?' · '+data.warning:'');
+  var diff=document.getElementById('chat-speech-diff');
+  if(diff)diff.innerHTML=chatSpeechConsoleDiffHtml(data.diff);
   var status=document.getElementById('chat-speech-status');
   if(status)status.textContent=data.source==='github'?'已同步':'本地读取';
 }
@@ -5137,71 +5126,6 @@ function chatPublishSpeechPreferences(){
     chatSpeechConsoleState.saving=false;
     if(button)button.disabled=false;
   });
-}
-var rulesPageState={data:null,loading:false,saving:false};
-function rulesEndpoint(){return chatSpeechPreferencesEndpoint(chatLoadConfig())}
-function rulesPageRules(){
-  var rows=Array.prototype.slice.call(document.querySelectorAll('.rules-table-row[data-rule-key]'));
-  var keys=Object.create(null),rules=[];
-  for(var i=0;i<rows.length;i++){
-    var row=rows[i],key=String(row.getAttribute('data-rule-key')||'').trim();
-    var instruction=String((row.querySelector('.rules-row-instruction')||{}).value||'').trim();
-    if(!instruction){toast('第 '+(i+1)+' 条规则内容不能为空');return null}
-    if(!key)key='manual.'+Date.now().toString(36)+'.'+i;
-    if(keys[key]){toast('规则内部标识重复');return null}keys[key]=1;
-    rules.push({
-      key:key,
-      instruction:instruction,
-      category:String((row.querySelector('.rules-row-category')||{}).value||'other'),
-      priority:String((row.querySelector('.rules-row-priority')||{}).value||'strong')
-    });
-  }
-  return rules;
-}
-function rulesSelectOptions(values,selected){return values.map(function(item){return '<option value="'+escAttr(item[0])+'"'+(item[0]===selected?' selected':'')+'>'+esc(item[1])+'</option>'}).join('')}
-function rulesTableRowHtml(rule,index){
-  rule=rule&&typeof rule==='object'?rule:{};
-  var key=String(rule.key||('manual.'+Date.now().toString(36)+'.'+index));
-  var categories=[['forbidden_language','禁用表达'],['tone','语气'],['addressing','称呼'],['response_style','回复方式'],['interaction_boundary','互动边界'],['format','格式'],['other','其他']];
-  var priorities=[['hard','硬性'],['strong','要求'],['normal','普通']];
-  return '<div class="rules-table-row" data-rule-key="'+escAttr(key)+'"><textarea class="rules-row-instruction" rows="2" maxlength="220" aria-label="规则内容">'+esc(rule.instruction||'')+'</textarea><select class="rules-row-category" aria-label="类别">'+rulesSelectOptions(categories,String(rule.category||'other'))+'</select><select class="rules-row-priority" aria-label="优先级">'+rulesSelectOptions(priorities,String(rule.priority||'strong'))+'</select><button class="rules-row-delete" type="button" title="删除规则" aria-label="删除规则" onclick="deleteRulesRow(this)">×</button></div>';
-}
-function addRulesRow(){var table=document.querySelector('.rules-table');if(!table)return;var empty=table.querySelector('.rules-empty');if(empty)empty.remove();table.insertAdjacentHTML('beforeend',rulesTableRowHtml({},table.querySelectorAll('.rules-table-row').length))}
-function deleteRulesRow(button){var row=button&&button.closest('.rules-table-row');if(row)row.remove()}
-function renderRulesPage(){
-  var body=document.getElementById('rules-page-body');if(!body)return;
-  var data=rulesPageState.data||{};
-  var draft=data.draft&&Array.isArray(data.draft.rules)?data.draft.rules:(Array.isArray(data.rules)?data.rules:[]);
-  var active=Array.isArray(data.active_rules)?data.active_rules:[];
-  var html='<header class="rules-page-head"><div><h2>规则管理</h2><p>编辑草稿，确认后发布为当前生效规则。</p></div><div class="rules-page-status">'+(data.enabled===false?'未激活':'已激活')+'</div></header>';
-  html+='<section class="rules-overview"><div><span>上次发布时间</span><b>'+esc(data.previous_updated_at||'未发布')+'</b></div><div><span>这次发布时间</span><b>'+esc(data.updated_at||'未发布')+'</b></div><div><span>条数</span><b>'+active.length+'</b></div><div><span>激活状态</span><b>'+(data.enabled===false?'未激活':'已激活')+'</b></div></section>';
-  html+='<div class="rules-actions"><button class="btn btn-outline btn-sm" type="button" onclick="addRulesRow()">新增规则</button><button class="btn btn-outline btn-sm" type="button" onclick="saveRulesDraft()">保存</button><button class="btn btn-blue btn-sm" type="button" onclick="publishRulesDraft()">发布</button><button class="btn btn-outline btn-sm" type="button" onclick="setRulesEnabled('+(data.enabled===false?'true':'false')+')">'+(data.enabled===false?'启用':'停用')+'</button><button class="btn btn-outline btn-sm" type="button" onclick="loadRulesPage(true)">重新读取</button></div>';
-  html+='<div class="rules-table"><div class="rules-table-head"><span>规则内容</span><span>类别</span><span>优先级</span><span></span></div>';
-  (draft||[]).forEach(function(rule,index){html+=rulesTableRowHtml(rule,index)});
-  if(!draft.length)html+='<div class="rules-empty">暂无规则，点击“新增规则”开始编辑。</div>';
-  html+='</div><div class="rules-inline-status" id="rules-inline-status">'+esc(data.warning||'')+'</div>';
-  body.innerHTML=html;
-}
-function rulesRequest(action,body){
-  body=body||{};body.action=action;
-  return panelDataFetch(rulesEndpoint(),{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(resp){return resp.json().then(function(data){if(!resp.ok||data.ok===false){var error=new Error(data.error||('HTTP '+resp.status));error.status=resp.status;throw error}return data})});
-}
-function loadRulesPage(force){
-  if(rulesPageState.loading&&!force)return Promise.resolve();
-  rulesPageState.loading=true;
-  return panelDataFetch(rulesEndpoint()+'?_t='+Date.now(),{cache:'no-store'},{label:'CK 网关面板 Key'}).then(function(resp){return resp.json().then(function(data){if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));return data})}).then(function(data){rulesPageState.data=data;renderRulesPage();chatRenderSpeechPreferences(data,false)}).catch(function(error){var body=document.getElementById('rules-page-body');if(body)body.innerHTML='<div class="entity-error">规则读取失败：'+esc(error.message||error)+'</div>'}).finally(function(){rulesPageState.loading=false});
-}
-function saveRulesDraft(){
-  var rules=rulesPageRules(),data=rulesPageState.data||{};if(!rules)return;
-  rulesRequest('save_draft',{base_revision:data.current_revision||'r0',rules:rules}).then(function(next){rulesPageState.data=next;renderRulesPage();toast('规则草稿已保存')}).catch(function(error){toast(error.status===409?'规则已被其他页面更新，请重新读取后合并':'规则草稿保存失败：'+(error.message||error))});
-}
-function publishRulesDraft(){
-  var rules=rulesPageRules(),data=rulesPageState.data||{};if(!rules)return;
-  rulesRequest('publish',{base_revision:data.current_revision||'r0',rules:rules}).then(function(next){rulesPageState.data=next;renderRulesPage();chatRenderSpeechPreferences(next,false);toast('规则已发布')}).catch(function(error){toast(error.status===409?'规则已被其他页面更新，请重新读取后合并':'规则发布失败：'+(error.message||error))});
-}
-function setRulesEnabled(enabled){
-  var data=rulesPageState.data||{};
-  rulesRequest('set_active',{active_revision:data.active_revision||data.current_revision||'r0',enabled:enabled===true}).then(function(next){rulesPageState.data=next;renderRulesPage();chatRenderSpeechPreferences(next,false);toast(enabled===true?'规则已启用':'规则已停用')}).catch(function(error){toast('规则状态更新失败：'+(error.message||error))});
 }
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
@@ -5977,15 +5901,20 @@ function chatRenderTrimState(cfg){
     next.textContent='1h 缓存边界自动截断已关闭；仍可手动同步并按需截断。';
     return;
   }
+  var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
+  if(cacheMeta.ttl!=='1h'){
+    next.textContent='自动截断仅在「原生稳定缓存 1h」模式生效；仍可手动同步并按需截断。';
+    return;
+  }
   var session=chatCurrentSession();
   var reference=chatCacheActivityReference(session,chatLastMessageTs());
   var referenceTs=reference.timestamp;
   var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
   if(expired){
     if(count>trim.keep){
-      next.textContent='距离最近一次有效缓存活动已超过 1h：下一次发送前先审阅措辞偏好，再保留最近 '+trim.keep+' 个真实轮次。';
+      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前先审阅措辞偏好，再保留最近 '+trim.keep+' 个真实轮次。';
     }else{
-      next.textContent='距离最近一次有效缓存活动已超过 1h：下一次发送前更新措辞偏好；真实轮次不足 '+trim.keep+'，不删除内容。';
+      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前更新措辞偏好；真实轮次不足 '+trim.keep+'，不删除内容。';
     }
   }else{
     var remaining=referenceTs?Math.max(0,CHAT_AUTO_TRIM_IDLE_MS-(Date.now()-referenceTs)):CHAT_AUTO_TRIM_IDLE_MS;
@@ -6074,7 +6003,6 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       speechPreferencePendingTrimEventId:s.speechPreferencePendingTrimEventId,
       speechPreferencePreparedThroughTs:s.speechPreferencePreparedThroughTs||0,
       speechPreferencePendingThroughTs:s.speechPreferencePendingThroughTs||0,
-      speechPreferenceRetryMessages:Array.isArray(s.speechPreferenceRetryMessages)?s.speechPreferenceRetryMessages.slice(0,400):[],
       speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
       speechPreferencePendingBoundaryReason:s.speechPreferencePendingBoundaryReason||'',
       cacheRebuildPending:s.cacheRebuildPending===true,
@@ -6535,7 +6463,8 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   var cacheReferenceTs=cacheReference.timestamp;
   var cacheAgeMs=cacheReferenceTs?Math.max(0,Date.now()-cacheReferenceTs):0;
   var cacheAgeBoundary=!!(
-    trim.enabled&&cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
+    trim.enabled&&selected.size>0&&cacheMeta.ttl==='1h'&&
+    cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
   );
   var boundary=manual||pendingBoundary||cacheAgeBoundary;
   var trigger=manual?String(opts.trigger||'manual'):(pendingBoundary?'pending_rebuild':'cache_1h');
@@ -6570,14 +6499,13 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   var drop=shouldTrim?(canonicalTransport?transportPlan.dropped:localPlan.dropped):0;
   var after=Math.max(0,historyRounds-drop);
   var preparedThrough=Number(session&&session.speechPreferencePreparedThroughTs||0)||0;
-  var retryPreferenceMessages=Array.isArray(session&&session.speechPreferenceRetryMessages)?session.speechPreferenceRetryMessages:[];
-  var preferenceMessages=pendingBoundary?[]:retryPreferenceMessages.concat(working.filter(function(message){
+  var preferenceMessages=pendingBoundary?[]:working.filter(function(message){
     if(!message||typeof message!=='object')return false;
     if(message.role!=='user'&&message.role!=='pending_user'&&message.role!=='assistant')return false;
     if(message.role==='assistant'&&message.stopped===true)return false;
     var ts=Number(message.ts||0)||0;
     return !preparedThrough||!ts||ts>preparedThrough;
-  }));
+  });
   var preferenceThroughTs=preferenceMessages.reduce(function(latest,message){
     return message&&(message.role==='user'||message.role==='pending_user')
       ?Math.max(latest,Number(message.ts||0)||0)
@@ -6627,7 +6555,6 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
 }
 function chatSpeechPreferenceMessageId(message,index){
   if(!message||typeof message!=='object')return '';
-  if(!message.messageId&&message.message_id)message.messageId=String(message.message_id);
   if(!message.messageId){
     message.messageId='msg-'+String(Number(message.ts||0)||Date.now())+'-'+String(index||0)+'-'+Math.random().toString(36).slice(2,7);
   }
@@ -6635,7 +6562,7 @@ function chatSpeechPreferenceMessageId(message,index){
 }
 function chatSpeechPreferencePrepareBatch(list){
   list=Array.isArray(list)?list:[];
-  var candidates=[],seen=Object.create(null);
+  var candidates=[];
   var previousAssistant='';
   list.forEach(function(message,index){
     if(!message||typeof message!=='object')return;
@@ -6646,15 +6573,12 @@ function chatSpeechPreferencePrepareBatch(list){
     if(message.role!=='user'&&message.role!=='pending_user')return;
     var text=String(message.text||'').trim();
     if(!text)return;
-    var messageId=chatSpeechPreferenceMessageId(message,index);
-    if(seen[messageId])return;
-    seen[messageId]=1;
     candidates.push({
       role:'user',
-      message_id:messageId,
+      message_id:chatSpeechPreferenceMessageId(message,index),
       turn_id:String(message.turnId||''),
       text:text.slice(0,2400),
-      assistant_context:String(message.assistant_context||previousAssistant||'').slice(-600),
+      assistant_context:previousAssistant,
       ts:Number(message.ts||0)||0
     });
     previousAssistant='';
@@ -6669,7 +6593,6 @@ function chatSpeechPreferencePrepareBatch(list){
     messages.push(row);
     chars+=size;
   }
-  var retryMessages=candidates.slice(messages.length,400);
   var reviewedThroughTs=messages.reduce(function(latest,row){return Math.max(latest,Number(row.ts||0)||0)},0);
   return {
     messages:messages,
@@ -6677,8 +6600,7 @@ function chatSpeechPreferencePrepareBatch(list){
     selectedMessages:messages.length,
     chars:chars,
     reviewedThroughTs:reviewedThroughTs,
-    complete:messages.length===candidates.length,
-    retryMessages:retryMessages
+    complete:messages.length===candidates.length
   };
 }
 function chatSpeechPreferencePrepareMessages(list){
@@ -6739,7 +6661,6 @@ function chatCaptureSpeechPreferenceRevisions(data,sessionId,opts){
     if(Number(session.speechPreferencePendingThroughTs||0)>Number(session.speechPreferencePreparedThroughTs||0)){
       session.speechPreferencePreparedThroughTs=Number(session.speechPreferencePendingThroughTs||0)||0;
     }
-    session.speechPreferenceRetryMessages=[];
     session.speechPreferencePendingActivationId='';
     session.speechPreferencePendingTrimEventId='';
     session.speechPreferencePendingThroughTs=0;
@@ -6777,7 +6698,7 @@ function chatSpeechPreferenceTrimEventId(cfg,plan){
 // 措辞偏好采用 prepare -> cache-boundary/chat 两阶段：prepare 只写待激活草稿，
 // 直到 1h 自动边界或手动截断后的下一轮把 activation_id 带进 /ck/chat 才应用。
 // 网关为本次提取保留最多 60s；前端再留网络传输和 JSON 处理余量。
-// 超时保留旧规则，但历史清理仍按已计算的完整轮次计划提交。
+// 超时只取消本次截断并保留完整历史，不会提交 pending activation。
 var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=75000;
 async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
   var batch=chatSpeechPreferencePrepareBatch(
@@ -6841,8 +6762,7 @@ async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
       revision:responseMeta.revision,pendingRevision:responseMeta.pendingRevision,appliedRevision:responseMeta.appliedRevision,
       durationMs:Date.now()-started,reviewedThroughTs:reviewedThroughTs,
       reviewComplete:data.review_complete!==false&&batch.complete,
-      candidateMessages:batch.candidateMessages,selectedMessages:batch.selectedMessages,inputChars:batch.chars,
-      retryMessages:batch.retryMessages
+      candidateMessages:batch.candidateMessages,selectedMessages:batch.selectedMessages,inputChars:batch.chars
     };
   }catch(error){
     var stopped=!!(requestState&&requestState.stopped);
@@ -6854,11 +6774,11 @@ async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
     });
     if(!stopped)toast(
       plan&&plan.trimmed
-        ?'措辞偏好更新失败，保留旧规则但继续截断历史'
+        ?'措辞偏好更新失败，本次不截断并保留完整历史'
         :'措辞偏好更新失败，本轮继续使用旧版本',
       5000
     );
-    return {ok:false,eventId:eventId,error:errorText,stopped:stopped,retryMessages:batch.messages.concat(batch.retryMessages).slice(0,400)};
+    return {ok:false,eventId:eventId,error:errorText,stopped:stopped};
   }finally{
     if(timer)clearTimeout(timer);
     if(parentSignal&&relay&&parentSignal.removeEventListener)parentSignal.removeEventListener('abort',relay);
@@ -6870,8 +6790,8 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
   var oldTransport=(s.transportMessages||[]).length;
   var reviewedThroughTs=Number(prepared.reviewedThroughTs||0)||0;
   var requiredThroughTs=Number(plan.requiredPreferenceThroughTs||0)||0;
-  // History cleanup is independent from optional speech-preference extraction.
-  var trimCommitted=!!plan.trimmed;
+  var reviewCoversTrim=!plan.trimmed||!requiredThroughTs||reviewedThroughTs>=requiredThroughTs;
+  var trimCommitted=!!(plan.trimmed&&reviewCoversTrim);
   if(trimCommitted){
     chatMessages=(plan.keptMessages||[]).concat(plan.deferred||[]);
     s.messages=chatMessages;
@@ -6892,8 +6812,6 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
       reviewedThroughTs
     );
   }
-  if(Array.isArray(prepared.retryMessages))s.speechPreferenceRetryMessages=prepared.retryMessages.slice(0,400);
-  else if(prepared.ok===true&&prepared.reviewComplete!==false)s.speechPreferenceRetryMessages=[];
   if(plan.cacheBoundary)s.cacheRebuildPending=true;
   chatResetSessionAnchorFromMessages(s);
   s.updated=Date.now();
@@ -6907,7 +6825,7 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     trigger:String(plan.trigger||''),
     manual:!!plan.manual,
     trimmed:trimCommitted,
-     trimDeferredForSpeechReview:false,
+    trimDeferredForSpeechReview:!!(plan.trimmed&&!reviewCoversTrim),
     before:plan.before,
     after:trimCommitted?plan.after:plan.before,
     dropped:trimCommitted?plan.dropped:0,
@@ -6943,16 +6861,13 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   }
   var prepared=await chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState);
   if((requestState&&requestState.stopped)||!prepared.ok){
-    if(requestState&&requestState.stopped){
-      chatRenderTrimState(cfg);
-      return {boundary:true,cacheBoundary:true,trigger:plan.trigger,manual:!!plan.manual,trimmed:false,before:plan.before,after:plan.before,dropped:0,prepareFailed:false,prepareStopped:true};
-    }
-    chatDebug('speech_preference_prepare_failed_nonblocking',{error:prepared.error||'unknown',trim_trigger:plan.trigger,planned_dropped:plan.dropped});
-    toast('措辞偏好暂时无法同步，已保留旧规则，但继续执行历史截断',5000);
-    var committed=chatCommitAutoTrimPlan(cfg,plan,{ok:false,activationId:'',eventId:'',durationMs:prepared.durationMs||0,reviewedThroughTs:Number(plan.preferenceThroughTs||0)||0,reviewComplete:false,retryMessages:prepared.retryMessages||[]});
-    committed.prepareFailed=true;
-    committed.speechPreferencePrepareFailed=true;
-    return committed;
+    chatRenderTrimState(cfg);
+    return {
+      boundary:true,cacheBoundary:true,trigger:plan.trigger,manual:!!plan.manual,
+      trimmed:false,before:plan.before,after:plan.before,dropped:0,
+      plannedDropped:plan.dropped,prepareFailed:!prepared.ok,prepareStopped:!!prepared.stopped,
+      speechPreferenceTrimEventId:prepared.eventId||''
+    };
   }
   return chatCommitAutoTrimPlan(cfg,plan,prepared);
 }
@@ -7011,11 +6926,15 @@ async function chatManualTrimNow(){
   if(button){button.disabled=true;button.textContent='正在审阅并按真实轮次裁剪...'}
   try{
     var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim'});
-    if(result&&result.prepareFailed)chatSetStatus('旧规则已保留，历史已按真实轮次截断');
+    if(result&&result.prepareFailed){chatSetStatus('措辞偏好更新失败，未进行手动重建');return}
+    if(result&&result.trimDeferredForSpeechReview){
+      toast('仍有措辞消息尚未审阅，本次保留完整历史；下一次会从断点继续',6000);
+      chatSetStatus('偏好审阅未完成，未截断历史');
+      return;
+    }
     if(result&&result.trimmed){
       chatSaveLocalMessages();
       chatRenderMessages();
-      await chatSyncTrimmedHistoryToGateway(cfg,result);
       toast(
         '已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息应用偏好并建立新缓存',
         5000
@@ -8703,50 +8622,6 @@ function chatUpdateCacheExpiryHint(keepScroll){
   var old=box.querySelector('.chat-cache-expired-tip:not(.persisted)');
   if(old)old.remove();
   if(chatEnsureCacheExpiryNotice())chatRenderMessages({respectUserScroll:true});
-  chatMaybeAutoTrimAtBoundary();
-}
-async function chatMaybeAutoTrimAtBoundary(){
-  if(chatAutoTrimBusy||chatSending||chatSpeechPreferenceManualBusy||currentPanelTab!=='chat')return;
-  var cfg=chatLoadConfig(),trim=chatAutoTrimConfigFrom(cfg),session=chatCurrentSession();
-  if(!trim.enabled||!session||session.cacheRebuildPending===true)return;
-  var reference=chatCacheActivityReference(session,chatLastMessageTs());
-  if(!reference.timestamp||Date.now()-reference.timestamp<CHAT_AUTO_TRIM_IDLE_MS)return;
-  if(!chatCurrentConversationRoundCount())return;
-  chatAutoTrimBusy=true;
-  try{
-    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{trigger:'idle_1h'});
-    if(result&&result.cacheBoundary){
-      chatSaveLocalMessages();
-      chatRenderMessages({respectUserScroll:true});
-      chatRenderTrimState(cfg);
-      chatSyncTrimmedHistoryToGateway(cfg,result);
-    }
-  }catch(error){
-    chatDebug('auto_trim_error',{error:String((error&&error.message)||error)});
-  }finally{chatAutoTrimBusy=false;}
-}
-function chatTruncateHistoryEndpoint(cfg){
-  var base=((cfg&&cfg.gatewayUrl)||GRAPH_API_BASE).trim().replace(/\/+$/,'');
-  return base+'/ck/truncate-history';
-}
-function chatSyncTrimmedHistoryToGateway(cfg,result){
-  cfg=cfg||chatLoadConfig();
-  var session=chatCurrentSession();
-  if(!session||!cfg.panelKey)return Promise.resolve(false);
-  var polling=chatPollingDisplayConfig();
-  return fetch(chatTruncateHistoryEndpoint(cfg),{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      key:cfg.panelKey,session_id:cfg.sessionId,model:cfg.model,
-      api_base:cfg.apiBase,upstream_key:cfg.upstreamKey,
-      chat_polling_enabled:polling.enabled,chat_polling_revision:polling.revision,
-      boundary_event_id:chatSpeechPreferenceTrimEventId(cfg,result),
-      transport_messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),
-      window_messages:chatWindowContextMessages()
-    })
-  }).then(function(resp){if(!resp.ok)throw new Error('HTTP '+resp.status);return true}).catch(function(error){
-    chatDebug('trim_gateway_sync_failed',{error:String((error&&error.message)||error)});return false;
-  });
 }
 function chatVersionNavHtml(m,i,role){
   var info=chatMessageVersionInfo(m);
@@ -8834,11 +8709,11 @@ function chatMessageTimingHtml(m,role,showTimestamp){
   if(ts&&showTimestamp!==false)bits.push('<span class="chat-msg-meta-time">'+esc(chatFullTimeLabel(ts))+'</span>');
   if(role==='user'){
     if(m&&m.role==='pending_user')bits.push('<span class="chat-msg-meta-pending">待发送</span>');
-    else if(showTimestamp!==false&&chatShouldShowMessageStatus())bits.push(chatCacheTickHtml(m));
+    else if(showTimestamp!==false)bits.push(chatCacheTickHtml(m));
   }else if(role==='assistant'&&showTimestamp!==false){
     var wait=chatAssistantWaitLabel(m);
     if(wait)bits.push('<span class="chat-msg-wait">'+esc(wait)+'</span>');
-    var cost=chatShouldShowBillingPrice()?chatAssistantCostHtml(m):'';
+    var cost=chatAssistantCostHtml(m);
     if(cost)bits.push(cost);
   }
   if(!bits.length)return '';
@@ -8870,14 +8745,6 @@ function chatCacheTickHtml(m){
   var one='<path d="M2.1 7.1 5.4 10.3 12.7 3.1"></path>';
   var two='<path class="chat-cache-tick-back" d="M1.8 7.2 4.8 10.2 11.2 3.8"></path><path d="M5.6 7.3 8.8 10.4 16.4 2.9"></path>';
   return '<span class="chat-cache-tick '+(hit?'hit ':'')+esc(state)+'" title="'+esc(title)+'" aria-label="'+esc(title)+'"><svg viewBox="0 0 '+(hit?'18':'15')+' 14" focusable="false" aria-hidden="true">'+(hit?two:one)+'</svg></span>';
-}
-function chatShouldShowMessageStatus(){
-  var polling=chatPollingDisplayConfig();
-  return !polling.enabled||polling.showMessageStatus===true;
-}
-function chatShouldShowBillingPrice(){
-  var polling=chatPollingDisplayConfig();
-  return !polling.enabled||polling.showBillingPrice===true;
 }
 function chatUsageCacheRead(usage){
   return chatUsageNumber(usage,[
@@ -9482,16 +9349,6 @@ async function chatSubmitPendingMessages(options){
     client_cache_generation:Number(currentSession.cacheGeneration||0)||0,
     client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0
   };
-  var pollingView=chatPollingDisplayConfig();
-  body.chat_polling_enabled=pollingView.enabled;
-  body.chat_polling_revision=pollingView.revision;
-  body.show_message_status=pollingView.showMessageStatus;
-  body.show_billing_price=pollingView.showBillingPrice;
-  if(pollingView.enabled){
-    delete body.api_base;
-    delete body.upstream_key;
-    delete body.provider_name;
-  }
   var speechBoundaryNow=!!(trimResult.cacheBoundary||currentSession.cacheRebuildPending);
   var pendingSpeechActivationId='';
   if(!currentSession.speechPreferenceRetryAtBoundary||speechBoundaryNow){
@@ -9819,10 +9676,6 @@ function switchPanelTab(tab,opts) {
   if(tab==='apiconfig'){
     renderApiConfig();
   }
-  if(tab==='rules'){
-    renderRulesPage();
-    loadRulesPage(false);
-  }
   if(tab==='overview'){
     loadArchiveFactOverview(false);
   }
@@ -10126,8 +9979,6 @@ var apiProvIdSeq=0;
 var pendingProvDel=null;
 var RELOAD_CONFIG_URL=GRAPH_API_BASE+'/reload-config';
 var PROVIDER_MODELS_URL=GRAPH_API_BASE+'/provider-models';
-var CHAT_POLLING_STATUS_URL=GRAPH_API_BASE+'/ck/chat-polling/status';
-var apiPollingRuntimeState={loading:false,revision:'',provider_id:'',provider_name:'',provider_index:-1,last_success_at:0};
 function newProvId(){apiProvIdSeq++;return 'p'+Date.now().toString(36)+apiProvIdSeq}
 function findApiTab(k){for(var i=0;i<API_TABS.length;i++){if(API_TABS[i].key===k)return API_TABS[i]}return API_TABS[0]}
 function cleanModelList(list,selected){
@@ -10172,9 +10023,6 @@ function closeProvDel(){
 }
 
 function persistApiProviders(){
-  if(apiProviders&&apiProviders.chat_polling&&typeof apiPollingRevision==='function'){
-    apiProviders.chat_polling.config_revision=apiPollingRevision();
-  }
   return keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:{API_PROVIDERS:apiProviders}})})
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})});
 }
@@ -10204,7 +10052,6 @@ var API_TABS=[
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
-  {key:'polling',label:'聊天轮询',kind:'polling',info:'只为聊天主链路维护供应商优先级。页面只保存供应商 ID 和模型，Key 与 URL 始终从供应商库由网关读取。'},
   {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：整理人物与事件小档案、提取独立 Fact、保存每日聊天切片，也会在上下文截断前更新你对助手说话方式的长期要求。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
     {key:'fact_extract',label:'Fact 提取',info:'按话题切分 chatlog、提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
@@ -10248,55 +10095,6 @@ function apiGroupSlot(g){
   apiProviders[g].model=String(apiProviders[g].model||'');
   delete apiProviders[g].providers;
   return apiProviders[g];
-}
-function apiPollingConfig(){
-  var raw=apiProviders&&apiProviders.chat_polling;
-  if(!raw||typeof raw!=='object'||Array.isArray(raw))raw={};
-  var order=Array.isArray(raw.order)?raw.order:[];
-  var seen=Object.create(null),normalized=[];
-  order.forEach(function(item){
-    if(!item||typeof item!=='object')return;
-    var id=String(item.provider_id||item.providerId||'').trim();
-    var model=String(item.model||'').trim();
-    if(!id||seen[id])return;
-    seen[id]=1;normalized.push({provider_id:id,model:model});
-  });
-  raw.enabled=raw.enabled===true;
-  raw.show_message_status=raw.show_message_status===true;
-  raw.show_billing_price=raw.show_billing_price===true;
-  raw.order=normalized;
-  raw.config_revision=String(raw.config_revision||'').trim();
-  apiProviders.chat_polling=raw;
-  return raw;
-}
-function apiPollingAvailableItems(){
-  var polling=apiPollingConfig(),list=providerLibraryList(),byId=Object.create(null),used=Object.create(null),out=[];
-  list.forEach(function(p){byId[p.id]=p});
-  (polling.order||[]).forEach(function(item){
-    var p=byId[item.provider_id];
-    if(!p||used[item.provider_id])return;
-    used[item.provider_id]=1;
-    var model=String(item.model||p.model||'').trim();
-    out.push({provider_id:p.id,provider:p,model:model,available:!!(p.url&&p.key&&model)});
-  });
-  list.forEach(function(p){
-    if(used[p.id])return;
-    var model=String(p.model||'').trim();
-    out.push({provider_id:p.id,provider:p,model:model,available:!!(p.url&&p.key&&model),appended:true});
-  });
-  return out;
-}
-function apiPollingRevision(){
-  var polling=apiPollingConfig(),items=apiPollingAvailableItems();
-  var payload=JSON.stringify({enabled:polling.enabled,show_message_status:polling.show_message_status,show_billing_price:polling.show_billing_price,order:items.filter(function(x){return x.available}).map(function(x){return {provider_id:x.provider_id,model:x.model,fingerprint:providerFingerprint(x.provider)}})});
-  var hash=2166136261;
-  for(var i=0;i<payload.length;i++){hash^=payload.charCodeAt(i);hash=Math.imul(hash,16777619)}
-  return (hash>>>0).toString(16)+'-'+payload.length.toString(36);
-}
-function apiPollingEnabled(){return apiPollingConfig().enabled===true}
-function chatPollingDisplayConfig(){
-  var p=apiPollingConfig();
-  return {enabled:p.enabled===true,revision:String(p.config_revision||apiPollingRevision()),showMessageStatus:p.show_message_status===true,showBillingPrice:p.show_billing_price===true};
 }
 function apiDirectValue(key){
   var item=apiDirectConfig&&apiDirectConfig[key];
@@ -10514,64 +10312,10 @@ function renderApiConfig(){
     return;
   }
   var tab=findApiTab(currentApiTab);
-  body.innerHTML=tab.kind==='providers'?renderProviderLibrary():(tab.kind==='polling'?renderApiPolling():renderApiAssignments(tab));
+  body.innerHTML=tab.kind==='providers'?renderProviderLibrary():renderApiAssignments(tab);
   body.scrollTop=0;
   chatRenderMainRouteSummary();
   chatUpdateRuntime(chatLoadConfig());
-}
-function renderApiPolling(){
-  var polling=apiPollingConfig(),items=apiPollingAvailableItems();
-  var available=items.filter(function(x){return x.available});
-  loadApiPollingStatus(polling);
-  var runtime=apiPollingRuntimeState;
-  var currentLabel=polling.enabled
-    ?(runtime.provider_name?'当前使用：'+runtime.provider_name:(runtime.loading?'当前使用：读取中':'当前使用：尚未成功'))
-    :'当前使用：单链路';
-  var html=apiPageHeadHtml('聊天 API 轮询','管理聊天主链路的优先级和失败切换。','<button class="btn btn-blue btn-sm" type="button" onclick="saveApiPolling()">保存轮询配置</button>');
-  html+=renderApiIntro(findApiTab('polling'));
-  html+='<section class="api-polling-overview"><div><b>轮询状态</b><span>'+(polling.enabled?'聊天 API 轮询':'单链路')+'</span></div><div><b>可用 API</b><span>'+available.length+' 个</span></div><div><b>当前顺序</b><span>'+esc(available.map(function(x){return providerDisplayName(x.provider)}).join(' → ')||'暂无可用 API')+'</span></div><div class="api-polling-current"><b>运行状态</b><span>'+esc(currentLabel)+'</span></div></section>';
-  html+='<div class="api-polling-list" id="api-polling-list">';
-  if(!items.length)html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先到供应商页添加 API，再回来设置轮询顺序。</p></div>';
-  items.forEach(function(item,index){
-    var p=item.provider,status=item.available?'已配置':'缺少 '+(!p.url?'URL':(!p.key?'Key':'模型'));
-    html+='<article class="api-polling-row '+(item.available?'':'is-unavailable')+'" draggable="true" data-provider-id="'+escAttr(item.provider_id)+'" ondragstart="apiPollingDragStart(event)" ondragover="apiPollingDragOver(event)" ondrop="apiPollingDrop(event)">'+
-      '<span class="api-polling-grip" aria-hidden="true">⋮⋮</span><b class="api-polling-index">'+(index+1)+'</b><div class="api-polling-main"><strong>'+esc(providerDisplayName(p))+'</strong><span>'+esc(providerHost(p.url)||'未填写 Host')+' · '+esc(item.model||'未设置模型')+'</span></div><span class="api-polling-status">'+esc(status)+'</span><div class="api-polling-actions"><button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移" onclick="moveApiPolling('+index+',-1)">↑</button><button class="btn btn-outline btn-sm" type="button" title="下移" aria-label="下移" onclick="moveApiPolling('+index+',1)">↓</button></div></article>';
-  });
-  html+='</div><div class="api-polling-options"><label class="api-toggle"><input id="api-polling-enabled" type="checkbox" '+(polling.enabled?'checked':'')+'><span>启用聊天 API 轮询</span></label><label class="api-toggle"><input id="api-polling-show-status" type="checkbox" '+(polling.show_message_status?'checked':'')+'><span>显示消息状态（√）</span></label><label class="api-toggle"><input id="api-polling-show-price" type="checkbox" '+(polling.show_billing_price?'checked':'')+'><span>显示计费价格</span></label></div>';
-  html+='<p class="api-polling-note">候选 Key 和 URL 不会进入聊天请求；新增供应商会在保存时自动追加到顺序末尾。</p>';
-  return html;
-}
-function loadApiPollingStatus(polling){
-  polling=polling||apiPollingConfig();
-  var revision=apiPollingRevision();
-  if(apiPollingRuntimeState.loading||apiPollingRuntimeState.revision===revision)return;
-  if(!polling.enabled){
-    apiPollingRuntimeState={loading:false,revision:revision,provider_id:'',provider_name:'',provider_index:-1,last_success_at:0};
-    return;
-  }
-  apiPollingRuntimeState.loading=true;
-  panelDataFetch(CHAT_POLLING_STATUS_URL+'?config_revision='+encodeURIComponent(revision)+'&_t='+Date.now(),{cache:'no-store'},{label:'CK 网关面板 Key'})
-    .then(function(resp){return resp.json().then(function(data){if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));return data})})
-    .then(function(data){apiPollingRuntimeState={loading:false,revision:String(data.config_revision||revision),provider_id:String(data.provider_id||''),provider_name:String(data.provider_name||''),provider_index:Number(data.provider_index||-1),last_success_at:Number(data.last_success_at||0)||0};if(currentApiTab==='polling')renderApiConfig()})
-    .catch(function(){apiPollingRuntimeState.loading=false;if(currentApiTab==='polling')renderApiConfig()});
-}
-var apiPollingDragId='';
-function apiPollingDragStart(event){apiPollingDragId=event.currentTarget.getAttribute('data-provider-id');event.dataTransfer.effectAllowed='move';}
-function apiPollingDragOver(event){event.preventDefault();event.dataTransfer.dropEffect='move';}
-function apiPollingDrop(event){event.preventDefault();var id=event.currentTarget.getAttribute('data-provider-id');var items=apiPollingAvailableItems(),from=items.findIndex(function(x){return x.provider_id===apiPollingDragId}),to=items.findIndex(function(x){return x.provider_id===id});if(from<0||to<0||from===to)return;var moved=items.splice(from,1)[0];items.splice(to,0,moved);apiPollingConfig().order=items.map(function(x){return {provider_id:x.provider_id,model:x.model}});renderApiConfig();}
-function moveApiPolling(index,delta){var items=apiPollingAvailableItems(),to=index+delta;if(index<0||to<0||index>=items.length||to>=items.length)return;var moved=items.splice(index,1)[0];items.splice(to,0,moved);apiPollingConfig().order=items.map(function(x){return {provider_id:x.provider_id,model:x.model}});renderApiConfig();}
-function saveApiPolling(){
-  var polling=apiPollingConfig(),items=apiPollingAvailableItems();
-  var enabled=document.getElementById('api-polling-enabled'),status=document.getElementById('api-polling-show-status'),price=document.getElementById('api-polling-show-price');
-  polling.enabled=!!(enabled&&enabled.checked);
-  polling.show_message_status=!!(status&&status.checked);
-  polling.show_billing_price=!!(price&&price.checked);
-  polling.order=items.filter(function(x){return x.available}).map(function(x){return {provider_id:x.provider_id,model:x.model}});
-  if(polling.enabled&&!polling.order.length){toast('没有可用 API，无法启用聊天轮询');return}
-  polling.config_revision=apiPollingRevision();
-  apiProviders.chat_polling=polling;
-  apiPollingRuntimeState.revision='';
-  persistAndReload('轮询配置已保存').then(function(ok){if(ok){apiProvidersLoaded=false;loadApiProviders()}});
 }
 function renderApiIntro(tab){
   return '<div class="api-info-row"><button class="api-info-btn api-info-main" type="button" onclick="toggleInfo(this)" aria-label="查看说明"><span>页面说明</span><i aria-hidden="true">›</i></button><div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info||'')+'</div></div></div>';
@@ -10617,29 +10361,7 @@ function renderApiAssignments(tab){
     return html;
   }
   groups.forEach(function(g){if(list.length)html+=assignmentCardHtml(g)});
-  if(tab.key==='main')html+=renderMainPollingSummary();
   return html;
-}
-function renderMainPollingSummary(){
-  var polling=chatPollingDisplayConfig(),items=apiPollingAvailableItems(),available=items.filter(function(x){return x.available});
-  return '<section class="api-main-polling"><div class="api-main-polling-head"><div><b>聊天主链路</b><span>'+(polling.enabled?'当前使用聊天 API 轮询':'当前使用单链路')+'</span></div><button class="btn btn-outline btn-sm" type="button" onclick="switchApiTab(\'polling\')">打开轮询配置</button></div><div class="api-main-polling-order">'+esc(available.map(function(x){return providerDisplayName(x.provider)}).join(' → ')||'暂无可用 API')+'</div><div class="api-main-polling-controls"><label class="api-toggle"><input id="api-main-polling-enabled" type="checkbox" '+(polling.enabled?'checked':'')+' onchange="saveMainPollingOptions()"><span>启用轮询</span></label><label class="api-toggle"><input id="api-main-polling-status" type="checkbox" '+(polling.showMessageStatus?'checked':'')+' onchange="saveMainPollingOptions()"><span>显示消息状态（√）</span></label><label class="api-toggle"><input id="api-main-polling-price" type="checkbox" '+(polling.showBillingPrice?'checked':'')+' onchange="saveMainPollingOptions()"><span>显示计费价格</span></label></div></section>';
-}
-function saveMainPollingOptions(){
-  var polling=apiPollingConfig();
-  var enabled=document.getElementById('api-main-polling-enabled'),status=document.getElementById('api-main-polling-status'),price=document.getElementById('api-main-polling-price');
-  polling.enabled=!!(enabled&&enabled.checked);
-  polling.show_message_status=!!(status&&status.checked);
-  polling.show_billing_price=!!(price&&price.checked);
-  if(polling.enabled&&!apiPollingAvailableItems().some(function(item){return item.available})){
-    polling.enabled=false;
-    if(enabled)enabled.checked=false;
-    toast('没有可用 API，无法启用聊天轮询');
-    return;
-  }
-  polling.config_revision=apiPollingRevision();
-  apiProviders.chat_polling=polling;
-  apiPollingRuntimeState.revision='';
-  persistAndReload('聊天主链路设置已保存').then(function(ok){if(ok){apiProvidersLoaded=false;loadApiProviders()}});
 }
 function assignmentCardHtml(g){
   var slot=apiGroupSlot(g.key),p=findLibraryProvider(slot.current);
