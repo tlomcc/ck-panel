@@ -92,10 +92,9 @@ function testTrimConfigAndSystemPrompt(){
 
 function testSpeechPreferenceStatusRendering(){
   const elements={
-    'chat-speech-rules':{value:''},
     'chat-speech-meta':{textContent:''},
     'chat-speech-state':{textContent:''},
-    'chat-speech-diff':{innerHTML:''},
+    'chat-speech-preview':{innerHTML:''},
     'chat-speech-status':{textContent:''}
   };
   const context={
@@ -111,16 +110,16 @@ function testSpeechPreferenceStatusRendering(){
     extractFunction('chatRenderSpeechPreferences')
   ].join('\n'),context);
   context.chatRenderSpeechPreferences({
-    rules:[{key:'tone',instruction:'保持清晰'}],
+    active_rules:[{key:'tone',instruction:'保持清晰'}],
+    enabled:true,active_revision:'r7-test',
     current_revision:'r7-test',previous_revision:'r6-test',
     updated_at:'2026-08-10T23:45:54+08:00',
     last_activation_at:'2026-08-11T00:10:00+08:00',
     pending_count:0,source:'github',diff:{}
   },false);
-  assert(elements['chat-speech-meta'].textContent.includes('规则更新 2026-08-10T23:45:54+08:00'));
-  assert(elements['chat-speech-meta'].textContent.includes('最近激活 2026-08-11T00:10:00+08:00'));
-  assert(elements['chat-speech-state'].textContent.includes('最近成功激活 2026-08-11T00:10:00+08:00'));
-  assert(elements['chat-speech-state'].textContent.includes('待激活 0 条'));
+  assert.strictEqual(elements['chat-speech-meta'].textContent,'条数：1');
+  assert(elements['chat-speech-preview'].innerHTML.includes('保持清晰'));
+  assert(!elements['chat-speech-meta'].textContent.includes('r7-test'));
 }
 
 const prepareTimeoutMatch=source.match(/var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=(\d+);/);

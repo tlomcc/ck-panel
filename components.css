@@ -520,6 +520,14 @@ body.dark .confirm-bg{background:rgba(0,0,0,.62)}
 .modal-bg.panel-auth-gate .modal h3{font-size:18px;letter-spacing:-.15px}
 .modal-bg.panel-auth-gate .modal p{line-height:1.7;color:var(--ck-muted)}
 .modal-bg.panel-auth-gate .modal-btns .btn-blue{min-width:96px}
+@media(max-width:520px){
+  .modal-bg.panel-auth-gate{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  .modal-bg.panel-auth-gate .modal{width:100%;max-width:420px;padding:22px 18px}
+  .modal-bg.panel-auth-gate .modal::before{left:18px}
+  .modal-bg.panel-auth-gate .modal p{overflow-wrap:anywhere}
+  .modal-bg.panel-auth-gate .modal input{width:100%;min-width:0}
+  .modal-bg.panel-auth-gate .modal-btns{flex-wrap:wrap}
+}
 body.panel-auth-locked{overflow:hidden}
 body.panel-auth-locked .page{visibility:hidden}
 
