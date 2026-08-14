@@ -18,23 +18,32 @@ function extractFunction(name){
 
 const POLLING_FNS=[
   'apiPollingConfig','apiPollingWrite','apiPollingItemFor','apiPollingItems',
-  'apiPollingAvailableItems','apiPollingRevision','providerFingerprint',
+  'apiPollingItemsFromOrder','apiPollingAvailableItems','apiPollingRevision','providerFingerprint',
+  'apiPollingDraftReset','apiPollingDraftGet','apiPollingDraftItems','apiPollingDraftSync',
+  'apiPollingCollectSwitches','apiPollingAddable','addApiPollingProvider','removeApiPolling',
+  'setApiPollingModel','moveApiPolling',
   'chatPollingViewInvalidate','chatPollingView',
   'chatShouldShowMessageStatus','chatShouldShowBillingPrice'
 ];
 
 function pollingContext(apiProviders,extra){
   const store={};
+  const toasts=[];
   const context=Object.assign({
     console,
     API_POLLING_KEY:'chat_polling',
     CHAT_POLLING_VIEW_KEY:'ckChatPollingView',
     chatPollingViewCache:null,
+    apiPollingDraft:null,
     apiProviders:apiProviders,
     apiProvidersLoaded:true,
     providerLibraryList:()=>((apiProviders.provider_library||{}).providers||[]),
+    findLibraryProvider:id=>((apiProviders.provider_library||{}).providers||[]).find(p=>String(p.id)===String(id))||null,
     providerHost:url=>String(url||'').replace(/^https?:\/\//,'').split('/')[0],
     providerDisplayName:p=>(p&&p.name)||'未命名供应商',
+    renderApiConfig:()=>{},
+    toast:msg=>{toasts.push(String(msg))},
+    document:{getElementById:id=>(context.__dom&&context.__dom[id])||null},
     localStorage:{
       getItem:k=>(k in store?store[k]:null),
       setItem:(k,v)=>{store[k]=String(v)},
@@ -44,6 +53,8 @@ function pollingContext(apiProviders,extra){
   vm.createContext(context);
   POLLING_FNS.forEach(name=>vm.runInContext(extractFunction(name),context));
   context.__store=store;
+  context.__toasts=toasts;
+  context.__dom=context.__dom||{};
   return context;
 }
 
@@ -89,18 +100,34 @@ function testWriteIsExplicit(){
   assert.strictEqual(providers.chat_polling.config_revision,'rev1');
 }
 
+// ---------------------------------------------------------------------------
+// 轮询队列由用户自己维护：只有明确加进 order 的供应商才参与轮询。
+// 旧版会把供应商库里所有 API 自动追加到轮询页，用户完全没法只轮其中几个。
+// ---------------------------------------------------------------------------
 function testOrderingAndAvailability(){
   const providers=library();
-  providers.chat_polling={enabled:true,order:[{provider_id:'B',model:'m-b'}]};
+  providers.chat_polling={enabled:true,order:[{provider_id:'B',model:'m-b'},{provider_id:'C',model:'m-c'}]};
   const context=pollingContext(providers);
   const items=context.apiPollingItems();
-  assert.strictEqual(items.map(x=>x.provider_id).join(','),'B,A,C','已排序的在前，未排序的按库顺序追加');
+  assert.strictEqual(items.map(x=>x.provider_id).join(','),'B,C','只按用户排好的顺序，不追加没加进来的 A');
   assert.strictEqual(items[0].available,true);
   const unavailable=items.filter(x=>!x.available);
   assert.strictEqual(unavailable.length,1,'缺 Key 的供应商必须判为不可用');
   assert.strictEqual(unavailable[0].provider_id,'C');
   assert.strictEqual(unavailable[0].missing,'Key');
-  assert.strictEqual(context.apiPollingAvailableItems().map(x=>x.provider_id).join(','),'B,A');
+  assert.strictEqual(context.apiPollingAvailableItems().map(x=>x.provider_id).join(','),'B');
+}
+
+function testUnaddedProvidersNeverJoinPolling(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  assert.strictEqual(context.apiPollingItems().map(x=>x.provider_id).join(','),'A','没加进来的供应商一个都不能出现');
+  assert.strictEqual(context.apiPollingItems().length,1);
+
+  providers.chat_polling={enabled:false,order:[]};
+  const empty=pollingContext(providers);
+  assert.strictEqual(empty.apiPollingItems().length,0,'空队列就是空的，不能被供应商库填满');
 }
 
 function testOrderDedupAndUnknownIds(){
@@ -112,7 +139,58 @@ function testOrderDedupAndUnknownIds(){
   ]};
   const context=pollingContext(providers);
   assert.strictEqual(context.apiPollingConfig().order.map(x=>x.provider_id).join(','),'B,不存在','读取阶段只去重');
-  assert.strictEqual(context.apiPollingItems().map(x=>x.provider_id).join(','),'B,A,C','库里不存在的引用被丢弃');
+  assert.strictEqual(context.apiPollingItems().map(x=>x.provider_id).join(','),'B','库里不存在的引用被丢弃，也不补别的');
+}
+
+// ---------------------------------------------------------------------------
+// 添加 / 移除 / 换模型 / 排序：全部只改草稿，点保存前不碰全局配置
+// ---------------------------------------------------------------------------
+function testAddRemoveAndReorderStayInDraft(){
+  const providers=library();
+  providers.chat_polling={enabled:false,order:[{provider_id:'A',model:''}]};
+  const before=JSON.stringify(providers.chat_polling);
+  const context=pollingContext(providers);
+
+  assert.strictEqual(context.apiPollingAddable().map(p=>p.id).join(','),'B,C','已在队列里的不能再次出现在待添加里');
+
+  context.__dom['api-polling-add-select']={value:'B'};
+  context.addApiPollingProvider();
+  assert.strictEqual(context.apiPollingDraftItems().map(x=>x.provider_id).join(','),'A,B','新加的排在队尾');
+  assert.strictEqual(context.apiPollingDraftItems()[1].model,'m-b','新加的默认跟随供应商默认模型，不用再填一遍');
+
+  context.addApiPollingProvider();
+  assert.strictEqual(context.apiPollingDraftItems().length,2,'同一个供应商不能重复加入');
+  assert.ok(context.__toasts.some(x=>x.indexOf('已经在队列里')>=0),'重复添加要给出提示');
+
+  context.moveApiPolling(1,-1);
+  assert.strictEqual(context.apiPollingDraftItems().map(x=>x.provider_id).join(','),'B,A','上移生效');
+
+  context.setApiPollingModel(0,'m-b-pro');
+  assert.strictEqual(context.apiPollingDraftItems()[0].model,'m-b-pro','行内换模型生效');
+
+  context.removeApiPolling(1);
+  assert.strictEqual(context.apiPollingDraftItems().map(x=>x.provider_id).join(','),'B','移出生效');
+
+  assert.strictEqual(JSON.stringify(providers.chat_polling),before,'保存之前不得改动全局 apiProviders');
+}
+
+function testDraftSyncDropsDeletedProviders(){
+  const providers=library();
+  providers.chat_polling={order:[{provider_id:'A',model:'m-a'},{provider_id:'已删除',model:'x'}]};
+  const context=pollingContext(providers);
+  const items=context.apiPollingDraftItems();
+  context.apiPollingDraftSync(items);
+  assert.strictEqual(context.apiPollingDraftGet().order.map(x=>x.provider_id).join(','),'A','供应商库里删掉的引用自动消失');
+}
+
+function testAddRejectsUnknownProvider(){
+  const providers=library();
+  providers.chat_polling={order:[]};
+  const context=pollingContext(providers);
+  context.__dom['api-polling-add-select']={value:'不存在'};
+  context.addApiPollingProvider();
+  assert.strictEqual(context.apiPollingDraftGet().order.length,0,'库里没有的供应商不能加进队列');
+  assert.ok(context.__toasts.some(x=>x.indexOf('不在供应商库')>=0));
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +277,11 @@ function testChatDisplayFallsBackToLocalMirror(){
 testConfigReadIsPure();
 testWriteIsExplicit();
 testOrderingAndAvailability();
+testUnaddedProvidersNeverJoinPolling();
 testOrderDedupAndUnknownIds();
+testAddRemoveAndReorderStayInDraft();
+testDraftSyncDropsDeletedProviders();
+testAddRejectsUnknownProvider();
 testDisplaySwitchesDoNotResetCursor();
 testRevisionTracksProviderCredentials();
 testChatDisplayDefaultsWhenConfigMissing();

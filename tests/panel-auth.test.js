@@ -114,16 +114,17 @@ function testSpeechPreferenceStatusRendering(){
     last_activation_at:'2026-08-11T00:10:00+08:00',
     pending_count:0,source:'github',diff:{}
   },false);
-  assert.strictEqual(elements['chat-speech-meta'].textContent,'条数：2','预览只显示条数');
+  assert.strictEqual(elements['chat-speech-meta'].textContent,'共 2 条','预览只显示条数');
   assert(elements['chat-speech-preview'].innerHTML.includes('保持清晰'),'必须显示规则正文');
   assert(elements['chat-speech-preview'].innerHTML.includes('不要叫我宝宝'),'必须显示全部规则正文');
+  assert(elements['chat-speech-preview'].innerHTML.includes('chat-speech-num'),'每条规则要有编号');
   const rendered=elements['chat-speech-meta'].textContent+elements['chat-speech-preview'].innerHTML;
   assert(!rendered.includes('r7-test'),'预览不得出现版本号');
   assert(!rendered.includes('r6-test'),'预览不得出现上一版版本号');
   assert(!rendered.includes('待激活'),'预览不得出现待激活等管理信息');
 
   context.chatRenderSpeechPreferences({rules:[],enabled:false,source:'github'},false);
-  assert.strictEqual(elements['chat-speech-meta'].textContent,'条数：0（已停用）','停用状态要能看出来');
+  assert.strictEqual(elements['chat-speech-meta'].textContent,'共 0 条（已停用）','停用状态要能看出来');
   assert(elements['chat-speech-preview'].innerHTML.includes('暂无生效规则'));
 }
 

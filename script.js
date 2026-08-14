@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v183-polling-rules-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v184-rules-page-and-polling-picker';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5056,12 +5056,14 @@ function chatRenderSpeechPreferences(data,preserveEditor){
   var rules=Array.isArray(data.rules)?data.rules:[];
   var disabled=data.enabled===false;
   var meta=document.getElementById('chat-speech-meta');
-  if(meta)meta.textContent='条数：'+rules.length+(disabled?'（已停用）':'');
+  if(meta)meta.textContent='共 '+rules.length+' 条'+(disabled?'（已停用）':'');
   var preview=document.getElementById('chat-speech-preview');
   if(preview){
+    // 上面写着"共 9 条"，下面就必须能一条条数出来，所以每条都带编号。
     preview.innerHTML=rules.length
-      ?rules.map(function(rule){
-          return '<div class="chat-speech-line">'+esc(String((rule&&rule.instruction)||''))+'</div>';
+      ?rules.map(function(rule,index){
+          return '<div class="chat-speech-line"><b class="chat-speech-num">'+(index+1)+'</b>'+
+            '<span>'+esc(String((rule&&rule.instruction)||''))+'</span></div>';
         }).join('')
       :'<div class="chat-speech-empty">暂无生效规则</div>';
   }
@@ -5071,40 +5073,69 @@ function chatRenderSpeechPreferences(data,preserveEditor){
 /* ---- 规则管理页 ---- */
 // 页面上不出现任何版本号：revision 只是后端的并发控制标识，对用户没有意义。
 // 用户要看的是「上次发布时间 / 这次发布时间 / 条数 / 激活状态」这四项。
+//
+// 每条规则只让用户写一句话。类别（称呼/语气/格式…）和强度（硬性/要求/普通）
+// 是后端的内部字段，用户看不懂也用不上，所以不在页面上出现；但要原样带回去，
+// 否则一次保存就会把老规则的强度全部抹平。
 var rulesPageState={data:null,loading:false,busy:false,dirty:false};
-var RULES_CATEGORIES=[
-  ['forbidden_language','禁用表达'],['tone','语气'],['addressing','称呼'],
-  ['response_style','回复方式'],['interaction_boundary','互动边界'],['format','格式'],['other','其他']
-];
-var RULES_PRIORITIES=[['hard','硬性'],['strong','要求'],['normal','普通']];
-function rulesSelectHtml(cls,label,options,selected){
-  return '<select class="'+cls+'" aria-label="'+escAttr(label)+'" onchange="rulesMarkDirty()">'+
-    options.map(function(item){
-      return '<option value="'+escAttr(item[0])+'"'+(item[0]===selected?' selected':'')+'>'+esc(item[1])+'</option>';
-    }).join('')+'</select>';
-}
-function rulesRowHtml(rule,index){
+var RULES_DEFAULT_CATEGORY='other';
+var RULES_DEFAULT_PRIORITY='strong';
+var rulesRowSeq=0;
+function rulesNewKey(){rulesRowSeq++;return 'manual_'+Date.now().toString(36)+'_'+rulesRowSeq}
+function rulesRowHtml(rule){
   rule=rule&&typeof rule==='object'?rule:{};
-  var key=String(rule.key||('manual_'+Date.now().toString(36)+'_'+index));
-  return '<div class="rules-row" data-rule-key="'+escAttr(key)+'">'+
-    '<textarea class="rules-row-text" rows="2" maxlength="220" aria-label="规则内容" placeholder="例如：不要叫我宝宝" oninput="rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
-    '<div class="rules-row-side">'+
-      rulesSelectHtml('rules-row-category','类别',RULES_CATEGORIES,String(rule.category||'other'))+
-      rulesSelectHtml('rules-row-priority','强度',RULES_PRIORITIES,String(rule.priority||'strong'))+
-      '<button class="rules-row-del" type="button" title="删除这条规则" aria-label="删除这条规则" onclick="rulesDeleteRow(this)">×</button>'+
-    '</div></div>';
+  var key=String(rule.key||'').trim()||rulesNewKey();
+  return '<div class="rules-row" data-rule-key="'+escAttr(key)+'"'+
+      ' data-rule-category="'+escAttr(String(rule.category||RULES_DEFAULT_CATEGORY))+'"'+
+      ' data-rule-priority="'+escAttr(String(rule.priority||RULES_DEFAULT_PRIORITY))+'">'+
+    '<b class="rules-row-index" aria-hidden="true"></b>'+
+    '<textarea class="rules-row-text" rows="2" maxlength="220" aria-label="规则内容" placeholder="用一句话写清楚，例如：不要叫我宝宝" oninput="rulesAutoGrow(this);rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
+    '<button class="rules-row-del" type="button" title="删除这条规则" aria-label="删除这条规则" onclick="rulesDeleteRow(this)">×</button>'+
+    '</div>';
+}
+// 规则往往两三行，固定高度会把后半句藏起来。让输入框跟着内容长高，一眼就能看全。
+function rulesAutoGrow(el){
+  if(!el||!el.style)return;
+  el.style.height='auto';
+  el.style.height=Math.max(56,el.scrollHeight)+'px';
+}
+// 换横竖屏、改窗口宽度后换行数会变，高度要重算一次，否则窄屏下仍会截半句。
+var rulesResizeBound=false;
+function rulesBindResize(){
+  if(rulesResizeBound)return;
+  if(typeof window==='undefined'||!window.addEventListener)return;
+  rulesResizeBound=true;
+  window.addEventListener('resize',function(){
+    if(document.getElementById('rules-table'))rulesRenumber();
+  });
+}
+// 增删之后重排编号，保证页面上的 1/2/3 永远和实际条数对得上。
+function rulesRenumber(){
+  rulesBindResize();
+  var rows=document.querySelectorAll('#rules-table .rules-row');
+  for(var i=0;i<rows.length;i++){
+    var badge=rows[i].querySelector('.rules-row-index');
+    if(badge)badge.textContent=String(i+1);
+    var text=rows[i].querySelector('.rules-row-text');
+    if(text)rulesAutoGrow(text);
+  }
+  var count=document.getElementById('rules-draft-count');
+  if(count)count.textContent=String(rows.length);
 }
 function rulesMarkDirty(){
   rulesPageState.dirty=true;
   var hint=document.getElementById('rules-dirty-hint');
-  if(hint)hint.textContent='有未保存的改动';
+  if(hint)hint.textContent='有改动还没保存';
 }
 function rulesAddRow(){
   var table=document.getElementById('rules-table');
   if(!table)return;
   var empty=table.querySelector('.rules-empty');
   if(empty)empty.remove();
-  table.insertAdjacentHTML('beforeend',rulesRowHtml({},table.querySelectorAll('.rules-row').length));
+  var adder=table.querySelector('.rules-add-row');
+  if(adder)adder.insertAdjacentHTML('beforebegin',rulesRowHtml({}));
+  else table.insertAdjacentHTML('beforeend',rulesRowHtml({}));
+  rulesRenumber();
   rulesMarkDirty();
   var rows=table.querySelectorAll('.rules-row-text');
   if(rows.length)rows[rows.length-1].focus();
@@ -5112,11 +5143,19 @@ function rulesAddRow(){
 function rulesDeleteRow(button){
   var row=button&&button.closest?button.closest('.rules-row'):null;
   if(!row)return;
+  var table=document.getElementById('rules-table');
   row.remove();
+  if(table&&!table.querySelectorAll('.rules-row').length){
+    var adder=table.querySelector('.rules-add-row');
+    var empty='<div class="rules-empty">规则已经清空。点「发布」会让助手不再受任何规则约束。</div>';
+    if(adder)adder.insertAdjacentHTML('beforebegin',empty);
+    else table.insertAdjacentHTML('beforeend',empty);
+  }
+  rulesRenumber();
   rulesMarkDirty();
 }
 // 从页面收集规则。内容为空的行直接跳过而不是报错——用户新增了一行又没填，
-// 不应该因此卡住整个保存。
+// 不应该因此卡住整个保存。类别和强度从 data-* 原样带回，页面上不展示。
 function rulesCollect(){
   var rows=Array.prototype.slice.call(document.querySelectorAll('#rules-table .rules-row'));
   var out=[],seen=Object.create(null);
@@ -5125,19 +5164,22 @@ function rulesCollect(){
     var textEl=row.querySelector('.rules-row-text');
     var instruction=String((textEl&&textEl.value)||'').trim();
     if(!instruction)continue;
-    var key=String(row.getAttribute('data-rule-key')||'').trim()||('manual_'+Date.now().toString(36)+'_'+i);
-    while(seen[key])key=key+'_'+i;
+    var key=String(row.getAttribute('data-rule-key')||'').trim()||rulesNewKey();
+    while(seen[key])key=rulesNewKey();
     seen[key]=1;
-    var categoryEl=row.querySelector('.rules-row-category');
-    var priorityEl=row.querySelector('.rules-row-priority');
     out.push({
       key:key,
       instruction:instruction,
-      category:String((categoryEl&&categoryEl.value)||'other'),
-      priority:String((priorityEl&&priorityEl.value)||'strong')
+      category:String(row.getAttribute('data-rule-category')||RULES_DEFAULT_CATEGORY),
+      priority:String(row.getAttribute('data-rule-priority')||RULES_DEFAULT_PRIORITY)
     });
   }
   return out;
+}
+function rulesDraftRules(){
+  var data=rulesPageState.data||{};
+  var draft=(data.draft&&typeof data.draft==='object')?data.draft:{};
+  return Array.isArray(draft.rules)?draft.rules:(Array.isArray(data.rules)?data.rules:[]);
 }
 function renderRulesPage(){
   var body=document.getElementById('rules-page-body');
@@ -5147,40 +5189,47 @@ function renderRulesPage(){
     return;
   }
   var data=rulesPageState.data||{};
-  var draft=(data.draft&&typeof data.draft==='object')?data.draft:{};
-  var draftRules=Array.isArray(draft.rules)?draft.rules:(Array.isArray(data.rules)?data.rules:[]);
+  var draftRules=rulesDraftRules();
   var enabled=data.enabled!==false;
   var publishedCount=Number(data.rule_count||(Array.isArray(data.rules)?data.rules.length:0))||0;
+  var busy=rulesPageState.busy?' disabled':'';
   var html='<header class="rules-head">'+
-    '<div><h2>规则管理</h2><p>改完先保存草稿，确认无误再发布成正式生效的规则。</p></div>'+
-    '<span class="rules-state '+(enabled?'on':'off')+'">'+(enabled?'已激活':'未激活')+'</span>'+
+    '<div><h2>规则管理</h2><p>这里写的每一句话都会长期约束助手怎么说话。改完先「保存草稿」，确认无误再「发布」。</p></div>'+
+    '<span class="rules-state '+(enabled?'on':'off')+'">'+(enabled?'已生效':'已停用')+'</span>'+
     '</header>';
   html+='<section class="rules-overview">'+
-    '<div><span>上次发布时间</span><b>'+esc(data.previous_updated_at||'未发布')+'</b></div>'+
-    '<div><span>这次发布时间</span><b>'+esc(data.updated_at||'未发布')+'</b></div>'+
-    '<div><span>条数</span><b>'+publishedCount+'</b></div>'+
-    '<div><span>激活状态</span><b>'+(enabled?'已激活':'未激活')+'</b></div>'+
+    '<div><span>正在生效</span><b>'+publishedCount+' 条</b></div>'+
+    '<div><span>草稿</span><b><i id="rules-draft-count">'+draftRules.length+'</i> 条</b></div>'+
+    '<div><span>这次发布时间</span><b>'+esc(rulesTimeText(data.updated_at))+'</b></div>'+
+    '<div><span>上次发布时间</span><b>'+esc(rulesTimeText(data.previous_updated_at))+'</b></div>'+
     '</section>';
   html+='<div class="rules-actions">'+
-    '<button class="btn btn-outline btn-sm" type="button" onclick="rulesAddRow()">新增规则</button>'+
-    '<button class="btn btn-outline btn-sm" type="button" onclick="rulesSaveDraft()">保存草稿</button>'+
-    '<button class="btn btn-blue btn-sm" type="button" onclick="rulesPublish()">发布</button>'+
-    '<button class="btn btn-outline btn-sm" type="button" onclick="rulesToggleEnabled()">'+(enabled?'停用':'启用')+'</button>'+
-    '<button class="btn btn-outline btn-sm" type="button" onclick="loadRulesPage(true)">重新读取</button>'+
-    '<span class="rules-dirty-hint" id="rules-dirty-hint">'+(rulesPageState.dirty?'有未保存的改动':'')+'</span>'+
+    '<button class="btn btn-blue btn-sm" type="button"'+busy+' onclick="rulesPublish()">发布并生效</button>'+
+    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesSaveDraft()">保存草稿</button>'+
+    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesToggleEnabled()">'+(enabled?'停用全部规则':'重新启用规则')+'</button>'+
+    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="loadRulesPage(true)">放弃改动并重新读取</button>'+
+    '<span class="rules-dirty-hint" id="rules-dirty-hint">'+(rulesPageState.busy?'处理中…':(rulesPageState.dirty?'有改动还没保存':''))+'</span>'+
     '</div>';
   if(!enabled){
-    html+='<div class="rules-notice">规则已停用：当前不会注入给助手，但草稿和历史都保留着，随时可以重新启用。</div>';
+    html+='<div class="rules-notice">已停用：当前一条规则都不会发给助手。草稿和历史都还在，点「重新启用规则」就能恢复。</div>';
   }
   html+='<div class="rules-table" id="rules-table">';
   if(!draftRules.length){
-    html+='<div class="rules-empty">还没有规则。点「新增规则」写一条，比如“不要叫我宝宝”。</div>';
+    html+='<div class="rules-empty">还没有规则。点下面的「新增一条规则」写一条，比如“不要叫我宝宝”。</div>';
   }else{
-    draftRules.forEach(function(rule,index){html+=rulesRowHtml(rule,index)});
+    draftRules.forEach(function(rule){html+=rulesRowHtml(rule)});
   }
+  html+='<button class="rules-add-row" type="button" onclick="rulesAddRow()">＋ 新增一条规则</button>';
   html+='</div>';
+  html+='<p class="rules-foot-note">最多 24 条，每条最多 220 字。「保存草稿」只是存起来，助手看不到；「发布」之后才会在下一次缓存边界生效。</p>';
   if(data.warning)html+='<div class="rules-notice warn">'+esc(String(data.warning))+'</div>';
   body.innerHTML=html;
+  rulesRenumber();
+}
+function rulesTimeText(value){
+  var text=String(value||'').trim();
+  if(!text)return '未发布过';
+  return text.replace('T',' ').replace(/\+\d{2}:\d{2}$/,'').slice(0,16);
 }
 function rulesEndpoint(){return chatSpeechPreferencesEndpoint(chatLoadConfig())}
 function loadRulesPage(force){
@@ -5192,7 +5241,7 @@ function loadRulesPage(force){
     .then(function(resp){return resp.json().then(function(data){
       if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));
       return data;
-    })})
+    },function(){throw new Error('网关返回的不是规则数据（HTTP '+resp.status+'）')})})
     .then(function(data){
       rulesPageState.data=data;
       rulesPageState.dirty=false;
@@ -5203,56 +5252,88 @@ function loadRulesPage(force){
     })
     .catch(function(error){
       var body=document.getElementById('rules-page-body');
-      if(body)body.innerHTML='<div class="entity-error">规则读取失败：'+esc(String((error&&error.message)||error))+'</div>'+
+      if(body)body.innerHTML='<div class="entity-error">规则读取失败：'+esc(rulesErrorText(error))+'</div>'+
         '<div class="api-error-actions"><button class="btn btn-outline btn-sm" type="button" onclick="loadRulesPage(true)">重新读取</button></div>';
       return false;
     })
     .then(function(result){rulesPageState.loading=false;return result});
 }
+// fetch 在跨域/断网时抛的是内容为 "Failed to fetch" 的 TypeError，直接甩给用户
+// 完全看不懂。这里翻译成人话，同时保留服务端返回的真实原因。
+function rulesErrorText(error){
+  var text=String((error&&error.message)||error||'').trim();
+  if(!text)return '请稍后重试';
+  if(/failed to fetch|networkerror|load failed/i.test(text))return '连不上 CK 网关，请检查网络后重试';
+  return text;
+}
+function rulesSetBusy(busy){
+  rulesPageState.busy=!!busy;
+  var actions=document.querySelectorAll('.rules-actions .btn');
+  for(var i=0;i<actions.length;i++)actions[i].disabled=!!busy;
+  var hint=document.getElementById('rules-dirty-hint');
+  if(hint)hint.textContent=busy?'处理中…':(rulesPageState.dirty?'有改动还没保存':'');
+}
 function rulesRequest(action,payload,okMessage){
   if(rulesPageState.busy)return Promise.resolve(false);
   var data=rulesPageState.data||{};
   var body=Object.assign({action:action,base_revision:data.current_revision||'r0'},payload||{});
-  rulesPageState.busy=true;
+  // 停用/启用不带规则内容，但用户可能正在编辑；先把页面上的行留住，
+  // 请求回来后放回草稿，别让一次点击把没保存的编辑清空。
+  var keepRules=(action==='set_enabled'&&rulesPageState.dirty)?rulesCollect():null;
+  rulesSetBusy(true);
   return panelDataFetch(rulesEndpoint(),{
     method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   },{label:'CK 网关面板 Key'})
     .then(function(resp){return resp.json().then(
       function(json){return {ok:resp.ok,status:resp.status,data:json}},
-      function(){return {ok:resp.ok,status:resp.status,data:{}}}
+      function(){return {ok:resp.ok,status:resp.status,data:{},notJson:true}}
     )})
     .then(function(result){
+      // 网关如果把请求转发出去了，会返回一段 HTML；状态码可能仍是 200，
+      // 不识别出来就会假装"保存成功"，比直接报错还危险。
+      if(result.notJson||!result.data||typeof result.data!=='object'){
+        throw new Error('网关没有返回规则数据，改动没有保存');
+      }
       if(!result.ok||result.data.ok===false){
         if(result.status===409){
           // 冲突时保留用户正在编辑的内容，不静默覆盖
-          toast('规则已被其他页面更新，请点「重新读取」后再合并你的改动',6000);
+          toast('规则已被其他页面更新，请点「放弃改动并重新读取」后再改一次',6000);
           return false;
         }
         throw new Error(result.data.error||('HTTP '+result.status));
       }
       rulesPageState.data=result.data;
       rulesPageState.dirty=false;
+      if(keepRules){
+        rulesPageState.data.draft=Object.assign({},result.data.draft||{},{rules:keepRules});
+        rulesPageState.dirty=true;
+      }
+      rulesSetBusy(false);
       renderRulesPage();
       chatRenderSpeechPreferences(result.data,false);
       toast(okMessage,4000);
       return true;
     })
     .catch(function(error){
-      toast('操作失败：'+String((error&&error.message)||error),5000,{type:'error',closable:true});
+      toast('操作失败：'+rulesErrorText(error),6000,{type:'error',closable:true});
       return false;
     })
-    .then(function(result){rulesPageState.busy=false;return result});
+    .then(function(result){rulesSetBusy(false);return result});
 }
 function rulesSaveDraft(){
-  return rulesRequest('save_draft',{rules:rulesCollect()},'草稿已保存，当前生效规则未改变');
+  return rulesRequest('save_draft',{rules:rulesCollect()},'草稿已保存，当前生效的规则没有变化');
 }
 function rulesPublish(){
-  return rulesRequest('publish',{rules:rulesCollect()},'规则已发布并生效');
+  var rules=rulesCollect();
+  var before=Number((rulesPageState.data||{}).rule_count||0)||0;
+  var message=rules.length?('已发布 '+rules.length+' 条规则'):'已发布：现在没有任何规则约束助手';
+  if(!rules.length&&before>0&&!confirm('确定要发布空规则吗？发布后助手将不再受任何措辞规则约束。'))return Promise.resolve(false);
+  return rulesRequest('publish',{rules:rules},message);
 }
 function rulesToggleEnabled(){
   var enabled=(rulesPageState.data||{}).enabled!==false;
-  return rulesRequest('set_enabled',{enabled:!enabled},enabled?'规则已停用':'规则已启用');
+  return rulesRequest('set_enabled',{enabled:!enabled},enabled?'已停用：规则不再发给助手':'已重新启用：规则会在下一次缓存边界生效');
 }
 function chatOpenSpeechPreferences(){
   chatOpenSettingTab('speech');
@@ -10433,7 +10514,7 @@ var API_TABS=[
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
-  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天设置一串备用 API：按你排好的顺序用，哪个报错就自动换下一个，全程不打扰你。只影响聊天，记忆、Fact、滚动、召回都还是各用各的绑定。这一页只保存供应商和模型的选择，Key 和地址始终由网关自己去供应商库里取。'},
+  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。只影响聊天，记忆、Fact、滚动、召回都还是各用各的绑定。'},
   {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：整理人物与事件小档案、提取独立 Fact、保存每日聊天切片，也会在上下文截断前更新你对助手说话方式的长期要求。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
     {key:'fact_extract',label:'Fact 提取',info:'按话题切分 chatlog、提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
@@ -10552,24 +10633,21 @@ function apiPollingItemFor(p,model){
   var missing=!url?'URL':(!key?'Key':(!model?'模型':''));
   return {provider_id:String(p&&p.id||''),provider:p,model:model,available:!missing,missing:missing};
 }
-// 已排序候选在前，供应商库里还没排进顺序的追加到末尾，
-// 保证新增供应商不会因为没排序就被静默漏掉。
+// 只把用户自己加进来的候选算数。供应商库里没加进来的一律不出现，
+// 更不会被静默塞进轮询——"全部供应商自动进轮询"正是上一版最难用的地方。
 function apiPollingItems(){
-  var polling=apiPollingConfig();
-  var list=providerLibraryList();
+  return apiPollingItemsFromOrder(apiPollingConfig().order);
+}
+function apiPollingItemsFromOrder(order){
   var byId=Object.create(null),used=Object.create(null),out=[];
-  list.forEach(function(p){byId[String(p.id)]=p});
-  polling.order.forEach(function(item){
-    var p=byId[item.provider_id];
-    if(!p||used[item.provider_id])return;
-    used[item.provider_id]=1;
-    out.push(apiPollingItemFor(p,item.model));
-  });
-  list.forEach(function(p){
-    var id=String(p.id);
-    if(used[id])return;
+  providerLibraryList().forEach(function(p){byId[String(p.id)]=p});
+  (Array.isArray(order)?order:[]).forEach(function(item){
+    var id=String(item&&item.provider_id||'');
+    var p=byId[id];
+    // 供应商库里已经删掉的引用自然消失，不用额外清理
+    if(!p||used[id])return;
     used[id]=1;
-    out.push(apiPollingItemFor(p,''));
+    out.push(apiPollingItemFor(p,item.model));
   });
   return out;
 }
@@ -10845,8 +10923,8 @@ function renderApiConfig(){
 }
 
 /* ---- 聊天轮询页 ---- */
-// 草稿：排序和开关改动先存在内存里，点"保存"才写回 apiProviders 并推给网关。
-// 这样页面上的任何操作都不会偷偷改动全局配置。
+// 草稿：增删、排序、换模型和开关改动先存在内存里，点"保存"才写回 apiProviders
+// 并推给网关。这样页面上的任何操作都不会偷偷改动全局配置。
 var apiPollingDraft=null;
 function apiPollingDraftReset(){apiPollingDraft=null}
 function apiPollingDraftGet(){
@@ -10856,41 +10934,57 @@ function apiPollingDraftGet(){
       enabled:polling.enabled,
       show_message_status:polling.show_message_status,
       show_billing_price:polling.show_billing_price,
-      order:apiPollingItems().map(function(x){return {provider_id:x.provider_id,model:x.model}})
+      order:polling.order.map(function(x){return {provider_id:x.provider_id,model:x.model}})
     };
   }
   return apiPollingDraft;
 }
 function apiPollingDraftItems(){
-  var draft=apiPollingDraftGet();
-  var list=providerLibraryList();
-  var byId=Object.create(null),used=Object.create(null),out=[];
-  list.forEach(function(p){byId[String(p.id)]=p});
-  draft.order.forEach(function(item){
-    var p=byId[item.provider_id];
-    if(!p||used[item.provider_id])return;
-    used[item.provider_id]=1;
-    out.push(apiPollingItemFor(p,item.model));
+  return apiPollingItemsFromOrder(apiPollingDraftGet().order);
+}
+// 每次改完都把 order 写回成"当前真实可见的这几条"，
+// 顺带清掉指向已删除供应商的死引用。
+function apiPollingDraftSync(items){
+  apiPollingDraftGet().order=items.map(function(x){return {provider_id:x.provider_id,model:x.model}});
+}
+// 供应商库里还没加进轮询的那些，才是"可以添加"的
+function apiPollingAddable(){
+  var used=Object.create(null);
+  apiPollingDraftGet().order.forEach(function(x){used[String(x.provider_id)]=1});
+  return providerLibraryList().filter(function(p){return !used[String(p.id)]});
+}
+function apiPollingModelSelectHtml(item,index){
+  var models=cleanModelList(item.provider&&item.provider.models,item.provider&&item.provider.model);
+  if(item.model&&models.indexOf(item.model)<0)models=[item.model].concat(models);
+  if(!models.length){
+    return '<span class="api-polling-model-empty">这个供应商还没有模型，'+
+      '<button type="button" onclick="switchApiTab(\'providers\')">去供应商页拉取</button></span>';
+  }
+  var defaultModel=String((item.provider&&item.provider.model)||'').trim();
+  var html='<select class="api-polling-model" aria-label="选择模型" onchange="setApiPollingModel('+index+',this.value)">';
+  html+='<option value=""'+(item.model===defaultModel||!item.model?' selected':'')+'>'+
+    (defaultModel?('跟随默认：'+esc(defaultModel)):'未设置默认模型')+'</option>';
+  models.forEach(function(m){
+    if(m===defaultModel)return;
+    html+='<option value="'+escAttr(m)+'"'+(m===item.model?' selected':'')+'>'+esc(m)+'</option>';
   });
-  list.forEach(function(p){
-    var id=String(p.id);
-    if(used[id])return;
-    used[id]=1;
-    out.push(apiPollingItemFor(p,''));
-  });
-  return out;
+  html+='</select>';
+  return html;
 }
 function renderApiPolling(){
   var draft=apiPollingDraftGet();
   var items=apiPollingDraftItems();
+  apiPollingDraftSync(items);
   var available=items.filter(function(x){return x.available});
   var saved=apiPollingConfig();
-  var html=apiPageHeadHtml('聊天 API 轮询','按顺序自动切换聊天供应商；某个 API 报错就静默换下一个。',
-    '<button class="btn btn-blue btn-sm" type="button" onclick="saveApiPolling()">保存轮询配置</button>');
+  var addable=apiPollingAddable();
+  var html=apiPageHeadHtml('聊天 API 轮询','自己挑几个 API 排成一队；某个报错就静默换下一个。',
+    '<button class="btn btn-blue btn-sm" type="button" onclick="saveApiPolling()">保存轮询配置</button>'+
+    (items.length?'<button class="btn btn-outline btn-sm" type="button" onclick="clearApiPolling()">清空队列</button>':''));
   html+=renderApiIntro(findApiTab('polling'));
   html+='<section class="api-polling-overview">'+
     '<div><b>当前模式</b><span>'+(saved.enabled?'聊天 API 轮询':'单链路')+'</span></div>'+
-    '<div><b>可用 API</b><span>'+available.length+' 个</span></div>'+
+    '<div><b>队列</b><span>'+items.length+' 个（'+available.length+' 个可用）</span></div>'+
     '<div class="api-polling-current"><b>正在使用</b><span id="api-polling-current-text">'+
       (saved.enabled?'读取中…':'单链路（轮询未开启）')+'</span></div>'+
     '</section>';
@@ -10900,27 +10994,45 @@ function renderApiPolling(){
     '<label class="api-toggle"><input id="api-polling-show-price" type="checkbox"'+(draft.show_billing_price?' checked':'')+'><span>轮询时仍显示计费价格</span></label>'+
     '</div>';
   html+='<p class="api-polling-note">轮询关闭时，√ 和价格一律正常显示，上面两个开关不起作用。开启轮询后回复会等整段生成完再显示，不再逐字出现——这样某个 API 中途失败时才不会把半截回复留在屏幕上。</p>';
-  if(!items.length){
-    html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先到供应商页添加 API，再回来设置轮询顺序。</p>'+
-      '<button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
-    return html;
-  }
   html+='<div class="api-polling-list">';
-  items.forEach(function(item,index){
-    var p=item.provider;
-    var status=item.available?'可用':('缺少 '+item.missing);
-    html+='<article class="api-polling-row'+(item.available?'':' is-unavailable')+'">'+
-      '<b class="api-polling-index">'+(index+1)+'</b>'+
-      '<div class="api-polling-main"><strong>'+esc(providerDisplayName(p))+'</strong>'+
-        '<span>'+esc(providerHost(p.url)||'未填写 URL')+' · '+esc(item.model||'未设置模型')+'</span></div>'+
-      '<span class="api-polling-status">'+esc(status)+'</span>'+
-      '<div class="api-polling-actions">'+
-        '<button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移"'+(index===0?' disabled':'')+' onclick="moveApiPolling('+index+',-1)">↑</button>'+
-        '<button class="btn btn-outline btn-sm" type="button" title="下移" aria-label="下移"'+(index===items.length-1?' disabled':'')+' onclick="moveApiPolling('+index+',1)">↓</button>'+
-      '</div></article>';
-  });
+  if(!items.length){
+    html+='<div class="api-polling-empty">轮询队列是空的。从下面挑一个供应商加进来，加几个就轮几个。</div>';
+  }else{
+    items.forEach(function(item,index){
+      var p=item.provider;
+      var status=item.available?'可用':('缺少 '+item.missing);
+      html+='<article class="api-polling-row'+(item.available?'':' is-unavailable')+'">'+
+        '<b class="api-polling-index">'+(index+1)+'</b>'+
+        '<div class="api-polling-main"><strong>'+esc(providerDisplayName(p))+'</strong>'+
+          '<span>'+esc(providerHost(p.url)||'未填写 URL')+'</span>'+
+          apiPollingModelSelectHtml(item,index)+'</div>'+
+        '<span class="api-polling-status">'+esc(status)+'</span>'+
+        '<div class="api-polling-actions">'+
+          '<button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移"'+(index===0?' disabled':'')+' onclick="moveApiPolling('+index+',-1)">↑</button>'+
+          '<button class="btn btn-outline btn-sm" type="button" title="下移" aria-label="下移"'+(index===items.length-1?' disabled':'')+' onclick="moveApiPolling('+index+',1)">↓</button>'+
+          '<button class="btn btn-outline btn-sm api-polling-remove" type="button" title="移出轮询" aria-label="移出轮询" onclick="removeApiPolling('+index+')">移出</button>'+
+        '</div></article>';
+    });
+  }
   html+='</div>';
-  html+='<p class="api-polling-note">顺序从上到下依次尝试。不可用的 API 会被跳过，不会发给网关。这一页不显示也不发送任何 Key。</p>';
+  // 添加行放在队列正下方：从供应商库里直接挑，Key、地址、模型都跟着供应商走，不用重填。
+  html+='<div class="api-polling-add">';
+  if(!providerLibraryList().length){
+    html+='<span class="api-polling-add-note">供应商库还是空的。</span>'+
+      '<button class="btn btn-outline btn-sm" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button>';
+  }else if(!addable.length){
+    html+='<span class="api-polling-add-note">供应商库里的 API 已经全部加进队列了。</span>'+
+      '<button class="btn btn-outline btn-sm" type="button" onclick="switchApiTab(\'providers\')">再添一个供应商</button>';
+  }else{
+    html+='<select id="api-polling-add-select" aria-label="选择要加入轮询的供应商">'+
+      addable.map(function(p){
+        var host=providerHost(p.url);
+        return '<option value="'+escAttr(p.id)+'">'+esc(providerDisplayName(p))+(host?('（'+esc(host)+'）'):'')+'</option>';
+      }).join('')+'</select>'+
+      '<button class="btn btn-blue btn-sm" type="button" onclick="addApiPollingProvider()">加入轮询</button>';
+  }
+  html+='</div>';
+  html+='<p class="api-polling-note">顺序从上到下依次尝试，第一个能用的就用它。缺 URL / Key / 模型的会被跳过，不会发给网关。这一页只保存"用哪个供应商、哪个模型"，Key 和地址始终由网关自己去供应商库里取，不在这里显示也不重复填写。</p>';
   return html;
 }
 function apiPollingCollectSwitches(){
@@ -10940,7 +11052,46 @@ function moveApiPolling(index,delta){
   if(index<0||to<0||index>=items.length||to>=items.length)return;
   var moved=items.splice(index,1)[0];
   items.splice(to,0,moved);
-  apiPollingDraftGet().order=items.map(function(x){return {provider_id:x.provider_id,model:x.model}});
+  apiPollingDraftSync(items);
+  renderApiConfig();
+}
+function addApiPollingProvider(){
+  apiPollingCollectSwitches();
+  var select=document.getElementById('api-polling-add-select');
+  var id=String((select&&select.value)||'').trim();
+  if(!id){toast('先选一个供应商');return}
+  var provider=findLibraryProvider(id);
+  if(!provider){toast('这个供应商已经不在供应商库里了');return}
+  var draft=apiPollingDraftGet();
+  if(draft.order.some(function(x){return String(x.provider_id)===id})){toast('这个供应商已经在队列里了');return}
+  // 模型默认跟随供应商的默认模型，用户不用再填一遍；想换在行内改就行。
+  draft.order.push({provider_id:id,model:''});
+  renderApiConfig();
+  toast('已加入队列：'+providerDisplayName(provider)+'（记得点「保存轮询配置」）',4000);
+}
+function removeApiPolling(index){
+  apiPollingCollectSwitches();
+  var items=apiPollingDraftItems();
+  if(index<0||index>=items.length)return;
+  items.splice(index,1);
+  apiPollingDraftSync(items);
+  renderApiConfig();
+}
+// 老配置是"所有供应商自动进轮询"留下来的，一条条移出太累。
+// 给一个一键清空，然后只把真正想轮的几个加回来。
+function clearApiPolling(){
+  apiPollingCollectSwitches();
+  if(!apiPollingDraftGet().order.length)return;
+  if(typeof confirm==='function'&&!confirm('清空轮询队列？清空后可以只把你真正想轮的几个 API 加回来。（点「保存轮询配置」才会真正生效）'))return;
+  apiPollingDraftGet().order=[];
+  renderApiConfig();
+  toast('队列已清空，记得点「保存轮询配置」',4000);
+}
+function setApiPollingModel(index,model){
+  apiPollingCollectSwitches();
+  var draft=apiPollingDraftGet();
+  if(index<0||index>=draft.order.length)return;
+  draft.order[index].model=String(model||'').trim();
   renderApiConfig();
 }
 function saveApiPolling(){
@@ -10948,15 +11099,14 @@ function saveApiPolling(){
   var items=apiPollingDraftItems();
   var available=items.filter(function(x){return x.available});
   if(draft.enabled&&!available.length){
-    toast('没有可用 API，无法启用聊天轮询');
+    toast(items.length?'队列里没有可用 API（缺 URL / Key / 模型），无法启用轮询':'轮询队列是空的，先加一个供应商');
     return;
   }
   var next={
     enabled:draft.enabled,
     show_message_status:draft.show_message_status,
     show_billing_price:draft.show_billing_price,
-    // 顺序保存全部现存供应商（含暂时不可用的），保留用户的优先级意图；
-    // 供应商库里已删除的引用在这一步自然消失。
+    // 顺序保存用户自己排好的这几条（含暂时不可用的），保留他的优先级意图。
     order:items.map(function(x){return {provider_id:x.provider_id,model:x.model}})
   };
   next.config_revision=apiPollingRevision(next,items);
@@ -11014,8 +11164,10 @@ function apiPollingRefreshStatus(){
 // 主链路页只做只读展示和跳转，不在这里放开关，避免两个页面各有一套状态互相打架。
 function renderMainPollingSummary(){
   var saved=apiPollingConfig();
+  var items=apiPollingItems();
   var available=apiPollingAvailableItems();
-  var orderText=available.map(function(x){return providerDisplayName(x.provider)}).join(' → ')||'暂无可用 API';
+  var orderText=available.map(function(x){return providerDisplayName(x.provider)}).join(' → ')||
+    (items.length?'队列里的 API 都缺 URL / Key / 模型':'还没有加过轮询候选');
   return '<section class="api-main-polling">'+
     '<div class="api-main-polling-head"><div><b>聊天 API 轮询</b>'+
       '<span>'+(saved.enabled?'已开启，聊天不再走上面的单链路':'未开启，聊天走上面的单链路')+'</span></div>'+

@@ -120,7 +120,7 @@
         } catch (e) {}
         promptPanelUpdate('新版本');
       });
-      navigator.serviceWorker.register('./sw.js?v=chat-v183-polling-rules-trim').then(function(reg) {
+      navigator.serviceWorker.register('./sw.js?v=chat-v184-rules-page-and-polling-picker').then(function(reg) {
         reg.addEventListener('updatefound', function() {
           var worker = reg.installing;
           if (!worker) return;
