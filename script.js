@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v184-rules-page-and-polling-picker';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v185-reply-split-by-newline';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -7921,38 +7921,11 @@ function chatStreamingAssistantPreviewText(rawText){
   var parsed=chatSplitThinkingText(rawText,{suppressThinking:true,hideUnclosedThinking:true});
   var text=String(parsed.text||'').trim();
   if(!text)return '';
-  var paragraphs=text.split(/\n{2,}/).map(function(x){return x.trim()}).filter(Boolean);
-  if(paragraphs.length>1)return paragraphs[0];
   var units=chatNaturalUnits(text);
-  if(units.length>1&&chatNaturalTextLen(text)>=70){
-    var target=Math.min(units.length,text.length<260?2:3);
-    var preview=[],len=0;
-    for(var i=0;i<units.length&&preview.length<target;i++){
-      preview.push(units[i]);
-      len+=chatNaturalTextLen(units[i]);
-      if(len>=56)break;
-    }
-    return chatNaturalJoin(preview);
-  }
-  return text;
+  return units.length?chatJoinNaturalUnits(units.slice(0,1)):text;
 }
 function chatRenderStreamingAssistantContent(rawText,tools){
   return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools);
-}
-function chatNaturalTextLen(text){
-  var len=String(text||'').replace(/\s+/g,'').length;
-  return len;
-}
-function chatAssistantSplitTarget(text,unitCount){
-  var len=chatNaturalTextLen(text);
-  if(len<70||unitCount<2)return 1;
-  var r=Math.random(),n;
-  if(len<120)n=2;
-  else if(len<260)n=r<0.7?2:3;
-  else if(len<520)n=r<0.72?3:4;
-  else if(len<900)n=r<0.12?2:(r<0.78?4:5);
-  else n=r<0.75?5:6+Math.floor(Math.random()*3);
-  return Math.max(1,Math.min(10,Math.min(n,unitCount)));
 }
 function chatSplitOutsideCodeBlocks(text){
   var lines=String(text||'').replace(/\r\n/g,'\n').split('\n');
@@ -7997,104 +7970,45 @@ function chatHasUnclosedCodeBlock(text){
   return inFence;
 }
 function chatNaturalUnits(text){
+  // 分条只按小克自己的回车来：一个换行就是一条，连续空行只当同一个分隔，不额外制造条数。
+  // 不再按字数、句号或随机条数二次切分，同一段回复永远切成同样的几条。
+  // 唯一例外是围栏代码块：整块保持原样，否则代码会被逐行拆碎、markdown 直接失效。
   var protectedBlocks=chatSplitOutsideCodeBlocks(text);
-  var paragraphs=protectedBlocks.map(function(x){return x.text}).filter(Boolean);
-  if(paragraphs.length>1){
-    var usable=paragraphs.every(function(p){var len=chatNaturalTextLen(p);return len>=8&&len<=180});
-    if(usable)return paragraphs;
-  }
   var units=[];
-  var lines=[];
   protectedBlocks.forEach(function(block){
-    if(block.code){lines.push({text:block.text,code:true});return;}
-    block.text.split(/\n+/).forEach(function(line){lines.push({text:line,code:false})});
+    if(block.code){
+      units.push({text:block.text,code:true});
+      return;
+    }
+    block.text.split('\n').forEach(function(line){
+      line=String(line).replace(/\s+$/,'');
+      if(!line.trim())return;
+      units.push({text:line,code:false});
+    });
   });
-  var i=0;
-  while(i<lines.length){
-    var item=lines[i];
-    var line=item.text.trim();
-    if(!line){i++;continue;}
-    if(item.code){units.push(line);i++;continue;}
-    var isOrderedListItem=/^\d+[.、]\s*/.test(line);
-    var isUnorderedListItem=/^[-*]\s/.test(line);
-    if(isOrderedListItem||isUnorderedListItem){
-      var listBlock=[line];
-      var j=i+1;
-      while(j<lines.length){
-        if(lines[j].code)break;
-        var nextLine=lines[j].text.trim();
-        if(!nextLine){j++;continue;}
-        var nextIsOrdered=/^\d+[.、]\s*/.test(nextLine);
-        var nextIsUnordered=/^[-*]\s/.test(nextLine);
-        if((isOrderedListItem&&nextIsOrdered)||(isUnorderedListItem&&nextIsUnordered)){
-          listBlock.push(nextLine);
-          j++;
-        }else{
-          break;
-        }
-      }
-      units.push(listBlock.join('\n'));
-      i=j;
-    }else{
-      var parts=line.match(/[^。！？!?；;…]+[。！？!?；;…]*/g)||[line];
-      parts.forEach(function(p){
-        p=p.trim();
-        if(p)units.push(p);
-      });
-      i++;
-    }
-  }
-  return units.length?units:[String(text||'').trim()];
+  if(units.length)return units;
+  var fallback=String(text||'').trim();
+  return fallback?[{text:fallback,code:false}]:[];
 }
-function chatNaturalJoin(list){
-  return list.join('').replace(/\s+\n/g,'\n').trim();
-}
-function chatPackNaturalUnits(units,target){
-  if(target<=1||units.length<=1)return [chatNaturalJoin(units)];
-  var total=units.reduce(function(n,u){return n+chatNaturalTextLen(u)},0);
-  var ideal=Math.max(28,Math.ceil(total/target));
-  var out=[],buf=[],bufLen=0;
-  units.forEach(function(unit,idx){
-    var uLen=chatNaturalTextLen(unit);
-    var remainingUnits=units.length-idx;
-    var remainingSlots=target-out.length-1;
-    var shouldClose=buf.length&&bufLen>=ideal*.72&&remainingSlots>0&&remainingUnits>remainingSlots;
-    if(shouldClose){
-      out.push(chatNaturalJoin(buf));
-      buf=[];
-      bufLen=0;
-    }
-    buf.push(unit);
-    bufLen+=uLen;
-    if(bufLen>=ideal*1.35&&target-out.length-1>0){
-      out.push(chatNaturalJoin(buf));
-      buf=[];
-      bufLen=0;
-    }
-  });
-  if(buf.length)out.push(chatNaturalJoin(buf));
-  while(out.length>target){
-    var last=out.pop();
-    out[out.length-1]=(out[out.length-1]||'')+last;
-  }
-  return out.filter(Boolean);
+function chatJoinNaturalUnits(list){
+  return (Array.isArray(list)?list:[])
+    .map(function(unit){return unit&&typeof unit==='object'?String(unit.text||''):String(unit||'')})
+    .filter(function(part){return part.trim()})
+    .join('\n')
+    .trim();
 }
 function chatSplitAssistantReplies(rawText,splitEnabled){
   var parsed=chatSplitThinkingText(rawText);
   var text=parsed.text.trim();
   if(!text)return parsed.thinking?[rawText]:[];
   if(splitEnabled===false)return [rawText];
+  // 代码块没闭合时整段发一条：这时候按行拆会把半截围栏切开，渲染必然错乱。
   if(chatHasUnclosedCodeBlock(text))return [rawText];
   var units=chatNaturalUnits(text);
-  if(/\n{2,}/.test(text)&&units.length>1&&units.length<=6){
-    if(parsed.thinking)units[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+units[0];
-    return units;
-  }
-  var target=chatAssistantSplitTarget(text,units.length);
-  if(target<=1)return [rawText];
-  var out=chatPackNaturalUnits(units,target);
-  if(parsed.thinking&&out.length)out[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+out[0];
-  return out.length?out:[rawText];
+  if(units.length<2)return [rawText];
+  var parts=units.map(function(unit){return unit.text});
+  if(parsed.thinking)parts[0]='<ck_thinking>\n'+parsed.thinking+'\n</ck_thinking>\n\n'+parts[0];
+  return parts;
 }
 function chatRecordFirstRenderedLatency(latency){
   latency=latency&&typeof latency==='object'?latency:{};
