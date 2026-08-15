@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v186-stop-back-to-pending';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v187-dedupe-fact-debug';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5551,10 +5551,51 @@ async function chatDeleteWorldbook(){
 }
 function chatDebugPrune(list){
   var cutoff=Date.now()-CHAT_DEBUG_TTL;
-  return (Array.isArray(list)?list:[]).filter(function(x){return x&&Number(x.ts||0)>=cutoff}).slice(-500);
+  return chatDebugNormalizeRecords((Array.isArray(list)?list:[]).filter(function(x){return x&&Number(x.ts||0)>=cutoff}).slice(-500));
+}
+function chatDebugStableValue(value){
+  if(Array.isArray(value))return value.map(chatDebugStableValue);
+  if(value&&typeof value==='object'){
+    var out={};
+    Object.keys(value).sort().forEach(function(key){out[key]=chatDebugStableValue(value[key])});
+    return out;
+  }
+  return value;
+}
+function chatDebugFactRecallSignature(record){
+  if(!record||((record.event!=='memory')&&(record.event!=='debug')))return '';
+  var data=record.data&&typeof record.data==='object'?record.data:{};
+  var diag=data.recall_diag&&typeof data.recall_diag==='object'?data.recall_diag:null;
+  if(!diag||!Object.keys(diag).length)return '';
+  return JSON.stringify(chatDebugStableValue(diag));
+}
+function chatDebugFactRecallPriority(record){
+  if(!record)return 0;
+  if(record.event==='debug'&&record.data&&String(record.data.recall_query||'').trim())return 3;
+  if(record.event==='debug')return 2;
+  return 1;
+}
+function chatDebugNormalizeRecords(list){
+  var out=[],factIndexes={};
+  (Array.isArray(list)?list:[]).forEach(function(record){
+    if(!record||typeof record!=='object')return;
+    var signature=chatDebugFactRecallSignature(record);
+    if(!signature){out.push(record);return;}
+    var existingIndex=factIndexes[signature];
+    if(existingIndex===undefined){
+      factIndexes[signature]=out.length;
+      out.push(record);
+      return;
+    }
+    if(chatDebugFactRecallPriority(record)>chatDebugFactRecallPriority(out[existingIndex]))out[existingIndex]=record;
+  });
+  return out;
 }
 function chatLoadDebugRecords(){
-  try{chatDebugRecords=chatDebugPrune(JSON.parse(localStorage.getItem(CHAT_DEBUG_KEY)||'[]'))}catch(e){chatDebugRecords=[]}
+  try{
+    chatDebugRecords=chatDebugPrune(JSON.parse(localStorage.getItem(CHAT_DEBUG_KEY)||'[]'));
+    chatSaveDebugRecords();
+  }catch(e){chatDebugRecords=[]}
   chatRenderDebugRecords();
 }
 function chatSaveDebugRecords(){
@@ -9850,7 +9891,7 @@ async function chatSubmitPendingMessages(options){
           var memoryPackEl=document.getElementById('chat-memory-pack');
           if(memoryPackEl)memoryPackEl.value=recallInfo.preview||'';
           var savedCfg=chatLoadConfig();savedCfg.memoryPreview=recallInfo.preview||'';chatSaveConfigObject(savedCfg);
-          chatDebug(ev,{memory_chars:recallInfo.chars,has_memory:!!recallInfo.preview,recall_diag:data.recall_diag||{}});
+          chatDebug(ev,{memory_chars:recallInfo.chars,has_memory:!!recallInfo.preview,recall_query:data.recall_query||'',debug_id:data.debug_id||'',recall_diag:data.recall_diag||{}});
         }else if(ev==='transport'){
           if(data&&Array.isArray(data.messages)){
             var ts=chatCurrentSession();
