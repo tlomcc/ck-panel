@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v185-reply-split-by-newline';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v186-stop-back-to-pending';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -6567,10 +6567,6 @@ function chatReleaseSendingUi(request){
 function chatFinalizeStoppedRequest(request){
   if(!request||request.stopRecorded)return false;
   request.stopRecorded=true;
-  var snapshot={};
-  if(typeof request.stopSnapshot==='function'){
-    try{snapshot=request.stopSnapshot()||{}}catch(e){snapshot={}}
-  }
   var submitTs=Number(request.submitTs)||Date.now();
   (request.pendingMessages||[]).forEach(function(message){
     var index=chatMessages.indexOf(message);
@@ -6595,19 +6591,6 @@ function chatFinalizeStoppedRequest(request){
     session.transportMessages=chatLimitArray(request.transportSnapshot.messages||[],CHAT_MAX_TRANSPORT_MESSAGES);
     session.transportUpdated=Number(request.transportSnapshot.updated)||0;
   }
-  var firstReplyTs=Number(snapshot.firstReplyTs)||Date.now();
-  var responseUserTs=Number(snapshot.responseUserTs)||submitTs;
-  var stopped=chatAttachAssistantTiming({
-    role:'assistant',
-    text:String(snapshot.assistantText||'')||'（已停止）',
-    recall:snapshot.recallInfo||null,
-    tools:chatCloneToolEvents(snapshot.toolEvents||[]),
-    stopped:true,
-    ts:firstReplyTs,
-    turnId:String(request.turnId||'')
-  },responseUserTs,firstReplyTs);
-  chatAttachAssistantCost(stopped,snapshot.requestUsage||null);
-  chatInsertMessagesBeforePending([stopped]);
   if(request.out&&request.out.parentNode)request.out.parentNode.remove();
   request.out=null;
   chatSaveLocalMessages();
@@ -6630,8 +6613,7 @@ function chatBeginSendingUi(){
     turnId:'',
     cacheLifecycleCaptured:false,
     submitTs:Date.now(),
-    out:null,
-    stopSnapshot:null
+    out:null
   };
   chatSending=true;
   chatAbort=controller;
@@ -9758,18 +9740,6 @@ async function chatSubmitPendingMessages(options){
   var assistantText='',recallInfo=null,toolEvents=[],requestUsage=null;
   var responseUserTs=submitTs;
   var firstReplyTs=0;
-  if(requestState){
-    requestState.stopSnapshot=function(){
-      return {
-        assistantText:assistantText,
-        recallInfo:recallInfo,
-        toolEvents:toolEvents,
-        requestUsage:requestUsage,
-        responseUserTs:responseUserTs,
-        firstReplyTs:firstReplyTs
-      };
-    };
-  }
   var latencyTrace={
     debug_id:'',
     panel_request_started_ms:0,
@@ -9982,7 +9952,6 @@ async function chatSubmitPendingMessages(options){
   }finally{
     stopStreamRender();
     if(out&&out.parentNode)out.parentNode.remove();
-    if(requestState)requestState.stopSnapshot=null;
     chatReleaseSendingUi(requestState);
   }
 }
