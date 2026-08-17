@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v187-dedupe-fact-debug';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v188-fact-cleanup';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1901,7 +1901,7 @@ function renderDailyStatus(d){
   html+=dsTile(!!e.yesterday_done,'前一天 · 小档案整理',d.yesterday,'已整理','还没整理');
   html+='</div>';
   html+=renderDailyFactStatus(d.fact_daily||{});
-  html+='<div class="ds-note">今天 '+esc(d.today||'')+'：档案整理 '+(e.today_done?'✅':'—')+'。<br>当天内容一般在“第二天首次聊天”时才离线整理，今天显示“—”属正常。</div>';
+  html+='<div class="ds-note">今天 '+esc(d.today||'')+'：档案整理 '+(e.today_done?'✅':'—')+'。<br>每日整理任务通常在第二天首次聊天时处理，今天显示“—”属正常。</div>';
   html+='<div class="ds-stats">'+
     '<div class="ds-stat"><b>'+(e.nodes||0)+'</b><span>小档案</span></div>'+
     '<div class="ds-stat"><b>'+(e.relations||0)+'</b><span>关系</span></div>'+
@@ -2850,8 +2850,6 @@ var CHAT_LOCAL_SUMMARY_VISIBLE_MESSAGES=40;
 var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
-var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
-var CHAT_SCROLL_JUMP_INTENT_MS=1200;
 var CHAT_IMAGE_MAX_COUNT=4;
 var CHAT_IMAGE_MAX_SOURCE_BYTES=12*1024*1024;
 var CHAT_IMAGE_MAX_DATA_URL_CHARS=5*1024*1024;
@@ -2879,11 +2877,6 @@ var chatSessions=[];
 var chatActiveSessionId='';
 var chatDebugRecords=[];
 var chatCacheTimer=null;
-var chatScrollJumpTimer=null;
-var chatScrollJumpManualUntil=0;
-var chatScrollJumpPointerActive=false;
-var chatScrollJumpPointerX=0;
-var chatScrollJumpPointerY=0;
 var chatWorldbookActiveId='';
 var chatEditingIndex=-1;
 var chatEditingDraftText='';
@@ -7930,7 +7923,7 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
-function chatRenderAssistantContent(rawText,streaming,tools,messageIndex){
+function chatRenderAssistantParts(rawText,streaming,tools,messageIndex){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
   var thinking=split.thinking?(
     '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
@@ -7938,7 +7931,11 @@ function chatRenderAssistantContent(rawText,streaming,tools,messageIndex){
   var toolTrace=chatRenderToolTrace(tools);
   var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
   var body=split.text?(tagged!==null?tagged:'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
-  return thinking+toolTrace+body;
+  return {thinking:thinking,toolTrace:toolTrace,body:body};
+}
+function chatRenderAssistantContent(rawText,streaming,tools,messageIndex){
+  var parts=chatRenderAssistantParts(rawText,streaming,tools,messageIndex);
+  return parts.thinking+parts.toolTrace+parts.body;
 }
 function chatStreamingAssistantPreviewText(rawText){
   var parsed=chatSplitThinkingText(rawText,{suppressThinking:true,hideUnclosedThinking:true});
@@ -8751,88 +8748,6 @@ document.addEventListener('visibilitychange',function(){
 function chatMessagesBox(){
   return document.getElementById('chat-messages');
 }
-function chatScrollJumpControls(){
-  return document.getElementById('chat-scroll-jumps');
-}
-function chatUpdateScrollJumpState(){
-  var controls=chatScrollJumpControls();
-  var box=chatMessagesBox();
-  if(!controls||!box)return;
-  var top=controls.querySelector('[data-chat-scroll-edge="top"]');
-  var bottom=controls.querySelector('[data-chat-scroll-edge="bottom"]');
-  if(top)top.disabled=box.scrollTop<=2;
-  if(bottom)bottom.disabled=box.scrollHeight-box.scrollTop-box.clientHeight<=2;
-}
-function chatHideScrollJumps(){
-  var controls=chatScrollJumpControls();
-  if(!controls)return;
-  if(controls.contains(document.activeElement)&&document.activeElement.blur)document.activeElement.blur();
-  controls.classList.remove('show');
-  controls.setAttribute('aria-hidden','true');
-}
-function chatScheduleScrollJumpHide(){
-  if(chatScrollJumpTimer)clearTimeout(chatScrollJumpTimer);
-  chatScrollJumpTimer=setTimeout(chatHideScrollJumps,CHAT_SCROLL_JUMP_VISIBLE_MS);
-}
-function chatRevealScrollJumps(){
-  if(!document.body.classList.contains('chat-active'))return;
-  var controls=chatScrollJumpControls();
-  if(!controls)return;
-  controls.classList.add('show');
-  controls.setAttribute('aria-hidden','false');
-  chatUpdateScrollJumpState();
-  chatScheduleScrollJumpHide();
-}
-function chatMarkScrollJumpManualIntent(){
-  chatScrollJumpManualUntil=Date.now()+CHAT_SCROLL_JUMP_INTENT_MS;
-}
-function chatHasScrollJumpManualIntent(){
-  return chatScrollJumpManualUntil>=Date.now();
-}
-function chatBeginScrollJumpPointer(event){
-  if(event&&event.button!==undefined&&event.button!==0)return;
-  chatScrollJumpPointerActive=true;
-  chatScrollJumpPointerX=Number(event&&event.clientX)||0;
-  chatScrollJumpPointerY=Number(event&&event.clientY)||0;
-}
-function chatContinueScrollJumpPointer(event){
-  if(!chatScrollJumpPointerActive)return;
-  var x=Number(event&&event.clientX)||0;
-  var y=Number(event&&event.clientY)||0;
-  if(Math.abs(x-chatScrollJumpPointerX)<3&&Math.abs(y-chatScrollJumpPointerY)<3)return;
-  chatScrollJumpPointerX=x;
-  chatScrollJumpPointerY=y;
-  chatMarkScrollJumpManualIntent();
-}
-function chatEndScrollJumpPointer(){
-  chatScrollJumpPointerActive=false;
-}
-function chatJumpToEdge(edge,event){
-  if(event)event.preventDefault();
-  var box=chatMessagesBox();
-  if(!box)return;
-  var top=edge==='top'?0:box.scrollHeight;
-  try{box.scrollTo({top:top,behavior:ckPrefersReducedMotion()?'auto':'smooth'})}
-  catch(e){box.scrollTop=top}
-  if(edge!=='top')chatSetNewMessageHint(false);
-  if(event&&event.currentTarget&&event.currentTarget.blur)event.currentTarget.blur();
-  chatRevealScrollJumps();
-  setTimeout(chatUpdateScrollJumpState,400);
-}
-function chatAttachScrollJumpControls(){
-  var controls=chatScrollJumpControls();
-  var box=chatMessagesBox();
-  if(!controls||!box||controls.__ckAttached)return;
-  controls.__ckAttached=true;
-  box.addEventListener('wheel',chatMarkScrollJumpManualIntent,{passive:true});
-  box.addEventListener('touchmove',chatMarkScrollJumpManualIntent,{passive:true});
-  box.addEventListener('pointerdown',chatBeginScrollJumpPointer,{passive:true});
-  window.addEventListener('pointermove',chatContinueScrollJumpPointer,{passive:true});
-  window.addEventListener('pointerup',chatEndScrollJumpPointer,{passive:true});
-  window.addEventListener('pointercancel',chatEndScrollJumpPointer,{passive:true});
-  controls.addEventListener('mouseenter',chatScheduleScrollJumpHide);
-  controls.addEventListener('focusin',chatScheduleScrollJumpHide);
-}
 function ckPrefersReducedMotion(){
   return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
@@ -8852,8 +8767,6 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
-  if(chatHasScrollJumpManualIntent())chatRevealScrollJumps();
-  else chatUpdateScrollJumpState();
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
@@ -9048,7 +8961,9 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
-  var inner=role==='assistant'?chatRenderAssistantContent(m.text||'',false,m.tools,i):esc(m.text||'');
+  var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i):null;
+  var thinking=assistantParts?assistantParts.thinking:'';
+  var inner=assistantParts?(assistantParts.toolTrace+assistantParts.body):esc(m.text||'');
   if(role==='user')inner=chatRenderUserMessageContent(m,i);
   var isGroupLast=chatIsMessageGroupLast(i,role);
   var toolButtons=role==='system'?[]:['<button class="chat-msg-act" data-act="copy" data-i="'+i+'" title="复制">复制</button>'];
@@ -9065,7 +8980,7 @@ function chatRenderMessageRow(m,i){
   var animKey=chatMessageAnimKey(m);
   var fresh=chatFreshMessageKeys.has(animKey)?' chat-fresh':'';
   var staggered=chatStaggeredMessageKeys.has(animKey)?' chat-staggered':'';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall:'')+bubble+versionNav+tools+userMeta+time+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+versionNav+tools+userMeta+time+'</div>';
 }
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
@@ -9412,7 +9327,6 @@ function chatInit(){
   chatRenderDraftImages();
   chatRenderDraftFiles();
   chatAttachMessagesScroll();
-  chatAttachScrollJumpControls();
   var input=document.getElementById('chat-input');
   chatLayoutCompose();
   window.addEventListener('resize',chatHandleViewportChange);
@@ -10438,21 +10352,15 @@ var API_TABS=[
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
-  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。只影响聊天，记忆、Fact、滚动、召回都还是各用各的绑定。'},
-  {key:'memory',label:'记忆',info:'这一栏管“帮你记住事情”：整理人物与事件小档案、提取独立 Fact、保存每日聊天切片，也会在上下文截断前更新你对助手说话方式的长期要求。',groups:[
+  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。只影响聊天、Fact 和召回配置。'},
+  {key:'memory',label:'记忆',info:'这一栏管人物与事件档案、Fact 提取和言语要求提取。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
-    {key:'fact_extract',label:'Fact 提取',info:'按话题切分 chatlog、提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'},
-    {key:'mem_chatlog',label:'Chatlog离线切片',info:'把每天的聊天记录存档，并剪成一小段一小段。这里直接选择负责切片和写摘要的供应商和模型。'}
-  ]},
-  {key:'rolling',label:'滚动',info:'这一栏管“自动整理近况”：放久了的旧近况会被自动概括一下、收进长期记录里，让“最近怎么样”这块始终干净。',groups:[
-    {key:'roll_sys',label:'Sys Rolling',info:'把“当前近况”里放了挺久的旧条目，自动概括并进长期时间线。这里选择负责这个任务的供应商和模型。'},
-    {key:'roll_status',label:'状态滚动',info:'每天自动把这一天的情况汇总成一份“今日状态”。这里选择负责写状态的供应商和模型。'}
+    {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
+    {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'}
   ]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
-    {key:'recall_rewrite',label:'意图改写',info:'在正式召回前，把当前问题改写成更明确、适合检索的查询。这里直接选择意图改写使用的供应商和模型。'},
-    {key:'recall_vector',label:'向量化',info:'把每条记忆变成电脑能比对“意思像不像”的形式。这里选择向量化服务供应商和模型。'},
-    {key:'recall_keyword',label:'关键词辅助',info:'除了按“意思”找，再用关键词兜底，减少漏召回。这里选择关键词辅助服务。'}
+    {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
+    {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}
   ]}
 ];
 var apiDirectConfig={};
@@ -10495,6 +10403,8 @@ function normalizeProvider(p){
   return {
     id:String(p.id||'').trim()||newProvId(),
     name:String(p.name||'').trim(),
+    note:String(p.note||'').trim(),
+    category:String(p.category||'').trim(),
     url:String(p.url||'').trim(),
     key:String(p.key||'').trim(),
     model:String(p.model||'').trim(),
@@ -10659,6 +10569,8 @@ function addProviderToLibrary(raw){
     var old=slot.providers[i];
     if(old.id===p.id||providerFingerprint(old)===fp){
       old.name=old.name||p.name;
+      old.note=old.note||p.note;
+      old.category=old.category||p.category;
       old.url=old.url||p.url;
       old.key=old.key||p.key;
       old.model=old.model||p.model;
@@ -10671,6 +10583,7 @@ function addProviderToLibrary(raw){
 }
 function normalizeApiProviders(raw){
   apiProviders=(raw&&typeof raw==='object'&&!Array.isArray(raw))?raw:{};
+  ['mem_chatlog','roll_sys','roll_status','recall_keyword'].forEach(function(key){delete apiProviders[key]});
   var sourceProviders=[];
   var existingLibrary=apiProviders[API_PROVIDER_LIBRARY_KEY];
   if(existingLibrary&&typeof existingLibrary==='object'&&!Array.isArray(existingLibrary)&&Array.isArray(existingLibrary.providers)){
@@ -10819,12 +10732,39 @@ function setModelSearchState(scope,models){
   input.placeholder=has?'搜索模型':'拉取模型后可搜索';
   filterModelOptions(input);
 }
-function providerOptionsHtml(selected){
+function providerOptionsHtml(selected,showCategorized){
   var html='<option value="">不选择</option>';
+  var categorized={};
   providerLibraryList().forEach(function(p){
+    var category=String(p.category||'').trim();
+    if(category){
+      if(showCategorized||p.id===selected)(categorized[category]||(categorized[category]=[])).push(p);
+      return;
+    }
     html+='<option value="'+escAttr(p.id)+'"'+(p.id===selected?' selected':'')+'>'+esc(providerDisplayName(p))+'</option>';
   });
+  Object.keys(categorized).sort(function(a,b){return a.localeCompare(b,'zh-CN')}).forEach(function(category){
+    html+='<optgroup label="'+escAttr(category)+'">';
+    categorized[category].forEach(function(p){
+      html+='<option value="'+escAttr(p.id)+'"'+(p.id===selected?' selected':'')+'>'+esc(providerDisplayName(p))+'</option>';
+    });
+    html+='</optgroup>';
+  });
   return html;
+}
+function hasCategorizedProviders(){
+  return providerLibraryList().some(function(p){return !!String(p.category||'').trim()});
+}
+function toggleCategorizedProviderOptions(btn){
+  var row=btn&&btn.closest?btn.closest('.api-assign-card'):null;
+  var select=row?row.querySelector('.assign-provider'):null;
+  if(!select)return;
+  var open=btn.getAttribute('data-open')!=='true';
+  var selected=select.value;
+  btn.setAttribute('data-open',open?'true':'false');
+  btn.textContent=open?'收起归类供应商':'展开归类供应商';
+  select.innerHTML=providerOptionsHtml(selected,open);
+  select.value=selected;
 }
 function renderApiConfig(){
   var body=document.getElementById('api-config-body');
@@ -11107,10 +11047,18 @@ function renderProviderLibrary(){
   var html=apiPageHeadHtml('供应商库','维护 API URL / Key 和模型列表。','<button class="prov-add compact" type="button" onclick="addProvider()">添加供应商</button>');
   html+=renderApiIntro(tab);
   if(!list.length){
-    html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先添加一个供应商，再到主链路、记忆、滚动或召回页选择它。</p><button class="prov-add" type="button" onclick="addProvider()">添加供应商</button></div>';
+    html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先添加一个供应商，再到主链路、记忆或召回页选择它。</p><button class="prov-add" type="button" onclick="addProvider()">添加供应商</button></div>';
   }else{
     html+='<div class="api-provider-list">';
-    list.forEach(function(p){html+=providerCardHtml(p)});
+    var uncategorized=list.filter(function(p){return !String(p.category||'').trim()});
+    uncategorized.forEach(function(p){html+=providerCardHtml(p)});
+    var categories={};
+    list.forEach(function(p){var category=String(p.category||'').trim();if(category)(categories[category]||(categories[category]=[])).push(p)});
+    Object.keys(categories).sort(function(a,b){return a.localeCompare(b,'zh-CN')}).forEach(function(category){
+      html+='<section class="prov-category" data-category="'+escAttr(category)+'"><button class="prov-category-head" type="button" onclick="this.parentNode.classList.toggle(\'expanded\')"><span>归类：'+esc(category)+'</span><small>'+categories[category].length+' 个供应商　⌄</small></button><div class="prov-category-body">';
+      categories[category].forEach(function(p){html+=providerCardHtml(p)});
+      html+='</div></section>';
+    });
     html+='</div>';
   }
   return html;
@@ -11122,10 +11070,12 @@ function providerCardHtml(p){
   var modelHint=models.length?'<div class="prov-model-hint">已缓存 '+models.length+' 个模型。默认模型会作为新功能选择的初始值。</div>':'<div class="prov-model-hint">先填 API URL 和 API Key，再拉取模型；也可以直接手填默认模型。</div>';
   var usedLabel=usage.length?(usage.length+' 处使用'):'未使用';
   return '<div class="prov-card" data-id="'+escAttr(p.id)+'">'+
-    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span><small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><div class="prov-card-badges"><span class="prov-status prov-status-model">'+models.length+' 模型</span><span class="prov-status '+(usage.length?'prov-status-on':'prov-status-off')+'">'+usedLabel+'</span></div></div>'+
+    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span>'+(p.note?'<small class="prov-note-preview">'+esc(p.note)+'</small>':'')+'<small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><div class="prov-card-badges"><span class="prov-status prov-status-model">'+models.length+' 模型</span><span class="prov-status '+(usage.length?'prov-status-on':'prov-status-off')+'">'+usedLabel+'</span></div></div>'+
     usageHtml+
     '<div class="prov-card-body">'+
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
+      '<div class="prov-row"><label>归类（文件夹）</label><input class="prov-category-input" type="text" value="'+escAttr(p.category||'')+'" placeholder="例如：不常用、备用"></div>'+
+      '<div class="prov-row prov-row-wide"><label>备注</label><textarea class="prov-note-input" rows="3" placeholder="记录这个供应商的用途、限制或注意事项">'+esc(p.note||'')+'</textarea></div>'+
       '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
@@ -11151,11 +11101,12 @@ function assignmentCardHtml(g){
   var selectedModel=slot.model||(p&&p.model)||'';
   var models=p?cleanModelList(p.models,selectedModel):[];
   var providerText=p?('当前供应商：'+providerDisplayName(p)):'当前未选择供应商';
+  var categorizedToggle=hasCategorizedProviders()?'<button class="api-provider-category-toggle" type="button" data-open="false" onclick="toggleCategorizedProviderOptions(this)">展开归类供应商</button>':'';
   return '<div class="api-assign-card" data-group="'+escAttr(g.key)+'">'+
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current)+'</select></label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current,false)+'</select>'+categorizedToggle+'</label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
     '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
     '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。Key 和站点地址在「供应商库」里管理。':'选择供应商后可拉取模型，也可以直接填写模型名。Key 和站点地址在「供应商库」里管理。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存配置</button></div>'+
@@ -11165,12 +11116,12 @@ function readProvCard(card){
   function v(sel){var el=card.querySelector(sel);return el?el.value:''}
   var id=card.getAttribute('data-id');
   var old=findLibraryProvider(id);
-  return {id:id,name:v('.prov-name-input'),url:v('.prov-url'),key:v('.prov-key'),model:v('.prov-model'),models:old&&Array.isArray(old.models)?old.models:[]};
+  return {id:id,name:v('.prov-name-input'),category:v('.prov-category-input'),note:v('.prov-note-input'),url:v('.prov-url'),key:v('.prov-key'),model:v('.prov-model'),models:old&&Array.isArray(old.models)?old.models:[]};
 }
 function addProvider(){
   switchApiTab('providers');
   var id=newProvId();
-  apiProviderLibrarySlot().providers.push({id:id,name:'',url:'',key:'',model:'',models:[]});
+  apiProviderLibrarySlot().providers.push({id:id,name:'',category:'',note:'',url:'',key:'',model:'',models:[]});
   renderApiConfig();
   setTimeout(function(){
     var card=document.querySelector('.prov-card[data-id="'+id+'"]');
@@ -11193,7 +11144,7 @@ function fetchProviderModels(btn){
   if(!d.url.trim()){toast('先填写 API URL');return}
   if(!d.key.trim()){toast('先填写 API Key');return}
   var p=findLibraryProvider(d.id)||{};
-  p.id=d.id;p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
+  p.id=d.id;p.name=d.name.trim();p.category=d.category.trim();p.note=d.note.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
   btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
   fetchModelsForProvider(p).then(function(models){
     p.models=cleanModelList(models,p.model);
@@ -11214,7 +11165,7 @@ function saveProvider(btn){
     for(var i=0;i<list.length;i++){if(providerFingerprint(list[i])===fp){p=list[i];break}}
     if(!p){list.push(normalizeProvider(d));p=findLibraryProvider(d.id)}
   }
-  p.name=d.name.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();p.models=cleanModelList(d.models,p.model);
+  p.name=d.name.trim();p.category=d.category.trim();p.note=d.note.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();p.models=cleanModelList(d.models,p.model);
   btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
   persistAndReload('供应商已保存').then(function(ok){btn.disabled=false;btn.textContent=old;if(ok)renderApiConfig()});
 }

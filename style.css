@@ -4385,6 +4385,11 @@ body.dark .ds-fact-error{background:#30271c;color:#dfbd83;border-color:#c68b42}
 .api-empty-callout b{display:block;font-size:15px;color:var(--ck-text);margin-bottom:5px}
 .api-empty-callout p{font-size:12.5px;color:var(--ck-muted);line-height:1.7;margin:0 0 12px}
 .api-provider-list{display:grid;gap:10px}
+.prov-category{display:grid;gap:8px}
+.prov-category-head{display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);background:var(--ck-surface-soft);color:var(--ck-text);font:inherit;text-align:left;cursor:pointer}
+.prov-category-head small{color:var(--ck-muted);font-size:12px}
+.prov-category-body{display:none;gap:10px;padding-left:12px}
+.prov-category.expanded .prov-category-body{display:grid}
 .api-assign-card{
   position:relative;overflow:hidden;
   background:var(--ck-surface);border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);
@@ -4413,6 +4418,7 @@ body.dark .ds-fact-error{background:#30271c;color:#dfbd83;border-color:#c68b42}
 .api-assign-grid input:focus{border-color:var(--ck-accent)}
 .api-assign-grid select:disabled{opacity:.62;cursor:default}
 .api-assign-grid input[readonly]{cursor:default}
+.api-provider-category-toggle{margin-top:6px;padding:0;border:0;background:transparent;color:var(--ck-accent-strong);font:inherit;font-size:11px;cursor:pointer}
 
 .prov-card{
   position:relative;
@@ -4425,6 +4431,7 @@ body.dark .ds-fact-error{background:#30271c;color:#dfbd83;border-color:#c68b42}
 }
 .prov-title-wrap{display:grid;gap:3px;min-width:0}
 .prov-title-wrap small{font-size:11.5px;color:var(--ck-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prov-title-wrap .prov-note-preview{color:var(--ck-text-soft);white-space:normal;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .prov-name{font-size:15px;font-weight:700;color:var(--ck-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prov-card-badges{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px}
 .prov-usage{
