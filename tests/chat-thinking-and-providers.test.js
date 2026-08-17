@@ -4,6 +4,7 @@ const fs=require('fs');
 const root=require('path').resolve(__dirname,'..');
 const source=fs.readFileSync(require('path').join(root,'script.js'),'utf8');
 const html=fs.readFileSync(require('path').join(root,'index.html'),'utf8');
+const css=fs.readFileSync(require('path').join(root,'chat.css'),'utf8');
 
 function functionSource(name){
   const start=source.indexOf(`function ${name}(`);
@@ -34,6 +35,10 @@ assert(row.includes("var inner=assistantParts?(assistantParts.toolTrace+assistan
   'assistant bubble content must exclude thinking');
 assert(row.includes("(role==='assistant'?recall+thinking:'')+bubble+"),
   'thinking must be placed beside recall and before the assistant bubble');
+const thinkingRule=css.match(/body\.chat-active \.chat-thinking\{[\s\S]*?\}/);
+assert(thinkingRule,'thinking CSS rule is missing');
+assert(!/width:100%/.test(thinkingRule[0]),'thinking must not force a full row width');
+assert(/max-width:min\(700px,82%\)/.test(thinkingRule[0]),'thinking max width must match recall');
 
 assert(provider.includes('prov-note-input'),'provider note editor is missing');
 assert(provider.includes('prov-category-input'),'provider category editor is missing');

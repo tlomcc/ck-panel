@@ -2009,7 +2009,6 @@ body.chat-active .chat-worldbook-empty{
 }
 
 body.chat-active .chat-thinking{
-  width:100%!important;
   max-width:min(700px,82%)!important;
   margin:0 0 8px!important;
   border:1px solid #ead9ae!important;
