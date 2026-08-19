@@ -123,6 +123,8 @@ function testTrimCommitsWhenPrepareFails(){
     trimmed:true,canonicalTransport:true,cacheBoundary:true,trigger:'cache_1h',
     keptMessages:[{role:'user',text:'保留'}],deferred:[],
     keptTransportMessages:[{role:'user'}],
+    droppedMessages:[],
+    droppedTransportMessages:[session.transportMessages[1]],
     before:10,after:4,dropped:6,historyBefore:10,historyAfter:4,keep:4,
     transportBefore:10,transportAfter:4,localBefore:10,localAfter:4,
     requiredPreferenceThroughTs:9999,forceCacheRebuild:true
@@ -156,6 +158,25 @@ function testTrimCommitsWhenReviewIncomplete(){
   assert.strictEqual(result.trimmed,true,'只审阅了一部分也要提交截断');
   assert.strictEqual(result.dropped,5);
   assert.strictEqual(session.speechPreferencePendingActivationId,'act-1','成功的 activation 仍然记录');
+}
+
+function testTrimCommitPreservesMessagesAppendedAfterPlanning(){
+  const dropped={role:'user',text:'旧消息'};
+  const kept={role:'assistant',text:'保留消息'};
+  const appended={role:'pending_user',text:'准备期间新发的消息'};
+  const transportDropped={role:'user',text:'旧 transport'};
+  const transportKept={role:'assistant',text:'保留 transport'};
+  const transportAppended={role:'user',text:'新 transport'};
+  const session={messages:[dropped,kept,appended],transportMessages:[transportDropped,transportKept,transportAppended],speechPreferenceRetryQueue:[]};
+  const context=commitContext(session);
+  context.chatMessages=session.messages;
+  context.chatCommitAutoTrimPlan({}, {
+    trimmed:true,canonicalTransport:true,cacheBoundary:true,trigger:'cache_1h',
+    droppedMessages:[dropped],droppedTransportMessages:[transportDropped],
+    before:2,after:1,dropped:1,historyBefore:2,historyAfter:1,keep:1
+  },{ok:true,reviewComplete:true});
+  assert.deepStrictEqual(context.chatMessages,[kept,appended],'提交只能扣除计划删除项，不能覆盖准备期间的新消息');
+  assert.deepStrictEqual(session.transportMessages,[transportKept,transportAppended],'transport 也必须保留计划后新增内容');
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +272,7 @@ testPrepareBatchConsumesQueueFirst();
 testQueueCommitSemantics();
 testTrimCommitsWhenPrepareFails();
 testTrimCommitsWhenReviewIncomplete();
+testTrimCommitPreservesMessagesAppendedAfterPlanning();
 testIdleBoundaryAppliesToEveryCacheStrategy();
 testIdleBoundaryDoesNotFireEarly();
 testEmptySessionDoesNotTrigger();

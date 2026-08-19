@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v189-thinking-width';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v190-panel-rebuild';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -1871,12 +1871,12 @@ function renderDailyFactStatus(f){
   var position=Math.max(0,Number(f.stage_position||0));
   var total=Math.max(0,Number(f.stage_total||0));
   var progress=total?Math.min(100,Math.round(position*100/total)):0;
-  var retryable=['blocked','retry_wait','superseded'].indexOf(status)>=0;
+  var retryable=['blocked','retry_wait','superseded','not_created','unavailable'].indexOf(status)>=0;
   var stats=f.stats||{};
   var provider=[f.provider_name||f.provider_id||'',f.provider_host||'',f.model||''].filter(Boolean).join(' · ');
   var html='<section class="ds-fact ds-fact-'+escAttr(status)+'">';
   html+='<div class="ds-fact-head"><div><span>昨日 Fact 更新</span><b>'+esc(dailyFactStatusLabel(status))+'</b></div>';
-  if(retryable)html+='<button class="btn btn-outline btn-sm" id="daily-fact-retry" type="button" onclick="retryDailyFact(\''+escAttr(f.target_date||'')+'\')">重试</button>';
+  if(retryable)html+='<button class="btn btn-outline btn-sm" id="daily-fact-retry" type="button" onclick="retryDailyFact(\''+escAttr(f.target_date||'')+'\')">补跑 '+esc(f.target_date||'昨日')+'</button>';
   html+='</div>';
   html+='<div class="ds-fact-progress"><i style="width:'+progress+'%"></i></div>';
   html+='<div class="ds-fact-stage"><b>'+esc(f.stage||'-')+'</b><span>'+(total?(position+' / '+total):'等待阶段进度')+'</span></div>';
@@ -1897,10 +1897,15 @@ function renderDailyStatus(d){
   if(!body)return;
   d=d||{};var e=d.entity||{};
   if(sub)sub.textContent='更新于 '+(d.now||'-');
-  var html='<div class="ds-grid">';
+  var f=d.fact_daily||{};
+  var todayTs=Date.parse(String(d.today||'')+'T00:00:00+08:00');
+  var successTs=Date.parse(String(f.last_success_date||'')+'T00:00:00+08:00');
+  var staleDays=isFinite(todayTs)&&isFinite(successTs)?Math.floor((todayTs-successTs)/86400000):0;
+  var html=staleDays>2?'<div class="ds-stale-alert"><b>小档案已 '+staleDays+' 天未更新</b><span>最近成功：'+esc(f.last_success_date||'-')+'。可在下方补跑断掉的日期。</span></div>':'';
+  html+='<div class="ds-grid">';
   html+=dsTile(!!e.yesterday_done,'前一天 · 小档案整理',d.yesterday,'已整理','还没整理');
   html+='</div>';
-  html+=renderDailyFactStatus(d.fact_daily||{});
+  html+=renderDailyFactStatus(f);
   html+='<div class="ds-note">今天 '+esc(d.today||'')+'：档案整理 '+(e.today_done?'✅':'—')+'。<br>每日整理任务通常在第二天首次聊天时处理，今天显示“—”属正常。</div>';
   html+='<div class="ds-stats">'+
     '<div class="ds-stat"><b>'+(e.nodes||0)+'</b><span>小档案</span></div>'+
@@ -2840,6 +2845,7 @@ function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 var CHAT_CONFIG_KEY='ckChatConfigV2';
 var CHAT_CACHE_STRATEGY_KEY='ckChatCacheStrategyV1';
 var CHAT_MESSAGES_KEY='ckChatSessionsV2';
+var CHAT_FOLDERS_KEY='ckChatFoldersV1';
 var CHAT_DEBUG_KEY='ckChatDebugV1';
 var CHAT_DEBUG_TTL=24*60*60*1000;
 var CHAT_CACHE_TTL=5*60*1000;
@@ -2850,6 +2856,8 @@ var CHAT_LOCAL_SUMMARY_VISIBLE_MESSAGES=40;
 var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
+var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
+var CHAT_SCROLL_JUMP_INTENT_MS=1200;
 var CHAT_IMAGE_MAX_COUNT=4;
 var CHAT_IMAGE_MAX_SOURCE_BYTES=12*1024*1024;
 var CHAT_IMAGE_MAX_DATA_URL_CHARS=5*1024*1024;
@@ -2874,9 +2882,16 @@ var chatActiveRequest=null;
 var chatRequestSeq=0;
 var chatDeferredSaveHandle=0;
 var chatSessions=[];
+var chatFolders=[];
+var chatSessionSearch='';
 var chatActiveSessionId='';
 var chatDebugRecords=[];
 var chatCacheTimer=null;
+var chatScrollJumpTimer=null;
+var chatScrollJumpManualUntil=0;
+var chatScrollJumpPointerActive=false;
+var chatScrollJumpPointerX=0;
+var chatScrollJumpPointerY=0;
 var chatWorldbookActiveId='';
 var chatEditingIndex=-1;
 var chatEditingDraftText='';
@@ -3016,6 +3031,7 @@ async function chatCleanHistory(){
         recall_mode:chatNormalizeRecallMode(cfg.recallMode),
         fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
         RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
+        recall_recent_rounds:chatNormalizeRecallRecentRounds(cfg.recallRecentRounds),
         transport_updated_at:currentSession.transportUpdated||0,
         transport_messages:transport,
         window_messages:windowMessages,
@@ -3521,6 +3537,7 @@ function chatDefaultConfig(){
     recall:true,
     recallMode:'fact_only',
     factRecallMode:'a',
+    recallRecentRounds:10,
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:'system_after_anchor',
@@ -3622,6 +3639,10 @@ function chatNormalizeRecallMode(value){
 }
 function chatNormalizeFactRecallMode(value){
   return String(value||'').trim().toLowerCase()==='b'?'b':'a';
+}
+function chatNormalizeRecallRecentRounds(value){
+  var number=Math.round(Number(value));
+  return isFinite(number)?Math.max(0,Math.min(100,number)):10;
 }
 function chatFactRecallModeMeta(value){
   var mode=chatNormalizeFactRecallMode(value);
@@ -3901,6 +3922,7 @@ function chatLoadConfig(){
   cfg.recall=cfg.recall!==false;
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
   cfg.factRecallMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
+  cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
   cfg.fakeThinking=cfg.fakeThinking===true;
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
@@ -3928,6 +3950,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.chatApiSource;
   cfg.recall=cfg.recall!==false;
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
+  cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   var trim=chatAutoTrimConfigFrom(cfg);
@@ -3950,6 +3973,7 @@ function chatMergeLiveToggleState(cfg){
   if(recall)cfg.recall=recall.checked===true;
   cfg.recallMode=chatRecallModeFromForm(cfg.recallMode);
   cfg.factRecallMode=chatFactRecallModeFromForm(cfg.factRecallMode);
+  cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(chatFieldValue('chat-recall-recent-rounds',cfg.recallRecentRounds));
   return cfg;
 }
 function chatStoreJson(key,value){
@@ -4641,6 +4665,7 @@ function chatNormalizeSession(s){
   var updated=Number(s.updated||created)||created;
   return {
     id:id,
+    folderId:String(s.folderId||''),
     title:String(s.title||'未命名对话').slice(0,80),
     created:created,
     updated:updated,
@@ -4799,6 +4824,7 @@ function chatReadForm(){
     recall:chatFieldChecked('chat-recall-enabled',saved.recall!==false),
     recallMode:chatRecallModeFromForm(saved.recallMode),
     factRecallMode:chatFactRecallModeFromForm(saved.factRecallMode),
+    recallRecentRounds:chatNormalizeRecallRecentRounds(chatFieldValue('chat-recall-recent-rounds',saved.recallRecentRounds)),
     fakeThinking:chatFieldChecked('chat-fake-thinking',saved.fakeThinking===true),
     fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
@@ -4834,6 +4860,7 @@ function chatWriteForm(cfg){
   chatSetFieldChecked('chat-recall-enabled',cfg.recall!==false);
   chatSetRecallModeField(cfg.recallMode);
   chatSetFactRecallModeField(cfg.factRecallMode);
+  chatSetFieldValue('chat-recall-recent-rounds',chatNormalizeRecallRecentRounds(cfg.recallRecentRounds));
   chatSetFieldChecked('chat-fake-thinking',cfg.fakeThinking===true);
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
@@ -5062,6 +5089,8 @@ function chatRenderSpeechPreferences(data,preserveEditor){
   }
   var status=document.getElementById('chat-speech-status');
   if(status)status.textContent=data.warning?String(data.warning):(data.source==='github'?'已同步':'本地读取');
+  var stale=document.getElementById('chat-speech-stale-dot');
+  if(stale)stale.hidden=data.draft_stale!==true;
 }
 /* ---- 规则管理页 ---- */
 // 页面上不出现任何版本号：revision 只是后端的并发控制标识，对用户没有意义。
@@ -5082,8 +5111,8 @@ function rulesRowHtml(rule){
       ' data-rule-category="'+escAttr(String(rule.category||RULES_DEFAULT_CATEGORY))+'"'+
       ' data-rule-priority="'+escAttr(String(rule.priority||RULES_DEFAULT_PRIORITY))+'">'+
     '<b class="rules-row-index" aria-hidden="true"></b>'+
-    '<textarea class="rules-row-text" rows="2" maxlength="220" aria-label="规则内容" placeholder="用一句话写清楚，例如：不要叫我宝宝" oninput="rulesAutoGrow(this);rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
-    '<button class="rules-row-del" type="button" title="删除这条规则" aria-label="删除这条规则" onclick="rulesDeleteRow(this)">×</button>'+
+    '<textarea class="rules-row-text" rows="2" aria-label="规则内容" placeholder="用一句话写清楚，例如：不要叫我宝宝" oninput="rulesAutoGrow(this);rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
+    '<details class="rules-row-menu"><summary title="规则操作" aria-label="规则操作">⋮</summary><div><button type="button" onclick="rulesMoveRow(this,-1)">上移</button><button type="button" onclick="rulesMoveRow(this,1)">下移</button><button class="danger" type="button" onclick="rulesDeleteRow(this)">删除</button></div></details>'+
     '</div>';
 }
 // 规则往往两三行，固定高度会把后半句藏起来。让输入框跟着内容长高，一眼就能看全。
@@ -5114,11 +5143,21 @@ function rulesRenumber(){
   }
   var count=document.getElementById('rules-draft-count');
   if(count)count.textContent=String(rows.length);
+  rulesUpdateMetrics();
 }
 function rulesMarkDirty(){
   rulesPageState.dirty=true;
   var hint=document.getElementById('rules-dirty-hint');
   if(hint)hint.textContent='有改动还没保存';
+  rulesUpdateMetrics();
+}
+function rulesUpdateMetrics(){
+  var metrics=document.getElementById('rules-metrics');if(!metrics)return;
+  var rules=rulesCollect();
+  var chars=rules.reduce(function(total,rule){return total+String(rule.instruction||'').length},0);
+  var tokens=Math.ceil(chars/2);
+  metrics.textContent=rules.length+' 条 · '+chars+' 字 · 每轮约 '+tokens+' tokens'+(chars>3000?' · 规则块偏大，会增加每轮成本':'');
+  metrics.classList.toggle('warn',chars>3000);
 }
 function rulesAddRow(){
   var table=document.getElementById('rules-table');
@@ -5147,6 +5186,22 @@ function rulesDeleteRow(button){
   rulesRenumber();
   rulesMarkDirty();
 }
+function rulesMoveRow(button,delta){
+  var row=button&&button.closest?button.closest('.rules-row'):null;
+  if(!row)return;
+  var sibling=delta<0?row.previousElementSibling:row.nextElementSibling;
+  if(!sibling||!sibling.classList||!sibling.classList.contains('rules-row'))return;
+  if(delta<0)row.parentNode.insertBefore(row,sibling);
+  else row.parentNode.insertBefore(sibling,row);
+  rulesRenumber();rulesMarkDirty();
+}
+function rulesAddExample(text){
+  var table=document.getElementById('rules-table');if(!table)return;
+  var empty=table.querySelector('.rules-empty');if(empty)empty.remove();
+  var adder=table.querySelector('.rules-add-row');
+  if(adder)adder.insertAdjacentHTML('beforebegin',rulesRowHtml({instruction:text}));
+  rulesRenumber();rulesMarkDirty();
+}
 // 从页面收集规则。内容为空的行直接跳过而不是报错——用户新增了一行又没填，
 // 不应该因此卡住整个保存。类别和强度从 data-* 原样带回，页面上不展示。
 function rulesCollect(){
@@ -5174,6 +5229,14 @@ function rulesDraftRules(){
   var draft=(data.draft&&typeof data.draft==='object')?data.draft:{};
   return Array.isArray(draft.rules)?draft.rules:(Array.isArray(data.rules)?data.rules:[]);
 }
+function rulesUsePublishedDraft(){
+  var data=rulesPageState.data||{};
+  data.draft=Object.assign({},data.draft||{},{rules:(Array.isArray(data.rules)?data.rules:[]).map(function(rule){return Object.assign({},rule)})});
+  data.draft_stale=false;
+  rulesPageState.dirty=true;
+  renderRulesPage();
+  rulesMarkDirty();
+}
 function renderRulesPage(){
   var body=document.getElementById('rules-page-body');
   if(!body)return;
@@ -5193,28 +5256,29 @@ function renderRulesPage(){
   html+='<section class="rules-overview">'+
     '<div><span>正在生效</span><b>'+publishedCount+' 条</b></div>'+
     '<div><span>草稿</span><b><i id="rules-draft-count">'+draftRules.length+'</i> 条</b></div>'+
-    '<div><span>这次发布时间</span><b>'+esc(rulesTimeText(data.updated_at))+'</b></div>'+
-    '<div><span>上次发布时间</span><b>'+esc(rulesTimeText(data.previous_updated_at))+'</b></div>'+
+    '<div><span>上次发布</span><b>'+esc(rulesTimeText(data.updated_at))+'</b></div>'+
     '</section>';
-  html+='<div class="rules-actions">'+
-    '<button class="btn btn-blue btn-sm" type="button"'+busy+' onclick="rulesPublish()">发布并生效</button>'+
-    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesSaveDraft()">保存草稿</button>'+
-    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesToggleEnabled()">'+(enabled?'停用全部规则':'重新启用规则')+'</button>'+
-    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="loadRulesPage(true)">放弃改动并重新读取</button>'+
-    '<span class="rules-dirty-hint" id="rules-dirty-hint">'+(rulesPageState.busy?'处理中…':(rulesPageState.dirty?'有改动还没保存':''))+'</span>'+
-    '</div>';
+  if(data.draft_stale){
+    html+='<div class="rules-stale"><div><b>草稿落后于正在生效的规则</b><span>助手当前生效 '+publishedCount+' 条，这份草稿只有 '+draftRules.length+' 条。</span></div><button class="btn btn-outline btn-sm" type="button" onclick="rulesUsePublishedDraft()">用生效规则覆盖草稿</button><small>也可以继续编辑，保留当前草稿。</small></div>';
+  }
   if(!enabled){
     html+='<div class="rules-notice">已停用：当前一条规则都不会发给助手。草稿和历史都还在，点「重新启用规则」就能恢复。</div>';
   }
   html+='<div class="rules-table" id="rules-table">';
   if(!draftRules.length){
-    html+='<div class="rules-empty">还没有规则。点下面的「新增一条规则」写一条，比如“不要叫我宝宝”。</div>';
+    html+='<div class="rules-empty"><b>还没有规则</b><span>从一句清楚、可执行的话开始。</span><div><button type="button" onclick="rulesAddExample(\'不要叫我宝宝\')">不要叫我宝宝</button><button type="button" onclick="rulesAddExample(\'回复使用自然段，不要堆列表\')">回复使用自然段</button></div></div>';
   }else{
     draftRules.forEach(function(rule){html+=rulesRowHtml(rule)});
   }
   html+='<button class="rules-add-row" type="button" onclick="rulesAddRow()">＋ 新增一条规则</button>';
   html+='</div>';
-  html+='<p class="rules-foot-note">最多 24 条，每条最多 220 字。「保存草稿」只是存起来，助手看不到；「发布」之后才会在下一次缓存边界生效。</p>';
+  html+='<div class="rules-actions">'+
+    '<div><span class="rules-dirty-hint" id="rules-dirty-hint">'+(rulesPageState.busy?'处理中…':(rulesPageState.dirty?'有改动还没保存':''))+'</span><span class="rules-metrics" id="rules-metrics"></span></div>'+
+    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesSaveDraft()">保存草稿</button>'+
+    '<button class="btn btn-blue btn-sm" type="button"'+busy+' onclick="rulesPublish()">发布并生效</button>'+
+    '<details class="rules-more"><summary title="更多操作" aria-label="更多操作">⋯</summary><div><button type="button" onclick="rulesToggleEnabled()">'+(enabled?'停用全部规则':'重新启用规则')+'</button><button type="button" onclick="loadRulesPage(true)">放弃改动并重新读取</button></div></details>'+
+    '</div>';
+  html+='<p class="rules-foot-note">保存草稿只是存起来，助手看不到；发布之后才会在下一次缓存边界生效。</p>';
   if(data.warning)html+='<div class="rules-notice warn">'+esc(String(data.warning))+'</div>';
   body.innerHTML=html;
   rulesRenumber();
@@ -6150,6 +6214,7 @@ function chatAssistantWaitLabel(m){
 }
 function chatUpdateRuntime(cfg,usage){
   cfg=cfg||chatLoadConfig();
+  if(document.body)document.body.classList.toggle('chat-polling-on',chatPollingView().enabled===true);
   var model=document.getElementById('chat-runtime-model');
   var cache=document.getElementById('chat-runtime-cache');
   var recall=document.getElementById('chat-runtime-recall');
@@ -6252,6 +6317,7 @@ function chatDefaultWindowTitle(){
   return chatCircledNumber(max+1)+'号窗口'+day;
 }
 function chatLoadSessions(){
+  chatLoadFolders();
   if(chatSessionsLoadedFromIndexedDb){
     var loadedCfg=chatLoadConfig();
     chatActiveSessionId=loadedCfg.sessionId||chatActiveSessionId;
@@ -6280,11 +6346,101 @@ function chatLoadSessions(){
   chatSaveConfigObject(cfg);
   chatStartIndexedDbSessionLoad();
 }
+function chatNormalizeFolder(folder,index){
+  folder=folder&&typeof folder==='object'?folder:{};
+  return {
+    id:String(folder.id||('f_'+Date.now().toString(36)+'_'+String(index||0))),
+    name:String(folder.name||'未命名文件夹').trim().slice(0,40)||'未命名文件夹',
+    color:String(folder.color||''),
+    collapsed:folder.collapsed===true,
+    order:isFinite(Number(folder.order))?Number(folder.order):Number(index||0),
+    created:Number(folder.created||Date.now())||Date.now()
+  };
+}
+function chatLoadFolders(){
+  try{
+    var raw=JSON.parse(localStorage.getItem(CHAT_FOLDERS_KEY)||'[]');
+    chatFolders=Array.isArray(raw)?raw.map(chatNormalizeFolder):[];
+  }catch(e){chatFolders=[]}
+  chatFolders.sort(function(a,b){return a.order-b.order||a.created-b.created});
+}
+function chatSaveFolders(){
+  try{localStorage.setItem(CHAT_FOLDERS_KEY,JSON.stringify(chatFolders.map(chatNormalizeFolder)))}catch(e){}
+}
+function chatFolderById(id){
+  return chatFolders.find(function(folder){return folder.id===String(id||'')})||null;
+}
+function chatFolderId(){return 'f_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7)}
+async function chatCreateFolder(name){
+  var value=name;
+  if(value===undefined)value=await ckPromptDialog('新建文件夹','',{placeholder:'文件夹名称',confirmText:'创建'});
+  if(value===null)return null;
+  value=String(value||'').trim();
+  if(!value){toast('请输入文件夹名称');return null}
+  var folder=chatNormalizeFolder({id:chatFolderId(),name:value,order:chatFolders.length,created:Date.now()},chatFolders.length);
+  chatFolders.push(folder);
+  chatSaveFolders();
+  chatRenderSessions();
+  return folder;
+}
+async function chatRenameFolder(id){
+  var folder=chatFolderById(id);if(!folder)return;
+  var value=await ckPromptDialog('重命名文件夹',folder.name,{placeholder:'文件夹名称',confirmText:'保存'});
+  if(value===null)return;
+  value=String(value||'').trim();
+  if(!value){toast('文件夹名称不能为空');return}
+  folder.name=value.slice(0,40);
+  chatSaveFolders();chatRenderSessions();
+}
+async function chatDeleteFolder(id){
+  var folder=chatFolderById(id);if(!folder)return;
+  var count=chatSessions.filter(function(session){return session.folderId===id}).length;
+  var confirmed=await ckConfirmDialog('删除“'+folder.name+'”文件夹？其中 '+count+' 个对话会移到未分组，不会被删除。',{title:'删除文件夹',confirmText:'删除',danger:true});
+  if(!confirmed)return;
+  chatSessions.forEach(function(session){if(session.folderId===id)session.folderId=''});
+  chatFolders=chatFolders.filter(function(item){return item.id!==id});
+  chatFolders.forEach(function(item,index){item.order=index});
+  chatSaveFolders();chatSaveSessions();chatRenderSessions();
+}
+async function chatFolderMenu(id,event){
+  if(event){event.preventDefault();event.stopPropagation()}
+  var folder=chatFolderById(id);if(!folder)return;
+  var choice=await ckPromptDialog('管理“'+folder.name+'”','',{placeholder:'输入 1 重命名，输入 2 删除',confirmText:'继续'});
+  if(choice===null)return;
+  if(String(choice).trim()==='1')return chatRenameFolder(id);
+  if(String(choice).trim()==='2')return chatDeleteFolder(id);
+  toast('请输入 1 或 2');
+}
+function chatToggleFolder(id){
+  var folder=chatFolderById(id);if(!folder)return;
+  folder.collapsed=!folder.collapsed;
+  chatSaveFolders();chatRenderSessions();
+}
+async function chatMoveSession(id,event){
+  if(event){event.preventDefault();event.stopPropagation()}
+  var session=chatSessions.find(function(item){return item.id===id});if(!session)return;
+  var choices=['0  未分组'];
+  chatFolders.forEach(function(folder,index){choices.push(String(index+1)+'  '+folder.name)});
+  choices.push(String(chatFolders.length+1)+'  新建文件夹');
+  var answer=await ckPromptDialog('移动对话',session.folderId?String(Math.max(1,chatFolders.findIndex(function(folder){return folder.id===session.folderId})+1)):'0',{placeholder:choices.join(' / '),confirmText:'移动'});
+  if(answer===null)return;
+  var number=Math.round(Number(answer));
+  if(!isFinite(number)||number<0||number>chatFolders.length+1){toast('请输入列表中的编号');return}
+  if(number===chatFolders.length+1){
+    var created=await chatCreateFolder();
+    if(!created)return;
+    session.folderId=created.id;
+  }else session.folderId=number===0?'':chatFolders[number-1].id;
+  session.updated=Date.now();
+  chatSaveSessions();chatRenderSessions();
+}
+function chatSetSessionSearch(value){chatSessionSearch=String(value||'').trim().toLowerCase();chatRenderSessions()}
 function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
   return chatSessions.slice(0,maxSessions).map(function(s){
     s=chatNormalizeSession(s);
     return {
       id:s.id,
+      folderId:String(s.folderId||''),
       title:s.title,
       created:s.created,
       updated:s.updated,
@@ -6427,16 +6583,33 @@ function chatSessionMeta(s){
   var n=chatConversationRoundCount((s&&s.messages)||[],(s&&s.transportMessages)||[]);
   return (n?n+' 轮':'新会话')+(s.updated?' · '+chatTimeLabel(s.updated):'');
 }
+function chatSessionRowHtml(s,folderName){
+  return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span class="chat-session-title">'+esc(s.title||'未命名对话')+'</span><small class="chat-session-preview">'+esc(chatSessionPreview(s))+'</small><em class="chat-session-meta">'+esc(chatSessionMeta(s))+'</em>'+(folderName?'<small class="chat-session-folder-label">'+esc(folderName)+'</small>':'')+'</button><div class="chat-session-actions"><button class="chat-session-move" type="button" onclick="chatMoveSession(\''+escAttr(s.id)+'\',event)" title="移动对话" aria-label="移动对话">↪</button><button class="chat-session-del" type="button" onclick="chatDeleteSession(\''+escAttr(s.id)+'\',event)" title="删除对话" aria-label="删除对话">×</button></div></div>';
+}
 function chatRenderSessions(){
   var list=document.getElementById('chat-session-list');
   var count=document.getElementById('chat-session-count');
   if(count)count.textContent=String(chatSessions.length);
   if(!list)return;
   chatSessions.sort(function(a,b){return (b.updated||0)-(a.updated||0)});
-  var rows=chatSessions.map(function(s){
-    return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span class="chat-session-title">'+esc(s.title||'未命名对话')+'</span><small class="chat-session-preview">'+esc(chatSessionPreview(s))+'</small><em class="chat-session-meta">'+esc(chatSessionMeta(s))+'</em></button><button class="chat-session-del" type="button" onclick="chatDeleteSession(\''+escAttr(s.id)+'\',event)" title="删除对话">×</button></div>';
-  }).join('');
-  if(chatSessions.length<=3){
+  var validFolderIds={};chatFolders.forEach(function(folder){validFolderIds[folder.id]=true});
+  var filtered=chatSessions.filter(function(session){
+    if(!chatSessionSearch)return true;
+    return [session.title,chatSessionPreview(session),chatSessionMeta(session),(chatFolderById(session.folderId)||{}).name].join(' ').toLowerCase().indexOf(chatSessionSearch)>=0;
+  });
+  var rows='';
+  if(chatSessionSearch){
+    rows=filtered.map(function(session){var folder=chatFolderById(session.folderId);return chatSessionRowHtml(session,folder?folder.name:'未分组')}).join('');
+    if(!rows)rows='<div class="chat-session-search-empty">没有匹配的对话</div>';
+  }else{
+    chatFolders.forEach(function(folder){
+      var sessions=filtered.filter(function(session){return session.folderId===folder.id});
+      rows+='<section class="chat-folder'+(folder.collapsed?' collapsed':'')+'"><div class="chat-folder-head"><button type="button" onclick="chatToggleFolder(\''+escAttr(folder.id)+'\')" aria-expanded="'+(folder.collapsed?'false':'true')+'"><span class="chat-folder-chevron">⌄</span><b>'+esc(folder.name)+'</b><small>'+sessions.length+'</small></button><button class="chat-folder-menu" type="button" onclick="chatFolderMenu(\''+escAttr(folder.id)+'\',event)" title="管理文件夹" aria-label="管理文件夹">⋯</button></div><div class="chat-folder-body">'+sessions.map(function(session){return chatSessionRowHtml(session,'')}).join('')+'</div></section>';
+    });
+    var ungrouped=filtered.filter(function(session){return !session.folderId||!validFolderIds[session.folderId]});
+    if(ungrouped.length||!chatFolders.length)rows+='<section class="chat-folder chat-folder-ungrouped"><div class="chat-folder-divider"><span>未分组</span><small>'+ungrouped.length+'</small></div><div class="chat-folder-body">'+ungrouped.map(function(session){return chatSessionRowHtml(session,'')}).join('')+'</div></section>';
+  }
+  if(chatSessions.length<=3&&!chatSessionSearch){
     rows+='<button class="chat-session-empty-hint" type="button" onclick="chatNewSession()"><span class="chat-session-empty-plus" aria-hidden="true">+</span><span>点击 + 开始新对话</span></button>';
   }
   list.innerHTML=rows;
@@ -6765,6 +6938,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     keep:trim.keep,deferred:deferred,
     keptMessages:working,droppedMessages:[],
     keptTransportMessages:transportMessages.slice(),
+    droppedTransportMessages:[],
     canonicalTransport:canonicalTransport,
     transportBefore:transportPlan.before,transportAfter:transportPlan.before,transportDropped:0,
     localBefore:localPlan.before,localAfter:localPlan.before,localDropped:0,
@@ -6818,6 +6992,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     droppedMessages:droppedMessages,
     keptMessages:keptMessages,
     keptTransportMessages:keptTransportMessages,
+    droppedTransportMessages:shouldTrim&&canonicalTransport?transportPlan.droppedMessages:[],
     canonicalTransport:canonicalTransport,
     transportBefore:transportPlan.before,
     transportAfter:shouldTrim&&canonicalTransport?transportPlan.after:transportPlan.before,
@@ -7145,10 +7320,12 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
   // 不再靠"保留完整聊天历史"来兜底，否则偏好服务一挂，截断功能就整体失效。
   var trimCommitted=!!plan.trimmed;
   if(trimCommitted){
-    chatMessages=(plan.keptMessages||[]).concat(plan.deferred||[]);
+    var dropSet=new Set(plan.droppedMessages||[]);
+    chatMessages=chatMessages.filter(function(message){return !dropSet.has(message)});
     s.messages=chatMessages;
     if(plan.canonicalTransport){
-      s.transportMessages=chatLimitArray(plan.keptTransportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
+      var transportDropSet=new Set(plan.droppedTransportMessages||[]);
+      s.transportMessages=chatLimitArray((s.transportMessages||[]).filter(function(message){return !transportDropSet.has(message)}),CHAT_MAX_TRANSPORT_MESSAGES);
     }else{
       s.transportMessages=[];
       s.transportUpdated=0;
@@ -7350,6 +7527,7 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
         recall_mode:chatNormalizeRecallMode(cfg.recallMode),
         fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
         RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
+        recall_recent_rounds:chatNormalizeRecallRecentRounds(cfg.recallRecentRounds),
         transport_updated_at:session.transportUpdated||0,
         transport_messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),
         window_messages:chatWindowContextMessages(),
@@ -8748,6 +8926,18 @@ document.addEventListener('visibilitychange',function(){
 function chatMessagesBox(){
   return document.getElementById('chat-messages');
 }
+function chatScrollJumpControls(){return document.getElementById('chat-scroll-jumps')}
+function chatUpdateScrollJumpState(){var c=chatScrollJumpControls(),b=chatMessagesBox();if(!c||!b)return;var t=c.querySelector('[data-chat-scroll-edge="top"]'),d=c.querySelector('[data-chat-scroll-edge="bottom"]');if(t)t.disabled=b.scrollTop<=2;if(d)d.disabled=b.scrollHeight-b.scrollTop-b.clientHeight<=2}
+function chatHideScrollJumps(){var c=chatScrollJumpControls();if(!c)return;if(c.contains(document.activeElement)&&document.activeElement.blur)document.activeElement.blur();c.classList.remove('show');c.setAttribute('aria-hidden','true')}
+function chatScheduleScrollJumpHide(){if(chatScrollJumpTimer)clearTimeout(chatScrollJumpTimer);chatScrollJumpTimer=setTimeout(chatHideScrollJumps,CHAT_SCROLL_JUMP_VISIBLE_MS)}
+function chatRevealScrollJumps(){if(!document.body.classList.contains('chat-active'))return;var c=chatScrollJumpControls();if(!c)return;c.classList.add('show');c.setAttribute('aria-hidden','false');chatUpdateScrollJumpState();chatScheduleScrollJumpHide()}
+function chatMarkScrollJumpManualIntent(){chatScrollJumpManualUntil=Date.now()+CHAT_SCROLL_JUMP_INTENT_MS}
+function chatHasScrollJumpManualIntent(){return chatScrollJumpManualUntil>=Date.now()}
+function chatBeginScrollJumpPointer(e){if(e&&e.button!==undefined&&e.button!==0)return;chatScrollJumpPointerActive=true;chatScrollJumpPointerX=Number(e&&e.clientX)||0;chatScrollJumpPointerY=Number(e&&e.clientY)||0}
+function chatContinueScrollJumpPointer(e){if(!chatScrollJumpPointerActive)return;var x=Number(e&&e.clientX)||0,y=Number(e&&e.clientY)||0;if(Math.abs(x-chatScrollJumpPointerX)<3&&Math.abs(y-chatScrollJumpPointerY)<3)return;chatScrollJumpPointerX=x;chatScrollJumpPointerY=y;chatMarkScrollJumpManualIntent()}
+function chatEndScrollJumpPointer(){chatScrollJumpPointerActive=false}
+function chatJumpToEdge(edge,event){if(event)event.preventDefault();var b=chatMessagesBox();if(!b)return;var top=edge==='top'?0:b.scrollHeight;try{b.scrollTo({top:top,behavior:ckPrefersReducedMotion()?'auto':'smooth'})}catch(e){b.scrollTop=top}if(edge!=='top')chatSetNewMessageHint(false);chatRevealScrollJumps();setTimeout(chatUpdateScrollJumpState,400)}
+function chatAttachScrollJumpControls(){var c=chatScrollJumpControls(),b=chatMessagesBox();if(!c||!b||c.__ckAttached)return;c.__ckAttached=true;b.addEventListener('wheel',chatMarkScrollJumpManualIntent,{passive:true});b.addEventListener('touchmove',chatMarkScrollJumpManualIntent,{passive:true});b.addEventListener('pointerdown',chatBeginScrollJumpPointer,{passive:true});window.addEventListener('pointermove',chatContinueScrollJumpPointer,{passive:true});window.addEventListener('pointerup',chatEndScrollJumpPointer,{passive:true});window.addEventListener('pointercancel',chatEndScrollJumpPointer,{passive:true})}
 function ckPrefersReducedMotion(){
   return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
@@ -8767,6 +8957,7 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
+  if(chatHasScrollJumpManualIntent())chatRevealScrollJumps();else chatUpdateScrollJumpState();
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
@@ -9164,7 +9355,7 @@ function chatApplyCacheTick(userIndex,usage,userBubble){
   chatMessages[userIndex].cacheRatio=ratio;
   chatMessages[userIndex].cacheState=state;
   if(!userBubble)userBubble=chatMessageBubbleByIndex(userIndex);
-  if(userBubble){
+  if(userBubble&&chatShouldShowMessageStatus()){
     var row=userBubble.closest?userBubble.closest('.chat-msg-row.user'):null;
     (row||userBubble).querySelectorAll('.chat-cache-tick').forEach(function(old){old.remove()});
     var meta=row?row.querySelector('.chat-msg-meta'):userBubble.querySelector('.chat-msg-meta');
@@ -9327,6 +9518,7 @@ function chatInit(){
   chatRenderDraftImages();
   chatRenderDraftFiles();
   chatAttachMessagesScroll();
+  chatAttachScrollJumpControls();
   var input=document.getElementById('chat-input');
   chatLayoutCompose();
   window.addEventListener('resize',chatHandleViewportChange);
@@ -9636,6 +9828,7 @@ async function chatSubmitPendingMessages(options){
     recall_mode:chatNormalizeRecallMode(cfg.recallMode),
     fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
     RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
+    recall_recent_rounds:chatNormalizeRecallRecentRounds(cfg.recallRecentRounds),
     ck_thinking_enabled:cfg.fakeThinking===true,
     ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
@@ -10439,8 +10632,8 @@ function apiPollingConfig(){
   });
   return {
     enabled:raw.enabled===true,
-    show_message_status:raw.show_message_status===true,
-    show_billing_price:raw.show_billing_price===true,
+    primary_retry_enabled:raw.primary_retry_enabled===true,
+    primary_retry_interval:Math.max(5,Math.min(200,Number(raw.primary_retry_interval)||20)),
     order:order,
     config_revision:String(raw.config_revision||'').trim()
   };
@@ -10450,8 +10643,8 @@ function apiPollingWrite(next){
   if(!apiProviders||typeof apiProviders!=='object'||Array.isArray(apiProviders))apiProviders={};
   apiProviders[API_POLLING_KEY]={
     enabled:next.enabled===true,
-    show_message_status:next.show_message_status===true,
-    show_billing_price:next.show_billing_price===true,
+    primary_retry_enabled:next.primary_retry_enabled===true,
+    primary_retry_interval:Math.max(5,Math.min(200,Number(next.primary_retry_interval)||20)),
     order:(Array.isArray(next.order)?next.order:[]).map(function(x){
       return {provider_id:String(x&&x.provider_id||''),model:String(x&&x.model||'')};
     }),
@@ -10493,6 +10686,8 @@ function apiPollingRevision(polling,items){
   items=items||apiPollingItems();
   var payload=JSON.stringify({
     enabled:polling.enabled===true,
+    primary_retry_enabled:polling.primary_retry_enabled===true,
+    primary_retry_interval:polling.primary_retry_interval,
     order:items.filter(function(x){return x.available}).map(function(x){
       return [x.provider_id,x.model,providerFingerprint(x.provider)];
     })
@@ -10512,22 +10707,19 @@ function chatPollingViewPersist(){
     var polling=apiPollingConfig();
     localStorage.setItem(CHAT_POLLING_VIEW_KEY,JSON.stringify({
       enabled:polling.enabled===true,
-      showMessageStatus:polling.show_message_status===true,
-      showBillingPrice:polling.show_billing_price===true,
       revision:String(polling.config_revision||'')
     }));
   }catch(e){}
   chatPollingViewInvalidate();
+  if(document.body)document.body.classList.toggle('chat-polling-on',chatPollingView().enabled===true);
 }
 function chatPollingView(){
   if(chatPollingViewCache)return chatPollingViewCache;
-  var view={enabled:false,showMessageStatus:false,showBillingPrice:false,revision:''};
+  var view={enabled:false,revision:''};
   if(typeof apiProvidersLoaded!=='undefined'&&apiProvidersLoaded){
     var polling=apiPollingConfig();
     view={
       enabled:polling.enabled===true,
-      showMessageStatus:polling.show_message_status===true,
-      showBillingPrice:polling.show_billing_price===true,
       revision:polling.config_revision||apiPollingRevision(polling)
     };
   }else{
@@ -10535,8 +10727,6 @@ function chatPollingView(){
       var raw=JSON.parse(localStorage.getItem(CHAT_POLLING_VIEW_KEY)||'{}');
       view={
         enabled:raw.enabled===true,
-        showMessageStatus:raw.showMessageStatus===true,
-        showBillingPrice:raw.showBillingPrice===true,
         revision:String(raw.revision||'')
       };
     }catch(e){}
@@ -10545,14 +10735,8 @@ function chatPollingView(){
   return view;
 }
 // 轮询关闭时强制显示 √ 和价格，两个开关只在轮询开启时才起作用。
-function chatShouldShowMessageStatus(){
-  var view=chatPollingView();
-  return view.enabled!==true||view.showMessageStatus===true;
-}
-function chatShouldShowBillingPrice(){
-  var view=chatPollingView();
-  return view.enabled!==true||view.showBillingPrice===true;
-}
+function chatShouldShowMessageStatus(){return chatPollingView().enabled!==true}
+function chatShouldShowBillingPrice(){return chatPollingView().enabled!==true}
 function isGgProvider(p){
   var name=String(p&&p.name||'').trim().toLowerCase();
   var host=providerHost(p&&p.url).toLowerCase();
@@ -10734,16 +10918,16 @@ function setModelSearchState(scope,models){
 }
 function providerOptionsHtml(selected,showCategorized){
   var html='<option value="">不选择</option>';
-  var categorized={};
+  var categorized={'未归类':[]};
   providerLibraryList().forEach(function(p){
-    var category=String(p.category||'').trim();
-    if(category){
-      if(showCategorized||p.id===selected)(categorized[category]||(categorized[category]=[])).push(p);
-      return;
-    }
-    html+='<option value="'+escAttr(p.id)+'"'+(p.id===selected?' selected':'')+'>'+esc(providerDisplayName(p))+'</option>';
+    var category=String(p.category||'').trim()||'未归类';
+    (categorized[category]||(categorized[category]=[])).push(p);
   });
-  Object.keys(categorized).sort(function(a,b){return a.localeCompare(b,'zh-CN')}).forEach(function(category){
+  Object.keys(categorized).filter(function(category){return categorized[category].length}).sort(function(a,b){
+    if(a==='未归类')return 1;
+    if(b==='未归类')return -1;
+    return a.localeCompare(b,'zh-CN');
+  }).forEach(function(category){
     html+='<optgroup label="'+escAttr(category)+'">';
     categorized[category].forEach(function(p){
       html+='<option value="'+escAttr(p.id)+'"'+(p.id===selected?' selected':'')+'>'+esc(providerDisplayName(p))+'</option>';
@@ -10752,19 +10936,24 @@ function providerOptionsHtml(selected,showCategorized){
   });
   return html;
 }
-function hasCategorizedProviders(){
-  return providerLibraryList().some(function(p){return !!String(p.category||'').trim()});
+function providerCategories(){
+  var seen={};
+  return providerLibraryList().map(function(provider){return String(provider.category||'').trim()}).filter(function(category){if(!category||seen[category])return false;seen[category]=true;return true}).sort(function(a,b){return a.localeCompare(b,'zh-CN')});
 }
-function toggleCategorizedProviderOptions(btn){
-  var row=btn&&btn.closest?btn.closest('.api-assign-card'):null;
-  var select=row?row.querySelector('.assign-provider'):null;
-  if(!select)return;
-  var open=btn.getAttribute('data-open')!=='true';
-  var selected=select.value;
-  btn.setAttribute('data-open',open?'true':'false');
-  btn.textContent=open?'收起归类供应商':'展开归类供应商';
-  select.innerHTML=providerOptionsHtml(selected,open);
-  select.value=selected;
+var API_PROVIDER_CATEGORY_VIEW_KEY='ckApiProviderCategoryViewV1';
+function providerCategoryView(){try{return JSON.parse(localStorage.getItem(API_PROVIDER_CATEGORY_VIEW_KEY)||'{}')||{}}catch(e){return {}}}
+function toggleProviderCategory(button){
+  var section=button&&button.closest?button.closest('.prov-category'):null;if(!section)return;
+  var category=section.getAttribute('data-category')||'';
+  var collapsed=!section.classList.contains('collapsed');
+  section.classList.toggle('collapsed',collapsed);
+  var view=providerCategoryView();view[category]=collapsed;
+  try{localStorage.setItem(API_PROVIDER_CATEGORY_VIEW_KEY,JSON.stringify(view))}catch(e){}
+}
+function setProviderCategoryChip(button){
+  var card=button&&button.closest?button.closest('.prov-card'):null;
+  var input=card?card.querySelector('.prov-category-input'):null;
+  if(input)input.value=button.getAttribute('data-value')||'';
 }
 function renderApiConfig(){
   var body=document.getElementById('api-config-body');
@@ -10796,8 +10985,8 @@ function apiPollingDraftGet(){
     var polling=apiPollingConfig();
     apiPollingDraft={
       enabled:polling.enabled,
-      show_message_status:polling.show_message_status,
-      show_billing_price:polling.show_billing_price,
+      primary_retry_enabled:polling.primary_retry_enabled,
+      primary_retry_interval:polling.primary_retry_interval,
       order:polling.order.map(function(x){return {provider_id:x.provider_id,model:x.model}})
     };
   }
@@ -10853,11 +11042,10 @@ function renderApiPolling(){
       (saved.enabled?'读取中…':'单链路（轮询未开启）')+'</span></div>'+
     '</section>';
   html+='<div class="api-polling-options">'+
-    '<label class="api-toggle"><input id="api-polling-enabled" type="checkbox"'+(draft.enabled?' checked':'')+'><span>启用聊天 API 轮询</span></label>'+
-    '<label class="api-toggle"><input id="api-polling-show-status" type="checkbox"'+(draft.show_message_status?' checked':'')+'><span>轮询时仍显示消息状态（√）</span></label>'+
-    '<label class="api-toggle"><input id="api-polling-show-price" type="checkbox"'+(draft.show_billing_price?' checked':'')+'><span>轮询时仍显示计费价格</span></label>'+
+    '<label class="api-toggle"><input id="api-polling-enabled" type="checkbox"'+(draft.enabled?' checked':'')+' onchange="apiPollingToggleControls()"><span>启用聊天 API 轮询</span></label>'+
+    '<div class="api-primary-retry '+(draft.enabled?'':'disabled')+(draft.primary_retry_enabled?'':' off')+'"><label class="api-toggle"><input id="api-polling-primary-retry" type="checkbox"'+(draft.primary_retry_enabled?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>回主重试</span></label><label class="api-primary-retry-interval"><span>备用 API 连续使用</span><input id="api-polling-primary-interval" type="number" min="5" max="200" step="1" value="'+draft.primary_retry_interval+'"'+(draft.enabled&&draft.primary_retry_enabled?'':' disabled')+' onblur="this.value=Math.max(5,Math.min(200,Number(this.value)||20))"><span>次后重试第 1 个</span></label><p>第 1 个恢复后会继续固定使用；仍失败则按队列顺序回到备用。</p></div>'+
     '</div>';
-  html+='<p class="api-polling-note">轮询关闭时，√ 和价格一律正常显示，上面两个开关不起作用。开启轮询后回复会等整段生成完再显示，不再逐字出现——这样某个 API 中途失败时才不会把半截回复留在屏幕上。</p>';
+  html+='<p class="api-polling-note">开启轮询后不显示 √ 和价格，回复会等整段生成完再显示。关闭轮询后恢复正常显示。</p>';
   html+='<div class="api-polling-list">';
   if(!items.length){
     html+='<div class="api-polling-empty">轮询队列是空的。从下面挑一个供应商加进来，加几个就轮几个。</div>';
@@ -10902,12 +11090,21 @@ function renderApiPolling(){
 function apiPollingCollectSwitches(){
   var draft=apiPollingDraftGet();
   var enabled=document.getElementById('api-polling-enabled');
-  var status=document.getElementById('api-polling-show-status');
-  var price=document.getElementById('api-polling-show-price');
+  var retry=document.getElementById('api-polling-primary-retry');
+  var interval=document.getElementById('api-polling-primary-interval');
   if(enabled)draft.enabled=!!enabled.checked;
-  if(status)draft.show_message_status=!!status.checked;
-  if(price)draft.show_billing_price=!!price.checked;
+  if(retry)draft.primary_retry_enabled=!!retry.checked;
+  if(interval)draft.primary_retry_interval=Math.max(5,Math.min(200,Number(interval.value)||20));
   return draft;
+}
+function apiPollingToggleControls(){
+  var draft=apiPollingCollectSwitches();
+  var card=document.querySelector('.api-primary-retry');
+  var retry=document.getElementById('api-polling-primary-retry');
+  var interval=document.getElementById('api-polling-primary-interval');
+  if(card){card.classList.toggle('disabled',!draft.enabled);card.classList.toggle('off',!draft.primary_retry_enabled)}
+  if(retry)retry.disabled=!draft.enabled;
+  if(interval)interval.disabled=!draft.enabled||!draft.primary_retry_enabled;
 }
 function moveApiPolling(index,delta){
   apiPollingCollectSwitches();
@@ -10968,8 +11165,8 @@ function saveApiPolling(){
   }
   var next={
     enabled:draft.enabled,
-    show_message_status:draft.show_message_status,
-    show_billing_price:draft.show_billing_price,
+    primary_retry_enabled:draft.primary_retry_enabled,
+    primary_retry_interval:draft.primary_retry_interval,
     // 顺序保存用户自己排好的这几条（含暂时不可用的），保留他的优先级意图。
     order:items.map(function(x){return {provider_id:x.provider_id,model:x.model}})
   };
@@ -11014,7 +11211,13 @@ function apiPollingRefreshStatus(){
     })})
     .then(function(data){
       var name=String(data.provider_name||'').trim();
-      apiPollingStatusApply(name?name:'尚未成功调用过任何 API');
+      if(!name){apiPollingStatusApply('尚未成功调用过任何 API');return}
+      var text='正在用 '+String(Math.max(1,Number(data.provider_index||0)+1))+' · '+name;
+      if(data.primary_retry_enabled){
+        var remaining=Math.max(0,Number(data.primary_retry_interval||20)-Number(data.since_primary||0));
+        text+=' · 距下次回主 '+remaining+' 次';
+      }
+      apiPollingStatusApply(text);
     })
     .catch(function(){
       apiPollingStatusApply('状态暂时读不到');
@@ -11024,20 +11227,6 @@ function apiPollingRefreshStatus(){
       apiPollingStatusState.revision=revision;
       apiPollingStatusState.loading=false;
     });
-}
-// 主链路页只做只读展示和跳转，不在这里放开关，避免两个页面各有一套状态互相打架。
-function renderMainPollingSummary(){
-  var saved=apiPollingConfig();
-  var items=apiPollingItems();
-  var available=apiPollingAvailableItems();
-  var orderText=available.map(function(x){return providerDisplayName(x.provider)}).join(' → ')||
-    (items.length?'队列里的 API 都缺 URL / Key / 模型':'还没有加过轮询候选');
-  return '<section class="api-main-polling">'+
-    '<div class="api-main-polling-head"><div><b>聊天 API 轮询</b>'+
-      '<span>'+(saved.enabled?'已开启，聊天不再走上面的单链路':'未开启，聊天走上面的单链路')+'</span></div>'+
-      '<button class="btn btn-outline btn-sm" type="button" onclick="switchApiTab(\'polling\')">打开轮询配置</button></div>'+
-    '<div class="api-main-polling-order">'+esc(orderText)+'</div>'+
-    '</section>';
 }
 function renderApiIntro(tab){
   return '<div class="api-info-row"><button class="api-info-btn api-info-main" type="button" onclick="toggleInfo(this)" aria-label="查看说明"><span>页面说明</span><i aria-hidden="true">›</i></button><div class="api-info-wrap"><div class="api-info-text">'+esc(tab.info||'')+'</div></div></div>';
@@ -11050,12 +11239,12 @@ function renderProviderLibrary(){
     html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先添加一个供应商，再到主链路、记忆或召回页选择它。</p><button class="prov-add" type="button" onclick="addProvider()">添加供应商</button></div>';
   }else{
     html+='<div class="api-provider-list">';
-    var uncategorized=list.filter(function(p){return !String(p.category||'').trim()});
-    uncategorized.forEach(function(p){html+=providerCardHtml(p)});
     var categories={};
-    list.forEach(function(p){var category=String(p.category||'').trim();if(category)(categories[category]||(categories[category]=[])).push(p)});
-    Object.keys(categories).sort(function(a,b){return a.localeCompare(b,'zh-CN')}).forEach(function(category){
-      html+='<section class="prov-category" data-category="'+escAttr(category)+'"><button class="prov-category-head" type="button" onclick="this.parentNode.classList.toggle(\'expanded\')"><span>归类：'+esc(category)+'</span><small>'+categories[category].length+' 个供应商　⌄</small></button><div class="prov-category-body">';
+    list.forEach(function(p){var category=String(p.category||'').trim()||'未归类';(categories[category]||(categories[category]=[])).push(p)});
+    var view=providerCategoryView(),collapseDefault=list.length>8;
+    Object.keys(categories).sort(function(a,b){if(a==='未归类')return 1;if(b==='未归类')return -1;return a.localeCompare(b,'zh-CN')}).forEach(function(category){
+      var collapsed=Object.prototype.hasOwnProperty.call(view,category)?view[category]===true:collapseDefault;
+      html+='<section class="prov-category'+(collapsed?' collapsed':'')+'" data-category="'+escAttr(category)+'"><div class="prov-category-head"><button type="button" onclick="toggleProviderCategory(this)" aria-expanded="'+(collapsed?'false':'true')+'"><span class="prov-category-chevron">⌄</span><b>'+esc(category)+'</b><small>'+categories[category].length+' 个供应商</small></button></div><div class="prov-category-body">';
       categories[category].forEach(function(p){html+=providerCardHtml(p)});
       html+='</div></section>';
     });
@@ -11069,13 +11258,20 @@ function providerCardHtml(p){
   var models=cleanModelList(p.models,p.model);
   var modelHint=models.length?'<div class="prov-model-hint">已缓存 '+models.length+' 个模型。默认模型会作为新功能选择的初始值。</div>':'<div class="prov-model-hint">先填 API URL 和 API Key，再拉取模型；也可以直接手填默认模型。</div>';
   var usedLabel=usage.length?(usage.length+' 处使用'):'未使用';
+  var category=String(p.category||'').trim()||'未归类';
+  var note=String(p.note||'');
+  var noteFirst=note.split(/\r?\n/)[0].trim();
+  var noteDate=(note.match(/\b\d{4}-\d{2}-\d{2}\b/)||[])[0]||'';
+  var categoryOptions=providerCategories();
+  var datalistId='prov-categories-'+String(p.id||'').replace(/[^a-zA-Z0-9_-]/g,'');
+  var categoryChips=categoryOptions.length?'<div class="prov-category-chips">'+categoryOptions.map(function(value){return '<button type="button" data-value="'+escAttr(value)+'" onclick="setProviderCategoryChip(this)">'+esc(value)+'</button>'}).join('')+'</div>':'';
   return '<div class="prov-card" data-id="'+escAttr(p.id)+'">'+
-    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span>'+(p.note?'<small class="prov-note-preview">'+esc(p.note)+'</small>':'')+'<small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><div class="prov-card-badges"><span class="prov-status prov-status-model">'+models.length+' 模型</span><span class="prov-status '+(usage.length?'prov-status-on':'prov-status-off')+'">'+usedLabel+'</span></div></div>'+
+    '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span>'+(noteFirst?'<small class="prov-note-preview" title="'+escAttr(note)+'">备注 · '+esc(noteFirst)+'</small>':'')+'<small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><div class="prov-card-badges"><span class="prov-status prov-category-badge">'+esc(category)+'</span>'+(noteDate?'<span class="prov-status prov-date-badge">日期 '+esc(noteDate.slice(5))+'</span>':'')+'<span class="prov-status prov-status-model">'+models.length+' 模型</span><span class="prov-status '+(usage.length?'prov-status-on':'prov-status-off')+'">'+usedLabel+'</span></div></div>'+
     usageHtml+
     '<div class="prov-card-body">'+
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
-      '<div class="prov-row"><label>归类（文件夹）</label><input class="prov-category-input" type="text" value="'+escAttr(p.category||'')+'" placeholder="例如：不常用、备用"></div>'+
-      '<div class="prov-row prov-row-wide"><label>备注</label><textarea class="prov-note-input" rows="3" placeholder="记录这个供应商的用途、限制或注意事项">'+esc(p.note||'')+'</textarea></div>'+
+      '<div class="prov-row"><label>归类（文件夹）</label><input class="prov-category-input" type="text" list="'+escAttr(datalistId)+'" value="'+escAttr(p.category||'')+'" placeholder="选择已有归类或输入新归类"><datalist id="'+escAttr(datalistId)+'">'+categoryOptions.map(function(value){return '<option value="'+escAttr(value)+'"></option>'}).join('')+'</datalist>'+categoryChips+'</div>'+
+      '<div class="prov-row prov-row-wide"><label>备注</label><textarea class="prov-note-input" rows="4" placeholder="例：\n限速 3 次/分钟\n只有 opus 能用，sonnet 会 404\n2026-09-01 到期">'+esc(p.note||'')+'</textarea></div>'+
       '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
@@ -11093,7 +11289,6 @@ function renderApiAssignments(tab){
     return html;
   }
   groups.forEach(function(g){if(list.length)html+=assignmentCardHtml(g)});
-  if(tab.key==='main')html+=renderMainPollingSummary();
   return html;
 }
 function assignmentCardHtml(g){
@@ -11101,12 +11296,11 @@ function assignmentCardHtml(g){
   var selectedModel=slot.model||(p&&p.model)||'';
   var models=p?cleanModelList(p.models,selectedModel):[];
   var providerText=p?('当前供应商：'+providerDisplayName(p)):'当前未选择供应商';
-  var categorizedToggle=hasCategorizedProviders()?'<button class="api-provider-category-toggle" type="button" data-open="false" onclick="toggleCategorizedProviderOptions(this)">展开归类供应商</button>':'';
   return '<div class="api-assign-card" data-group="'+escAttr(g.key)+'">'+
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current,false)+'</select>'+categorizedToggle+'</label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current,true)+'</select></label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
     '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
     '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。Key 和站点地址在「供应商库」里管理。':'选择供应商后可拉取模型，也可以直接填写模型名。Key 和站点地址在「供应商库」里管理。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存配置</button></div>'+

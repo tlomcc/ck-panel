@@ -14,15 +14,15 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="style.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="polish.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="chat.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="wechat.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="shell.css?v=chat-v189-thinking-width">
-<link rel="stylesheet" href="components.css?v=chat-v189-thinking-width">
-<script>window.CK_PANEL_VERSION='chat-v189-thinking-width';</script>
+<link rel="stylesheet" href="tokens.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="style.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="polish.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="chat.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="wechat.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="shell.css?v=chat-v190-panel-rebuild">
+<link rel="stylesheet" href="components.css?v=chat-v190-panel-rebuild">
+<script>window.CK_PANEL_VERSION='chat-v190-panel-rebuild';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -31,7 +31,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><svg class="ck-mark" viewBox="0 0 36 36" aria-hidden="true"><path class="ck-mark-c" d="M22.6 11.4a8.2 8.2 0 1 0 0 13.2"/><path class="ck-mark-k1" d="M25.4 9.5v17"/><path class="ck-mark-k2" d="M32.8 11.2 25.6 18l7.2 6.8"/><circle class="ck-mark-node" cx="25.5" cy="18" r="1.7"/></svg></button><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v189">chat-v189-thinking-width</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v190">chat-v190-panel-rebuild</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -182,7 +182,8 @@
 <section class="panel-tab active" id="tab-chat">
 <div class="chat-shell">
 <aside class="chat-drawer" aria-label="对话列表" aria-hidden="true">
-<div class="chat-drawer-head"><div><button class="chat-icon-btn chat-drawer-close" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表" title="关闭">‹</button><b>对话</b><span id="chat-session-count">0</span></div><div class="chat-drawer-actions"><button class="chat-icon-btn" type="button" onclick="chatNewSession()" aria-label="新会话" title="新会话">＋</button></div></div>
+<div class="chat-drawer-head"><div><button class="chat-icon-btn chat-drawer-close" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表" title="关闭">‹</button><b>对话</b><span id="chat-session-count">0</span></div><div class="chat-drawer-actions"><button class="chat-icon-btn" type="button" onclick="chatCreateFolder()" aria-label="新建文件夹" title="新建文件夹">▱</button><button class="chat-icon-btn" type="button" onclick="chatNewSession()" aria-label="新会话" title="新会话">＋</button></div></div>
+<div class="chat-session-tools"><input id="chat-session-search" type="search" placeholder="搜索对话" aria-label="搜索对话" oninput="chatSetSessionSearch(this.value)"></div>
 <div class="chat-session-list" id="chat-session-list"></div>
 </aside>
 <button class="chat-drawer-mask" type="button" onclick="chatToggleSessions(false)" aria-label="关闭对话列表"></button>
@@ -203,6 +204,10 @@
 </div>
 <div class="chat-messages" id="chat-messages"><div class="empty-state small">还没有消息</div></div>
 <button class="chat-new-message-tip" id="chat-new-message-tip" type="button" onclick="chatJumpToLatest()" hidden>有新消息 ↓</button>
+<div class="chat-scroll-jumps" id="chat-scroll-jumps" aria-label="快速滚动" aria-hidden="true">
+<button type="button" data-chat-scroll-edge="top" onclick="chatJumpToEdge('top',event)" aria-label="回到顶部" title="回到顶部"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/></svg></button>
+<button type="button" data-chat-scroll-edge="bottom" onclick="chatJumpToEdge('bottom',event)" aria-label="前往底部" title="前往底部"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg></button>
+</div>
 <div class="chat-compose">
 <div class="chat-pending-bar" id="chat-pending-bar"></div>
 <input class="chat-image-input" id="chat-image-input" type="file" accept="image/*" multiple onchange="chatOnImageFilesSelected(event)" hidden>
@@ -248,7 +253,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v189-thinking-width">v189</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v190-panel-rebuild">v190</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <label class="chat-switch"><input id="chat-fake-thinking" type="checkbox"><span>伪思考链</span></label>
@@ -259,7 +264,7 @@
 <div class="chat-side-panel" id="chat-side-speech">
 <div class="chat-speech-preview-head"><span id="chat-speech-meta">正在读取</span><span id="chat-speech-status"></span></div>
 <div class="chat-speech-preview" id="chat-speech-preview"></div>
-<div class="chat-speech-preview-foot"><button class="btn btn-outline btn-sm" type="button" onclick="navTo('rules')">打开规则管理</button></div>
+<div class="chat-speech-preview-foot"><button class="btn btn-outline btn-sm chat-speech-manage" type="button" onclick="navTo('rules')">打开规则管理<span class="chat-speech-stale-dot" id="chat-speech-stale-dot" hidden></span></button></div>
 </div>
 <div class="chat-side-panel" id="chat-side-gateway">
 <label>网关地址<input id="chat-gateway-url" autocomplete="off" readonly value="https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run"></label>
@@ -285,7 +290,7 @@
 <label>当前 Session<input id="chat-session-id" autocomplete="off" readonly></label>
 <div class="chat-memory-card chat-recall-mode-card"><b>当前时间上下文</b><p>开启后每轮只注入当前北京时间，不查询记忆。时间块位于稳定缓存断点之后，不携带 cache_control。</p><label class="chat-switch chat-recall-switch"><input id="chat-nc-context-injection" type="checkbox" checked onchange="chatSaveNcContextInjection(true)"><span>注入当前时间</span></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveNcContextInjection()">保存时间设置</button><span class="chat-cache-save-status" id="chat-nc-context-save-status">切换后会立即保存。</span></div></div>
 <div class="chat-memory-card chat-recall-mode-card"><b>后端切换通知</b><p>主链路供应商或模型发生变化时，只在切换后的第一条消息中把旧后端和新后端通知给 AI；冷启动首条不提示。</p><label class="chat-switch chat-recall-switch"><input id="chat-backend-switch-notification" type="checkbox" checked onchange="chatSaveBackendSwitchNotification(true)"><span>后端切换通知</span></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveBackendSwitchNotification()">保存通知设置</button><span class="chat-cache-save-status" id="chat-backend-switch-save-status">切换后会立即保存。</span></div></div>
-<div class="chat-memory-card chat-recall-mode-card"><b>Fact 召回</b><p>开启时只查询并注入独立 Fact；关闭时不加载 Fact、不调用召回 API，也不注入记忆。召回内容位于稳定缓存断点之后。</p><label class="chat-switch chat-recall-switch"><input id="chat-recall-enabled" type="checkbox" checked onchange="chatSetRecallEnabled(this.checked,true)"><span>开启 Fact 召回</span></label><div class="chat-recall-mode-label">召回模式</div><div class="chat-recall-mode-segment" id="chat-fact-recall-mode-control" role="radiogroup" aria-label="召回模式"><label><input type="radio" name="chat-fact-recall-mode" value="a" checked onchange="chatSetFactRecallMode(this.value,true)"><span>A（经典）</span></label><label><input type="radio" name="chat-fact-recall-mode" value="b" onchange="chatSetFactRecallMode(this.value,true)"><span>B（宽松）</span></label></div><div class="chat-recall-mode-detail" id="chat-recall-mode-detail"></div><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveRecallSetting()">保存召回设置</button><span class="chat-cache-save-status" id="chat-recall-save-status">切换后会立即保存，也可点按钮确认。</span></div></div>
+<div class="chat-memory-card chat-recall-mode-card"><b>Fact 召回</b><p>开启时只查询并注入独立 Fact；关闭时不加载 Fact、不调用召回 API，也不注入记忆。召回内容位于稳定缓存断点之后。</p><label class="chat-switch chat-recall-switch"><input id="chat-recall-enabled" type="checkbox" checked onchange="chatSetRecallEnabled(this.checked,true)"><span>开启 Fact 召回</span></label><div class="chat-recall-mode-label">召回模式</div><div class="chat-recall-mode-segment" id="chat-fact-recall-mode-control" role="radiogroup" aria-label="召回模式"><label><input type="radio" name="chat-fact-recall-mode" value="a" checked onchange="chatSetFactRecallMode(this.value,true)"><span>A（经典）</span></label><label><input type="radio" name="chat-fact-recall-mode" value="b" onchange="chatSetFactRecallMode(this.value,true)"><span>B（宽松）</span></label></div><div class="chat-recall-mode-detail" id="chat-recall-mode-detail"></div><label class="chat-recall-recent"><span>最近轮次不重复</span><input id="chat-recall-recent-rounds" type="number" min="0" max="100" step="1" value="10" inputmode="numeric"><small>0 = 关闭</small></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveRecallSetting()">保存召回设置</button><span class="chat-cache-save-status" id="chat-recall-save-status">切换后会立即保存，也可点按钮确认。</span></div></div>
 <div class="chat-memory-card chat-cache-mode-card"><b>缓存策略</b><p>独立控制上游提示缓存断点，与时间上下文、记忆召回开关互不控制。选择后会单独保存，不会被聊天配置覆盖。</p><div class="chat-cache-saved" id="chat-cache-saved-mode">已保存：读取中</div><div class="chat-cache-strategy-select-row"><label for="chat-cache-strategy">选择策略</label><select id="chat-cache-strategy" class="chat-cache-strategy-select" onchange="chatSyncCacheStrategyFields()"><option value="single_5m">5min｜用户断点</option><option value="native_stable">原生稳定1h｜Claude /messages</option><option value="native_tiered">分层省钱｜1h 兜底 + 5m 尾部</option><option value="assistant_latest">助手｜最新助手断点</option><option value="prefix_24h">共同前缀｜上游自动</option></select></div><div class="chat-cache-mode-detail" id="chat-cache-mode-detail"></div><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveCacheStrategy()">保存缓存策略</button><span class="chat-cache-save-status" id="chat-cache-save-status">选择后会立即单独保存，也可点按钮确认。</span></div></div>
 <input id="chat-recall-retention-seconds" type="hidden" value="300">
 <label>本轮召回内容<textarea id="chat-memory-pack" rows="9" readonly placeholder="本轮没有召回时这里为空"></textarea></label>
@@ -342,9 +347,9 @@
 </section></div>
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="chat-history.js?v=chat-v189-thinking-width"></script>
-<script src="script.js?v=chat-v189-thinking-width"></script>
-<script src="script-extra.js?v=chat-v189-thinking-width"></script>
-<script src="pwa.js?v=chat-v189-thinking-width"></script>
+<script src="chat-history.js?v=chat-v190-panel-rebuild"></script>
+<script src="script.js?v=chat-v190-panel-rebuild"></script>
+<script src="script-extra.js?v=chat-v190-panel-rebuild"></script>
+<script src="pwa.js?v=chat-v190-panel-rebuild"></script>
 </body>
 </html>

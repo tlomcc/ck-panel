@@ -18,7 +18,7 @@ function extractFunction(name){
 
 const RULES_FNS=[
   'rulesNewKey','rulesRowHtml','rulesAutoGrow','rulesBindResize','rulesRenumber','rulesMarkDirty','rulesCollect',
-  'rulesDraftRules','rulesTimeText','rulesErrorText','renderRulesPage','chatRenderSpeechPreferences'
+  'rulesUpdateMetrics','rulesDraftRules','rulesUsePublishedDraft','rulesTimeText','rulesErrorText','renderRulesPage','chatRenderSpeechPreferences'
 ];
 
 // 极简 DOM：只要能建元素、查 class、读 value 就够验证这几个纯渲染函数。
@@ -78,7 +78,8 @@ function testRowHasNoSelects(){
   assert.strictEqual(html.indexOf('rules-row-category'),-1);
   assert.strictEqual(html.indexOf('rules-row-priority'),-1);
   assert.ok(html.indexOf('rules-row-text')>=0,'正文输入框仍然要在');
-  assert.ok(html.indexOf('rules-row-del')>=0,'删除按钮仍然要在');
+  assert.ok(html.indexOf('rules-row-menu')>=0,'规则操作菜单仍然要在');
+  assert.strictEqual(html.indexOf('maxlength='),-1,'规则输入不得保留旧字数硬限制');
 }
 
 // 类别和强度是后端字段，页面不展示但必须原样带回，否则一次保存就把老规则的强度抹平
@@ -229,7 +230,24 @@ function testPageRender(){
     .forEach(fn=>assert.ok(html.indexOf(fn)>=0,'缺少按钮：'+fn));
   assert.strictEqual((html.match(/class="rules-row"/g)||[]).length,2,'两条规则渲染两行');
   assert.ok(html.indexOf('rules-add-row')>=0,'列表底部要有"新增一条规则"');
+  assert.ok(html.indexOf('rules-more')>=0,'停用和重新读取要收进更多菜单');
+  assert.ok(html.indexOf('rules-metrics')>=0,'底部要显示规则成本软提示');
+  assert.strictEqual((html.match(/rules-overview/g)||[]).length,1);
   assert.strictEqual(html.indexOf('r0'),-1,'页面不显示版本号');
+}
+
+function testStaleDraftWarningAndRebase(){
+  const context=rulesContext();
+  const body=bodyNode();
+  context.__dom.byId['rules-page-body']=body;
+  context.rulesPageState.data={enabled:true,draft_stale:true,rule_count:2,rules:[{key:'a',instruction:'甲'},{key:'b',instruction:'乙'}],draft:{rules:[{key:'a',instruction:'旧草稿'}]}};
+  context.renderRulesPage();
+  assert.ok(body.innerHTML.indexOf('rules-stale')>=0,'旧草稿必须显示醒目提示');
+  assert.ok(body.innerHTML.indexOf('rulesUsePublishedDraft()')>=0,'必须能用生效规则覆盖草稿');
+  context.rulesUsePublishedDraft();
+  assert.strictEqual(context.rulesPageState.data.draft.rules.length,2);
+  assert.strictEqual(context.rulesPageState.data.draft_stale,false);
+  assert.strictEqual(context.rulesPageState.dirty,true);
 }
 
 function testPageRenderDisabledNotice(){
@@ -276,6 +294,7 @@ testErrorTextIsHumanReadable();
 testTimeTextIsTrimmed();
 testTextareaGrowsWithContent();
 testPageRender();
+testStaleDraftWarningAndRebase();
 testPageRenderDisabledNotice();
 testPageRenderEmptyState();
 testBusyDisablesButtons();

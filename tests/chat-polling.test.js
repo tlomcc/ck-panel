@@ -3,6 +3,7 @@ const fs=require('fs');
 const vm=require('vm');
 
 const source=fs.readFileSync(require.resolve('../script.js'),'utf8');
+const css=fs.readFileSync(require.resolve('../chat.css'),'utf8');
 
 function extractFunction(name){
   const start=source.indexOf(`function ${name}(`);
@@ -91,7 +92,7 @@ function testWriteIsExplicit(){
   const providers=library();
   const context=pollingContext(providers);
   context.apiPollingWrite({
-    enabled:true,show_message_status:true,show_billing_price:false,
+    enabled:true,primary_retry_enabled:true,primary_retry_interval:20,
     order:[{provider_id:'B',model:'m-b'}],config_revision:'rev1'
   });
   assert.strictEqual(providers.chat_polling.enabled,true,'显式写入才落到 apiProviders');
@@ -194,17 +195,19 @@ function testAddRejectsUnknownProvider(){
 }
 
 // ---------------------------------------------------------------------------
-// 显示开关不能进 config_revision，否则勾一下复选框就把网关粘性游标重置了
+// 回主重试会改变游标行为，因此必须进入 config_revision。
 // ---------------------------------------------------------------------------
-function testDisplaySwitchesDoNotResetCursor(){
+function testPrimaryRetrySettingsResetCursor(){
   const providers=library();
   providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
   const context=pollingContext(providers);
   const base=context.apiPollingRevision();
 
-  providers.chat_polling.show_message_status=true;
-  providers.chat_polling.show_billing_price=true;
-  assert.strictEqual(context.apiPollingRevision(),base,'两个显示开关不得改变 config_revision');
+  providers.chat_polling.primary_retry_enabled=true;
+  assert.notStrictEqual(context.apiPollingRevision(),base,'回主开关必须改变 config_revision');
+  const retryRevision=context.apiPollingRevision();
+  providers.chat_polling.primary_retry_interval=35;
+  assert.notStrictEqual(context.apiPollingRevision(),retryRevision,'回主间隔必须改变 config_revision');
 
   providers.chat_polling.order=[{provider_id:'B',model:'m-b'},{provider_id:'A',model:'m-a'}];
   assert.notStrictEqual(context.apiPollingRevision(),base,'顺序变化必须改变 config_revision');
@@ -230,19 +233,13 @@ function testChatDisplayDefaultsWhenConfigMissing(){
 
 function testChatDisplayRulesUnderPolling(){
   const cases=[
-    {enabled:false,status:false,price:false,tick:true,cost:true,note:'轮询关闭：强制都显示'},
-    {enabled:false,status:true,price:true,tick:true,cost:true,note:'轮询关闭：开关无效，仍然都显示'},
-    {enabled:true,status:false,price:false,tick:false,cost:false,note:'轮询开启且都关：都隐藏'},
-    {enabled:true,status:true,price:false,tick:true,cost:false,note:'只开状态开关'},
-    {enabled:true,status:false,price:true,tick:false,cost:true,note:'只开价格开关'},
-    {enabled:true,status:true,price:true,tick:true,cost:true,note:'两个都开'}
+    {enabled:false,tick:true,cost:true,note:'轮询关闭：显示状态和价格'},
+    {enabled:true,tick:false,cost:false,note:'轮询开启：无条件隐藏状态和价格'}
   ];
   cases.forEach(item=>{
     const providers=library();
     providers.chat_polling={
       enabled:item.enabled,
-      show_message_status:item.status,
-      show_billing_price:item.price,
       order:[{provider_id:'A',model:'m-a'}]
     };
     const context=pollingContext(providers);
@@ -253,7 +250,7 @@ function testChatDisplayRulesUnderPolling(){
 
 function testChatDisplayFallsBackToLocalMirror(){
   const providers=library();
-  providers.chat_polling={enabled:true,show_message_status:false,show_billing_price:true,order:[{provider_id:'A',model:'m-a'}]};
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
   const loaded=pollingContext(providers);
   loaded.chatPollingViewInvalidate();
   const view=loaded.chatPollingView();
@@ -261,10 +258,10 @@ function testChatDisplayFallsBackToLocalMirror(){
 
   // 模拟"API 配置还没读到"，但本地镜像里有上次保存的值
   const offline=pollingContext({},{apiProvidersLoaded:false});
-  offline.__store.ckChatPollingView=JSON.stringify({enabled:true,showMessageStatus:false,showBillingPrice:true});
+  offline.__store.ckChatPollingView=JSON.stringify({enabled:true});
   offline.chatPollingViewCache=null;
-  assert.strictEqual(offline.chatShouldShowMessageStatus(),false,'镜像生效：轮询开启且状态开关关闭时隐藏 √');
-  assert.strictEqual(offline.chatShouldShowBillingPrice(),true,'镜像生效：价格开关开启时显示价格');
+  assert.strictEqual(offline.chatShouldShowMessageStatus(),false,'镜像生效：轮询开启时隐藏 √');
+  assert.strictEqual(offline.chatShouldShowBillingPrice(),false,'镜像生效：轮询开启时隐藏价格');
 
   // 镜像损坏时必须退回"全部显示"，不能让聊天页少东西
   const broken=pollingContext({},{apiProvidersLoaded:false});
@@ -272,6 +269,16 @@ function testChatDisplayFallsBackToLocalMirror(){
   broken.chatPollingViewCache=null;
   assert.strictEqual(broken.chatShouldShowMessageStatus(),true,'镜像损坏时退回全部显示');
   assert.strictEqual(broken.chatShouldShowBillingPrice(),true,'镜像损坏时退回全部显示');
+}
+
+function testPollingHasHardDomFallback(){
+  const apply=extractFunction('chatApplyCacheTick');
+  assert.ok(apply.includes('chatShouldShowMessageStatus()'),'incremental cache tick insertion needs the polling gate');
+  assert.ok(/chat-polling-on \.chat-cache-tick/.test(css),'polling body class must hard-hide cache ticks');
+  assert.ok(/chat-polling-on \.chat-msg-cost/.test(css),'polling body class must hard-hide prices');
+  assert.ok(source.includes("classList.toggle('chat-polling-on'"),'runtime must synchronize the polling body class');
+  assert.ok(!source.includes('api-polling-show-status'),'obsolete status checkbox must be removed');
+  assert.ok(!source.includes('api-polling-show-price'),'obsolete price checkbox must be removed');
 }
 
 testConfigReadIsPure();
@@ -282,10 +289,11 @@ testOrderDedupAndUnknownIds();
 testAddRemoveAndReorderStayInDraft();
 testDraftSyncDropsDeletedProviders();
 testAddRejectsUnknownProvider();
-testDisplaySwitchesDoNotResetCursor();
+testPrimaryRetrySettingsResetCursor();
 testRevisionTracksProviderCredentials();
 testChatDisplayDefaultsWhenConfigMissing();
 testChatDisplayRulesUnderPolling();
 testChatDisplayFallsBackToLocalMirror();
+testPollingHasHardDomFallback();
 
 console.log('chat polling config tests: OK');
