@@ -182,7 +182,7 @@ function testTrimCommitPreservesMessagesAppendedAfterPlanning(){
 // ---------------------------------------------------------------------------
 // 1h 边界对全部缓存策略一致生效
 // ---------------------------------------------------------------------------
-function planContext(cacheStrategy,session,messages){
+function planContext(cacheStrategy,session,messages,trimConfig){
   const context={
     console,
     chatMessages:messages,
@@ -192,7 +192,9 @@ function planContext(cacheStrategy,session,messages){
     chatPendingMessages:()=>[],
     chatCurrentSession:()=>session,
     chatLoadConfig:()=>({cacheStrategy}),
-    chatAutoTrimConfigFrom:()=>({enabled:true,keep:2}),
+    chatAutoTrimConfigFrom:()=>Object.assign({
+      enabled:true,keep:2,roundLimitEnabled:false,roundLimit:1000
+    },trimConfig||{}),
     chatAutoTrimRoundCount:list=>(list||[]).filter(m=>m&&m.role==='user').length,
     chatTransportRoundCount:list=>(list||[]).filter(m=>m&&m.role==='user').length,
     chatIsRealMessage:m=>!!(m&&(m.role==='user'||m.role==='assistant')),
@@ -267,10 +269,52 @@ function testManualTrimIgnoresCacheAge(){
   assert.strictEqual(plan.historyAfter,2);
 }
 
+function testRoundLimitKeepsRecentCompleteRounds(){
+  const fresh=Date.now()-5*60*1000;
+  const config={enabled:false,keep:60,roundLimitEnabled:true,roundLimit:200};
+  const below=planContext('prefix_24h',{transportMessages:[],cacheLastReadAt:fresh},staleRounds(199,fresh),config)
+    .chatPlanAutoTrimForPendingBatch({cacheStrategy:'prefix_24h'},[],{trigger:'round_limit',idleCheck:true});
+  assert.strictEqual(below.roundLimitBoundary,false,'199 轮不能提前触发轮数上限');
+  assert.strictEqual(below.boundary,false,'199 轮没有任何自动截断边界');
+
+  const atLimit=planContext('prefix_24h',{transportMessages:[],cacheLastReadAt:fresh},staleRounds(200,fresh),config)
+    .chatPlanAutoTrimForPendingBatch({cacheStrategy:'prefix_24h'},[],{trigger:'round_limit',idleCheck:true});
+  assert.strictEqual(atLimit.roundLimitBoundary,true,'达到 200 轮必须触发轮数上限');
+  assert.strictEqual(atLimit.trigger,'round_limit');
+  assert.strictEqual(atLimit.trimmed,true);
+  assert.strictEqual(atLimit.dropped,140,'200 轮到最近 60 轮必须删除 140 轮');
+  assert.strictEqual(atLimit.historyAfter,60,'必须保留最近 60 个完整真实轮次');
+  assert.strictEqual(atLimit.keptMessages[0].text,'问 141','保留范围必须从第 141 轮开始');
+}
+
+function testRoundLimitAndOneHourBoundaryTrimOnce(){
+  const stale=Date.now()-2*60*60*1000;
+  const config={enabled:true,keep:60,roundLimitEnabled:true,roundLimit:200};
+  const plan=planContext('native_stable',{transportMessages:[],cacheLastReadAt:stale},staleRounds(200,stale),config)
+    .chatPlanAutoTrimForPendingBatch({cacheStrategy:'native_stable'},[],{trigger:'idle_1h',idleCheck:true});
+  assert.strictEqual(plan.cacheAgeBoundary,true);
+  assert.strictEqual(plan.roundLimitBoundary,true);
+  assert.strictEqual(plan.trigger,'round_limit','两个边界同时满足时只选一个明确原因');
+  assert.strictEqual(plan.dropped,140,'两个边界同时满足不能重复删除');
+  assert.strictEqual(plan.historyAfter,60);
+}
+
+function testRoundLimitDisabledKeepsOneHourBehavior(){
+  const stale=Date.now()-2*60*60*1000;
+  const config={enabled:true,keep:2,roundLimitEnabled:false,roundLimit:200};
+  const plan=planContext('native_stable',{transportMessages:[],cacheLastReadAt:stale},staleRounds(5,stale),config)
+    .chatPlanAutoTrimForPendingBatch({cacheStrategy:'native_stable'},[],{trigger:'idle_1h',idleCheck:true});
+  assert.strictEqual(plan.roundLimitBoundary,false,'关闭轮数上限后不能产生轮数边界');
+  assert.strictEqual(plan.cacheAgeBoundary,true,'关闭轮数上限不能影响既有 1h 边界');
+  assert.strictEqual(plan.trigger,'cache_1h');
+  assert.strictEqual(plan.historyAfter,2);
+}
+
 function testPrefixSilentConfigIsNormalizedWithoutDisablingTrim(){
   const context=load({
     console,
     CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS:200,
+    CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT:1000,
     chatPositiveIntOrDefault:(value,fallback)=>Math.max(1,Math.floor(Number(value)||fallback))
   },['chatNormalizeAutoTrimConfig']);
   const normalized=context.chatNormalizeAutoTrimConfig({
@@ -279,7 +323,13 @@ function testPrefixSilentConfigIsNormalizedWithoutDisablingTrim(){
   assert.strictEqual(normalized.enabled,true,'静默通知不能关闭自动截断');
   assert.strictEqual(normalized.prefixSilent,true,'静默选项必须被配置层保留');
   assert.strictEqual(normalized.keep,12,'固定轮数配置必须照常保留');
+  assert.strictEqual(normalized.roundLimitEnabled,false,'轮数上限默认关闭，保持老用户行为');
+  assert.strictEqual(normalized.roundLimit,1000);
+  const capped=context.chatNormalizeAutoTrimConfig({keep:60,roundLimitEnabled:true,roundLimit:20});
+  assert.strictEqual(capped.roundLimit,61,'轮数上限必须大于保留轮数');
   assert.ok(source.includes("chat-auto-trim-prefix-silent"),'截断页必须保存静默开关');
+  assert.ok(source.includes("chat-auto-trim-round-limit-enabled"),'截断页必须保存轮数上限开关');
+  assert.ok(source.includes("chat-auto-trim-round-limit"),'截断页必须保存轮数上限输入');
   assert.ok(source.includes("if(!quietPrefix)toast"),'共同前缀静默只抑制自动截断通知');
   assert.ok(extractFunction('chatManualTrimNow').includes("toast("),'手动截断仍要正常通知');
 }
@@ -295,6 +345,9 @@ testIdleBoundaryDoesNotFireEarly();
 testEmptySessionDoesNotTrigger();
 testIdleCheckRequiredForUnsentBoundary();
 testManualTrimIgnoresCacheAge();
+testRoundLimitKeepsRecentCompleteRounds();
+testRoundLimitAndOneHourBoundaryTrimOnce();
+testRoundLimitDisabledKeepsOneHourBehavior();
 testPrefixSilentConfigIsNormalizedWithoutDisablingTrim();
 
 console.log('trim boundary tests: OK');

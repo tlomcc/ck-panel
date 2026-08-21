@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v192-polling-live-timeout';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v193-round-limit-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2855,6 +2855,7 @@ var CHAT_MAX_TRANSPORT_MESSAGES=0;
 var CHAT_LOCAL_SUMMARY_VISIBLE_MESSAGES=40;
 var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
+var CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT=1000;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
 var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
 var CHAT_SCROLL_JUMP_INTENT_MS=1200;
@@ -3195,13 +3196,20 @@ function chatNormalizeCostPricing(raw){
 }
 function chatNormalizeAutoTrimConfig(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
+  var keep=chatPositiveIntOrDefault(
+    raw.keep!==undefined?raw.keep:(raw.keepRounds!==undefined?raw.keepRounds:raw.retain),
+    CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS
+  );
+  var roundLimit=chatPositiveIntOrDefault(
+    raw.roundLimit!==undefined?raw.roundLimit:(raw.round_limit!==undefined?raw.round_limit:raw.maxRounds),
+    CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT
+  );
   return {
     enabled:raw.enabled!==false,
     prefixSilent:raw.prefixSilent===true||raw.prefix_silent===true,
-    keep:chatPositiveIntOrDefault(
-      raw.keep!==undefined?raw.keep:(raw.keepRounds!==undefined?raw.keepRounds:raw.retain),
-      CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS
-    )
+    keep:keep,
+    roundLimitEnabled:raw.roundLimitEnabled===true||raw.round_limit_enabled===true,
+    roundLimit:Math.max(keep+1,roundLimit)
   };
 }
 function chatAutoTrimConfigFrom(cfg){
@@ -3209,7 +3217,9 @@ function chatAutoTrimConfigFrom(cfg){
   return chatNormalizeAutoTrimConfig({
     enabled:cfg.autoTrimEnabled,
     prefixSilent:cfg.autoTrimPrefixSilent===true,
-    keep:cfg.autoTrimKeepRounds
+    keep:cfg.autoTrimKeepRounds,
+    roundLimitEnabled:cfg.autoTrimRoundLimitEnabled===true,
+    roundLimit:cfg.autoTrimRoundLimit
   });
 }
 function chatCurrentCostPricing(){
@@ -3554,6 +3564,8 @@ function chatDefaultConfig(){
     autoTrimEnabled:true,
     autoTrimKeepRounds:CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
     autoTrimPrefixSilent:false,
+    autoTrimRoundLimitEnabled:false,
+    autoTrimRoundLimit:CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT,
     settingsOpen:false,
     chatSideTab:'model',
     memoryPreview:'',
@@ -3937,6 +3949,8 @@ function chatLoadConfig(){
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
   cfg.autoTrimPrefixSilent=trim.prefixSilent;
+  cfg.autoTrimRoundLimitEnabled=trim.roundLimitEnabled;
+  cfg.autoTrimRoundLimit=trim.roundLimit;
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   return cfg;
 }
@@ -3962,6 +3976,8 @@ function chatSaveConfigObject(cfg){
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
   cfg.autoTrimPrefixSilent=trim.prefixSilent;
+  cfg.autoTrimRoundLimitEnabled=trim.roundLimitEnabled;
+  cfg.autoTrimRoundLimit=trim.roundLimit;
   delete cfg.autoTrimThreshold;
   delete cfg.autoTrimDrop;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
@@ -4816,7 +4832,9 @@ function chatReadForm(){
   var trimCfg=chatNormalizeAutoTrimConfig({
     enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
     prefixSilent:chatFieldChecked('chat-auto-trim-prefix-silent',saved.autoTrimPrefixSilent===true),
-    keep:chatFieldValue('chat-auto-trim-keep',saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS)
+    keep:chatFieldValue('chat-auto-trim-keep',saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS),
+    roundLimitEnabled:chatFieldChecked('chat-auto-trim-round-limit-enabled',saved.autoTrimRoundLimitEnabled===true),
+    roundLimit:chatFieldValue('chat-auto-trim-round-limit',saved.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT)
   });
   var cfg={
     gatewayUrl:GRAPH_API_BASE,
@@ -4846,6 +4864,8 @@ function chatReadForm(){
     autoTrimEnabled:trimCfg.enabled,
     autoTrimKeepRounds:trimCfg.keep,
     autoTrimPrefixSilent:trimCfg.prefixSilent,
+    autoTrimRoundLimitEnabled:trimCfg.roundLimitEnabled,
+    autoTrimRoundLimit:trimCfg.roundLimit,
     settingsOpen:settings?settings.classList.contains('open'):false,
     chatSideTab:activePanelTab||saved.chatSideTab||'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
@@ -4881,6 +4901,8 @@ function chatWriteForm(cfg){
   chatSetFieldChecked('chat-auto-trim-enabled',trimCfg.enabled);
   chatSetFieldChecked('chat-auto-trim-prefix-silent',trimCfg.prefixSilent);
   chatSetFieldValue('chat-auto-trim-keep',trimCfg.keep);
+  chatSetFieldChecked('chat-auto-trim-round-limit-enabled',trimCfg.roundLimitEnabled);
+  chatSetFieldValue('chat-auto-trim-round-limit',trimCfg.roundLimit);
   var costPricing=chatNormalizeCostPricing(cfg.costPricing);
   chatSetFieldValue('chat-cost-mode',costPricing.mode);
   chatSetFieldValue('chat-cost-currency',costPricing.currency);
@@ -6003,7 +6025,7 @@ function chatFormatDebug(ev,data){
     var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
     var backendNoticeState=data.backend_switch_notification_enabled===false?'通知关闭':(data.backend_switch_notification_injected?'已注入切换通知':(data.backend_switch_detected?'切换但静默':'未切换'));
     var backendText=data.backend_name?('｜后端：'+data.backend_name+' · '+(data.backend_model||data.model||'-')+'（'+backendNoticeState+'）'):'';
-    var boundaryLabels={cache_1h:'真实缓存 generation 到期',manual_trim:'手动完整轮次截断',manual_sync:'仅同步措辞偏好',pending_rebuild:'已准备操作后的下一条消息'};
+    var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'仅同步措辞偏好',pending_rebuild:'已准备操作后的下一条消息'};
     var boundaryText=data.cache_rebuild_boundary?('｜缓存重建边界：'+(boundaryLabels[data.cache_rebuild_boundary]||data.cache_rebuild_boundary)):'';
     return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+backendText+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+injectionText+targetText+recallText+'｜缓存策略：'+strategyText+boundaryText+idleText+cleanText+mcpText;
   }
@@ -6256,7 +6278,7 @@ function chatRenderTrimState(cfg){
   cfg=cfg||chatLoadConfig();
   var trim=chatAutoTrimConfigFrom(cfg);
   var count=chatCurrentConversationRoundCount();
-  if(current)current.textContent='当前 '+count+' 个真实轮次';
+  if(current)current.textContent='当前 '+count+' 个真实轮次'+(trim.roundLimitEnabled?'｜上限 '+trim.roundLimit+' 轮':'');
   if(speech){
     speech.disabled=chatSending||chatSpeechPreferenceManualBusy||count<=0;
     speech.title=count<=0?'当前没有可检查的对话':'检查尚未审阅的用户措辞，不主动删除历史';
@@ -6270,8 +6292,19 @@ function chatRenderTrimState(cfg){
         :'当前不足 '+trim.keep+' 个真实轮次，只同步措辞偏好');
   }
   if(!next)return;
+  if(!trim.enabled&&!trim.roundLimitEnabled){
+    next.textContent='1h 缓存边界与轮数上限自动截断均已关闭；仍可手动同步并按需截断。';
+    return;
+  }
+  var roundLimitText=trim.roundLimitEnabled
+    ?('轮数上限：达到 '+trim.roundLimit+' 轮时，立即保留最近 '+trim.keep+' 个完整真实轮次。')
+    :'轮数上限自动截断已关闭。';
+  if(trim.roundLimitEnabled&&count>=trim.roundLimit){
+    next.textContent='已达到 '+trim.roundLimit+' 轮上限；将立即保留最近 '+trim.keep+' 个完整真实轮次。'+(trim.enabled?' 1h 缓存边界也保持启用。':'');
+    return;
+  }
   if(!trim.enabled){
-    next.textContent='1h 缓存边界自动截断已关闭；仍可手动同步并按需截断。';
+    next.textContent=roundLimitText;
     return;
   }
   var session=chatCurrentSession();
@@ -6280,9 +6313,9 @@ function chatRenderTrimState(cfg){
   var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
   if(expired){
     if(count>trim.keep){
-      next.textContent=(trim.prefixSilent&&chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'?'共同前缀模式已到固定轮数边界：下一次发送前保留最近 ':'缓存已连续 1h 未读取或创建：下一次发送前先审阅措辞偏好，再保留最近 ')+trim.keep+' 个真实轮次。';
+      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前先审阅措辞偏好，再保留最近 '+trim.keep+' 个真实轮次。 '+roundLimitText;
     }else{
-      next.textContent=(trim.prefixSilent&&chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'?'共同前缀模式已到固定轮数边界：下一次发送前更新措辞偏好；真实轮次不足 ':'缓存已连续 1h 未读取或创建：下一次发送前更新措辞偏好；真实轮次不足 ')+trim.keep+'，不删除内容。';
+      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前更新措辞偏好；真实轮次不足 '+trim.keep+'，不删除内容。 '+roundLimitText;
     }
   }else{
     var remaining=referenceTs?Math.max(0,CHAT_AUTO_TRIM_IDLE_MS-(Date.now()-referenceTs)):CHAT_AUTO_TRIM_IDLE_MS;
@@ -6290,7 +6323,7 @@ function chatRenderTrimState(cfg){
     var sourceText=reference.source==='cache_read'
       ?'按最近一次成功缓存读取续期'
       :(reference.source==='full_create'?'按最近一次完整缓存创建计时':'尚无缓存用量记录，暂按最近消息估算');
-    next.textContent=sourceText+'；约 '+minutes+' 分钟后到边界，再保留最近 '+trim.keep+' 个完整真实轮次。';
+    next.textContent=sourceText+'；约 '+minutes+' 分钟后到 1h 边界，再保留最近 '+trim.keep+' 个完整真实轮次。 '+roundLimitText;
   }
 }
 function chatNowTitle(){
@@ -6929,14 +6962,24 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     trim.enabled&&(selected.size>0||opts.idleCheck===true)&&
     cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
   );
-  var boundary=manual||pendingBoundary||cacheAgeBoundary;
-  var trigger=manual?String(opts.trigger||'manual'):(pendingBoundary?'pending_rebuild':'cache_1h');
+  // 轮数上限和 1h 边界彼此独立、可以同时开启；两者复用同一个 keep，
+  // 因而无论哪条先满足，都只会按完整真实轮次裁到同一保留值。
+  var roundLimitBoundary=!!(
+    trim.roundLimitEnabled&&(selected.size>0||opts.idleCheck===true)&&
+    historyRounds>=trim.roundLimit
+  );
+  var boundary=manual||pendingBoundary||roundLimitBoundary||cacheAgeBoundary;
+  var trigger=manual
+    ?String(opts.trigger||'manual')
+    :(pendingBoundary?'pending_rebuild':(roundLimitBoundary?'round_limit':'cache_1h'));
   var base={
     boundary:boundary,
     cacheBoundary:boundary,
     trigger:trigger,
     manual:manual,
     cacheAgeBoundary:cacheAgeBoundary,
+    roundLimitBoundary:roundLimitBoundary,
+    roundLimit:trim.roundLimit,
     cacheAgeMs:cacheAgeMs,
     cacheReferenceTs:cacheReferenceTs,
     cacheReferenceSource:cacheReference.source,
@@ -6986,6 +7029,8 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     trigger:trigger,
     manual:manual,
     cacheAgeBoundary:cacheAgeBoundary,
+    roundLimitBoundary:roundLimitBoundary,
+    roundLimit:trim.roundLimit,
     cacheAgeMs:cacheAgeMs,
     cacheReferenceTs:cacheReferenceTs,
     cacheReferenceSource:base.cacheReferenceSource,
@@ -7565,29 +7610,33 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
 }
 var chatIdleTrimBusy=false;
 var chatIdleTrimLastCheckAt=0;
-// 1 小时自动截断的"页面在线"路径：到点就地执行本地完整轮次裁剪并同步网关，
+// 1 小时边界与轮数上限自动截断的"页面在线"路径：到点就地执行本地完整轮次裁剪并同步网关，
 // 全程不发起 AI 聊天请求。页面关闭、休眠或断网时，由发送前既有的边界检查兜底补执行。
-async function chatMaybeAutoTrimAtIdleBoundary(){
+async function chatMaybeAutoTrimAtIdleBoundary(opts){
+  opts=opts||{};
   if(chatIdleTrimBusy||chatSending||chatSpeechPreferenceManualBusy)return;
   if(currentPanelTab!=='chat')return;
   if(chatEditingIndex>=0)return;
   var now=Date.now();
-  if(now-chatIdleTrimLastCheckAt<30000)return;
+  if(opts.forceCheck!==true&&now-chatIdleTrimLastCheckAt<30000)return;
   chatIdleTrimLastCheckAt=now;
   var cfg=chatLoadConfig();
   var trim=chatAutoTrimConfigFrom(cfg);
-  if(!trim.enabled)return;
+  if(!trim.enabled&&!trim.roundLimitEnabled)return;
   var session=chatCurrentSession();
   if(!session)return;
   // 已经标记待重建，说明上一次边界处理过了，交给下一次真实发送即可。
   if(session.cacheRebuildPending===true)return;
   if(chatPendingMessages().length)return;
   var reference=chatCacheActivityReference(session,chatLastMessageTs());
-  if(!reference.timestamp||now-reference.timestamp<CHAT_AUTO_TRIM_IDLE_MS)return;
-  if(chatCurrentConversationRoundCount()<=0)return;
+  var count=chatCurrentConversationRoundCount();
+  if(count<=0)return;
+  var cacheAgeDue=!!(trim.enabled&&reference.timestamp&&now-reference.timestamp>=CHAT_AUTO_TRIM_IDLE_MS);
+  var roundLimitDue=!!(trim.roundLimitEnabled&&count>=trim.roundLimit);
+  if(!cacheAgeDue&&!roundLimitDue)return;
   chatIdleTrimBusy=true;
   try{
-    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{trigger:'idle_1h',idleCheck:true});
+    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{trigger:roundLimitDue?'round_limit':'idle_1h',idleCheck:true});
     if(result&&result.cacheBoundary){
       chatSaveLocalMessages();
       chatRenderMessages({respectUserScroll:true});
@@ -7598,7 +7647,12 @@ async function chatMaybeAutoTrimAtIdleBoundary(){
           chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'
           && chatAutoTrimConfigFrom(cfg).prefixSilent
         );
-        if(!quietPrefix)toast('已超过 1 小时无新消息：已保留最近 '+result.historyAfter+' 个完整真实轮次',5000);
+        if(!quietPrefix)toast(
+          result.trigger==='round_limit'
+            ?'已达到 '+trim.roundLimit+' 轮上限：已保留最近 '+result.historyAfter+' 个完整真实轮次'
+            :'已超过 1 小时无新消息：已保留最近 '+result.historyAfter+' 个完整真实轮次',
+          5000
+        );
       }
     }
   }catch(error){
@@ -9903,7 +9957,7 @@ async function chatSubmitPendingMessages(options){
   if((regenerateRequest||cfg.fullWindowContext!==false||trimResult.trimmed||speechBoundaryNow)&&!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
   var requestBodyText=JSON.stringify(body);
-  var assistantText='',recallInfo=null,toolEvents=[],requestUsage=null;
+  var assistantText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
   var responseUserTs=submitTs;
   var firstReplyTs=0;
   var latencyTrace={
@@ -10111,6 +10165,7 @@ async function chatSubmitPendingMessages(options){
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
     await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId});
+    requestCompleted=true;
     chatSetStatus('完成');
   }catch(e){
     if(requestState&&(requestState.stopped||chatRequestWasAborted(e,requestSignal))){
@@ -10127,6 +10182,11 @@ async function chatSubmitPendingMessages(options){
     stopStreamRender();
     if(out&&out.parentNode)out.parentNode.remove();
     chatReleaseSendingUi(requestState);
+    if(requestCompleted){
+      // 第 y 轮回复刚落定时立刻复核轮数上限，不必等待 15 秒定时器。
+      // forceCheck 只跳过 30 秒节流，函数内部仍会检查是否真的达到上限。
+      setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
+    }
   }
 }
 document.addEventListener('click',function(e){

@@ -74,7 +74,7 @@ function testMemoryAuthenticationSurvivesStorageFailure(){
 }
 
 function testTrimConfigAndSystemPrompt(){
-  const context={console,CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS:200};
+  const context={console,CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS:200,CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT:1000};
   vm.createContext(context);
   vm.runInContext([
     extractFunction('chatPositiveIntOrDefault'),
