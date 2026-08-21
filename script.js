@@ -10617,7 +10617,16 @@ function providerFingerprint(p){
 // 2. 只存供应商 ID 和模型，Key/URL 永远从供应商库实时解析，不复制。
 // 3. 两个显示开关不参与 config_revision，否则用户勾一下复选框就会把网关的
 //    粘性游标重置掉，白白丢失当前正在用的可用 API。
+// 4. 每条候选可以单独绑一个缓存策略。空字符串＝跟随聊天页的全局策略，
+//    也就是老配置读出来一律是空，行为和改造前完全一致。绑了策略的那条，
+//    网关切到它的时候会连缓存断点一起换过去。缓存策略必须参与 config_revision，
+//    否则别的热实例不会重新拉配置，改了策略却还在按旧策略打断点。
 var API_POLLING_KEY='chat_polling';
+// 空值必须保持为空（"跟随聊天页"），不能被 chatNormalizeCacheStrategy 兜底成 single_5m。
+function apiPollingNormalizeStrategy(value){
+  var raw=String(value||'').trim();
+  return raw?chatNormalizeCacheStrategy(raw):'';
+}
 function apiPollingConfig(){
   var raw=(apiProviders&&typeof apiProviders==='object'&&!Array.isArray(apiProviders))
     ?apiProviders[API_POLLING_KEY]:null;
@@ -10628,7 +10637,11 @@ function apiPollingConfig(){
     var id=String(item.provider_id||item.providerId||'').trim();
     if(!id||seen[id])return;
     seen[id]=1;
-    order.push({provider_id:id,model:String(item.model||'').trim()});
+    order.push({
+      provider_id:id,
+      model:String(item.model||'').trim(),
+      cache_strategy:apiPollingNormalizeStrategy(item.cache_strategy||item.cacheStrategy)
+    });
   });
   return {
     enabled:raw.enabled===true,
@@ -10646,19 +10659,30 @@ function apiPollingWrite(next){
     primary_retry_enabled:next.primary_retry_enabled===true,
     primary_retry_interval:Math.max(5,Math.min(200,Number(next.primary_retry_interval)||20)),
     order:(Array.isArray(next.order)?next.order:[]).map(function(x){
-      return {provider_id:String(x&&x.provider_id||''),model:String(x&&x.model||'')};
+      return {
+        provider_id:String(x&&x.provider_id||''),
+        model:String(x&&x.model||''),
+        cache_strategy:apiPollingNormalizeStrategy(x&&x.cache_strategy)
+      };
     }),
     config_revision:String(next.config_revision||'')
   };
   chatPollingViewInvalidate();
   return apiProviders[API_POLLING_KEY];
 }
-function apiPollingItemFor(p,model){
+function apiPollingItemFor(p,model,cacheStrategy){
   model=String(model||(p&&p.model)||'').trim();
   var url=String(p&&p.url||'').trim();
   var key=String(p&&p.key||'').trim();
   var missing=!url?'URL':(!key?'Key':(!model?'模型':''));
-  return {provider_id:String(p&&p.id||''),provider:p,model:model,available:!missing,missing:missing};
+  return {
+    provider_id:String(p&&p.id||''),
+    provider:p,
+    model:model,
+    cache_strategy:apiPollingNormalizeStrategy(cacheStrategy),
+    available:!missing,
+    missing:missing
+  };
 }
 // 只把用户自己加进来的候选算数。供应商库里没加进来的一律不出现，
 // 更不会被静默塞进轮询——"全部供应商自动进轮询"正是上一版最难用的地方。
@@ -10674,7 +10698,7 @@ function apiPollingItemsFromOrder(order){
     // 供应商库里已经删掉的引用自然消失，不用额外清理
     if(!p||used[id])return;
     used[id]=1;
-    out.push(apiPollingItemFor(p,item.model));
+    out.push(apiPollingItemFor(p,item.model,item.cache_strategy));
   });
   return out;
 }
@@ -10689,7 +10713,7 @@ function apiPollingRevision(polling,items){
     primary_retry_enabled:polling.primary_retry_enabled===true,
     primary_retry_interval:polling.primary_retry_interval,
     order:items.filter(function(x){return x.available}).map(function(x){
-      return [x.provider_id,x.model,providerFingerprint(x.provider)];
+      return [x.provider_id,x.model,x.cache_strategy,providerFingerprint(x.provider)];
     })
   });
   var hash=2166136261;
@@ -10987,7 +11011,9 @@ function apiPollingDraftGet(){
       enabled:polling.enabled,
       primary_retry_enabled:polling.primary_retry_enabled,
       primary_retry_interval:polling.primary_retry_interval,
-      order:polling.order.map(function(x){return {provider_id:x.provider_id,model:x.model}})
+      order:polling.order.map(function(x){
+        return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy};
+      })
     };
   }
   return apiPollingDraft;
@@ -10998,7 +11024,9 @@ function apiPollingDraftItems(){
 // 每次改完都把 order 写回成"当前真实可见的这几条"，
 // 顺带清掉指向已删除供应商的死引用。
 function apiPollingDraftSync(items){
-  apiPollingDraftGet().order=items.map(function(x){return {provider_id:x.provider_id,model:x.model}});
+  apiPollingDraftGet().order=items.map(function(x){
+    return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy};
+  });
 }
 // 供应商库里还没加进轮询的那些，才是"可以添加"的
 function apiPollingAddable(){
@@ -11020,6 +11048,20 @@ function apiPollingModelSelectHtml(item,index){
   models.forEach(function(m){
     if(m===defaultModel)return;
     html+='<option value="'+escAttr(m)+'"'+(m===item.model?' selected':'')+'>'+esc(m)+'</option>';
+  });
+  html+='</select>';
+  return html;
+}
+// 轮询里每条候选各自绑一个缓存策略。标签直接取聊天页那份 meta，避免两处文案走样。
+var API_POLLING_STRATEGY_VALUES=['single_5m','assistant_latest','native_stable','native_tiered','prefix_24h'];
+function apiPollingStrategySelectHtml(item,index){
+  var current=apiPollingNormalizeStrategy(item.cache_strategy);
+  var html='<select class="api-polling-strategy" aria-label="选择这个供应商的缓存策略" onchange="setApiPollingStrategy('+index+',this.value)">';
+  html+='<option value=""'+(current?'':' selected')+'>跟随聊天页设置</option>';
+  API_POLLING_STRATEGY_VALUES.forEach(function(value){
+    var meta=chatCacheStrategyMeta(value);
+    html+='<option value="'+escAttr(value)+'"'+(value===current?' selected':'')+'>缓存：'+
+      esc(meta.label)+'</option>';
   });
   html+='</select>';
   return html;
@@ -11057,7 +11099,10 @@ function renderApiPolling(){
         '<b class="api-polling-index">'+(index+1)+'</b>'+
         '<div class="api-polling-main"><strong>'+esc(providerDisplayName(p))+'</strong>'+
           '<span>'+esc(providerHost(p.url)||'未填写 URL')+'</span>'+
-          apiPollingModelSelectHtml(item,index)+'</div>'+
+          '<div class="api-polling-selects">'+
+            apiPollingModelSelectHtml(item,index)+
+            apiPollingStrategySelectHtml(item,index)+
+          '</div></div>'+
         '<span class="api-polling-status">'+esc(status)+'</span>'+
         '<div class="api-polling-actions">'+
           '<button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移"'+(index===0?' disabled':'')+' onclick="moveApiPolling('+index+',-1)">↑</button>'+
@@ -11084,7 +11129,8 @@ function renderApiPolling(){
       '<button class="btn btn-blue btn-sm" type="button" onclick="addApiPollingProvider()">加入轮询</button>';
   }
   html+='</div>';
-  html+='<p class="api-polling-note">顺序从上到下依次尝试，第一个能用的就用它。缺 URL / Key / 模型的会被跳过，不会发给网关。这一页只保存"用哪个供应商、哪个模型"，Key 和地址始终由网关自己去供应商库里取，不在这里显示也不重复填写。</p>';
+  html+='<p class="api-polling-note">顺序从上到下依次尝试，第一个能用的就用它。缺 URL / Key / 模型的会被跳过，不会发给网关。这一页只保存"用哪个供应商、哪个模型、配哪个缓存策略"，Key 和地址始终由网关自己去供应商库里取，不在这里显示也不重复填写。</p>';
+  html+='<p class="api-polling-note">缓存策略默认「跟随聊天页设置」，也就是和改造前一样用聊天页那一个全局策略。给某条单独选了策略后，网关切到它时会连缓存断点一起换成它的策略；换回没设策略的候选就自动回到聊天页设置。不同供应商对缓存的支持不一样，这里可以一家一家配。</p>';
   return html;
 }
 function apiPollingCollectSwitches(){
@@ -11125,8 +11171,8 @@ function addApiPollingProvider(){
   if(!provider){toast('这个供应商已经不在供应商库里了');return}
   var draft=apiPollingDraftGet();
   if(draft.order.some(function(x){return String(x.provider_id)===id})){toast('这个供应商已经在队列里了');return}
-  // 模型默认跟随供应商的默认模型，用户不用再填一遍；想换在行内改就行。
-  draft.order.push({provider_id:id,model:''});
+  // 模型默认跟随供应商的默认模型，缓存策略默认跟随聊天页，用户不用再填一遍；想换在行内改就行。
+  draft.order.push({provider_id:id,model:'',cache_strategy:''});
   renderApiConfig();
   toast('已加入队列：'+providerDisplayName(provider)+'（记得点「保存轮询配置」）',4000);
 }
@@ -11155,6 +11201,13 @@ function setApiPollingModel(index,model){
   draft.order[index].model=String(model||'').trim();
   renderApiConfig();
 }
+function setApiPollingStrategy(index,strategy){
+  apiPollingCollectSwitches();
+  var draft=apiPollingDraftGet();
+  if(index<0||index>=draft.order.length)return;
+  draft.order[index].cache_strategy=apiPollingNormalizeStrategy(strategy);
+  renderApiConfig();
+}
 function saveApiPolling(){
   var draft=apiPollingCollectSwitches();
   var items=apiPollingDraftItems();
@@ -11168,7 +11221,9 @@ function saveApiPolling(){
     primary_retry_enabled:draft.primary_retry_enabled,
     primary_retry_interval:draft.primary_retry_interval,
     // 顺序保存用户自己排好的这几条（含暂时不可用的），保留他的优先级意图。
-    order:items.map(function(x){return {provider_id:x.provider_id,model:x.model}})
+    order:items.map(function(x){
+      return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy};
+    })
   };
   next.config_revision=apiPollingRevision(next,items);
   apiPollingWrite(next);

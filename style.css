@@ -7080,6 +7080,14 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
   border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
   background:var(--ck-surface);color:var(--ck-text);font-size:11.5px;
 }
+/* 模型和缓存策略两个下拉并排：窄屏自动换行，不挤压供应商名那一列 */
+.api-polling-selects{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px}
+.api-polling-selects .api-polling-model{margin-top:0;max-width:220px;flex:1 1 160px}
+.api-polling-strategy{
+  height:30px;padding:3px 6px;flex:1 1 160px;min-width:0;max-width:220px;
+  border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
+  background:var(--ck-surface);color:var(--ck-text);font-size:11.5px;
+}
 .api-polling-model-empty{font-size:11px;color:var(--ck-muted)}
 .api-polling-model-empty button{
   border:0;background:transparent;padding:0;
@@ -7119,6 +7127,7 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
   .api-polling-status{grid-column:2;justify-self:start;align-self:center}
   .api-polling-actions{grid-column:3;justify-self:end}
   .api-polling-model{max-width:none}
+  .api-polling-selects .api-polling-model,.api-polling-strategy{max-width:none;flex:1 1 100%}
 }
 
 /* ---- 规则管理页 ---- */

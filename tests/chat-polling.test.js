@@ -18,11 +18,12 @@ function extractFunction(name){
 }
 
 const POLLING_FNS=[
+  'apiPollingNormalizeStrategy','chatNormalizeCacheStrategy',
   'apiPollingConfig','apiPollingWrite','apiPollingItemFor','apiPollingItems',
   'apiPollingItemsFromOrder','apiPollingAvailableItems','apiPollingRevision','providerFingerprint',
   'apiPollingDraftReset','apiPollingDraftGet','apiPollingDraftItems','apiPollingDraftSync',
   'apiPollingCollectSwitches','apiPollingAddable','addApiPollingProvider','removeApiPolling',
-  'setApiPollingModel','moveApiPolling',
+  'setApiPollingModel','setApiPollingStrategy','moveApiPolling',
   'chatPollingViewInvalidate','chatPollingView',
   'chatShouldShowMessageStatus','chatShouldShowBillingPrice'
 ];
@@ -271,6 +272,87 @@ function testChatDisplayFallsBackToLocalMirror(){
   assert.strictEqual(broken.chatShouldShowBillingPrice(),true,'镜像损坏时退回全部显示');
 }
 
+// ---------------------------------------------------------------------------
+// 每条候选各自绑缓存策略：空＝跟随聊天页，绑了就必须一路带到写入和 revision。
+// ---------------------------------------------------------------------------
+function testCacheStrategyDefaultsToFollowChatPage(){
+  const providers=library();
+  // 改造前保存的老配置没有 cache_strategy 字段，必须读成空（跟随聊天页），
+  // 不能被兜底成 single_5m，否则老用户的全局策略会被静默改掉。
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  assert.strictEqual(context.apiPollingConfig().order[0].cache_strategy,'','老配置读出来必须是空＝跟随聊天页');
+  assert.strictEqual(context.apiPollingItems()[0].cache_strategy,'','运行时候选也保持空');
+}
+
+function testCacheStrategyIsNormalizedAndCarried(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[
+    {provider_id:'A',model:'m-a',cache_strategy:'24H'},
+    {provider_id:'B',model:'m-b',cacheStrategy:'native'},
+    {provider_id:'C',model:'m-c',cache_strategy:'  '}
+  ]};
+  const context=pollingContext(providers);
+  const order=context.apiPollingConfig().order;
+  assert.strictEqual(order[0].cache_strategy,'prefix_24h','别名和大小写要归一');
+  assert.strictEqual(order[1].cache_strategy,'native_stable','驼峰字段名也要认');
+  assert.strictEqual(order[2].cache_strategy,'','纯空白等于没设置');
+  assert.strictEqual(context.apiPollingItems()[0].cache_strategy,'prefix_24h','策略要带到运行时候选上');
+}
+
+function testWriteKeepsCacheStrategy(){
+  const providers=library();
+  const context=pollingContext(providers);
+  context.apiPollingWrite({
+    enabled:true,
+    order:[{provider_id:'A',model:'m-a',cache_strategy:'assistant'},{provider_id:'B',model:'m-b'}],
+    config_revision:'rev'
+  });
+  assert.strictEqual(providers.chat_polling.order[0].cache_strategy,'assistant_latest','写入要保留并归一策略');
+  assert.strictEqual(providers.chat_polling.order[1].cache_strategy,'','没设的写成空，不许写成 single_5m');
+}
+
+function testSetStrategyStaysInDraft(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const before=JSON.stringify(providers.chat_polling);
+  const context=pollingContext(providers);
+  context.setApiPollingStrategy(0,'native_tiered');
+  assert.strictEqual(context.apiPollingDraftItems()[0].cache_strategy,'native_tiered','行内选策略生效');
+  context.setApiPollingStrategy(0,'');
+  assert.strictEqual(context.apiPollingDraftItems()[0].cache_strategy,'','可以改回跟随聊天页');
+  assert.strictEqual(JSON.stringify(providers.chat_polling),before,'保存之前不得改动全局 apiProviders');
+}
+
+// 缓存策略必须进 config_revision：否则别的热实例不会重新拉配置，
+// 用户改了策略，那些实例还在按旧策略打断点。
+function testCacheStrategyEntersRevision(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  const base=context.apiPollingRevision();
+  providers.chat_polling.order=[{provider_id:'A',model:'m-a',cache_strategy:'native_stable'}];
+  assert.notStrictEqual(context.apiPollingRevision(),base,'绑定缓存策略必须改变 config_revision');
+}
+
+// 轮询下拉里的策略清单是手写常量，必须和 chatNormalizeCacheStrategy 的
+// 正式输出集合一致。以后新增第 6 个策略时这条会立刻失败，
+// 提醒把它补进下拉——否则新策略在轮询页永远选不到。
+function testStrategyListCoversEveryCanonicalStrategy(){
+  const listed=/var API_POLLING_STRATEGY_VALUES=\[([^\]]*)\]/.exec(source);
+  assert.ok(listed,'找不到 API_POLLING_STRATEGY_VALUES 常量');
+  const values=listed[1].split(',').map(s=>s.trim().replace(/^'|'$/g,'')).filter(Boolean);
+  const canonical=new Set();
+  // 从归一函数里把所有 return '<正式值>' 抓出来
+  for(const match of extractFunction('chatNormalizeCacheStrategy').matchAll(/return '([a-z0-9_]+)'/g)){
+    canonical.add(match[1]);
+  }
+  assert.deepStrictEqual(
+    values.slice().sort(),[...canonical].sort(),
+    '轮询策略下拉和 chatNormalizeCacheStrategy 的正式值对不上'
+  );
+}
+
 function testPollingHasHardDomFallback(){
   const apply=extractFunction('chatApplyCacheTick');
   assert.ok(apply.includes('chatShouldShowMessageStatus()'),'incremental cache tick insertion needs the polling gate');
@@ -291,6 +373,12 @@ testDraftSyncDropsDeletedProviders();
 testAddRejectsUnknownProvider();
 testPrimaryRetrySettingsResetCursor();
 testRevisionTracksProviderCredentials();
+testCacheStrategyDefaultsToFollowChatPage();
+testCacheStrategyIsNormalizedAndCarried();
+testWriteKeepsCacheStrategy();
+testSetStrategyStaysInDraft();
+testCacheStrategyEntersRevision();
+testStrategyListCoversEveryCanonicalStrategy();
 testChatDisplayDefaultsWhenConfigMissing();
 testChatDisplayRulesUnderPolling();
 testChatDisplayFallsBackToLocalMirror();
