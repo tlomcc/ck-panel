@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v191-polling-cache-strategy';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v192-polling-live-timeout';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2892,6 +2892,7 @@ var chatScrollJumpManualUntil=0;
 var chatScrollJumpPointerActive=false;
 var chatScrollJumpPointerX=0;
 var chatScrollJumpPointerY=0;
+var chatPollingLiveState=null;
 var chatWorldbookActiveId='';
 var chatEditingIndex=-1;
 var chatEditingDraftText='';
@@ -3196,6 +3197,7 @@ function chatNormalizeAutoTrimConfig(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
   return {
     enabled:raw.enabled!==false,
+    prefixSilent:raw.prefixSilent===true||raw.prefix_silent===true,
     keep:chatPositiveIntOrDefault(
       raw.keep!==undefined?raw.keep:(raw.keepRounds!==undefined?raw.keepRounds:raw.retain),
       CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS
@@ -3206,6 +3208,7 @@ function chatAutoTrimConfigFrom(cfg){
   cfg=cfg||{};
   return chatNormalizeAutoTrimConfig({
     enabled:cfg.autoTrimEnabled,
+    prefixSilent:cfg.autoTrimPrefixSilent===true,
     keep:cfg.autoTrimKeepRounds
   });
 }
@@ -3550,6 +3553,7 @@ function chatDefaultConfig(){
     splitAssistantReplies:true,
     autoTrimEnabled:true,
     autoTrimKeepRounds:CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
+    autoTrimPrefixSilent:false,
     settingsOpen:false,
     chatSideTab:'model',
     memoryPreview:'',
@@ -3932,6 +3936,7 @@ function chatLoadConfig(){
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
+  cfg.autoTrimPrefixSilent=trim.prefixSilent;
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   return cfg;
 }
@@ -3956,6 +3961,7 @@ function chatSaveConfigObject(cfg){
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
+  cfg.autoTrimPrefixSilent=trim.prefixSilent;
   delete cfg.autoTrimThreshold;
   delete cfg.autoTrimDrop;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
@@ -4809,6 +4815,7 @@ function chatReadForm(){
   var cacheMeta=chatCacheStrategyMeta(cacheStrategyValue);
   var trimCfg=chatNormalizeAutoTrimConfig({
     enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
+    prefixSilent:chatFieldChecked('chat-auto-trim-prefix-silent',saved.autoTrimPrefixSilent===true),
     keep:chatFieldValue('chat-auto-trim-keep',saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS)
   });
   var cfg={
@@ -4838,6 +4845,7 @@ function chatReadForm(){
     splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
     autoTrimKeepRounds:trimCfg.keep,
+    autoTrimPrefixSilent:trimCfg.prefixSilent,
     settingsOpen:settings?settings.classList.contains('open'):false,
     chatSideTab:activePanelTab||saved.chatSideTab||'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
@@ -4871,6 +4879,7 @@ function chatWriteForm(cfg){
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String(cacheMeta.retentionSeconds);
   var trimCfg=chatAutoTrimConfigFrom(cfg);
   chatSetFieldChecked('chat-auto-trim-enabled',trimCfg.enabled);
+  chatSetFieldChecked('chat-auto-trim-prefix-silent',trimCfg.prefixSilent);
   chatSetFieldValue('chat-auto-trim-keep',trimCfg.keep);
   var costPricing=chatNormalizeCostPricing(cfg.costPricing);
   chatSetFieldValue('chat-cost-mode',costPricing.mode);
@@ -6271,9 +6280,9 @@ function chatRenderTrimState(cfg){
   var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
   if(expired){
     if(count>trim.keep){
-      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前先审阅措辞偏好，再保留最近 '+trim.keep+' 个真实轮次。';
+      next.textContent=(trim.prefixSilent&&chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'?'共同前缀模式已到固定轮数边界：下一次发送前保留最近 ':'缓存已连续 1h 未读取或创建：下一次发送前先审阅措辞偏好，再保留最近 ')+trim.keep+' 个真实轮次。';
     }else{
-      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前更新措辞偏好；真实轮次不足 '+trim.keep+'，不删除内容。';
+      next.textContent=(trim.prefixSilent&&chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'?'共同前缀模式已到固定轮数边界：下一次发送前更新措辞偏好；真实轮次不足 ':'缓存已连续 1h 未读取或创建：下一次发送前更新措辞偏好；真实轮次不足 ')+trim.keep+'，不删除内容。';
     }
   }else{
     var remaining=referenceTs?Math.max(0,CHAT_AUTO_TRIM_IDLE_MS-(Date.now()-referenceTs)):CHAT_AUTO_TRIM_IDLE_MS;
@@ -7585,7 +7594,11 @@ async function chatMaybeAutoTrimAtIdleBoundary(){
       chatRenderTrimState(cfg);
       if(result.trimmed){
         await chatSyncTrimmedHistoryToGateway(cfg,result);
-        toast('已超过 1 小时无新消息：已保留最近 '+result.historyAfter+' 个完整真实轮次',5000);
+        var quietPrefix=(
+          chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'
+          && chatAutoTrimConfigFrom(cfg).prefixSilent
+        );
+        if(!quietPrefix)toast('已超过 1 小时无新消息：已保留最近 '+result.historyAfter+' 个完整真实轮次',5000);
       }
     }
   }catch(error){
@@ -9093,6 +9106,11 @@ function chatEnsureCacheExpiryNotice(){
   var lastTs=chatLastMessageTs();
   var info=chatCacheExpiryInfo();
   var session=chatCurrentSession();
+  var cfg=chatLoadConfig()||{};
+  if(
+    chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'
+    && chatAutoTrimConfigFrom(cfg).prefixSilent
+  )return false;
   var referenceTs=chatCacheActivityReference(session,lastTs).timestamp;
   var expired=!!(info.ttlMs>0&&referenceTs&&chatMessages.length&&!chatSending&&(Date.now()-referenceTs>=info.ttlMs));
   if(!expired||chatHasCacheNoticeAfter(referenceTs))return false;
@@ -9987,6 +10005,10 @@ async function chatSubmitPendingMessages(options){
           streamError=chatCreateRequestFailure(streamErrorText,chatContainsPlatformExitError(streamErrorText));
           return;
         }
+        if(ev==='polling'){
+          chatApplyPollingLiveState(data||{});
+          return;
+        }
         attemptState.receivedValidContent=true;
         if(ev==='delta'){
           var deltaText=typeof data==='string'?data:String((data&&data.text)||'');
@@ -10028,6 +10050,10 @@ async function chatSubmitPendingMessages(options){
           if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
           if(ev==='done'&&data&&data.usage)userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data.usage,null)});
           if(ev==='done'){
+            if(chatPollingLiveState&&chatPollingView().enabled===true){
+              chatPollingLiveState=Object.assign({},chatPollingLiveState,{state:'success'});
+              apiPollingStatusState.data=chatPollingLiveState;
+            }
             if(data&&data.usage&&requestState&&!requestState.cacheLifecycleCaptured){
               chatCaptureCacheLifecycle(data.usage,chatCurrentSession());
               requestState.cacheLifecycleCaptured=true;
@@ -10160,6 +10186,9 @@ function switchPanelTab(tab,opts) {
   if(panel)panel.classList.add('active');
   if(tab==='apiconfig'){
     renderApiConfig();
+    if(currentApiTab==='polling')apiPollingStartStatusRealtime();
+  }else{
+    apiPollingStopStatusRealtime();
   }
   if(tab==='rules'){
     renderRulesPage();
@@ -10489,6 +10518,8 @@ function switchApiTab(k){
   if(currentApiTab==='polling'&&k!=='polling')apiPollingDraftReset();
   currentApiTab=k;
   renderApiConfig();
+  if(k==='polling')apiPollingStartStatusRealtime();
+  else apiPollingStopStatusRealtime();
 }
 
 
@@ -11087,7 +11118,7 @@ function renderApiPolling(){
     '<label class="api-toggle"><input id="api-polling-enabled" type="checkbox"'+(draft.enabled?' checked':'')+' onchange="apiPollingToggleControls()"><span>启用聊天 API 轮询</span></label>'+
     '<div class="api-primary-retry '+(draft.enabled?'':'disabled')+(draft.primary_retry_enabled?'':' off')+'"><label class="api-toggle"><input id="api-polling-primary-retry" type="checkbox"'+(draft.primary_retry_enabled?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>回主重试</span></label><label class="api-primary-retry-interval"><span>备用 API 连续使用</span><input id="api-polling-primary-interval" type="number" min="5" max="200" step="1" value="'+draft.primary_retry_interval+'"'+(draft.enabled&&draft.primary_retry_enabled?'':' disabled')+' onblur="this.value=Math.max(5,Math.min(200,Number(this.value)||20))"><span>次后重试第 1 个</span></label><p>第 1 个恢复后会继续固定使用；仍失败则按队列顺序回到备用。</p></div>'+
     '</div>';
-  html+='<p class="api-polling-note">开启轮询后不显示 √ 和价格，回复会等整段生成完再显示。关闭轮询后恢复正常显示。</p>';
+  html+='<p class="api-polling-note">每个候选 API 单次最多等待 60 秒，超时立即切下一个；开启轮询后不显示 √ 和价格，回复会等整段生成完再显示。关闭轮询后恢复正常显示。</p>';
   html+='<div class="api-polling-list">';
   if(!items.length){
     html+='<div class="api-polling-empty">轮询队列是空的。从下面挑一个供应商加进来，加几个就轮几个。</div>';
@@ -11095,7 +11126,7 @@ function renderApiPolling(){
     items.forEach(function(item,index){
       var p=item.provider;
       var status=item.available?'可用':('缺少 '+item.missing);
-      html+='<article class="api-polling-row'+(item.available?'':' is-unavailable')+'">'+
+      html+='<article class="api-polling-row'+(item.available?'':' is-unavailable')+'" data-provider-id="'+escAttr(item.provider_id)+'">'+
         '<b class="api-polling-index">'+(index+1)+'</b>'+
         '<div class="api-polling-main"><strong>'+esc(providerDisplayName(p))+'</strong>'+
           '<span>'+esc(providerHost(p.url)||'未填写 URL')+'</span>'+
@@ -11103,7 +11134,7 @@ function renderApiPolling(){
             apiPollingModelSelectHtml(item,index)+
             apiPollingStrategySelectHtml(item,index)+
           '</div></div>'+
-        '<span class="api-polling-status">'+esc(status)+'</span>'+
+        '<span class="api-polling-status" data-base-status="'+escAttr(status)+'">'+esc(status)+'</span>'+
         '<div class="api-polling-actions">'+
           '<button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移"'+(index===0?' disabled':'')+' onclick="moveApiPolling('+index+',-1)">↑</button>'+
           '<button class="btn btn-outline btn-sm" type="button" title="下移" aria-label="下移"'+(index===items.length-1?' disabled':'')+' onclick="moveApiPolling('+index+',1)">↓</button>'+
@@ -11228,7 +11259,7 @@ function saveApiPolling(){
   next.config_revision=apiPollingRevision(next,items);
   apiPollingWrite(next);
   chatPollingViewPersist();
-  apiPollingStatusState={revision:'',text:'',loading:false};
+  apiPollingStatusState={revision:'',text:'',loading:false,data:null};
   persistAndReload(draft.enabled?'聊天轮询已保存并启用':'聊天轮询配置已保存').then(function(ok){
     if(ok){
       apiPollingDraftReset();
@@ -11239,13 +11270,78 @@ function saveApiPolling(){
 }
 // 只读状态。关键：失败也要把 revision 记下来，否则会"失败→重渲染→再请求"无限循环，
 // 这正是上一版把面板拖垮的原因之一。并且这里只改一个文本节点，不重渲染整页。
-var apiPollingStatusState={revision:'',text:'',loading:false};
+var apiPollingStatusState={revision:'',text:'',loading:false,data:null};
+var apiPollingStatusTimer=0;
 function apiPollingStatusApply(text){
   apiPollingStatusState.text=text;
   var node=document.getElementById('api-polling-current-text');
   if(node)node.textContent=text;
 }
-function apiPollingRefreshStatus(){
+function apiPollingStatusText(data){
+  data=data&&typeof data==='object'?data:{};
+  var state=String(data.state||'');
+  var name=String(data.active_provider_name||data.provider_name||'').trim();
+  var index=Number(data.active_provider_index);
+  if(!isFinite(index)||index<0)index=Number(data.provider_index);
+  var number=isFinite(index)&&index>=0?index+1:0;
+  var label={trying:'调用中',failed:'刚失败',timeout:'已超时',success:'本轮成功',exhausted:'全部失败'}[state]||'正在用';
+  var text=name?(label+' '+(number?number+' · ':'')+name):(state==='exhausted'?'全部失败':'尚未成功调用过任何 API');
+  var attempt=Number(data.attempt_number||0),total=Number(data.attempt_total||data.candidate_count||0);
+  if(attempt>0&&total>0)text+=' · 本轮 '+attempt+'/'+total;
+  if(data.primary_retry_enabled){
+    text+=' · 距下次回主 '+Math.max(0,Number(data.remaining_to_primary||0))+' 轮';
+  }
+  if(data.cache_strategy){
+    var cacheMeta=chatCacheStrategyMeta(data.cache_strategy);
+    if(cacheMeta&&cacheMeta.shortLabel)text+=' · 缓存 '+cacheMeta.shortLabel;
+  }
+  if(state==='trying')text+=' · 单次上限 '+Math.max(1,Number(data.timeout_seconds||60))+'s';
+  return text;
+}
+function apiPollingPaintRows(data){
+  data=data&&typeof data==='object'?data:{};
+  var active=String(data.active_provider_id||data.provider_id||'');
+  var state=String(data.state||'');
+  document.querySelectorAll('.api-polling-row[data-provider-id]').forEach(function(row){
+    var same=!!active&&row.getAttribute('data-provider-id')===active;
+    row.classList.toggle('is-active',same&&state==='trying');
+    row.classList.toggle('is-failed',same&&(state==='failed'||state==='timeout'));
+    row.classList.toggle('is-success',same&&state==='success');
+    var badge=row.querySelector('.api-polling-status');
+    if(!badge)return;
+    var base=badge.getAttribute('data-base-status')||badge.textContent||'';
+    if(!same)badge.textContent=base;
+    else if(state==='trying')badge.textContent='调用中';
+    else if(state==='timeout')badge.textContent='1 分钟超时';
+    else if(state==='failed')badge.textContent='本轮失败';
+    else if(state==='success')badge.textContent='正在使用';
+  });
+}
+function chatApplyPollingLiveState(data){
+  chatPollingLiveState=data&&typeof data==='object'?Object.assign({},data):null;
+  if(!chatPollingLiveState)return;
+  var text=apiPollingStatusText(chatPollingLiveState);
+  apiPollingStatusState.data=chatPollingLiveState;
+  apiPollingStatusApply(text);
+  apiPollingPaintRows(chatPollingLiveState);
+  if(chatSending){
+    var state=String(chatPollingLiveState.state||'');
+    if(state==='trying')chatSetStatus(text);
+    else if(state==='failed'||state==='timeout')chatSetStatus(text+'，正在切换下一个 API');
+    else if(state==='success')chatSetStatus(text+'，正在接收回复');
+  }
+}
+function apiPollingStartStatusRealtime(){
+  if(apiPollingStatusTimer)return;
+  apiPollingRefreshStatus(true);
+  apiPollingStatusTimer=setInterval(function(){
+    if(currentPanelTab==='apiconfig'&&currentApiTab==='polling')apiPollingRefreshStatus(true);
+  },1000);
+}
+function apiPollingStopStatusRealtime(){
+  if(apiPollingStatusTimer){clearInterval(apiPollingStatusTimer);apiPollingStatusTimer=0}
+}
+function apiPollingRefreshStatus(force){
   var saved=apiPollingConfig();
   if(!saved.enabled){
     apiPollingStatusApply('单链路（轮询未开启）');
@@ -11253,11 +11349,12 @@ function apiPollingRefreshStatus(){
   }
   var revision=saved.config_revision||apiPollingRevision(saved);
   if(apiPollingStatusState.loading)return;
-  if(apiPollingStatusState.revision===revision){
+  if(!force&&apiPollingStatusState.revision===revision&&apiPollingStatusState.data){
     apiPollingStatusApply(apiPollingStatusState.text||'读取中…');
     return;
   }
   apiPollingStatusState.loading=true;
+  var requestRevision=revision;
   panelDataFetch(CHAT_POLLING_STATUS_URL+'?config_revision='+encodeURIComponent(revision)+'&_t='+Date.now(),
     {cache:'no-store'},{label:'CK 网关面板 Key'})
     .then(function(resp){return resp.json().then(function(data){
@@ -11265,21 +11362,21 @@ function apiPollingRefreshStatus(){
       return data;
     })})
     .then(function(data){
-      var name=String(data.provider_name||'').trim();
-      if(!name){apiPollingStatusApply('尚未成功调用过任何 API');return}
-      var text='正在用 '+String(Math.max(1,Number(data.provider_index||0)+1))+' · '+name;
-      if(data.primary_retry_enabled){
-        var remaining=Math.max(0,Number(data.primary_retry_interval||20)-Number(data.since_primary||0));
-        text+=' · 距下次回主 '+remaining+' 次';
-      }
-      apiPollingStatusApply(text);
+      var currentData=apiPollingStatusState.data;
+      var currentUpdated=Number(currentData&&currentData.status_updated_at||currentData&&currentData.updated_at||0);
+      var incomingUpdated=Number(data.status_updated_at||0);
+      if(currentUpdated&&incomingUpdated&&incomingUpdated<currentUpdated)return;
+      apiPollingStatusState.data=data;
+      chatPollingLiveState=data;
+      apiPollingStatusApply(apiPollingStatusText(data));
+      apiPollingPaintRows(data);
     })
     .catch(function(){
       apiPollingStatusApply('状态暂时读不到');
     })
     .then(function(){
       // 成功或失败都记下 revision，保证同一份配置最多只请求一次。
-      apiPollingStatusState.revision=revision;
+      if(apiPollingConfig().config_revision===requestRevision)apiPollingStatusState.revision=requestRevision;
       apiPollingStatusState.loading=false;
     });
 }

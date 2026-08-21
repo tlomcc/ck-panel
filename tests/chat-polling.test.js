@@ -25,7 +25,8 @@ const POLLING_FNS=[
   'apiPollingCollectSwitches','apiPollingAddable','addApiPollingProvider','removeApiPolling',
   'setApiPollingModel','setApiPollingStrategy','moveApiPolling',
   'chatPollingViewInvalidate','chatPollingView',
-  'chatShouldShowMessageStatus','chatShouldShowBillingPrice'
+  'chatShouldShowMessageStatus','chatShouldShowBillingPrice',
+  'chatCacheStrategyMeta','apiPollingStatusText'
 ];
 
 function pollingContext(apiProviders,extra){
@@ -363,6 +364,30 @@ function testPollingHasHardDomFallback(){
   assert.ok(!source.includes('api-polling-show-price'),'obsolete price checkbox must be removed');
 }
 
+function testPollingLiveStatusText(){
+  const context=pollingContext(library());
+  const trying=context.apiPollingStatusText({
+    state:'trying',active_provider_name:'乙',active_provider_index:1,
+    attempt_number:2,attempt_total:3,primary_retry_enabled:true,
+    remaining_to_primary:7,timeout_seconds:60,cache_strategy:'prefix_24h'
+  });
+  assert.ok(trying.includes('调用中 2 · 乙'),'实时状态要显示当前 API 序号和名称');
+  assert.ok(trying.includes('本轮 2/3'),'实时状态要显示本轮尝试进度');
+  assert.ok(trying.includes('距下次回主 7 轮'),'实时状态要显示回主倒计时');
+  assert.ok(trying.includes('缓存 前缀'),'实时状态要显示候选缓存策略');
+  assert.ok(trying.includes('单次上限 60s'),'实时状态要显示一分钟上限');
+  assert.strictEqual(context.apiPollingStatusText({state:'exhausted'}),'全部失败');
+}
+
+function testPollingRuntimeWiring(){
+  const streamHandler=source.slice(source.indexOf('function handleStreamEvent'),source.indexOf("if(ev==='delta')",source.indexOf('function handleStreamEvent')));
+  assert.ok(streamHandler.indexOf("if(ev==='polling')")<streamHandler.indexOf('attemptState.receivedValidContent=true'),
+    'polling 状态事件不能冒充正文，否则断线后不会重试');
+  assert.ok(source.includes('},1000);'),'轮询页状态接口必须每秒兜底刷新');
+  assert.ok(source.includes('data-provider-id="'),'每个队列行必须能按 provider id 实时着色');
+  assert.ok(source.includes('每个候选 API 单次最多等待 60 秒'),'界面必须明确单 API 一分钟上限');
+}
+
 testConfigReadIsPure();
 testWriteIsExplicit();
 testOrderingAndAvailability();
@@ -383,5 +408,7 @@ testChatDisplayDefaultsWhenConfigMissing();
 testChatDisplayRulesUnderPolling();
 testChatDisplayFallsBackToLocalMirror();
 testPollingHasHardDomFallback();
+testPollingLiveStatusText();
+testPollingRuntimeWiring();
 
 console.log('chat polling config tests: OK');

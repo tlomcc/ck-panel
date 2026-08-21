@@ -267,6 +267,23 @@ function testManualTrimIgnoresCacheAge(){
   assert.strictEqual(plan.historyAfter,2);
 }
 
+function testPrefixSilentConfigIsNormalizedWithoutDisablingTrim(){
+  const context=load({
+    console,
+    CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS:200,
+    chatPositiveIntOrDefault:(value,fallback)=>Math.max(1,Math.floor(Number(value)||fallback))
+  },['chatNormalizeAutoTrimConfig']);
+  const normalized=context.chatNormalizeAutoTrimConfig({
+    enabled:true,prefixSilent:true,keep:12
+  });
+  assert.strictEqual(normalized.enabled,true,'静默通知不能关闭自动截断');
+  assert.strictEqual(normalized.prefixSilent,true,'静默选项必须被配置层保留');
+  assert.strictEqual(normalized.keep,12,'固定轮数配置必须照常保留');
+  assert.ok(source.includes("chat-auto-trim-prefix-silent"),'截断页必须保存静默开关');
+  assert.ok(source.includes("if(!quietPrefix)toast"),'共同前缀静默只抑制自动截断通知');
+  assert.ok(extractFunction('chatManualTrimNow').includes("toast("),'手动截断仍要正常通知');
+}
+
 testSpeechQueueNormalization();
 testPrepareBatchConsumesQueueFirst();
 testQueueCommitSemantics();
@@ -278,5 +295,6 @@ testIdleBoundaryDoesNotFireEarly();
 testEmptySessionDoesNotTrigger();
 testIdleCheckRequiredForUnsentBoundary();
 testManualTrimIgnoresCacheAge();
+testPrefixSilentConfigIsNormalizedWithoutDisablingTrim();
 
 console.log('trim boundary tests: OK');

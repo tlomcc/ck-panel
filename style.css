@@ -7064,6 +7064,10 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
 }
 .api-polling-row:last-child{border-bottom:0}
 .api-polling-row.is-unavailable{opacity:.6}
+.api-polling-row.is-active{background:rgba(18,140,76,.08)}
+.api-polling-row.is-active .api-polling-status{color:#13723d;background:#e5f6ea}
+.api-polling-row.is-success .api-polling-status{color:#0b6b36;background:#dff3e7}
+.api-polling-row.is-failed .api-polling-status{color:#a04724;background:#fff0e7}
 .api-polling-index{
   display:flex;width:24px;height:24px;align-items:center;justify-content:center;
   border:1px solid rgba(var(--ck-accent-rgb),.35);border-radius:50%;
