@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v206-fact-sheet-css-comment-fix';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v207-adaptive-digest-budget';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1403,11 +1403,13 @@ var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
 // 条目归属的自然日按"被总结内容里最后一条消息"落在哪一天算：
 // 跨零点那一次截断（例如 23:50–00:20）因此算新一天的第一条，并作废前一天全部条目。
 var CHAT_DAILY_DIGEST_MAX_ENTRIES=12;
-var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=1400;
-var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=16000;
+// 单条上限对齐网关的 CHAT_DIGEST_GUARD_CHARS：网关按被截断内容的体量自适应决定
+// 写多少字、且不做硬切，面板这里要是还按 1400 切，等于把一整天压回 1400 字。
+var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=8000;
+var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=24000;
 var CHAT_DAILY_DIGEST_TIMEOUT_MS=90000;
-// 截断那一轮等总结的上限。网关侧 CHAT_DIGEST_TIMEOUT_SECONDS 默认 55 秒、prepare
-// 总预算再 +5 秒，所以最坏一分钟；面板只等到这里为止，超时就放弃等待、照常发送，
+// 截断那一轮等总结的上限。网关侧 CHAT_DIGEST_TIMEOUT_SECONDS 默认 80 秒、prepare
+// 总预算再 +5 秒；面板只等到这里为止，超时就放弃等待、照常发送，
 // 总结仍在后台继续落地（退回原来的异步行为）。绝不能因为总结慢就卡死发送。
 var CHAT_DAILY_DIGEST_TRIM_WAIT_MS=45000;
 var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
@@ -6457,8 +6459,10 @@ async function chatDailyDigestRequest(cfg,job){
   // 先按新条目的自然日作废其它日期的条目，再把剩下的当日条目交给网关做合并判断。
   // 跨零点的那一次截断就是在这里"开始新的一天"。
   var pruned=chatDailyDigestPrune(session,dayKey);
+  // rounds 一起送过去：网关按"这条旧总结覆盖了多少轮"和它自己的字数算合并时的字数预算，
+  // 否则一整天几十轮会被当成一条短总结重写，越合并越薄。
   var previous=pruned.entries.map(function(row){
-    return {start_ts:row.startTs,end_ts:row.endTs,text:row.text};
+    return {start_ts:row.startTs,end_ts:row.endTs,text:row.text,rounds:Number(row.rounds||0)||0};
   });
   var controller=null,timer=0,timedOut=false;
   var started=Date.now();
@@ -6519,6 +6523,9 @@ async function chatDailyDigestRequest(cfg,job){
       ok:true,merged:merged,chars:text.length,rounds:entry.rounds,day_key:dayKey,
       range:chatDailyDigestRangeLabel(entry),entries:session.dailyDigests.length,
       trigger:entry.trigger,provider_model:String(data.provider_model||''),
+      input_rounds:Number(data.input_rounds||0)||0,
+      budget:String(data.budget_low||0)+'-'+String(data.budget_high||0),
+      guard_trimmed:data.guard_trimmed===true,salvaged:data.salvaged===true,
       duration_ms:Date.now()-started
     });
     return entry;

@@ -7,6 +7,8 @@
 //    保留下来并开始新的一天"的实现方式。
 // 3. 注入包超限时只丢最旧的整条，不做半条截断。
 // 4. 助手正文里的伪思考链不进总结输入。
+// 5. 单条上限对齐网关的防写飞边界（8000）。网关按被截断内容的体量自适应决定写多少字、
+//    且不做硬切；面板这里要是还按 1400 切，等于把一整天重新压回 1400 字。
 const assert=require('assert');
 const fs=require('fs');
 const vm=require('vm');
@@ -56,8 +58,8 @@ function coreContext(overrides){
   const context=Object.assign({
     console,
     CHAT_DAILY_DIGEST_MAX_ENTRIES:12,
-    CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS:1400,
-    CHAT_DAILY_DIGEST_MAX_PACK_CHARS:16000,
+    CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS:8000,
+    CHAT_DAILY_DIGEST_MAX_PACK_CHARS:24000,
     chatLoadConfig:()=>({dailyDigestEnabled:true}),
     chatCurrentSession:()=>({dailyDigests:[]}),
   },overrides||{});
@@ -105,8 +107,13 @@ function testNormalizeSortsCapsAndDerivesDayKey(){
   assert.strictEqual(capped.length,12,'按条数上限保留最新的');
   assert.strictEqual(capped[capped.length-1].text,'第19');
 
-  const long=ctx.chatDailyDigestNormalize([{text:'甲'.repeat(5000),endTs:at(2026,8,22,1,0)}]);
-  assert.strictEqual(long[0].text.length,1400,'单条正文按上限截断');
+  const long=ctx.chatDailyDigestNormalize([{text:'甲'.repeat(50000),endTs:at(2026,8,22,1,0)}]);
+  assert.strictEqual(long[0].text.length,8000,'单条正文按上限截断');
+
+  // 真实常量必须跟网关的防写飞边界对齐，别再退回 1400。
+  assert.ok(/var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=8000;/.test(source),
+    '单条上限要对齐网关 CHAT_DIGEST_GUARD_CHARS=8000，否则网关不切面板照样切');
+  assert.ok(/var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=24000;/.test(source),'注入包上限要跟着放宽');
 }
 
 // 这一组是需求里最容易写错的地方。
@@ -196,6 +203,7 @@ function testPanelWiring(){
   assert.ok(html.indexOf('id="chat-daily-digest-injection-position"')<0,
     '注入位置选择器必须撤掉，位置固定不可选');
   assert.ok(/注入位置固定在系统缓存断点之前/.test(html),'卡片上要写清位置固定在哪里');
+  assert.ok(/不做固定字数硬切/.test(html),'卡片要说明总结长度是按体量自适应的，不是固定字数');
 
   assert.ok(css.includes('#chat-daily-digest-pack{max-height:220px!important}')||
     /#chat-daily-digest-pack,\s*\n?body\.chat-active \.chat-settings #chat-memory-pack\{max-height:220px!important\}/.test(css),
@@ -217,6 +225,9 @@ function testPanelWiring(){
   assert.ok(/toast\([^)]*当日截断总结失败/.test(request),'失败必须在面板通知');
   assert.ok(request.includes("chatDailyDigestPrune(session,dayKey)"),'写入前按新条目的自然日作废旧条目');
   assert.ok(request.includes("data.merge_with_previous===true"),'要处理网关给的合并决定');
+  // 合并时网关要按"旧总结有多长、覆盖了多少轮"算字数预算，rounds 必须一起送。
+  assert.ok(/rounds:Number\(row\.rounds\|\|0\)\|\|0/.test(request),
+    'previous 里要带 rounds，否则几十轮的旧总结会被当成一条短总结重写，越合并越薄');
 
   const schedule=extractFunction('chatDailyDigestScheduleForTrim');
   assert.ok(schedule.includes('chatDailyDigestChain'),'多次截断必须串行，否则合并判断看不到上一条');
