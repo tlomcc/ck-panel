@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v193-round-limit-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v194-daily-digest';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2857,6 +2857,13 @@ var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT=1000;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
+// 当日截断总结。每次真正丢掉历史的自动截断都会静默生成一条，成功不通知、失败才提示。
+// 条目归属的自然日按"被总结内容里最后一条消息"落在哪一天算：
+// 跨零点那一次截断（例如 23:50–00:20）因此算新一天的第一条，并作废前一天全部条目。
+var CHAT_DAILY_DIGEST_MAX_ENTRIES=12;
+var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=1400;
+var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=16000;
+var CHAT_DAILY_DIGEST_TIMEOUT_MS=90000;
 var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
 var CHAT_SCROLL_JUMP_INTENT_MS=1200;
 var CHAT_IMAGE_MAX_COUNT=4;
@@ -3570,6 +3577,8 @@ function chatDefaultConfig(){
     chatSideTab:'model',
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
+    dailyDigestEnabled:true,
+    dailyDigestInjectionPosition:'system_tail',
     costPricing:chatDefaultCostPricing(),
     worldbooks:[]
   };
@@ -3794,6 +3803,17 @@ function chatNormalizeInjectionPosition(value,fallback){
   };
   return allowed[raw]?raw:fallback;
 }
+var CHAT_INJECTION_POSITION_LABELS={
+  system_after_main:'系统提示词后',
+  system_after_anchor:'首条锚点后',
+  system_tail:'系统区底部',
+  latest_user_prefix:'最新消息开头',
+  latest_user_suffix:'最新消息结尾'
+};
+function chatInjectionPositionLabel(value,fallback){
+  var raw=chatNormalizeInjectionPosition(value,fallback||'system_tail');
+  return CHAT_INJECTION_POSITION_LABELS[raw]||raw;
+}
 function chatMainRouteConfig(){
   if(!apiProvidersLoaded){
     return {
@@ -3944,6 +3964,8 @@ function chatLoadConfig(){
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
+  cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
+  cfg.dailyDigestInjectionPosition=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail');
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
@@ -3980,6 +4002,8 @@ function chatSaveConfigObject(cfg){
   cfg.autoTrimRoundLimit=trim.roundLimit;
   delete cfg.autoTrimThreshold;
   delete cfg.autoTrimDrop;
+  cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
+  cfg.dailyDigestInjectionPosition=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail');
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   try{localStorage.setItem(CHAT_CACHE_STRATEGY_KEY,cfg.cacheStrategy)}catch(e){}
@@ -4703,6 +4727,7 @@ function chatNormalizeSession(s){
     speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
     speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
     speechPreferencePendingBoundaryReason:String(s.speechPreferencePendingBoundaryReason||''),
+    dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
     cacheRebuildPending:s.cacheRebuildPending===true,
     cacheFullCreatedAt:Number(s.cacheFullCreatedAt||0)||0,
     cacheFullCreateTokens:Number(s.cacheFullCreateTokens||0)||0,
@@ -4870,6 +4895,8 @@ function chatReadForm(){
     chatSideTab:activePanelTab||saved.chatSideTab||'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
+    dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
+    dailyDigestInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-daily-digest-injection-position',saved.dailyDigestInjectionPosition),'system_tail'),
     costPricing:chatReadCostPricing(saved.costPricing),
     worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
@@ -4917,6 +4944,7 @@ function chatWriteForm(cfg){
   chatSetFieldChecked('chat-full-window-context',cfg.fullWindowContext!==false);
   chatUpdateSplitReplyButton(cfg);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
+  chatRenderDailyDigest(cfg);
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
   chatRenderWorldbooks(cfg);
@@ -5005,6 +5033,7 @@ function chatSaveConfig(silent){
   chatRenderNcContextState();
   chatRenderBackendSwitchNotificationState();
   chatRenderCostPricingModeHint(cfg.costPricing&&cfg.costPricing.mode);
+  chatRenderDailyDigest(cfg);
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
   return cfg;
@@ -5709,6 +5738,7 @@ function chatDebugRecordKind(record,text){
   if(ev==='done'||text.indexOf('请求完成')>=0)return 'done';
   if(text.indexOf('缓存诊断')>=0||text.indexOf('缓存读取')>=0||text.indexOf('缓存创建')>=0||text.indexOf('CACHE')>=0)return 'cache';
   if(ev==='error'||text.indexOf('请求错误')>=0)return 'error';
+  if(text.indexOf('当日截断总结失败')>=0)return 'error';
   return 'info';
 }
 function chatIntentRewriteFromDebug(data){
@@ -6021,13 +6051,14 @@ function chatFormatDebug(ev,data){
     var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
     var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
     var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
-    var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')):'';
+    var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')+' / 当日总结 '+(data.injection_positions.daily_digest||'-')):'';
+    var dailyDigestText=data.daily_digest_chars?('｜当日截断总结：'+data.daily_digest_chars+' 字'):'';
     var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
     var backendNoticeState=data.backend_switch_notification_enabled===false?'通知关闭':(data.backend_switch_notification_injected?'已注入切换通知':(data.backend_switch_detected?'切换但静默':'未切换'));
     var backendText=data.backend_name?('｜后端：'+data.backend_name+' · '+(data.backend_model||data.model||'-')+'（'+backendNoticeState+'）'):'';
     var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'仅同步措辞偏好',pending_rebuild:'已准备操作后的下一条消息'};
     var boundaryText=data.cache_rebuild_boundary?('｜缓存重建边界：'+(boundaryLabels[data.cache_rebuild_boundary]||data.cache_rebuild_boundary)):'';
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+backendText+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+thinkingText+injectionText+targetText+recallText+'｜缓存策略：'+strategyText+boundaryText+idleText+cleanText+mcpText;
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+backendText+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+dailyDigestText+thinkingText+injectionText+targetText+recallText+'｜缓存策略：'+strategyText+boundaryText+idleText+cleanText+mcpText;
   }
   if(ev==='memory'){
     return chatFormatRecallDiag(data);
@@ -6055,6 +6086,13 @@ function chatFormatDebug(ev,data){
     var sec=data.seconds!==undefined?('｜耗时：'+Number(data.seconds||0).toFixed(2)+'s'):'';
     var chars=data.result_chars?('｜结果：'+data.result_chars+'字'):'';
     return '🛠 工具调用｜'+(data.name||'未知工具')+'｜'+status+'｜来源：'+(data.source||'internal')+sec+chars;
+  }
+  if(ev==='daily_digest'){
+    if(data.ok===false)return '⚠️ 当日截断总结失败｜本批 '+(data.messages||0)+' 条消息没能接上｜'+(data.error||'未知原因');
+    if(data.skipped)return '🗂 当日截断总结｜跳过：'+(data.skipped==='expired_day'
+      ?('内容属于 '+(data.day_key||'-')+'，放到今天已经过期')
+      :data.skipped);
+    return '🗂 当日截断总结｜'+(data.merged?'并入上一条':'新增一条')+'｜'+(data.range||'-')+'｜'+(data.chars||0)+' 字｜覆盖 '+(data.rounds||0)+' 轮｜当日共 '+(data.entries||0)+' 条｜'+(data.provider_model||'-')+'｜'+(data.duration_ms||0)+'ms';
   }
   if(ev==='debug'){
     if(data.fact_stats_queued){
@@ -6498,6 +6536,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
       speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
       speechPreferencePendingBoundaryReason:s.speechPreferencePendingBoundaryReason||'',
+      dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
       cacheRebuildPending:s.cacheRebuildPending===true,
       cacheFullCreatedAt:s.cacheFullCreatedAt||0,
       cacheFullCreateTokens:s.cacheFullCreateTokens||0,
@@ -7364,6 +7403,308 @@ async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
     if(parentSignal&&relay&&parentSignal.removeEventListener)parentSignal.removeEventListener('abort',relay);
   }
 }
+// ===== 当日截断总结 =====
+// 截断把最旧的完整真实轮次从上下文里删掉，这里负责让助手仍然记得刚才聊了什么、
+// 当时是什么气氛。生成在网关（无状态的 /ck/chat-digest/prepare），存储和有效期在这里，
+// 因为只有面板知道用户本地时钟的自然日边界。
+// 有效期规则：条目只在"它自己的 dayKey"那一天有效；写入新条目时按新条目的 dayKey
+// 作废其它日期的全部条目。所以 23:50–00:20 那一次截断会被保留成新一天的第一条，
+// 并顺手把前一天的所有条目丢掉。
+function chatDailyDigestPad2(value){
+  value=Math.floor(Number(value)||0);
+  return (value<10?'0':'')+value;
+}
+function chatDailyDigestDayKey(ts){
+  var value=Number(ts||0)||0;
+  if(value<=0)return '';
+  var d=new Date(value);
+  if(isNaN(d.getTime()))return '';
+  return d.getFullYear()+'-'+chatDailyDigestPad2(d.getMonth()+1)+'-'+chatDailyDigestPad2(d.getDate());
+}
+function chatDailyDigestClock(ts){
+  var value=Number(ts||0)||0;
+  if(value<=0)return '??:??';
+  var d=new Date(value);
+  if(isNaN(d.getTime()))return '??:??';
+  return chatDailyDigestPad2(d.getHours())+':'+chatDailyDigestPad2(d.getMinutes());
+}
+// 条目标签必须带具体时间，后续作废和合并都靠它认人。
+// 起止跨了自然日时把起始那天的日期也写出来，让"昨夜到今晨"那一条一眼可辨。
+function chatDailyDigestRangeLabel(entry){
+  entry=entry||{};
+  var startTs=Number(entry.startTs||0)||0;
+  var endTs=Number(entry.endTs||0)||0;
+  var startDay=chatDailyDigestDayKey(startTs);
+  var endDay=chatDailyDigestDayKey(endTs);
+  var head=(startDay&&endDay&&startDay!==endDay)?(startDay.slice(5)+' '):'';
+  return head+chatDailyDigestClock(startTs)+'–'+chatDailyDigestClock(endTs);
+}
+function chatDailyDigestNormalize(list){
+  var out=[];
+  (Array.isArray(list)?list:[]).forEach(function(row){
+    if(!row||typeof row!=='object')return;
+    var text=String(row.text||'').trim();
+    if(!text)return;
+    var endTs=Number(row.endTs!==undefined?row.endTs:row.end_ts)||0;
+    var startTs=Number(row.startTs!==undefined?row.startTs:row.start_ts)||endTs;
+    var dayKey=String(row.dayKey||row.day_key||'')||chatDailyDigestDayKey(endTs);
+    if(!dayKey)return;
+    out.push({
+      id:String(row.id||('dg-'+endTs+'-'+Math.random().toString(36).slice(2,7))),
+      startTs:startTs,
+      endTs:endTs,
+      dayKey:dayKey,
+      text:text.slice(0,CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS),
+      rounds:Number(row.rounds||0)||0,
+      mergedCount:Number(row.mergedCount||row.merged_count||0)||0,
+      trigger:String(row.trigger||''),
+      createdAt:Number(row.createdAt||row.created_at||0)||0
+    });
+  });
+  out.sort(function(a,b){return (a.endTs||0)-(b.endTs||0)||(a.createdAt||0)-(b.createdAt||0)});
+  if(out.length>CHAT_DAILY_DIGEST_MAX_ENTRIES)out=out.slice(out.length-CHAT_DAILY_DIGEST_MAX_ENTRIES);
+  return out;
+}
+function chatDailyDigestKeepDay(list,dayKey){
+  dayKey=String(dayKey||'');
+  if(!dayKey)return [];
+  return chatDailyDigestNormalize(list).filter(function(row){return row.dayKey===dayKey});
+}
+function chatDailyDigestEntries(session,dayKey){
+  session=session||chatCurrentSession();
+  if(!session)return [];
+  return chatDailyDigestKeepDay(session.dailyDigests,dayKey||chatDailyDigestDayKey(Date.now()));
+}
+// 把非目标自然日的条目就地作废。dayKey 省略时按"现在"算，
+// 写入新条目时由调用方传入新条目自己的 dayKey。
+function chatDailyDigestPrune(session,dayKey){
+  if(!session)return {changed:false,entries:[]};
+  var before=chatDailyDigestNormalize(session.dailyDigests);
+  var kept=chatDailyDigestKeepDay(before,dayKey||chatDailyDigestDayKey(Date.now()));
+  session.dailyDigests=kept;
+  return {changed:kept.length!==before.length,entries:kept};
+}
+function chatDailyDigestBlockText(entry){
+  return '【'+chatDailyDigestRangeLabel(entry)+'】\n'+String((entry&&entry.text)||'');
+}
+// 注入用的正文。超出总字数上限时先丢最旧的整条，不做半条截断。
+function chatDailyDigestPack(cfg,session){
+  cfg=cfg||chatLoadConfig();
+  if(cfg.dailyDigestEnabled===false)return '';
+  var entries=chatDailyDigestEntries(session);
+  var blocks=[],chars=0;
+  for(var i=entries.length-1;i>=0;i--){
+    var block=chatDailyDigestBlockText(entries[i]);
+    if(blocks.length&&chars+block.length+2>CHAT_DAILY_DIGEST_MAX_PACK_CHARS)break;
+    blocks.push(block);
+    chars+=block.length+2;
+  }
+  blocks.reverse();
+  return blocks.join('\n\n');
+}
+function chatDailyDigestEndpoint(cfg){
+  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
+  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
+  return base+'/ck/chat-digest/prepare';
+}
+// 送给网关的对话。助手正文里剥掉伪思考链：那是脑内独白，不是当时真说出口的话，
+// 留着只会让总结把两种声音混在一起。
+function chatDailyDigestRequestMessages(list){
+  var out=[];
+  (Array.isArray(list)?list:[]).forEach(function(message){
+    if(!message||typeof message!=='object')return;
+    var role=message.role==='pending_user'?'user':message.role;
+    if(role!=='user'&&role!=='assistant')return;
+    if(role==='assistant'&&message.stopped===true)return;
+    var text=String(message.text||'');
+    if(role==='assistant'){
+      var parsed=chatSplitThinkingText(text,{suppressThinking:true,hideUnclosedThinking:true});
+      text=String((parsed&&parsed.text)||'');
+    }
+    text=text.trim();
+    if(!text)return;
+    out.push({role:role,text:text,ts:Number(message.ts||0)||0});
+  });
+  return out;
+}
+function chatDailyDigestFindSession(sessionId){
+  sessionId=String(sessionId||'');
+  if(!sessionId)return null;
+  for(var i=0;i<chatSessions.length;i++){
+    if(String(chatSessions[i]&&chatSessions[i].id||'')===sessionId)return chatSessions[i];
+  }
+  return null;
+}
+function chatDailyDigestSetStatus(text,kind){
+  var el=document.getElementById('chat-daily-digest-save-status');
+  if(!el)return;
+  el.textContent=String(text||'');
+  el.className='chat-cache-save-status'+(kind==='ok'?' ok':'')+(kind==='error'?' error':'');
+}
+function chatDailyDigestDisplayText(entries){
+  return (entries||[]).map(chatDailyDigestBlockText).join('\n\n');
+}
+function chatRenderDailyDigest(cfg){
+  cfg=cfg||chatLoadConfig();
+  var session=chatCurrentSession();
+  var pruned=chatDailyDigestPrune(session);
+  if(pruned.changed)chatSaveSessions();
+  var entries=pruned.entries;
+  chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestDisplayText(entries));
+  chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
+  var positionEl=document.getElementById('chat-daily-digest-injection-position');
+  if(positionEl)positionEl.value=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail');
+  var hint=document.getElementById('chat-daily-digest-hint');
+  if(hint){
+    if(cfg.dailyDigestEnabled===false){
+      hint.textContent='已关闭：截断时不再生成总结，已有条目也不会注入。';
+    }else if(!entries.length){
+      hint.textContent='今天还没有发生过截断。截断成功时静默生成，不会打扰你。';
+    }else{
+      var chars=chatDailyDigestPack(cfg,session).length;
+      hint.textContent='今天 '+entries.length+' 条 · 注入 '+chars+' 字 · 位置：'+
+        chatInjectionPositionLabel(cfg.dailyDigestInjectionPosition)+'。明天零点自动作废。';
+    }
+  }
+  return entries;
+}
+function chatSaveDailyDigestSetting(auto){
+  var cfg=chatSaveConfig(true);
+  if(!auto){
+    chatDailyDigestSetStatus(
+      cfg.dailyDigestEnabled===false
+        ?'已保存：当日截断总结已关闭'
+        :'已保存：注入位置 '+chatInjectionPositionLabel(cfg.dailyDigestInjectionPosition),
+      'ok'
+    );
+    toast('当日截断总结设置已保存');
+  }
+  return cfg;
+}
+// 串行执行：两次截断挨得很近时也要按顺序落条目，否则第二条看不到第一条，合并判断就失真。
+var chatDailyDigestChain=Promise.resolve();
+function chatDailyDigestScheduleForTrim(cfg,plan){
+  cfg=cfg||chatLoadConfig();
+  if(cfg.dailyDigestEnabled===false)return;
+  var messages=chatDailyDigestRequestMessages(plan&&plan.droppedMessages);
+  if(!messages.length)return;
+  var sessionId=String((chatCurrentSession()||{}).id||'');
+  var trigger=String((plan&&plan.trigger)||'');
+  var rounds=Number((plan&&plan.dropped)||0)||0;
+  chatDailyDigestChain=chatDailyDigestChain.then(function(){
+    return chatDailyDigestRequest(cfg,{messages:messages,sessionId:sessionId,trigger:trigger,rounds:rounds});
+  }).catch(function(){});
+}
+async function chatDailyDigestRequest(cfg,job){
+  cfg=cfg||chatLoadConfig();
+  job=job||{};
+  var messages=Array.isArray(job.messages)?job.messages:[];
+  if(!messages.length)return null;
+  var panelKey=String(cfg.panelKey||'').trim();
+  if(!panelKey)return null;
+  var session=chatDailyDigestFindSession(job.sessionId)||chatCurrentSession();
+  if(!session)return null;
+  var startTs=0,endTs=0;
+  messages.forEach(function(row){
+    var ts=Number(row.ts||0)||0;
+    if(ts<=0)return;
+    endTs=Math.max(endTs,ts);
+    startTs=startTs?Math.min(startTs,ts):ts;
+  });
+  var now=Date.now();
+  if(!endTs)endTs=now;
+  if(!startTs)startTs=endTs;
+  var dayKey=chatDailyDigestDayKey(endTs);
+  var todayKey=chatDailyDigestDayKey(now);
+  // 内容整段落在过去某一天：总结出来当天就已经过期，没必要花一次模型调用。
+  // 顺手把陈旧条目清掉，这样"隔天回来第一次截断"不会留下前一天的注入。
+  if(dayKey!==todayKey){
+    var stale=chatDailyDigestPrune(session,todayKey);
+    if(stale.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
+    chatDebug('daily_digest',{ok:true,skipped:'expired_day',day_key:dayKey,today:todayKey,messages:messages.length});
+    return null;
+  }
+  // 先按新条目的自然日作废其它日期的条目，再把剩下的当日条目交给网关做合并判断。
+  // 跨零点的那一次截断就是在这里"开始新的一天"。
+  var pruned=chatDailyDigestPrune(session,dayKey);
+  var previous=pruned.entries.map(function(row){
+    return {start_ts:row.startTs,end_ts:row.endTs,text:row.text};
+  });
+  var controller=null,timer=0,timedOut=false;
+  var started=Date.now();
+  try{
+    if(typeof AbortController!=='undefined'){
+      controller=new AbortController();
+      timer=setTimeout(function(){timedOut=true;try{controller.abort()}catch(e){}},CHAT_DAILY_DIGEST_TIMEOUT_MS);
+    }
+    var response=await fetch(chatDailyDigestEndpoint(cfg),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal:controller?controller.signal:undefined,
+      body:JSON.stringify({
+        key:panelKey,
+        session_id:String(session.id||cfg.sessionId||''),
+        event_id:'dg-'+endTs+'-'+Math.random().toString(36).slice(2,8),
+        reason:job.trigger||'auto_trim',
+        tz_offset_minutes:-new Date().getTimezoneOffset(),
+        messages:messages,
+        previous:previous
+      })
+    });
+    var data={};
+    try{data=await response.json()}catch(e){}
+    if(!response.ok||data.ok===false)throw new Error((data&&data.error)||('HTTP '+response.status));
+    if(data.prepared!==true){
+      chatDebug('daily_digest',{ok:true,skipped:String(data.skipped||'not_prepared'),messages:messages.length});
+      return null;
+    }
+    var text=String(data.text||'').trim();
+    if(!text)throw new Error('网关未返回总结正文');
+    var entry={
+      id:'dg-'+endTs+'-'+Math.random().toString(36).slice(2,7),
+      startTs:startTs,
+      endTs:endTs,
+      dayKey:dayKey,
+      text:text,
+      rounds:Number(job.rounds||0)||0,
+      trigger:String(job.trigger||''),
+      createdAt:Date.now()
+    };
+    var kept=pruned.entries.slice();
+    var merged=data.merge_with_previous===true&&kept.length>0;
+    if(merged){
+      // 话题连续时替换掉上一条，时间范围往前扩到旧条目的起点，保持一条完整连贯的记录。
+      var last=kept[kept.length-1];
+      entry.startTs=Math.min(Number(last.startTs||entry.startTs)||entry.startTs,entry.startTs);
+      entry.rounds=(Number(last.rounds||0)||0)+entry.rounds;
+      entry.mergedCount=(Number(last.mergedCount||0)||0)+1;
+      kept=kept.slice(0,kept.length-1);
+    }
+    kept.push(entry);
+    session.dailyDigests=chatDailyDigestNormalize(kept);
+    session.updated=Date.now();
+    chatSaveSessions();
+    chatRenderDailyDigest(cfg);
+    chatDebug('daily_digest',{
+      ok:true,merged:merged,chars:text.length,rounds:entry.rounds,day_key:dayKey,
+      range:chatDailyDigestRangeLabel(entry),entries:session.dailyDigests.length,
+      trigger:entry.trigger,provider_model:String(data.provider_model||''),
+      duration_ms:Date.now()-started
+    });
+    return entry;
+  }catch(error){
+    if(timedOut)error=new Error('总结超时（'+Math.round(CHAT_DAILY_DIGEST_TIMEOUT_MS/1000)+' 秒）');
+    var errorText=String((error&&error.message)||error).slice(0,300);
+    chatDebug('daily_digest',{ok:false,messages:messages.length,duration_ms:Date.now()-started,error:errorText});
+    // 成功静默、失败才出声：这批对话已经被截断掉了，用户需要知道这段记忆没接上。
+    chatDailyDigestSetStatus('最近一次截断总结失败：'+errorText,'error');
+    toast('当日截断总结失败，这段被截断的对话没能接上：'+errorText,6000,{type:'error',closable:true,pauseOnHover:true});
+    if(pruned.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
+    return null;
+  }finally{
+    if(timer)clearTimeout(timer);
+  }
+}
 function chatCommitAutoTrimPlan(cfg,plan,prepared){
   prepared=prepared||{};
   var s=chatCurrentSession();
@@ -7402,6 +7743,9 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
   chatSaveSessions();
   chatRenderSessions();
   chatRenderTrimState(cfg);
+  // 真正丢掉历史时才生成当日截断总结。plan.droppedMessages 仍持有被删掉的原始消息对象，
+  // 上面的 filter 只换了 chatMessages 的引用，没有清空 plan。
+  if(trimCommitted)chatDailyDigestScheduleForTrim(cfg,plan);
   if(plan.editingMessage)chatEditingIndex=chatMessages.indexOf(plan.editingMessage);
   return {
     boundary:true,
@@ -9892,6 +10236,8 @@ async function chatSubmitPendingMessages(options){
     system:chatComposeSystemPrompt(cfg),
     worldbook_pack:chatWorldbookPack(cfg),
     worldbook_injection_position:chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail'),
+    daily_digest_pack:chatDailyDigestPack(cfg,currentSession),
+    daily_digest_injection_position:chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail'),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     nc_context_injection:cfg.ncContextInjection!==false,

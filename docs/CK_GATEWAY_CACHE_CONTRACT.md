@@ -15,6 +15,8 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "system": "stable system prompt",
   "worldbook_pack": "stable worldbook text",
   "worldbook_injection_position": "system_tail",
+  "daily_digest_pack": "today's truncation digests, oldest first, each prefixed with its time range",
+  "daily_digest_injection_position": "system_tail",
   "api_base": "upstream base URL",
   "upstream_key": "upstream key",
   "upstream_format": "anthropic when cache_strategy is native_stable or native_tiered; otherwise omit for auto detection",
@@ -53,7 +55,7 @@ Do not send these fields:
 
 `fact_recall_mode` (also accepted as `RECALL_MODE`) independently selects the Fact algorithm: `a` is the classic path and remains the default; `b` is the relaxed path with its own rewrite, category-aware filtering, forced candidate floor, model refinement, and `[Fact召回]` injection format. Switching the Fact algorithm rotates the recall behavior revision so stale injected context from the previous algorithm is removed without changing `recall_mode=full|fact_only` compatibility semantics.
 
-The changing current-time and recall block must stay after the latest real user's stable text block and must not itself carry `cache_control`. In `single_5m`, the anchor remains on real user text before the dynamic block. In `assistant_latest`, the anchor remains on the previous assistant. In `native_stable`, the request uses Anthropic native `/messages` and places `1h` anchors on the last stable system block plus the two latest completed assistants; the older assistant is the exact read anchor from the previous request and the newest assistant creates the next incremental cache. `native_tiered` keeps those three `1h` anchors and adds a fourth `5m` anchor to the latest real user text block. Images, tool blocks, `<ck_gateway_context>`, `<ck_reply_target>` and other per-request injection blocks are never breakpoint targets. The current user and dynamic tail remain after those anchors. In `prefix_24h`, no explicit anchor or forced TTL is added and the dynamic block remains at the changing tail after the reusable common prefix.
+The changing current-time and recall block must stay after the latest real user's stable text block and must not itself carry `cache_control`. In `single_5m`, the anchor remains on real user text before the dynamic block. In `assistant_latest`, the anchor remains on the previous assistant. In `native_stable`, the request uses Anthropic native `/messages` and places `1h` anchors on the last stable system block plus the two latest completed assistants; the older assistant is the exact read anchor from the previous request and the newest assistant creates the next incremental cache. `native_tiered` keeps those three `1h` anchors and adds a fourth `5m` anchor to the latest real user text block. Images, tool blocks, `<ck_gateway_context>`, `<ck_reply_target>`, `<ck_daily_digest>` and other per-request injection blocks are never breakpoint targets. The current user and dynamic tail remain after those anchors. In `prefix_24h`, no explicit anchor or forced TTL is added and the dynamic block remains at the changing tail after the reusable common prefix.
 
 Optimistic rendering must not mutate the transport contract. The panel may persist/render a `pending_user` immediately, but `window_messages` must continue to exclude that pending turn until it is represented by `text`; request serialization, retry reuse, transport selection, TTL and retention fields remain unchanged apart from explicitly added feature fields such as `nc_context_injection`.
 
@@ -114,7 +116,7 @@ For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text bloc
 
 This is not upstream hidden chain-of-thought. It is user-visible role text that the panel folds under "思考" and keeps in visible/transport history, so later turns can quote or remember it. Changing the prompt changes the system prefix and can invalidate prompt-cache hits.
 
-`worldbook_injection_position`, `ck_thinking_injection_position`, and `memory_pack_injection_position` may use these values:
+`worldbook_injection_position`, `ck_thinking_injection_position`, `memory_pack_injection_position`, and `daily_digest_injection_position` may use these values:
 
 - `system_after_main`: as a system block immediately after the main system prompt.
 - `system_after_anchor`: as a system block after the CK session anchor.
@@ -122,7 +124,7 @@ This is not upstream hidden chain-of-thought. It is user-visible role text that 
 - `latest_user_prefix`: prepended to the latest real user message.
 - `latest_user_suffix`: appended to the latest real user message.
 
-Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor`; worldbook and memory pack use `system_tail`. Use `latest_user_*` only for compatibility testing, because those positions sit near the dynamic recall context and usually give weaker prompt-cache reuse than stable system positions.
+Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor`; worldbook, memory pack and daily digest use `system_tail`. Inside `system_tail` the daily digest is emitted before memory pack and worldbook, so its default position is exactly "after the system prompt and the pseudo-thinking block". Use `latest_user_*` only for compatibility testing, because those positions sit near the dynamic recall context and usually give weaker prompt-cache reuse than stable system positions.
 
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
 
@@ -203,3 +205,19 @@ Use gateway debug records to check:
 - `client_history_ignored` is absent or false during normal requests.
 - `cache_read_input_tokens` appears from the second or later turn, subject to upstream TTL.
 - If the second turn misses but the third turn hits, inspect `breakpoints[].prefix_bytes`; the first turn may not have had enough stable prefix to create a reusable upstream prompt cache entry.
+
+## Daily truncation digest
+
+`daily_digest_pack` carries the panel-owned digests of turns that auto-trim has already removed from this window. It is injected as a `<ck_daily_digest>` system block and is meant to read as the assistant's own memory of the day, not as reference material.
+
+The gateway side is stateless. `POST /ck/chat-digest/prepare` (alias `/chat-digest/prepare`) takes `{key, session_id, event_id, reason, tz_offset_minutes, messages, previous}` and returns `{ok, prepared, text, merge_with_previous, start_ts, end_ts, range_label, provider_model}`. It performs exactly one model call and stores nothing; a `503` with `error_code` in `chat_digest_not_configured | chat_digest_timeout | chat_digest_failed` never blocks the trim that already happened.
+
+Storage, validity and expiry belong to the panel, because only the panel knows the user's local midnight:
+
+- A digest entry belongs to the natural day of the **last message it summarizes**, not the day it was written.
+- Writing a new entry discards every stored entry from a different day. A truncation that spans midnight (for example 23:50 to 00:20) is therefore kept as the first entry of the new day and retires the whole previous day in the same step.
+- Each entry keeps its own `start_ts`/`end_ts` and is displayed with a time range, so expiry and merging stay auditable.
+- When the summarized content lies entirely in a past day, the panel skips the model call: the result would already be expired.
+- When the new batch continues the previous entry's topic, the model returns `merge_with_previous: true` and the panel replaces the previous entry with one coherent passage, widening the stored time range.
+
+The block only changes at a trim boundary, and a trim boundary is already a cache-rebuild boundary, so the digest is treated as a stable system block. It must never be a `cache_control` breakpoint target.

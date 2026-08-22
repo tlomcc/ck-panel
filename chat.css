@@ -1511,6 +1511,7 @@ body.chat-active .chat-settings #chat-worldbook-content{
 }
 
 body.chat-active .chat-settings #chat-system,
+body.chat-active .chat-settings #chat-daily-digest-pack,
 body.chat-active .chat-settings #chat-memory-pack{max-height:220px!important}
 
 body.chat-active .chat-switch{
@@ -1659,6 +1660,12 @@ body.chat-active .chat-cache-save-status{
 
 body.chat-active .chat-cache-save-status.ok{
   color:#18844f!important;
+  font-weight:800!important;
+}
+
+/* 当日截断总结失败是唯一需要主动出声的情况，toast 消失后这行还留着。 */
+body.chat-active .chat-cache-save-status.error{
+  color:#c0392b!important;
   font-weight:800!important;
 }
 

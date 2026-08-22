@@ -99,6 +99,7 @@ function testQueueCommitSemantics(){
 // 截断提交不再被措辞偏好绑住
 // ---------------------------------------------------------------------------
 function commitContext(session){
+  const digestCalls=[];
   const context={
     console,
     chatMessages:[],
@@ -111,9 +112,13 @@ function commitContext(session){
     chatResetSessionAnchorFromMessages:()=>{},
     chatSaveSessions:()=>{},
     chatRenderSessions:()=>{},
-    chatRenderTrimState:()=>{}
+    chatRenderTrimState:()=>{},
+    // 当日截断总结在提交点挂钩；这里记录调用，供下面断言"只有真的丢历史才生成总结"。
+    chatDailyDigestScheduleForTrim:(cfg,plan)=>{digestCalls.push(plan)}
   };
-  return load(context,['chatSpeechPreferenceNormalizeQueue','chatSpeechPreferenceQueueCommit','chatCommitAutoTrimPlan']);
+  const loaded=load(context,['chatSpeechPreferenceNormalizeQueue','chatSpeechPreferenceQueueCommit','chatCommitAutoTrimPlan']);
+  loaded.digestCalls=digestCalls;
+  return loaded;
 }
 
 function testTrimCommitsWhenPrepareFails(){
@@ -142,6 +147,18 @@ function testTrimCommitsWhenPrepareFails(){
   assert.strictEqual(session.transportMessages.length,1,'canonical transport 同步裁剪');
   assert.strictEqual(session.cacheRebuildPending,true,'边界后标记重建缓存');
   assert.strictEqual(session.speechPreferenceRetryQueue.length,1,'未审阅内容转入重试队列，不随历史一起丢失');
+  assert.strictEqual(context.digestCalls.length,1,'真的丢掉历史时必须触发当日截断总结');
+}
+
+function testDigestIsNotScheduledWithoutARealTrim(){
+  const session={messages:[],transportMessages:[],speechPreferenceRetryQueue:[]};
+  const context=commitContext(session);
+  context.chatCommitAutoTrimPlan({},{
+    trimmed:false,canonicalTransport:false,cacheBoundary:true,trigger:'pending_rebuild',
+    keptMessages:[],deferred:[],keptTransportMessages:[],
+    before:5,after:5,dropped:0,historyBefore:5,historyAfter:5,keep:5
+  },{ok:true});
+  assert.strictEqual(context.digestCalls.length,0,'只标记缓存边界、没丢历史时不该白花一次总结');
 }
 
 function testTrimCommitsWhenReviewIncomplete(){
@@ -338,6 +355,7 @@ testSpeechQueueNormalization();
 testPrepareBatchConsumesQueueFirst();
 testQueueCommitSemantics();
 testTrimCommitsWhenPrepareFails();
+testDigestIsNotScheduledWithoutARealTrim();
 testTrimCommitsWhenReviewIncomplete();
 testTrimCommitPreservesMessagesAppendedAfterPlanning();
 testIdleBoundaryAppliesToEveryCacheStrategy();
