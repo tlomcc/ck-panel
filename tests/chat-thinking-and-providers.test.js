@@ -50,7 +50,14 @@ assert(normalize.includes("category:String(p.category||'').trim()"),'provider ca
 assert(readCard.includes("category:v('.prov-category-input')"),'provider category must be read from the editor');
 assert(readCard.includes("note:v('.prov-note-input')"),'provider note must be read from the editor');
 assert(library.includes('prov-category'),'categorized providers need a folder section');
-assert(library.includes("||'未归类'"),'provider library needs an explicit uncategorized section');
+assert(library.includes('prov-loose'),'uncategorized providers must render outside every folder');
+assert(!library.includes('未归类'),'uncategorized providers must not get a fake folder section');
+assert(library.includes('renameProviderCategory'),'provider folders need a rename entry');
+assert(!options.includes('未归类'),'provider selects must not group uncategorized providers under a fake label');
+const renameCategory=functionSource('renameProviderCategory');
+assert(renameCategory.includes('ckPromptDialog'),'folder rename must ask for the new name');
+assert(renameCategory.includes('persistAndReload'),'folder rename must be saved to the gateway');
+assert(renameCategory.includes("p.category=next"),'folder rename must move every provider in that folder');
 assert(options.includes('<optgroup'),'provider selects must use native category groups');
 assert(!source.includes('toggleCategorizedProviderOptions'),'obsolete category expansion button must be removed');
 

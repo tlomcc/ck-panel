@@ -4168,6 +4168,8 @@ body.chat-active .chat-folder.collapsed .chat-folder-body{display:none}
 body.chat-active .chat-folder-menu{width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:#8c9892;font-size:17px;cursor:pointer}
 body.chat-active .chat-folder-menu:hover{background:#edf1ef;color:#48554f}
 body.chat-active .chat-folder-body{display:grid;gap:8px}
+body.chat-active .chat-folder-empty{margin:0 4px;padding:9px 11px;border:1px dashed var(--chat5-line-soft);border-radius:8px;color:#8c9892;font-size:11px;line-height:1.6}
+body.dark.chat-active .chat-folder-empty{border-color:#2b3540;color:#8b9791}
 body.chat-active .chat-folder-divider{display:flex;align-items:center;gap:8px;margin-top:2px;color:#87928d;font-size:10.5px;font-weight:750}
 body.chat-active .chat-folder-divider::before,body.chat-active .chat-folder-divider::after{content:"";height:1px;flex:1;background:var(--chat5-line-soft)}
 body.chat-active .chat-folder-divider small{margin-left:0}

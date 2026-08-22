@@ -488,7 +488,7 @@ body.chat-active .chat-session-list{
 }
 body.chat-active .chat-session-row{
   min-height:68px!important;
-  grid-template-columns:minmax(0,1fr) 34px!important;
+  grid-template-columns:minmax(0,1fr) 58px!important;
   gap:0!important;
   border:0!important;
   border-left:3px solid transparent!important;
@@ -561,10 +561,15 @@ body.chat-active .chat-session-del{
   border-radius:50%!important;
   color:#aaa!important;
   font-size:16px!important;
-  opacity:0!important;
+  opacity:.62!important;
 }
+body.chat-active .chat-session-move{opacity:.62!important}
 body.chat-active .chat-session-row:hover .chat-session-del,
-body.chat-active .chat-session-row:focus-within .chat-session-del{opacity:1!important}
+body.chat-active .chat-session-row:focus-within .chat-session-del,
+body.chat-active .chat-session-row.active .chat-session-del,
+body.chat-active .chat-session-row:hover .chat-session-move,
+body.chat-active .chat-session-row:focus-within .chat-session-move,
+body.chat-active .chat-session-row.active .chat-session-move{opacity:1!important}
 body.chat-active .chat-session-empty-hint{
   margin:12px!important;
   min-height:44px!important;
@@ -1797,6 +1802,20 @@ body.dark .panel-update-confirm{background:var(--wx-primary)!important;color:#ff
 .ck-action-dialog .ck-action-message[hidden]{display:none!important}
 .ck-action-dialog #ck-action-input[hidden]{display:none!important}
 .ck-action-dialog #ck-action-input{margin-bottom:16px!important}
+.ck-action-dialog .ck-action-choices[hidden]{display:none!important}
+.ck-action-dialog .ck-action-choices{display:grid!important;gap:8px!important;margin:0 0 16px!important;max-height:52vh!important;overflow:auto!important}
+.ck-action-dialog .ck-action-choice{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:46px!important;padding:10px 12px!important;border:1px solid #e6e6e6!important;border-radius:10px!important;background:#fff!important;color:#333!important;font:inherit!important;font-size:14px!important;text-align:left!important;cursor:pointer!important}
+.ck-action-dialog .ck-action-choice-label{flex:1 1 auto!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+.ck-action-dialog .ck-action-choice small{flex:0 0 auto!important;color:#999!important;font-size:11px!important}
+.ck-action-dialog .ck-action-choice:hover{border-color:#07c160!important;background:#f4fbf6!important}
+.ck-action-dialog .ck-action-choice.active{border-color:#07c160!important;background:#f0faf3!important;color:#0a7a41!important;font-weight:700!important}
+.ck-action-dialog .ck-action-choice.active small{color:#3f9c6a!important}
+.ck-action-dialog .ck-action-choice.danger{color:#d94a4a!important}
+.ck-action-dialog .ck-action-choice.danger:hover{border-color:#f2b3b3!important;background:#fff5f5!important}
+.ck-action-dialog .ck-action-choice:focus-visible{outline:2px solid rgba(7,193,96,.32)!important;outline-offset:2px!important}
+body.dark .ck-action-dialog .ck-action-choice{border-color:#2b3540!important;background:#1b222a!important;color:#e6ede9!important}
+body.dark .ck-action-dialog .ck-action-choice:hover{border-color:#2f9c63!important;background:#1e2a24!important}
+body.dark .ck-action-dialog .ck-action-choice.active{border-color:#2f9c63!important;background:#1d2b23!important;color:#7fd6a4!important}
 .ck-action-dialog .btn:focus,
 .ck-action-dialog .btn:focus-visible,
 .ck-action-dialog input:focus,
