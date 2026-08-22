@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v197-digest-cache-position';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v198-rules-layout';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -5125,11 +5125,27 @@ function chatRenderSpeechPreferences(data,preserveEditor){
 // 每条规则只让用户写一句话。类别（称呼/语气/格式…）和强度（硬性/要求/普通）
 // 是后端的内部字段，用户看不懂也用不上，所以不在页面上出现；但要原样带回去，
 // 否则一次保存就会把老规则的强度全部抹平。
-var rulesPageState={data:null,loading:false,busy:false,dirty:false};
+var rulesPageState={data:null,loading:false,busy:false,dirty:false,diff:null};
 var RULES_DEFAULT_CATEGORY='other';
 var RULES_DEFAULT_PRIORITY='strong';
 var rulesRowSeq=0;
+var rulesFilterText='';
 function rulesNewKey(){rulesRowSeq++;return 'manual_'+Date.now().toString(36)+'_'+rulesRowSeq}
+// 已发布的那一份，按 key 索引。用来在每行右边标出「新增 / 改过」，
+// 让用户在按下发布之前就看清这一次到底会改动什么。
+function rulesPublishedMap(){
+  var data=rulesPageState.data||{};
+  var list=Array.isArray(data.rules)?data.rules:[];
+  var map=Object.create(null);
+  for(var i=0;i<list.length;i++){
+    var rule=list[i]||{};
+    var key=String(rule.key||'').trim();
+    if(key)map[key]=String(rule.instruction||'').trim();
+  }
+  return map;
+}
+// 排序按钮常显，不藏在 ⋮ 里：手机上一定点得到，规则多的时候也不用一层层展开。
+// 跨很远的移动交给菜单里的「移到最前/最后」，比连点十几次上移现实。
 function rulesRowHtml(rule){
   rule=rule&&typeof rule==='object'?rule:{};
   var key=String(rule.key||'').trim()||rulesNewKey();
@@ -5138,14 +5154,24 @@ function rulesRowHtml(rule){
       ' data-rule-priority="'+escAttr(String(rule.priority||RULES_DEFAULT_PRIORITY))+'">'+
     '<b class="rules-row-index" aria-hidden="true"></b>'+
     '<textarea class="rules-row-text" rows="2" aria-label="规则内容" placeholder="用一句话写清楚，例如：不要叫我宝宝" oninput="rulesAutoGrow(this);rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
-    '<details class="rules-row-menu"><summary title="规则操作" aria-label="规则操作">⋮</summary><div><button type="button" onclick="rulesMoveRow(this,-1)">上移</button><button type="button" onclick="rulesMoveRow(this,1)">下移</button><button class="danger" type="button" onclick="rulesDeleteRow(this)">删除</button></div></details>'+
+    '<div class="rules-row-tools">'+
+      '<span class="rules-row-flag" hidden></span>'+
+      '<button class="rules-row-btn rules-row-move" type="button" title="上移" aria-label="上移" onclick="rulesMoveRow(this,-1)">↑</button>'+
+      '<button class="rules-row-btn rules-row-move" type="button" title="下移" aria-label="下移" onclick="rulesMoveRow(this,1)">↓</button>'+
+      '<details class="rules-row-menu"><summary title="更多操作" aria-label="更多操作">⋮</summary><div>'+
+        '<button type="button" onclick="rulesMoveRowEdge(this,-1)">移到最前</button>'+
+        '<button type="button" onclick="rulesMoveRowEdge(this,1)">移到最后</button>'+
+        '<button type="button" onclick="rulesDuplicateRow(this)">复制一条</button>'+
+        '<button class="danger" type="button" onclick="rulesDeleteRow(this)">删除</button>'+
+      '</div></details>'+
+    '</div>'+
     '</div>';
 }
 // 规则往往两三行，固定高度会把后半句藏起来。让输入框跟着内容长高，一眼就能看全。
 function rulesAutoGrow(el){
   if(!el||!el.style)return;
   el.style.height='auto';
-  el.style.height=Math.max(56,el.scrollHeight)+'px';
+  el.style.height=Math.max(44,el.scrollHeight)+'px';
 }
 // 换横竖屏、改窗口宽度后换行数会变，高度要重算一次，否则窄屏下仍会截半句。
 var rulesResizeBound=false;
@@ -5169,25 +5195,108 @@ function rulesRenumber(){
   }
   var count=document.getElementById('rules-draft-count');
   if(count)count.textContent=String(rows.length);
-  rulesUpdateMetrics();
+  rulesRefreshFooter();
 }
 function rulesMarkDirty(){
   rulesPageState.dirty=true;
-  var hint=document.getElementById('rules-dirty-hint');
-  if(hint)hint.textContent='有改动还没保存';
+  rulesRefreshFooter();
+}
+// 行标记、成本提示、底部状态文案三处都依赖同一次统计，合到一起刷新，
+// 避免每次敲键盘把整张表扫三遍。
+function rulesRefreshFooter(){
+  rulesUpdateRowFlags();
   rulesUpdateMetrics();
+  var hint=document.getElementById('rules-dirty-hint');
+  if(hint)hint.textContent=rulesStatusHintText();
+}
+// 每行标出相对「正在生效」的变化，同时统计删掉了几条 —— 底部行动条要靠这个
+// 数字说清楚「点一次发布会发生什么」。空行不算改动，用户新增一行还没填不该报警。
+function rulesUpdateRowFlags(){
+  var published=rulesPublishedMap();
+  var rows=document.querySelectorAll('#rules-table .rules-row');
+  var seen=Object.create(null),added=0,changed=0;
+  for(var i=0;i<rows.length;i++){
+    var key=String(rows[i].getAttribute('data-rule-key')||'').trim();
+    var textEl=rows[i].querySelector('.rules-row-text');
+    var instruction=String((textEl&&textEl.value)||'').trim();
+    var state='';
+    if(instruction){
+      if(!(key in published)){state='新增';added++}
+      else if(published[key]!==instruction){state='改过';changed++}
+    }
+    if(key)seen[key]=1;
+    var flag=rows[i].querySelector('.rules-row-flag');
+    if(flag){
+      flag.textContent=state;
+      flag.hidden=!state;
+      flag.className='rules-row-flag'+(state==='新增'?' add':(state==='改过'?' edit':''));
+    }
+  }
+  var removed=0;
+  for(var pk in published){if(!seen[pk])removed++}
+  rulesPageState.diff={added:added,changed:changed,removed:removed};
+  return rulesPageState.diff;
+}
+function rulesDiffText(diff){
+  diff=diff||rulesPageState.diff||{};
+  var parts=[];
+  if(diff.added)parts.push('新增 '+diff.added+' 条');
+  if(diff.changed)parts.push('改动 '+diff.changed+' 条');
+  if(diff.removed)parts.push('删除 '+diff.removed+' 条');
+  return parts.join(' · ');
+}
+function rulesStatusHintText(){
+  if(rulesPageState.busy)return '处理中…';
+  if(!rulesPageState.dirty)return '';
+  var text=rulesDiffText();
+  return text?('还没保存：'+text):'有改动还没保存';
 }
 function rulesUpdateMetrics(){
-  var metrics=document.getElementById('rules-metrics');if(!metrics)return;
   var rules=rulesCollect();
   var chars=rules.reduce(function(total,rule){return total+String(rule.instruction||'').length},0);
   var tokens=Math.ceil(chars/2);
-  metrics.textContent=rules.length+' 条 · '+chars+' 字 · 每轮约 '+tokens+' tokens'+(chars>3000?' · 规则块偏大，会增加每轮成本':'');
-  metrics.classList.toggle('warn',chars>3000);
+  var metrics=document.getElementById('rules-metrics');
+  if(metrics){
+    metrics.textContent=rules.length+' 条 · '+chars+' 字 · 每轮约 '+tokens+' tokens'+(chars>3000?' · 规则块偏大，会增加每轮成本':'');
+    if(metrics.classList)metrics.classList.toggle('warn',chars>3000);
+  }
+  var chip=document.getElementById('rules-diff-chip');
+  if(chip){
+    var diffText=rulesDiffText();
+    chip.textContent=diffText?('待发布 '+diffText):'';
+    chip.hidden=!diffText;
+  }
+}
+// 搜索只是把不相关的行藏起来，DOM 里一条都没少，所以保存/发布拿到的仍是全量。
+// 但列表这时不是完整顺序，上移下移会移错位置，排序按钮直接收起来。
+function rulesFilter(value){
+  rulesFilterText=String(value==null?'':value).trim().toLowerCase();
+  var rows=document.querySelectorAll('#rules-table .rules-row');
+  var shown=0;
+  for(var i=0;i<rows.length;i++){
+    var textEl=rows[i].querySelector('.rules-row-text');
+    var instruction=String((textEl&&textEl.value)||'').toLowerCase();
+    var hit=!rulesFilterText||instruction.indexOf(rulesFilterText)>=0;
+    rows[i].hidden=!hit;
+    if(hit)shown++;
+  }
+  var table=document.getElementById('rules-table');
+  if(table&&table.setAttribute)table.setAttribute('data-filtering',rulesFilterText?'1':'0');
+  var hint=document.getElementById('rules-filter-hint');
+  if(hint)hint.textContent=rulesFilterText?(shown?('命中 '+shown+' / '+rows.length+' 条，搜索时不能排序'):'没有匹配的规则'):'';
+  return shown;
+}
+// 搜索状态下新增会立刻被过滤掉、看起来像"没加上"，所以先把搜索清空再加。
+function rulesClearFilter(){
+  if(!rulesFilterText)return;
+  var input=document.getElementById('rules-search');
+  if(input)input.value='';
+  rulesFilter('');
 }
 function rulesAddRow(){
   var table=document.getElementById('rules-table');
   if(!table)return;
+  rulesClearFilter();
   var empty=table.querySelector('.rules-empty');
   if(empty)empty.remove();
   var adder=table.querySelector('.rules-add-row');
@@ -5198,10 +5307,15 @@ function rulesAddRow(){
   var rows=table.querySelectorAll('.rules-row-text');
   if(rows.length)rows[rows.length-1].focus();
 }
+function rulesCloseRowMenu(button){
+  var menu=button&&button.closest?button.closest('details'):null;
+  if(menu)menu.open=false;
+}
 function rulesDeleteRow(button){
   var row=button&&button.closest?button.closest('.rules-row'):null;
   if(!row)return;
   var table=document.getElementById('rules-table');
+  rulesCloseRowMenu(button);
   row.remove();
   if(table&&!table.querySelectorAll('.rules-row').length){
     var adder=table.querySelector('.rules-add-row');
@@ -5221,8 +5335,35 @@ function rulesMoveRow(button,delta){
   else row.parentNode.insertBefore(sibling,row);
   rulesRenumber();rulesMarkDirty();
 }
+// 规则多起来以后连点十几次上移不现实，给一个一步到位的入口。
+function rulesMoveRowEdge(button,delta){
+  var row=button&&button.closest?button.closest('.rules-row'):null;
+  if(!row||!row.parentNode)return;
+  rulesCloseRowMenu(button);
+  var table=row.parentNode;
+  var rows=table.querySelectorAll('.rules-row');
+  if(rows.length<2)return;
+  if(delta<0){
+    if(rows[0]!==row)table.insertBefore(row,rows[0]);
+  }else{
+    var last=rows[rows.length-1];
+    // last 后面就是「＋ 新增一条规则」那个按钮，插到它前面即为末位
+    if(last!==row)table.insertBefore(row,last.nextSibling);
+  }
+  rulesRenumber();rulesMarkDirty();
+}
+function rulesDuplicateRow(button){
+  var row=button&&button.closest?button.closest('.rules-row'):null;
+  if(!row)return;
+  rulesCloseRowMenu(button);
+  var textEl=row.querySelector('.rules-row-text');
+  // 复制出来的是一条新规则，不能沿用原 key，否则后端会报 rule keys must be unique
+  row.insertAdjacentHTML('afterend',rulesRowHtml({instruction:String((textEl&&textEl.value)||'')}));
+  rulesRenumber();rulesMarkDirty();
+}
 function rulesAddExample(text){
   var table=document.getElementById('rules-table');if(!table)return;
+  rulesClearFilter();
   var empty=table.querySelector('.rules-empty');if(empty)empty.remove();
   var adder=table.querySelector('.rules-add-row');
   if(adder)adder.insertAdjacentHTML('beforebegin',rulesRowHtml({instruction:text}));
@@ -5276,21 +5417,34 @@ function renderRulesPage(){
   var publishedCount=Number(data.rule_count||(Array.isArray(data.rules)?data.rules.length:0))||0;
   var busy=rulesPageState.busy?' disabled':'';
   var html='<header class="rules-head">'+
-    '<div><h2>规则管理</h2><p>这里写的每一句话都会长期约束助手怎么说话。改完先「保存草稿」，确认无误再「发布」。</p></div>'+
-    '<span class="rules-state '+(enabled?'on':'off')+'">'+(enabled?'已生效':'已停用')+'</span>'+
-    '</header>';
-  html+='<section class="rules-overview">'+
-    '<div><span>正在生效</span><b>'+publishedCount+' 条</b></div>'+
-    '<div><span>草稿</span><b><i id="rules-draft-count">'+draftRules.length+'</i> 条</b></div>'+
-    '<div><span>上次发布</span><b>'+esc(rulesTimeText(data.updated_at))+'</b></div>'+
-    '</section>';
+    '<div class="rules-head-main"><h2>规则管理</h2>'+
+      '<p>这里写的每一句话都会长期约束助手怎么说话。改完先「保存草稿」，确认无误再「发布」。</p></div>'+
+    '<div class="rules-head-side">'+
+      '<span class="rules-state '+(enabled?'on':'off')+'"><i aria-hidden="true"></i>'+(enabled?'已生效':'已停用')+'</span>'+
+      '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesReload()">刷新</button>'+
+    '</div></header>';
+  // 三项状态压成一行：卡片式的三宫格占掉大半屏高度，真正要看的规则被挤到下面去了。
+  html+='<div class="rules-statbar">'+
+    '<span class="rules-stat">正在生效 <b>'+publishedCount+'</b> 条</span>'+
+    '<span class="rules-stat">草稿 <b id="rules-draft-count">'+draftRules.length+'</b> 条</span>'+
+    '<span class="rules-stat">上次发布 <b>'+esc(rulesTimeText(data.updated_at))+'</b></span>'+
+    '<span class="rules-diff-chip" id="rules-diff-chip" hidden></span>'+
+    '</div>';
   if(data.draft_stale){
     html+='<div class="rules-stale"><div><b>草稿落后于正在生效的规则</b><span>助手当前生效 '+publishedCount+' 条，这份草稿只有 '+draftRules.length+' 条。</span></div><button class="btn btn-outline btn-sm" type="button" onclick="rulesUsePublishedDraft()">用生效规则覆盖草稿</button><small>也可以继续编辑，保留当前草稿。</small></div>';
   }
   if(!enabled){
     html+='<div class="rules-notice">已停用：当前一条规则都不会发给助手。草稿和历史都还在，点「重新启用规则」就能恢复。</div>';
   }
-  html+='<div class="rules-table" id="rules-table">';
+  html+='<div class="rules-toolbar">';
+  if(draftRules.length>1||rulesFilterText){
+    html+='<label class="rules-search"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg></span>'+
+      '<input id="rules-search" type="search" value="'+escAttr(rulesFilterText)+'" placeholder="搜索规则内容" aria-label="搜索规则内容" autocomplete="off" oninput="rulesFilter(this.value)"></label>';
+  }
+  html+='<span class="rules-filter-hint" id="rules-filter-hint"></span>'+
+    '<button class="btn btn-outline btn-sm rules-toolbar-add" type="button" onclick="rulesAddRow()">＋ 新增一条</button>'+
+    '</div>';
+  html+='<div class="rules-table" id="rules-table" data-filtering="0">';
   if(!draftRules.length){
     html+='<div class="rules-empty"><b>还没有规则</b><span>从一句清楚、可执行的话开始。</span><div><button type="button" onclick="rulesAddExample(\'不要叫我宝宝\')">不要叫我宝宝</button><button type="button" onclick="rulesAddExample(\'回复使用自然段，不要堆列表\')">回复使用自然段</button></div></div>';
   }else{
@@ -5299,7 +5453,7 @@ function renderRulesPage(){
   html+='<button class="rules-add-row" type="button" onclick="rulesAddRow()">＋ 新增一条规则</button>';
   html+='</div>';
   html+='<div class="rules-actions">'+
-    '<div><span class="rules-dirty-hint" id="rules-dirty-hint">'+(rulesPageState.busy?'处理中…':(rulesPageState.dirty?'有改动还没保存':''))+'</span><span class="rules-metrics" id="rules-metrics"></span></div>'+
+    '<div><span class="rules-dirty-hint" id="rules-dirty-hint">'+esc(rulesStatusHintText())+'</span><span class="rules-metrics" id="rules-metrics"></span></div>'+
     '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesSaveDraft()">保存草稿</button>'+
     '<button class="btn btn-blue btn-sm" type="button"'+busy+' onclick="rulesPublish()">发布并生效</button>'+
     '<details class="rules-more"><summary title="更多操作" aria-label="更多操作">⋯</summary><div><button type="button" onclick="rulesToggleEnabled()">'+(enabled?'停用全部规则':'重新启用规则')+'</button><button type="button" onclick="loadRulesPage(true)">放弃改动并重新读取</button></div></details>'+
@@ -5308,6 +5462,15 @@ function renderRulesPage(){
   if(data.warning)html+='<div class="rules-notice warn">'+esc(String(data.warning))+'</div>';
   body.innerHTML=html;
   rulesRenumber();
+  // 重渲染会重建整张表，之前的搜索词得重新套一遍，否则搜索框有字但列表是全量
+  if(rulesFilterText)rulesFilter(rulesFilterText);
+}
+// 刷新会丢掉页面上没保存的编辑，所以先问一句；⋯ 菜单里那条本来就叫「放弃改动」，
+// 语义已经写明，不再重复确认。
+function rulesReload(){
+  if(rulesPageState.dirty&&typeof confirm==='function'&&!confirm('页面上还有没保存的改动，重新读取会丢掉它们。确定继续吗？'))return Promise.resolve(false);
+  rulesFilterText='';
+  return loadRulesPage(true);
 }
 function rulesTimeText(value){
   var text=String(value||'').trim();
@@ -5351,10 +5514,11 @@ function rulesErrorText(error){
 }
 function rulesSetBusy(busy){
   rulesPageState.busy=!!busy;
-  var actions=document.querySelectorAll('.rules-actions .btn');
+  // 页头的「刷新」也要一起锁：请求还在飞的时候重新读取会拿到中间状态
+  var actions=document.querySelectorAll('.rules-actions .btn,.rules-head-side .btn');
   for(var i=0;i<actions.length;i++)actions[i].disabled=!!busy;
   var hint=document.getElementById('rules-dirty-hint');
-  if(hint)hint.textContent=busy?'处理中…':(rulesPageState.dirty?'有改动还没保存':'');
+  if(hint)hint.textContent=rulesStatusHintText();
 }
 function rulesRequest(action,payload,okMessage){
   if(rulesPageState.busy)return Promise.resolve(false);

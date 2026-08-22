@@ -18,6 +18,7 @@ function extractFunction(name){
 
 const RULES_FNS=[
   'rulesNewKey','rulesRowHtml','rulesAutoGrow','rulesBindResize','rulesRenumber','rulesMarkDirty','rulesCollect',
+  'rulesPublishedMap','rulesRefreshFooter','rulesUpdateRowFlags','rulesDiffText','rulesStatusHintText','rulesFilter',
   'rulesUpdateMetrics','rulesDraftRules','rulesUsePublishedDraft','rulesTimeText','rulesErrorText','renderRulesPage','chatRenderSpeechPreferences'
 ];
 
@@ -43,10 +44,11 @@ function rulesContext(){
   const collected=[];
   const context={
     console,
-    rulesPageState:{data:null,loading:false,busy:false,dirty:false},
+    rulesPageState:{data:null,loading:false,busy:false,dirty:false,diff:null},
     RULES_DEFAULT_CATEGORY:'other',
     RULES_DEFAULT_PRIORITY:'strong',
     rulesRowSeq:0,
+    rulesFilterText:'',
     rulesResizeBound:false,
     Date,
     chatSpeechConsoleState:{data:null},
@@ -82,6 +84,21 @@ function testRowHasNoSelects(){
   assert.strictEqual(html.indexOf('maxlength='),-1,'规则输入不得保留旧字数硬限制');
 }
 
+// 用户明确选定的排序方式：↑↓ 常显在行上（手机一定点得到），跨很远的移动放进 ⋮ 菜单
+function testMoveButtonsAreAlwaysVisible(){
+  const context=rulesContext();
+  const html=context.rulesRowHtml({key:'a',instruction:'x'});
+  assert.ok(html.indexOf('rules-row-move')>=0,'每行要有常显的排序按钮');
+  assert.ok(html.indexOf('rulesMoveRow(this,-1)')>=0);
+  assert.ok(html.indexOf('rulesMoveRow(this,1)')>=0);
+  assert.ok(html.indexOf('rules-row-move')<html.indexOf('<details'),'排序按钮不能再收进 ⋮ 菜单里');
+  assert.ok(html.indexOf('rulesMoveRowEdge(this,-1)')>=0,'菜单里要有「移到最前」');
+  assert.ok(html.indexOf('rulesMoveRowEdge(this,1)')>=0,'菜单里要有「移到最后」');
+  assert.ok(html.indexOf('rulesDuplicateRow(this)')>=0,'菜单里要能复制一条');
+  assert.ok(html.indexOf('rulesDeleteRow(this)')>=0,'删除仍然在菜单里，避免误触');
+  assert.ok(html.indexOf('rules-row-flag')>=0,'每行要留差异标记位');
+}
+
 // 类别和强度是后端字段，页面不展示但必须原样带回，否则一次保存就把老规则的强度抹平
 function testHiddenFieldsSurviveOnTheRow(){
   const context=rulesContext();
@@ -110,9 +127,20 @@ function testNewRowsGetUniqueKeys(){
 // ---------------------------------------------------------------------------
 function fakeRow(key,text,category,priority){
   const attrs={'data-rule-key':key,'data-rule-category':category||'other','data-rule-priority':priority||'strong'};
+  const flag={textContent:'',hidden:false,className:''};
+  const index={textContent:''};
+  const textNode={value:text,style:{height:''},scrollHeight:60};
   return {
+    hidden:false,
+    __flag:flag,
+    __index:index,
     getAttribute:k=>(k in attrs?attrs[k]:null),
-    querySelector:sel=>(sel==='.rules-row-text'?{value:text}:null)
+    querySelector(sel){
+      if(sel==='.rules-row-text')return textNode;
+      if(sel==='.rules-row-flag')return flag;
+      if(sel==='.rules-row-index')return index;
+      return null;
+    }
   };
 }
 
@@ -137,6 +165,83 @@ function testCollectDeduplicatesKeys(){
   const out=context.rulesCollect();
   assert.strictEqual(out.length,2);
   assert.notStrictEqual(out[0].key,out[1].key,'重复 key 必须改掉，否则后端整批拒绝');
+}
+
+// ---------------------------------------------------------------------------
+// 差异标记：发布之前就要能看出这一次会改动什么
+// ---------------------------------------------------------------------------
+function testRowFlagsShowWhatPublishWillChange(){
+  const context=rulesContext();
+  context.rulesPageState.data={rule_count:2,rules:[{key:'a',instruction:'甲'},{key:'b',instruction:'乙'}]};
+  context.__rows.push(fakeRow('a','甲'),fakeRow('b','乙改过了'),fakeRow('c','新的一条'));
+  const diff=context.rulesUpdateRowFlags();
+  assert.strictEqual(diff.added,1);
+  assert.strictEqual(diff.changed,1);
+  assert.strictEqual(diff.removed,0);
+  assert.strictEqual(context.__rows[0].__flag.textContent,'','没变的规则不加标记');
+  assert.strictEqual(context.__rows[0].__flag.hidden,true);
+  assert.strictEqual(context.__rows[1].__flag.textContent,'改过');
+  assert.strictEqual(context.__rows[1].__flag.className,'rules-row-flag edit');
+  assert.strictEqual(context.__rows[2].__flag.textContent,'新增');
+  assert.strictEqual(context.__rows[2].__flag.className,'rules-row-flag add');
+  assert.strictEqual(context.rulesDiffText(),'新增 1 条 · 改动 1 条');
+}
+
+function testDeletedRulesAreCounted(){
+  const context=rulesContext();
+  context.rulesPageState.data={rules:[{key:'a',instruction:'甲'},{key:'b',instruction:'乙'}]};
+  context.__rows.push(fakeRow('a','甲'));
+  assert.strictEqual(context.rulesUpdateRowFlags().removed,1,'草稿里删掉几条也要算出来，发布前必须告诉用户');
+  assert.ok(context.rulesDiffText().indexOf('删除 1 条')>=0);
+}
+
+// 新增了一行还没填字，不该被当成"有改动"报警
+function testEmptyRowIsNotAChange(){
+  const context=rulesContext();
+  context.rulesPageState.data={rules:[]};
+  context.__rows.push(fakeRow('a','   '));
+  const diff=context.rulesUpdateRowFlags();
+  assert.strictEqual(diff.added,0);
+  assert.strictEqual(diff.changed,0);
+  assert.strictEqual(diff.removed,0);
+  assert.strictEqual(context.rulesDiffText(),'');
+}
+
+function testStatusHintSaysWhatIsUnsaved(){
+  const context=rulesContext();
+  assert.strictEqual(context.rulesStatusHintText(),'','没改动时底部不要挂着提示');
+  context.rulesPageState.busy=true;
+  assert.strictEqual(context.rulesStatusHintText(),'处理中…');
+  context.rulesPageState.busy=false;
+  context.rulesPageState.dirty=true;
+  context.rulesPageState.diff={added:2,changed:0,removed:1};
+  assert.strictEqual(context.rulesStatusHintText(),'还没保存：新增 2 条 · 删除 1 条');
+  context.rulesPageState.diff={added:0,changed:0,removed:0};
+  assert.strictEqual(context.rulesStatusHintText(),'有改动还没保存','算不出差异时也要给个兜底文案');
+}
+
+// ---------------------------------------------------------------------------
+// 搜索：只是把行藏起来，DOM 里一条都不能少，否则保存会把没命中的规则弄丢
+// ---------------------------------------------------------------------------
+function testFilterHidesRowsWithoutLosingThem(){
+  const context=rulesContext();
+  const table={attrs:{},setAttribute(k,v){this.attrs[k]=String(v)}};
+  const hint={textContent:''};
+  context.__dom.byId['rules-table']=table;
+  context.__dom.byId['rules-filter-hint']=hint;
+  context.__rows.push(fakeRow('a','不要叫我宝宝'),fakeRow('b','回复要分段'));
+  assert.strictEqual(context.rulesFilter('分段'),1);
+  assert.strictEqual(context.__rows[0].hidden,true);
+  assert.strictEqual(context.__rows[1].hidden,false);
+  assert.strictEqual(table.attrs['data-filtering'],'1','搜索时要把排序按钮收起来');
+  assert.ok(hint.textContent.indexOf('命中 1 / 2')>=0);
+  assert.strictEqual(context.rulesCollect().length,2,'搜索绝不能让没命中的规则从提交里消失');
+  assert.strictEqual(context.rulesFilter('不存在的词'),0);
+  assert.strictEqual(hint.textContent,'没有匹配的规则');
+  context.rulesFilter('');
+  assert.strictEqual(context.__rows[0].hidden,false);
+  assert.strictEqual(table.attrs['data-filtering'],'0');
+  assert.strictEqual(hint.textContent,'');
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +308,7 @@ function testTextareaGrowsWithContent(){
   assert.strictEqual(el.style.height,'132px','长内容要撑开输入框');
   const short={style:{height:''},scrollHeight:20};
   context.rulesAutoGrow(short);
-  assert.strictEqual(short.style.height,'56px','短内容不低于最小高度');
+  assert.strictEqual(short.style.height,'44px','短内容不低于最小高度');
   context.rulesAutoGrow(null);
   context.rulesAutoGrow({});
 }
@@ -226,13 +331,17 @@ function testPageRender(){
   context.renderRulesPage();
   const html=body.innerHTML;
   assert.strictEqual(html.indexOf('<select'),-1,'整页都不应该再出现下拉框');
-  ['rulesPublish()','rulesSaveDraft()','rulesToggleEnabled()','loadRulesPage(true)','rulesAddRow()']
+  ['rulesPublish()','rulesSaveDraft()','rulesToggleEnabled()','loadRulesPage(true)','rulesAddRow()','rulesReload()']
     .forEach(fn=>assert.ok(html.indexOf(fn)>=0,'缺少按钮：'+fn));
   assert.strictEqual((html.match(/class="rules-row"/g)||[]).length,2,'两条规则渲染两行');
   assert.ok(html.indexOf('rules-add-row')>=0,'列表底部要有"新增一条规则"');
   assert.ok(html.indexOf('rules-more')>=0,'停用和重新读取要收进更多菜单');
   assert.ok(html.indexOf('rules-metrics')>=0,'底部要显示规则成本软提示');
-  assert.strictEqual((html.match(/rules-overview/g)||[]).length,1);
+  assert.strictEqual((html.match(/rules-statbar/g)||[]).length,1,'状态收成一行状态条');
+  assert.strictEqual(html.indexOf('rules-overview'),-1,'旧的三宫格状态卡已经撤掉');
+  assert.ok(html.indexOf('rules-diff-chip')>=0,'状态条上要留"待发布"提示位');
+  assert.ok(html.indexOf('rules-toolbar')>=0,'列表上方要有工具条');
+  assert.ok(html.indexOf('rulesFilter(this.value)')>=0,'两条以上规则要给搜索框');
   assert.strictEqual(html.indexOf('r0'),-1,'页面不显示版本号');
 }
 
@@ -268,6 +377,7 @@ function testPageRenderEmptyState(){
   context.renderRulesPage();
   assert.ok(body.innerHTML.indexOf('rules-empty')>=0);
   assert.ok(body.innerHTML.indexOf('rules-add-row')>=0,'空状态也要能直接新增');
+  assert.strictEqual(body.innerHTML.indexOf('rules-search'),-1,'一条都没有的时候不摆搜索框');
 }
 
 function testBusyDisablesButtons(){
@@ -282,11 +392,17 @@ function testBusyDisablesButtons(){
 }
 
 testRowHasNoSelects();
+testMoveButtonsAreAlwaysVisible();
 testHiddenFieldsSurviveOnTheRow();
 testRowCarriesNumberSlot();
 testNewRowsGetUniqueKeys();
 testCollectSkipsEmptyRowsAndKeepsHiddenFields();
 testCollectDeduplicatesKeys();
+testRowFlagsShowWhatPublishWillChange();
+testDeletedRulesAreCounted();
+testEmptyRowIsNotAChange();
+testStatusHintSaysWhatIsUnsaved();
+testFilterHidesRowsWithoutLosingThem();
 testPreviewIsNumbered();
 testPreviewMarksDisabled();
 testPreviewEmptyState();

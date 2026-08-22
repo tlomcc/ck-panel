@@ -7117,78 +7117,145 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
 }
 
 /* ---- 规则管理页 ---- */
-.rules-page{width:min(1000px,100%);margin:0 auto;padding:18px}
+.rules-page{width:min(1000px,100%);margin:0 auto;padding:18px 18px 6px}
 .rules-head{
   display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
-  margin-bottom:14px;padding:18px 20px;
+  margin-bottom:10px;padding:16px 18px;
   border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
   background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);
 }
+.rules-head-main{min-width:0}
 .rules-head h2{margin:0 0 4px;font-size:20px;line-height:1.2;letter-spacing:-.2px;color:var(--ck-text)}
 .rules-head p{margin:0;font-size:12.5px;line-height:1.65;color:var(--ck-muted)}
+.rules-head-side{display:flex;flex:none;align-items:center;gap:8px}
 .rules-state{
-  flex:none;padding:5px 11px;border-radius:var(--ck-radius-pill);
+  display:inline-flex;align-items:center;gap:6px;flex:none;
+  padding:5px 11px;border-radius:var(--ck-radius-pill);
   font-size:11px;font-weight:700;white-space:nowrap;
   border:1px solid var(--ck-line-soft);background:var(--ck-surface-soft);color:var(--ck-muted);
 }
-.rules-state.on{border-color:rgba(var(--ck-accent-rgb),.35);color:var(--ck-accent)}
-.rules-overview{
-  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-  margin-bottom:12px;
-  border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
-  background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);overflow:hidden;
+.rules-state i{width:6px;height:6px;flex:none;border-radius:50%;background:currentColor}
+.rules-state.on{border-color:rgba(var(--ck-accent-rgb),.35);background:var(--ck-accent-wash);color:var(--ck-accent)}
+/* 三项状态压成一行：原来的三宫格卡片要占掉大半屏，真正要看的规则被挤到折线以下 */
+.rules-statbar{
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;
+  margin:0 4px 12px;font-size:11.5px;line-height:1.6;color:var(--ck-muted);
 }
-.rules-overview>div{display:grid;gap:5px;min-width:0;padding:12px 14px;border-right:1px solid var(--ck-line-soft)}
-.rules-overview>div:last-child{border-right:0}
-.rules-overview span{font-size:11px;font-weight:700;color:var(--ck-muted)}
-.rules-overview b{font-size:12.5px;font-weight:600;color:var(--ck-text);overflow-wrap:anywhere}
-.rules-overview b i{font-style:normal}
-.rules-actions{position:sticky;z-index:12;bottom:0;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:16px -4px 0;padding:11px 12px;border:1px solid var(--ck-line);border-radius:8px;background:color-mix(in srgb,var(--ck-surface) 92%,transparent);box-shadow:0 -7px 20px rgba(15,23,42,.08);backdrop-filter:blur(12px)}
+.rules-stat b{font-weight:700;color:var(--ck-text)}
+.rules-diff-chip{
+  padding:3px 9px;border-radius:var(--ck-radius-pill);
+  border:1px solid color-mix(in srgb,var(--ck-amber) 38%,transparent);
+  background:var(--ck-amber-wash);color:var(--ck-amber);
+  font-size:11px;font-weight:700;
+}
+.rules-diff-chip[hidden]{display:none}
+.rules-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.rules-search{position:relative;display:flex;align-items:center;flex:1 1 260px;min-width:0;max-width:340px}
+.rules-search>span{position:absolute;left:11px;display:flex;color:var(--ck-faint);pointer-events:none}
+.rules-search>span svg{display:block;width:15px;height:15px;opacity:.8}
+.rules-search input{
+  width:100%;min-width:0;height:34px;padding:0 12px 0 32px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-pill);
+  background:var(--ck-surface);color:var(--ck-text);font:inherit;font-size:12.5px;outline:none;
+  transition:border-color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease);
+}
+.rules-search input:focus{border-color:rgba(var(--ck-accent-rgb),.6);box-shadow:0 0 0 3px var(--ck-focus)}
+.rules-filter-hint{flex:1 1 auto;min-width:0;font-size:11px;line-height:1.5;color:var(--ck-muted)}
+.rules-toolbar-add{flex:none;white-space:nowrap}
+.rules-actions{
+  position:sticky;z-index:12;bottom:0;
+  display:flex;align-items:center;justify-content:flex-end;gap:8px;
+  margin:14px -4px 0;padding:10px 12px;
+  border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);
+  background:color-mix(in srgb,var(--ck-surface) 92%,transparent);
+  box-shadow:0 -6px 18px rgba(24,49,36,.07);backdrop-filter:blur(12px);
+}
+body.dark .rules-actions{box-shadow:0 -8px 22px rgba(0,0,0,.34)}
 .rules-actions>div:first-child{display:grid;gap:2px;min-width:0;margin-right:auto}
 .rules-actions .btn:disabled{opacity:.5;cursor:wait}
-.rules-dirty-hint{font-size:11.5px;color:var(--ck-accent)}
+.rules-dirty-hint{font-size:11.5px;font-weight:600;color:var(--ck-amber)}
+.rules-dirty-hint:empty{display:none}
 .rules-notice{
   margin-bottom:12px;padding:10px 13px;
   border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
   background:var(--ck-surface-soft);font-size:12px;line-height:1.65;color:var(--ck-muted);
 }
-.rules-notice.warn{border-color:rgba(180,59,59,.32);color:#b43b3b}
-.rules-stale{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;align-items:center;margin-bottom:12px;padding:12px 13px;border:1px solid rgba(180,59,59,.3);border-radius:8px;background:#fff8f8;color:#8f3434}
+/* 深色下原来写死的 #fff8f8 / #b43b3b 会变成一块白斑，全部改走 token */
+.rules-notice.warn{
+  border-color:color-mix(in srgb,var(--ck-danger) 32%,transparent);
+  background:color-mix(in srgb,var(--ck-danger) 8%,var(--ck-surface));color:var(--ck-danger);
+}
+.rules-stale{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;align-items:center;
+  margin-bottom:12px;padding:12px 13px;
+  border:1px solid color-mix(in srgb,var(--ck-danger) 30%,transparent);border-radius:var(--ck-radius-md);
+  background:color-mix(in srgb,var(--ck-danger) 8%,var(--ck-surface));color:var(--ck-danger);
+}
 .rules-stale>div{display:grid;gap:3px}.rules-stale b{font-size:12.5px}.rules-stale span,.rules-stale small{font-size:11.5px;line-height:1.5}.rules-stale small{grid-column:1/-1;color:var(--ck-muted)}
 .rules-table{
   border:1px solid var(--ck-line);border-radius:var(--ck-radius-lg);
-  background:var(--ck-surface);overflow:visible;
+  background:var(--ck-surface);box-shadow:var(--ck-shadow-xs);overflow:visible;
 }
 .rules-row{
-  display:grid;grid-template-columns:24px minmax(0,1fr) 30px;gap:10px;align-items:start;
-  padding:11px 13px;border-bottom:1px solid var(--ck-line-soft);
+  display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:start;
+  padding:8px 10px 8px 8px;
+  border-bottom:1px solid var(--ck-line-soft);border-left:2px solid transparent;
+  transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease);
 }
-.rules-row:last-child{border-bottom:0}
+.rules-row[hidden]{display:none}
+/* 列表最后是「＋ 新增一条规则」那个按钮，所以最后一条规则是 last-of-type 而不是 last-child */
+.rules-row:last-of-type{border-bottom:0}
+.rules-row:hover{background:var(--ck-surface-soft)}
+.rules-row:focus-within{background:var(--ck-surface-soft);border-left-color:rgba(var(--ck-accent-rgb),.55)}
 .rules-row-index{
-  display:flex;width:24px;height:24px;margin-top:5px;flex:none;
+  display:flex;width:22px;height:22px;margin-top:7px;flex:none;
   align-items:center;justify-content:center;
-  border:1px solid rgba(var(--ck-accent-rgb),.35);border-radius:50%;
-  font-size:11px;font-weight:700;color:var(--ck-accent);
+  border-radius:50%;background:var(--ck-surface-soft);
+  font-size:11px;font-weight:700;color:var(--ck-muted);
 }
+.rules-row:focus-within .rules-row-index{background:var(--ck-accent-soft);color:var(--ck-accent)}
 .rules-row-text{
-  width:100%;min-width:0;min-height:56px;padding:8px 3px;resize:vertical;
-  border:0;border-bottom:1px solid var(--ck-line-soft);border-radius:0;
-  background:var(--ck-surface);color:var(--ck-text);font-size:12.5px;line-height:1.6;
+  width:100%;min-width:0;min-height:44px;padding:6px 8px;resize:vertical;
+  border:1px solid transparent;border-radius:var(--ck-radius-sm);
+  background:transparent;color:var(--ck-text);font:inherit;font-size:12.5px;line-height:1.6;
 }
-.rules-row-text:focus{outline:none;border-color:rgba(var(--ck-accent-rgb),.65);background:var(--ck-surface-soft)}
-.rules-row-menu,.rules-more{position:relative}.rules-row-menu summary,.rules-more summary{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;color:var(--ck-muted);font-size:18px;cursor:pointer;list-style:none}.rules-row-menu summary::-webkit-details-marker,.rules-more summary::-webkit-details-marker{display:none}
-.rules-row-menu>div,.rules-more>div{position:absolute;z-index:30;right:0;top:34px;display:grid;min-width:116px;padding:5px;border:1px solid var(--ck-line);border-radius:7px;background:var(--ck-surface);box-shadow:var(--ck-shadow-md)}
-.rules-row-menu button,.rules-more button{padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--ck-text);font:inherit;font-size:11.5px;text-align:left;cursor:pointer}.rules-row-menu button:hover,.rules-more button:hover{background:var(--ck-surface-soft)}.rules-row-menu button.danger{color:#b43b3b}
+.rules-row-text:focus{outline:none;border-color:rgba(var(--ck-accent-rgb),.45);background:var(--ck-surface)}
+.rules-row-tools{display:flex;align-items:center;gap:2px;margin-top:5px;flex:none}
+.rules-row-flag{
+  margin-right:4px;padding:2px 7px;border-radius:var(--ck-radius-pill);
+  font-size:10.5px;font-weight:700;white-space:nowrap;
+}
+.rules-row-flag[hidden]{display:none}
+.rules-row-flag.add{background:var(--ck-accent-wash);color:var(--ck-accent)}
+.rules-row-flag.edit{background:var(--ck-amber-wash);color:var(--ck-amber)}
+.rules-row-btn{
+  display:flex;width:26px;height:26px;flex:none;align-items:center;justify-content:center;
+  border:0;border-radius:var(--ck-radius-sm);background:transparent;
+  color:var(--ck-faint);font:inherit;font-size:13px;line-height:1;cursor:pointer;
+}
+.rules-row-btn:hover{background:color-mix(in srgb,var(--ck-accent) 12%,transparent);color:var(--ck-accent)}
+/* 搜索时列表不是完整顺序，上移下移会移错位置，直接把排序按钮收起来 */
+.rules-table[data-filtering="1"] .rules-row-move{display:none}
+.rules-row-menu,.rules-more{position:relative}
+.rules-row-menu summary,.rules-more summary{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--ck-radius-sm);color:var(--ck-faint);font-size:17px;line-height:1;cursor:pointer;list-style:none}
+.rules-more summary{width:30px;height:30px;font-size:18px;color:var(--ck-muted)}
+.rules-row-menu summary:hover,.rules-more summary:hover{background:color-mix(in srgb,var(--ck-accent) 12%,transparent);color:var(--ck-accent)}
+.rules-row-menu summary::-webkit-details-marker,.rules-more summary::-webkit-details-marker{display:none}
+.rules-row-menu>div,.rules-more>div{position:absolute;z-index:30;right:0;top:32px;display:grid;min-width:124px;padding:5px;border:1px solid var(--ck-line);border-radius:var(--ck-radius-sm);background:var(--ck-surface);box-shadow:var(--ck-shadow-md)}
+.rules-row-menu button,.rules-more button{padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--ck-text);font:inherit;font-size:11.5px;text-align:left;white-space:nowrap;cursor:pointer}
+.rules-row-menu button:hover,.rules-more button:hover{background:var(--ck-surface-soft)}
+.rules-row-menu button.danger,.rules-more button.danger{color:var(--ck-danger)}
 .rules-add-row{
-  display:block;width:100%;padding:13px 14px;
-  border:0;border-top:1px dashed var(--ck-line);background:transparent;
-  color:var(--ck-accent);font-size:12.5px;font-weight:600;text-align:center;cursor:pointer;
+  display:block;width:100%;padding:12px 14px;
+  border:0;border-top:1px dashed var(--ck-line);border-radius:0 0 var(--ck-radius-lg) var(--ck-radius-lg);
+  background:transparent;
+  color:var(--ck-accent);font:inherit;font-size:12.5px;font-weight:600;text-align:center;cursor:pointer;
 }
-.rules-add-row:hover{background:var(--ck-surface-soft)}
+.rules-add-row:hover{background:var(--ck-accent-wash)}
 .rules-table>.rules-add-row:first-child{border-top:0}
-.rules-empty{display:grid;justify-items:center;gap:7px;padding:26px 14px;font-size:12.5px;line-height:1.7;color:var(--ck-muted);text-align:center}.rules-empty b{color:var(--ck-text);font-size:14px}.rules-empty>div{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}.rules-empty button{padding:5px 8px;border:1px solid var(--ck-line);border-radius:6px;background:var(--ck-surface-soft);color:var(--ck-text-soft);font:inherit;font-size:11px;cursor:pointer}
+.rules-empty{display:grid;justify-items:center;gap:7px;padding:26px 14px;font-size:12.5px;line-height:1.7;color:var(--ck-muted);text-align:center}.rules-empty b{color:var(--ck-text);font-size:14px}.rules-empty>div{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}.rules-empty button{padding:5px 8px;border:1px solid var(--ck-line);border-radius:var(--ck-radius-pill);background:var(--ck-surface-soft);color:var(--ck-text-soft);font:inherit;font-size:11px;cursor:pointer}.rules-empty button:hover{border-color:rgba(var(--ck-accent-rgb),.45);color:var(--ck-accent)}
 .rules-foot-note{margin:10px 2px 0;font-size:11.5px;line-height:1.65;color:var(--ck-muted)}
-.rules-metrics{font-size:10.5px;color:var(--ck-muted)}.rules-metrics.warn{color:#b26b16}
+.rules-metrics{font-size:10.5px;color:var(--ck-muted)}.rules-metrics.warn{color:var(--ck-amber)}
 /* 聊天抽屉里的措辞偏好纯预览：只有条数和带编号的正文，没有边框卡片和按钮组 */
 body.chat-active .chat-settings .chat-speech-preview-head{
   display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;
@@ -7212,11 +7279,18 @@ body.chat-active .chat-settings .chat-speech-empty{font-size:12px;color:var(--ck
 body.chat-active .chat-settings .chat-speech-preview-foot{margin-top:12px}
 body.chat-active .chat-speech-manage{position:relative}.chat-speech-stale-dot{position:absolute;right:-3px;top:-3px;width:7px;height:7px;border-radius:50%;background:#c74343;box-shadow:0 0 0 2px var(--ck-surface)}
 @media (max-width:640px){
-  .rules-page{padding:12px}
-  .rules-overview{grid-template-columns:1fr}
-  .rules-overview>div{border-right:0;border-bottom:1px solid var(--ck-line-soft)}
-  .rules-overview>div:last-child{border-bottom:0}
+  .rules-page{padding:12px 12px 6px}
+  .rules-head{flex-direction:column;align-items:stretch;gap:10px;padding:14px 15px}
+  .rules-head-side{justify-content:space-between}
+  .rules-statbar{margin:0 2px 10px;gap:4px 10px}
+  .rules-toolbar{flex-wrap:wrap}
+  .rules-search{flex:1 1 100%;max-width:none;order:1}
+  .rules-toolbar-add{order:2}
+  .rules-filter-hint{order:3;flex:1 1 100%}
+  /* 手机上按钮挤在正文右边会把输入区压到 200px 以下，改成自己占一行、右对齐、点得到 */
+  .rules-row{grid-template-columns:20px minmax(0,1fr);padding:8px 8px 6px}
+  .rules-row-index{width:20px;height:20px;margin-top:6px}
+  .rules-row-tools{grid-column:1/-1;justify-content:flex-end;margin-top:0}
   .rules-actions{display:grid;grid-template-columns:1fr 1fr auto}.rules-actions>div:first-child{grid-column:1/-1}
   .rules-stale{grid-template-columns:1fr}.rules-stale small{grid-column:1}
-  .rules-head{align-items:center}
 }
