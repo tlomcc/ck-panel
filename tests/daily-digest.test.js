@@ -16,8 +16,10 @@ const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
 const css=fs.readFileSync(require.resolve('../chat.css'),'utf8');
 
 function extractFunction(name){
-  const start=source.indexOf(`function ${name}(`);
+  let start=source.indexOf(`function ${name}(`);
   assert(start>=0,`missing function ${name}`);
+  // async 函数要把 async 前缀一起带走，否则 vm 里跑不了里面的 await。
+  if(source.slice(Math.max(0,start-6),start)==='async ')start-=6;
   const brace=source.indexOf('{',start);
   let depth=0;
   for(let index=brace;index<source.length;index++){
@@ -190,10 +192,10 @@ function testPanelWiring(){
   assert.ok(/<label>当日截断总结<textarea id="chat-daily-digest-pack"[^>]*readonly/.test(html),
     '结构必须和本轮召回内容对齐：裸 label + readonly textarea');
 
-  // 注入位置不可选：位置固定在系统区最后一块，选择器必须已经撤掉。
+  // 注入位置不可选：位置固定在系统缓存断点之前，选择器必须已经撤掉。
   assert.ok(html.indexOf('id="chat-daily-digest-injection-position"')<0,
     '注入位置选择器必须撤掉，位置固定不可选');
-  assert.ok(/注入位置固定在系统区最后一块/.test(html),'卡片上要写清位置固定在哪里');
+  assert.ok(/注入位置固定在系统缓存断点之前/.test(html),'卡片上要写清位置固定在哪里');
 
   assert.ok(css.includes('#chat-daily-digest-pack{max-height:220px!important}')||
     /#chat-daily-digest-pack,\s*\n?body\.chat-active \.chat-settings #chat-memory-pack\{max-height:220px!important\}/.test(css),
@@ -218,6 +220,8 @@ function testPanelWiring(){
 
   const schedule=extractFunction('chatDailyDigestScheduleForTrim');
   assert.ok(schedule.includes('chatDailyDigestChain'),'多次截断必须串行，否则合并判断看不到上一条');
+  assert.ok(/return task/.test(schedule),'必须把本次总结的 promise 交出去，截断那一轮要等它');
+  assert.ok(/chatDailyDigestChain=task/.test(schedule),'串行语义要保留：下一次截断排在这次后面');
 
   // 换会话/新会话/删会话之后，面板不能还挂着上一个会话的总结。
   assert.ok(extractFunction('chatWriteForm').includes('chatRenderDailyDigest(cfg)'),
@@ -232,6 +236,85 @@ function testPanelWiring(){
   assert.ok(request.includes('cfg.dailyDigestEnabled===false)return null'),'期间被关掉就不要再写入');
 }
 
+// 截断那一轮要先把总结等回来再发请求：否则本轮请求没有总结、下一轮才第一次带上它，
+// 系统前缀连着变两次，整段缓存重建两次。等待必须有上限、失败不阻塞、能被停止打断。
+function testWaitWiring(){
+  const commit=extractFunction('chatCommitAutoTrimPlan');
+  assert.ok(/var digestWait=trimCommitted\?chatDailyDigestScheduleForTrim\(cfg,plan\):null/.test(commit),
+    '只有真的裁掉历史才生成总结；没截断的普通轮次不能多等一步');
+  assert.ok(/digestWait:digestWait/.test(commit),'commit 要把 promise 交给调用方');
+
+  const apply=source.slice(
+    source.indexOf('async function chatApplyAutoTrimForPendingBatch'),
+    source.indexOf('async function chatManualSyncSpeechPreferences'),
+  );
+  assert.strictEqual((apply.match(/chatAwaitTrimDigest\(/g)||[]).length,3,
+    '三条提交路径（无可审阅内容 / 偏好失败 / 正常）都要等总结');
+  assert.ok(apply.indexOf('chatAwaitTrimDigest(')<apply.length,'等待必须发生在 apply 里，也就是请求体组装之前');
+  // 停止分支在等待之前就返回，不该多等。
+  assert.ok(apply.indexOf('prepareStopped:true')<apply.indexOf('chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,prepared)'),
+    '用户中止时直接返回，不进入等待');
+
+  const wait=extractFunction('chatAwaitTrimDigest');
+  assert.ok(/CHAT_DAILY_DIGEST_TRIM_WAIT_MS/.test(wait),'等待必须有上限');
+  assert.ok(/requestState\)poll=setInterval/.test(wait),'等待期间要能被停止打断');
+  assert.ok(/if\(timer\)clearTimeout\(timer\);\s*\n\s*if\(poll\)clearInterval\(poll\);/.test(wait),
+    '定时器必须在 finally 里清掉');
+  assert.ok(/var CHAT_DAILY_DIGEST_TRIM_WAIT_MS=45000;/.test(source),'面板上限 45 秒，短于网关最坏一分钟');
+}
+
+function waitContext(overrides){
+  const context=Object.assign({
+    console,setTimeout,clearTimeout,setInterval,clearInterval,
+    CHAT_DAILY_DIGEST_TRIM_WAIT_MS:5000,
+    chatDebug:()=>{},
+    chatDailyDigestSetStatus:()=>{},
+  },overrides||{});
+  return load(context,['chatAwaitTrimDigest']);
+}
+
+async function testWaitBehaviour(){
+  // 1. 总结按时回来：等到它，并且清掉"正在整理"那行字。
+  const statuses=[];
+  let ctx=waitContext({chatDailyDigestSetStatus:text=>statuses.push(text)});
+  let result=await ctx.chatAwaitTrimDigest({digestWait:Promise.resolve({id:'dg-1'}),trigger:'round_limit',dropped:40},null);
+  assert.strictEqual(result.digestWaited,'ok');
+  assert.ok(/正在整理被截断的对话/.test(statuses[0]),'等待期间要有反馈');
+  assert.strictEqual(statuses[statuses.length-1],'','成功后清掉等待提示，成功仍然静默');
+
+  // 2. 没发生截断：一步都不多走，连状态行都不碰。
+  let touched=0;
+  ctx=waitContext({chatDailyDigestSetStatus:()=>{touched++}});
+  result=await ctx.chatAwaitTrimDigest({digestWait:null},null);
+  assert.strictEqual(result.digestWaited,undefined);
+  assert.strictEqual(touched,0,'没有截断的普通轮次不该有任何等待痕迹');
+
+  // 3. 超时：放弃等待、照常发送，不抛错。
+  const timeoutStatuses=[];
+  ctx=waitContext({
+    CHAT_DAILY_DIGEST_TRIM_WAIT_MS:40,
+    chatDailyDigestSetStatus:text=>timeoutStatuses.push(text),
+  });
+  result=await ctx.chatAwaitTrimDigest({digestWait:new Promise(()=>{})},null);
+  assert.strictEqual(result.digestWaited,'timeout');
+  assert.ok(/照常发送/.test(timeoutStatuses[timeoutStatuses.length-1]),'超时要说明本轮照常发送');
+
+  // 4. 总结失败：不阻塞发送，也不覆盖失败提示（失败文案由 chatDailyDigestRequest 自己写）。
+  const failStatuses=[];
+  ctx=waitContext({chatDailyDigestSetStatus:text=>failStatuses.push(text)});
+  result=await ctx.chatAwaitTrimDigest({digestWait:Promise.reject(new Error('boom'))},null);
+  assert.strictEqual(result.digestWaited,'failed');
+  assert.strictEqual(failStatuses.length,1,'失败分支不许再改状态行');
+
+  // 5. 用户点停止：立刻退出等待。
+  ctx=waitContext();
+  const requestState={stopped:false};
+  const pendingForever=ctx.chatAwaitTrimDigest({digestWait:new Promise(()=>{})},requestState);
+  requestState.stopped=true;
+  result=await pendingForever;
+  assert.strictEqual(result.digestWaited,'stopped');
+}
+
 testDayKeyAndClock();
 testRangeLabelMarksTheMidnightCrossing();
 testNormalizeSortsCapsAndDerivesDayKey();
@@ -239,4 +322,10 @@ testExpiryDiscardsOtherDaysOnly();
 testPackFormatAndBudget();
 testRequestMessagesStripPseudoThinking();
 testPanelWiring();
-console.log('daily digest tests: OK');
+testWaitWiring();
+testWaitBehaviour().then(()=>{
+  console.log('daily digest tests: OK');
+},error=>{
+  console.error(error);
+  process.exit(1);
+});

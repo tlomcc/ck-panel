@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v203-profile-and-legacy-purge';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v204-digest-prefix-and-trim-wait';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1406,6 +1406,10 @@ var CHAT_DAILY_DIGEST_MAX_ENTRIES=12;
 var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=1400;
 var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=16000;
 var CHAT_DAILY_DIGEST_TIMEOUT_MS=90000;
+// 截断那一轮等总结的上限。网关侧 CHAT_DIGEST_TIMEOUT_SECONDS 默认 55 秒、prepare
+// 总预算再 +5 秒，所以最坏一分钟；面板只等到这里为止，超时就放弃等待、照常发送，
+// 总结仍在后台继续落地（退回原来的异步行为）。绝不能因为总结慢就卡死发送。
+var CHAT_DAILY_DIGEST_TRIM_WAIT_MS=45000;
 var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
 var CHAT_SCROLL_JUMP_INTENT_MS=1200;
 var CHAT_IMAGE_MAX_COUNT=4;
@@ -4566,7 +4570,7 @@ function chatDebugRecordTopic(record,text){
   if(ev==='usage'||ev==='done')return 'usage';
   if(ev==='latency')return 'timing';
   if(ev==='intent_rewrite'||ev==='memory')return 'recall';
-  if(ev==='daily_digest')return 'trim';
+  if(ev==='daily_digest'||ev==='daily_digest_wait')return 'trim';
   if(ev==='gateway')return 'other';
   if(ev==='debug'){
     if(data.mode==='new_session')return 'request';
@@ -4857,6 +4861,16 @@ function chatFormatDebug(ev,data){
       ?('内容属于 '+(data.day_key||'-')+'，放到今天已经过期')
       :data.skipped);
     return '🗂 当日截断总结｜'+(data.merged?'并入上一条':'新增一条')+'｜'+(data.range||'-')+'｜'+(data.chars||0)+' 字｜覆盖 '+(data.rounds||0)+' 轮｜当日共 '+(data.entries||0)+' 条｜'+(data.provider_model||'-')+'｜'+(data.duration_ms||0)+'ms';
+  }
+  if(ev==='daily_digest_wait'){
+    var waitLabel={
+      ok:'总结已赶上本轮请求',
+      skipped:'本次没有可总结内容',
+      timeout:'等待超时，本轮照常发送（总结在后台继续）',
+      failed:'总结失败，本轮照常发送',
+      stopped:'已被停止，不再等待'
+    }[String(data.outcome||'')]||String(data.outcome||'-');
+    return '⏳ 截断总结等待｜'+waitLabel+'｜等了 '+(data.wait_ms||0)+'ms／上限 '+(data.limit_ms||0)+'ms｜触发：'+(data.trigger||'-')+'｜丢弃 '+(data.dropped||0)+' 轮';
   }
   if(ev==='speech_preference_prepare'){
     if(data.skipped)return '🗣 措辞偏好提取｜跳过：'+data.skipped;
@@ -6313,7 +6327,7 @@ function chatRenderDailyDigest(cfg){
       hint.textContent='今天还没有发生过截断。截断成功时静默生成，不会打扰你。';
     }else{
       var chars=chatDailyDigestPack(cfg,session).length;
-      hint.textContent='今天 '+entries.length+' 条 · 注入 '+chars+' 字 · 位置：系统区最后一块（紧挨历史消息）。明天零点自动作废。';
+      hint.textContent='今天 '+entries.length+' 条 · 注入 '+chars+' 字 · 位置：系统缓存断点之前（和系统提示词一起进缓存）。明天零点自动作废。';
     }
   }
   return entries;
@@ -6333,17 +6347,68 @@ function chatSaveDailyDigestSetting(auto){
 }
 // 串行执行：两次截断挨得很近时也要按顺序落条目，否则第二条看不到第一条，合并判断就失真。
 var chatDailyDigestChain=Promise.resolve();
+// 返回本次总结的 promise（没有可总结内容或功能关闭时返回 null）。
+// 截断那一轮要用它把总结等回来再发请求，见 chatAwaitTrimDigest。
 function chatDailyDigestScheduleForTrim(cfg,plan){
   cfg=cfg||chatLoadConfig();
-  if(cfg.dailyDigestEnabled===false)return;
+  if(cfg.dailyDigestEnabled===false)return null;
   var messages=chatDailyDigestRequestMessages(plan&&plan.droppedMessages);
-  if(!messages.length)return;
+  if(!messages.length)return null;
   var sessionId=String((chatCurrentSession()||{}).id||'');
   var trigger=String((plan&&plan.trigger)||'');
   var rounds=Number((plan&&plan.dropped)||0)||0;
-  chatDailyDigestChain=chatDailyDigestChain.then(function(){
+  var task=chatDailyDigestChain.then(function(){
     return chatDailyDigestRequest(cfg,{messages:messages,sessionId:sessionId,trigger:trigger,rounds:rounds});
-  }).catch(function(){});
+  }).catch(function(){return null});
+  chatDailyDigestChain=task;
+  return task;
+}
+// 截断那一轮先把总结等回来，再让调用方去组装请求体。
+// 为什么要等：截断已经让消息区整段重建了，总结这时候一起进去只重建一次；
+// 异步落地的话本轮请求里没有总结、下一轮才第一次带上它，系统前缀又变一次，
+// 等于连着两轮整段重建。等待有上限、失败不阻塞、用户点停止立刻退出。
+async function chatAwaitTrimDigest(result,requestState){
+  var wait=result&&result.digestWait;
+  if(!wait)return result;
+  var timer=0,poll=0;
+  var started=Date.now();
+  // 反馈只写在「记忆与缓存」里总结自己那条状态行上：聊天状态行是"对方正在输入/在线"
+  // 二选一的指示器，塞不进自定义文案；而发送路径此时已经是"对方正在输入..."+可用的
+  // 停止按钮，界面不会像卡住。成功仍然静默（不弹通知）。
+  chatDailyDigestSetStatus('正在整理被截断的对话…（最多等 '+Math.round(CHAT_DAILY_DIGEST_TRIM_WAIT_MS/1000)+' 秒）');
+  try{
+    var outcome=await new Promise(function(resolve){
+      var settled=false;
+      function finish(kind){if(settled)return;settled=true;resolve(kind)}
+      wait.then(function(entry){finish(entry?'ok':'skipped')},function(){finish('failed')});
+      timer=setTimeout(function(){finish('timeout')},CHAT_DAILY_DIGEST_TRIM_WAIT_MS);
+      // 等待期间用户点停止：立刻退出，总结留给后台继续落地。
+      if(requestState)poll=setInterval(function(){if(requestState.stopped)finish('stopped')},200);
+    });
+    result.digestWaited=outcome;
+    result.digestWaitMs=Date.now()-started;
+    if(outcome==='timeout'){
+      chatDailyDigestSetStatus('总结还没回来，本轮先照常发送；生成完会自动补上，下一轮带上它。');
+    }else if(outcome==='ok'||outcome==='skipped'){
+      // 成功分支由 chatRenderDailyDigest 重画这条状态行，这里只清掉"正在整理"。
+      chatDailyDigestSetStatus('');
+    }
+    chatDebug('daily_digest_wait',{
+      ok:outcome==='ok'||outcome==='skipped',
+      outcome:outcome,
+      wait_ms:result.digestWaitMs,
+      limit_ms:CHAT_DAILY_DIGEST_TRIM_WAIT_MS,
+      trigger:String(result.trigger||''),
+      dropped:Number(result.dropped||0)||0
+    });
+  }catch(error){
+    // 等待本身出问题也不能阻塞发送。
+    result.digestWaited='failed';
+  }finally{
+    if(timer)clearTimeout(timer);
+    if(poll)clearInterval(poll);
+  }
+  return result;
 }
 async function chatDailyDigestRequest(cfg,job){
   // 这个请求是异步落地的，配置可能在截断之后被改过（关掉功能、换网关地址、换 Key），
@@ -6498,11 +6563,13 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
   chatRenderTrimState(cfg);
   // 真正丢掉历史时才生成当日截断总结。plan.droppedMessages 仍持有被删掉的原始消息对象，
   // 上面的 filter 只换了 chatMessages 的引用，没有清空 plan。
-  if(trimCommitted)chatDailyDigestScheduleForTrim(cfg,plan);
+  // 这里只把请求发出去并把 promise 交出去；等不等由调用方决定（见 chatAwaitTrimDigest）。
+  var digestWait=trimCommitted?chatDailyDigestScheduleForTrim(cfg,plan):null;
   if(plan.editingMessage)chatEditingIndex=chatMessages.indexOf(plan.editingMessage);
   return {
     boundary:true,
     cacheBoundary:true,
+    digestWait:digestWait,
     trigger:String(plan.trigger||''),
     manual:!!plan.manual,
     trimmed:trimCommitted,
@@ -6536,10 +6603,10 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   var queuedRows=chatSpeechPreferenceQueueRows(chatCurrentSession());
   if(!chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages,queuedRows).length){
     chatDebug('speech_preference_prepare',{ok:true,skipped:'no_text',event_id:'',dropped_rounds:plan.dropped});
-    return chatCommitAutoTrimPlan(cfg,plan,{
+    return await chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,{
       ok:true,activationId:'',eventId:'',durationMs:0,
       reviewedThroughTs:Number(plan.preferenceThroughTs||0)||0,reviewComplete:true
-    });
+    }),requestState);
   }
   var prepared=await chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState);
   // 用户主动中止：尊重中止，不提交任何改动。
@@ -6566,9 +6633,11 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     });
     committedOnFailure.prepareFailed=true;
     committedOnFailure.speechPreferencePrepareError=prepared.error||'';
-    return committedOnFailure;
+    return await chatAwaitTrimDigest(committedOnFailure,requestState);
   }
-  return chatCommitAutoTrimPlan(cfg,plan,prepared);
+  // 截断那一轮在这里等总结：位置在请求体组装之前，等到的总结就能进本轮请求，
+  // 整段缓存重建只发生一次。等待有上限、失败和超时都不阻塞发送。
+  return await chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,prepared),requestState);
 }
 async function chatManualSyncSpeechPreferences(){
   chatInit();
