@@ -7153,13 +7153,12 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
 .rules-search{position:relative;display:flex;align-items:center;flex:1 1 260px;min-width:0;max-width:340px}
 .rules-search>span{position:absolute;left:11px;display:flex;color:var(--ck-faint);pointer-events:none}
 .rules-search>span svg{display:block;width:15px;height:15px;opacity:.8}
+/* 边框、圆角、底色和聚焦光圈交给 components.css 的通用输入控件规则（它在最后加载、
+   特异度也更高），这里只管几何，避免写一堆压不过去的死样式 */
 .rules-search input{
   width:100%;min-width:0;height:34px;padding:0 12px 0 32px;
-  border:1px solid var(--ck-line);border-radius:var(--ck-radius-pill);
-  background:var(--ck-surface);color:var(--ck-text);font:inherit;font-size:12.5px;outline:none;
-  transition:border-color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease);
+  font:inherit;font-size:12.5px;outline:none;
 }
-.rules-search input:focus{border-color:rgba(var(--ck-accent-rgb),.6);box-shadow:0 0 0 3px var(--ck-focus)}
 .rules-filter-hint{flex:1 1 auto;min-width:0;font-size:11px;line-height:1.5;color:var(--ck-muted)}
 .rules-toolbar-add{flex:none;white-space:nowrap}
 .rules-actions{
@@ -7214,12 +7213,15 @@ body.dark .rules-actions{box-shadow:0 -8px 22px rgba(0,0,0,.34)}
   font-size:11px;font-weight:700;color:var(--ck-muted);
 }
 .rules-row:focus-within .rules-row-index{background:var(--ck-accent-soft);color:var(--ck-accent)}
-.rules-row-text{
+/* components.css 里的 `textarea:not([hidden])` 会给所有 textarea 上边框和浅底，
+   加一级 .rules-row 提到 (0,2,0) 压过它 —— 二十条规则各自套一个方框太吵，
+   要的是一份清单：平时无框，选中那条才浮出来。 */
+.rules-row .rules-row-text{
   width:100%;min-width:0;min-height:44px;padding:6px 8px;resize:vertical;
   border:1px solid transparent;border-radius:var(--ck-radius-sm);
   background:transparent;color:var(--ck-text);font:inherit;font-size:12.5px;line-height:1.6;
 }
-.rules-row-text:focus{outline:none;border-color:rgba(var(--ck-accent-rgb),.45);background:var(--ck-surface)}
+.rules-row .rules-row-text:focus{outline:none;border-color:rgba(var(--ck-accent-rgb),.45);background:var(--ck-surface)}
 .rules-row-tools{display:flex;align-items:center;gap:2px;margin-top:5px;flex:none}
 .rules-row-flag{
   margin-right:4px;padding:2px 7px;border-radius:var(--ck-radius-pill);
