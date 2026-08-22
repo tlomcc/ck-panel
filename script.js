@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v204-digest-prefix-and-trim-wait';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v205-cache-fingerprint-truth';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4799,9 +4799,21 @@ function chatFormatDebug(ev,data){
   function fingerprintZh(fp){
     if(!fp||typeof fp!=='object')return '';
     var cmp=(fp.compare_previous&&typeof fp.compare_previous==='object')?fp.compare_previous:{};
-    var status=cmp.status==='same'?'前缀一致':(cmp.status==='partial'?'部分可复用':(cmp.status==='changed'?'前缀变化':'首次记录'));
+    var status=cmp.status==='same'?'和上一轮完全相同':(cmp.status==='partial'?'部分可复用':(cmp.status==='changed'?'前缀全变':'首次记录'));
     var changes=Array.isArray(cmp.changes)?cmp.changes:[];
     var stable=Array.isArray(cmp.stable_matches)?cmp.stable_matches:[];
+    var reusable=Array.isArray(cmp.reusable_breakpoints)?cmp.reusable_breakpoints:[];
+    // 这三项才是「本轮该不该命中」的判据：和上一轮逐段对齐后的最长相同前缀、
+    // 第一处变化在哪一段、上一轮哪些断点还落在这段相同前缀里。
+    var commonText=cmp.common_prefix_bytes!==undefined
+      ?('｜相同前缀 '+(cmp.common_prefix_bytes||0)+'B/~'+(cmp.common_prefix_token_estimate||0)+'t（'+(cmp.common_prefix_segments||0)+' 段）')
+      :'';
+    var firstChangeText=cmp.first_change_label?('｜首个变化：'+cmp.first_change_label):'';
+    var reusableText=cmp.common_prefix_bytes===undefined
+      ?''
+      :(reusable.length
+        ?('｜上一轮断点仍可读 '+reusable.length+' 个：'+reusable.slice(0,3).join('，'))
+        :'｜上一轮断点全部作废（本轮必然整段重建）');
     var changeText=changes.length?'｜变化：'+changes.slice(0,4).join('；'):'';
     var stableText=stable.length?'｜稳定：'+stable.slice(0,4).join('，'):'';
     var bps=Array.isArray(fp.breakpoint_summary)?fp.breakpoint_summary:[];
@@ -4810,7 +4822,7 @@ function chatFormatDebug(ev,data){
       return String(x.label||'-')+':'+(x.prefix_bytes||0)+'B/~'+(x.prefix_token_estimate||0)+'t';
     });
     var sizeText=sizes.length?'｜断点累计 '+sizes.slice(0,4).join('，'):'';
-    return '｜'+status+stableText+changeText+'｜请求 '+(fp.request_hash||'-')+'/'+(fp.request_bytes||0)+'B｜断点 '+(bps.join('，')||'-')+sizeText;
+    return '｜'+status+commonText+firstChangeText+reusableText+stableText+changeText+'｜请求 '+(fp.request_hash||'-')+'/'+(fp.request_bytes||0)+'B（哈希不含断点标记）｜断点 '+(bps.join('，')||'-')+sizeText;
   }
   if(ev==='meta'){
     var source=data.history_source||'';

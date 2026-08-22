@@ -61,8 +61,20 @@ assert(render.includes('chatDebugRecords[item.index],item.index'),'copy buttons 
 assert(chatCss.includes('.chat-debug-topic'),'topic headings need styling');
 
 // 原来落进「🔎 调试信息｜{原始 JSON}」的事件现在有中文标题，才能被正确归类。
-['🗣 措辞偏好提取','✂️ 截断同步网关','⚠️ 空闲自动截断失败'].forEach(function(title){
+['🗣 措辞偏好提取','✂️ 截断同步网关','⚠️ 空闲自动截断失败','⏳ 截断总结等待'].forEach(function(title){
   assert(format.includes(title),'missing debug title '+title);
 });
+
+// 缓存指纹是排查"为什么不命中"的唯一仪表。旧版只报一个 status，而且那个 status
+// 本身不可信；现在网关会给出和上一轮逐段对齐的相同前缀、首个变化位置、上一轮哪些
+// 断点还落在相同前缀里 —— 这三项必须显示出来，否则修了网关也看不到。
+const fingerprint=format.slice(format.indexOf('function fingerprintZh'),format.indexOf("if(ev==='meta')"));
+assert(fingerprint.includes('common_prefix_bytes'),'相同前缀字节数必须显示');
+assert(fingerprint.includes('common_prefix_segments'),'相同前缀段数必须显示');
+assert(fingerprint.includes('first_change_label'),'首个变化的位置必须显示');
+assert(fingerprint.includes('reusable_breakpoints'),'上一轮还能读到哪些断点必须显示');
+assert(fingerprint.includes('上一轮断点全部作废'),'一个断点都读不到时要说清本轮必然整段重建');
+assert(!fingerprint.includes("'前缀一致'"),'旧的「前缀一致」文案会被误当成证据，必须换掉');
+assert(fingerprint.includes('哈希不含断点标记'),'哈希语义变了（剥掉 cache_control），要在面板上写明');
 
 console.log('debug panel layout tests: OK');
