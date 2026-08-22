@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v195-daily-digest-session-switch';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v196-fact-status-and-digest-api';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -922,33 +922,12 @@ function archiveOverviewSeenLabel(value){
   }
   return text.length>=8?shortText(text,16):'最近更新';
 }
-function archiveOverviewFactCount(facts){
-  if(!facts||typeof facts!=='object')return 0;
-  var count=0;
-  Object.keys(facts).forEach(function(key){
-    var value=facts[key];
-    if(Array.isArray(value))count+=value.filter(function(item){return item!==null&&item!==undefined&&String(item).trim()!==''}).length;
-    else if(value!==null&&value!==undefined&&String(value).trim()!=='')count++;
-  });
-  return count;
-}
 function archiveOverviewLoadingState(message){
-  archiveOverviewSetText('archive-overview-status',message||'正在读取档案和事实…');
+  archiveOverviewSetText('archive-overview-status',message||'正在读取事实与向量…');
   archiveOverviewSetText('archive-overview-updated','正在同步');
-  ['archive-type-list','archive-field-list','archive-recent-entities','archive-recent-facts','archive-health-grid'].forEach(function(id){
+  ['archive-field-list','archive-recent-facts','archive-health-grid'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.innerHTML='<div class="empty-state small">加载中...</div>';
   });
-}
-function archiveOverviewRenderTypes(graph){
-  var box=document.getElementById('archive-type-list');if(!box)return;
-  var nodes=Array.isArray(graph&&graph.top_nodes)?graph.top_nodes:[],counts={},order=['person','event','place','thing','mood','topic'];
-  nodes.forEach(function(node){var type=String(node&&node.type||'topic').toLowerCase();if(order.indexOf(type)<0)type='topic';counts[type]=(counts[type]||0)+1});
-  var rows=order.filter(function(type){return counts[type]}),max=rows.reduce(function(value,type){return Math.max(value,counts[type]||0)},1);
-  if(!rows.length){box.innerHTML='<div class="empty-state small">当前没有可展示的小档案</div>';return}
-  box.innerHTML=rows.map(function(type){
-    var count=counts[type]||0,pct=Math.max(6,Math.round(count*100/max));
-    return '<button class="archive-ledger-row" type="button" onclick="openArchiveType(\''+escAttr(type)+'\')"><span class="archive-ledger-label"><i class="archive-type-dot archive-type-'+escAttr(type)+'"></i><b>'+esc(entityTypeLabel(type))+'</b></span><span class="archive-ledger-meter"><i style="width:'+pct+'%"></i></span><strong>'+count+'</strong></button>';
-  }).join('');
 }
 function archiveOverviewRenderFields(facts){
   var box=document.getElementById('archive-field-list');if(!box)return;
@@ -957,15 +936,6 @@ function archiveOverviewRenderFields(facts){
   box.innerHTML=rows.map(function(row){
     var count=numOr(row.count,0),pct=Math.max(6,Math.round(count*100/max)),encoded=encodeURIComponent(String(row.value||''));
     return '<button class="archive-ledger-row archive-field-row" type="button" onclick="openArchiveField(\''+escAttr(encoded)+'\')"><span class="archive-ledger-label"><i>#</i><b>'+esc(row.label||row.value||'未分类')+'</b></span><span class="archive-ledger-meter"><i style="width:'+pct+'%"></i></span><strong>'+count+'</strong></button>';
-  }).join('');
-}
-function archiveOverviewRenderEntities(graph){
-  var box=document.getElementById('archive-recent-entities');if(!box)return;
-  var nodes=(Array.isArray(graph&&graph.top_nodes)?graph.top_nodes.slice():[]).sort(function(a,b){return String(b.last_seen||'').localeCompare(String(a.last_seen||''))||numOr(b.importance,0)-numOr(a.importance,0)}).slice(0,6);
-  if(!nodes.length){box.innerHTML='<div class="empty-state small">当前没有小档案</div>';return}
-  box.innerHTML=nodes.map(function(node){
-    var type=factTypeClass(node.type),key=encodeURIComponent(String(node.key||node.name||'')),factCount=archiveOverviewFactCount(node.facts);
-    return '<button class="archive-record" type="button" onclick="openArchiveEntity(\''+escAttr(key)+'\')"><span class="archive-record-badge fact-badge-'+escAttr(type)+'">'+esc(entityTypeLabel(node.type))+'</span><span class="archive-record-copy"><b>'+esc(node.name||node.key||'未命名实体')+'</b><small>'+esc(archiveOverviewSeenLabel(node.last_seen))+' · 提及 '+numOr(node.mentions,0)+' · 明细 '+factCount+'</small></span><span class="archive-record-arrow" aria-hidden="true">↗</span></button>';
   }).join('');
 }
 function archiveOverviewRenderFacts(facts){
@@ -977,39 +947,33 @@ function archiveOverviewRenderFacts(facts){
     return '<button class="archive-record archive-fact-record" type="button" onclick="openArchiveFact(\''+escAttr(key)+'\')"><span class="archive-record-badge fact-badge-topic">'+esc(factRowCategory(row))+'</span><span class="archive-record-copy"><b>'+esc((factRowPeople(row).slice(0,2).join(' / '))||'未标人物')+'</b><small>'+esc(shortText(factRowText(row)||'暂无正文',72))+'</small></span><span class="archive-record-date">'+esc(row.time||archiveOverviewSeenLabel(row.last_seen))+'</span></button>';
   }).join('');
 }
-function archiveOverviewRenderHealth(graph,facts){
+function archiveOverviewRenderHealth(facts){
   var box=document.getElementById('archive-health-grid');if(!box)return;
-  var nodes=Array.isArray(graph&&graph.top_nodes)?graph.top_nodes:[],nodeTotal=numOr(graph&&graph.counts&&graph.counts.nodes,nodes.length),nodeOk=nodes.filter(function(node){return !!node.has_vector}).length;
   var counts=facts&&facts.counts||{},factTotal=numOr(counts.active,counts.total||0),factOk=numOr(counts.vector_ok,0);
   var attention=numOr(counts.vector_missing,0)+numOr(counts.vector_zero,0)+numOr(counts.vector_dimension_error,0)+numOr(counts.vector_invalid,0),stale=numOr(facts&&facts.stale_vector_count,0);
+  var expired=numOr(counts.expired,0);
   var cards=[
-    {label:'档案向量覆盖',value:nodeOk+'/'+nodeTotal,note:archiveOverviewPercent(nodeOk,nodeTotal)+'%',tone:nodeOk===nodeTotal?'ok':'warn',action:"openArchiveType('all')"},
     {label:'Fact 向量覆盖',value:factOk+'/'+factTotal,note:archiveOverviewPercent(factOk,factTotal)+'%',tone:factOk===factTotal?'ok':'warn',action:"openArchiveFactFilter('', 'ok')"},
     {label:'向量待检查',value:attention,note:attention?'缺失 / 零 / 维度异常':'当前全部正常',tone:attention?'warn':'ok',action:"openArchiveFactFilter('', '')"},
-    {label:'失效向量残留',value:stale,note:stale?'需后续清理':'没有残留',tone:stale?'warn':'ok',action:"openArchiveFactFilter('', '')"}
+    {label:'失效向量残留',value:stale,note:stale?'需后续清理':'没有残留',tone:stale?'warn':'ok',action:"openArchiveFactFilter('', '')"},
+    {label:'已过期 Fact',value:expired,note:expired?'已归档，不再参与召回':'当前没有过期事实',tone:'ok',action:"openArchiveFactFilter('', '')"}
   ];
   box.innerHTML=cards.map(function(card){return '<button class="archive-health-card archive-health-'+card.tone+'" type="button" onclick="'+card.action+'"><span>'+esc(card.label)+'</span><b>'+esc(card.value)+'</b><small>'+esc(card.note)+'</small></button>'}).join('');
 }
 function renderArchiveFactOverview(graph,facts){
   graph=graph||{};facts=facts||{};
-  var nodes=Array.isArray(graph.top_nodes)?graph.top_nodes:[],nodeTotal=numOr(graph.counts&&graph.counts.nodes,nodes.length),nodeOk=nodes.filter(function(node){return !!node.has_vector}).length;
-  var relations=numOr(graph.counts&&graph.counts.relations,(graph.recent_relations||[]).length),counts=facts.counts||{},factTotal=numOr(counts.active,counts.total||0),factOk=numOr(counts.vector_ok,0),vectorPct=archiveOverviewPercent(factOk,factTotal);
-  archiveOverviewSetText('archive-spine-profiles',nodeTotal);
-  archiveOverviewSetText('archive-spine-profiles-note','向量 '+nodeOk+'/'+nodeTotal+' · '+archiveOverviewPercent(nodeOk,nodeTotal)+'%');
-  archiveOverviewSetText('archive-spine-relations',relations);
+  var counts=facts.counts||{},factTotal=numOr(counts.active,counts.total||0),factOk=numOr(counts.vector_ok,0),vectorPct=archiveOverviewPercent(factOk,factTotal);
   archiveOverviewSetText('archive-spine-facts',factTotal);
   archiveOverviewSetText('archive-spine-vectors',vectorPct+'%');
   archiveOverviewSetText('archive-spine-vectors-note',factOk+'/'+factTotal+' 正常');
-  archiveOverviewSetText('archive-overview-consolidated','昨日整理：'+archiveOverviewLast(graph.processed_days));
+  // graph 只剩这一条在用：dev-log 的向量化日期，属于向量健康而不是小档案。
   archiveOverviewSetText('archive-overview-indexed','向量化：'+archiveOverviewLast(graph.indexed_days));
-  archiveOverviewSetText('archive-overview-updated',facts.updated?('更新于 '+facts.updated):'已读取当前档案');
+  archiveOverviewSetText('archive-overview-updated',facts.updated?('更新于 '+facts.updated):'已读取当前事实库');
   var attention=numOr(counts.vector_missing,0)+numOr(counts.vector_zero,0)+numOr(counts.vector_dimension_error,0)+numOr(counts.vector_invalid,0)+numOr(facts.stale_vector_count,0);
-  archiveOverviewSetText('archive-overview-status','已读取 '+nodeTotal+' 张小档案、'+relations+' 条关系和 '+factTotal+' 条 Active facts；'+(attention?('其中 '+attention+' 项需要检查。'):'当前向量健康检查全部正常。'));
-  archiveOverviewRenderTypes(graph);
+  archiveOverviewSetText('archive-overview-status','已读取 '+factTotal+' 条 Active facts；'+(attention?('其中 '+attention+' 项向量需要检查。'):'当前向量健康检查全部正常。'));
   archiveOverviewRenderFields(facts);
-  archiveOverviewRenderEntities(graph);
   archiveOverviewRenderFacts(facts);
-  archiveOverviewRenderHealth(graph,facts);
+  archiveOverviewRenderHealth(facts);
 }
 function archiveOverviewFetch(force){
   var factUrl=ENTITY_FACTS_URL+'?limit=8&offset=0&sort=recent'+(force?'&refresh=1&_t='+Date.now():'');
@@ -1046,7 +1010,7 @@ function loadArchiveFactOverview(force){
     }else{
       archiveOverviewSetText('archive-overview-status','总览暂时读取失败：'+(err&&err.message?err.message:'请稍后重试'));
       archiveOverviewSetText('archive-overview-updated','读取失败');
-      ['archive-type-list','archive-field-list','archive-recent-entities','archive-recent-facts','archive-health-grid'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML='<div class="facts-empty facts-empty-error"><b>暂时读不到</b><span>不会修改任何档案或事实数据。</span></div>'});
+      ['archive-field-list','archive-recent-facts','archive-health-grid'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML='<div class="facts-empty facts-empty-error"><b>暂时读不到</b><span>不会修改任何档案或事实数据。</span></div>'});
     }
     return archiveOverviewData;
   }).finally(function(){if(requestId===archiveOverviewRequestId)archiveOverviewLoading=false});
@@ -1844,18 +1808,23 @@ function loadDailyStatus(force){
   var body=document.getElementById('daily-status-body');
   if(dailyStatusLoading)return;
   dailyStatusLoading=true;
-  if(force&&body&&!body.querySelector('.ds-grid'))body.innerHTML='<div class="empty-state small">读取中...</div>';
+  if(force&&body&&!body.querySelector('.ds-fact'))body.innerHTML='<div class="empty-state small">读取中...</div>';
   dailyStatusFetch().then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
     renderDailyStatus(d);
   }).catch(function(){
-    if(body&&(force||!body.querySelector('.ds-grid')))body.innerHTML='<div class="entity-error">读不到状态。检查网关是否在线、key 是否正确（点刷新会让你重新输 key）。</div>';
+    if(body&&(force||!body.querySelector('.ds-fact')))body.innerHTML='<div class="entity-error">读不到状态。检查网关是否在线、key 是否正确（点刷新会让你重新输 key）。</div>';
   }).then(function(){dailyStatusLoading=false});
-}
-function dsTile(ok,title,date,doneLabel,waitLabel){
-  return '<div class="ds-tile '+(ok?'ds-ok':'ds-wait')+'"><div class="ds-tile-icon" aria-hidden="true">'+(ok?'✓':'·')+'</div><div class="ds-tile-body"><div class="ds-tile-title">'+esc(title)+'</div><div class="ds-tile-sub">'+esc(date||'')+' · '+(ok?esc(doneLabel):esc(waitLabel))+'</div></div></div>';
 }
 function dailyFactStatusLabel(status){
   return ({not_created:'未触发',queued:'已排队',running:'运行中',retry_wait:'等待重试',blocked:'已阻止',published:'已发布',no_content:'无有效内容',superseded:'来源已变化',unavailable:'状态不可用'})[status]||status||'未知';
+}
+function dsText(value){var text=String(value===0?'0':(value||'')).trim();return text||'-'}
+function dsDuration(seconds){
+  var total=Math.max(0,Math.floor(Number(seconds||0)));
+  if(!total)return '-';
+  if(total<60)return total+' 秒';
+  if(total<3600)return Math.floor(total/60)+' 分 '+(total%60)+' 秒';
+  return Math.floor(total/3600)+' 小时 '+Math.floor((total%3600)/60)+' 分';
 }
 function retryDailyFact(targetDate){
   var button=document.getElementById('daily-fact-retry');
@@ -1874,47 +1843,48 @@ function renderDailyFactStatus(f){
   var retryable=['blocked','retry_wait','superseded','not_created','unavailable'].indexOf(status)>=0;
   var stats=f.stats||{};
   var provider=[f.provider_name||f.provider_id||'',f.provider_host||'',f.model||''].filter(Boolean).join(' · ');
+  var attempt=Math.max(0,Number(f.attempt||0));
   var html='<section class="ds-fact ds-fact-'+escAttr(status)+'">';
-  html+='<div class="ds-fact-head"><div><span>昨日 Fact 更新</span><b>'+esc(dailyFactStatusLabel(status))+'</b></div>';
+  html+='<div class="ds-fact-head"><div><span>Fact 提取 · '+esc(f.target_date||'昨日')+'</span><b>'+esc(dailyFactStatusLabel(status))+'</b></div>';
   if(retryable)html+='<button class="btn btn-outline btn-sm" id="daily-fact-retry" type="button" onclick="retryDailyFact(\''+escAttr(f.target_date||'')+'\')">补跑 '+esc(f.target_date||'昨日')+'</button>';
   html+='</div>';
   html+='<div class="ds-fact-progress"><i style="width:'+progress+'%"></i></div>';
-  html+='<div class="ds-fact-stage"><b>'+esc(f.stage||'-')+'</b><span>'+(total?(position+' / '+total):'等待阶段进度')+'</span></div>';
+  html+='<div class="ds-fact-stage"><b>'+esc(f.stage||'尚未进入任何阶段')+'</b><span>'+(total?(position+' / '+total+' 阶段'):'等待阶段进度')+'</span></div>';
+  html+='<div class="ds-fact-metrics">'+
+    '<span><b>'+Number(stats.candidates||0)+'</b>候选</span>'+
+    '<span><b>'+Number(stats.audited||0)+'</b>审计</span>'+
+    '<span><b>'+Number(stats.verified||0)+'</b>复核</span>'+
+    '<span><b>'+Number(stats.final_facts||0)+'</b>最终入库</span>'+
+    '</div>';
   html+='<div class="ds-fact-meta">';
-  html+='<div><span>目标 / 来源</span><b>'+esc(f.target_date||'-')+' · '+esc(f.source_sha_short||'-')+'</b></div>';
+  html+='<div><span>来源快照</span><b>'+esc(dsText(f.source_sha_short))+(f.source_state?' · '+esc(f.source_state):'')+'</b></div>';
   html+='<div><span>当前 API</span><b>'+esc(provider||'尚未调用')+'</b></div>';
-  html+='<div><span>最近断点</span><b>'+esc(f.last_checkpoint_at||f.updated_at||'-')+'</b></div>';
-  html+='<div><span>Generation</span><b>'+esc(f.base_generation_short||'-')+' → '+esc(f.published_generation_short||'-')+'</b></div>';
-  html+='<div><span>结果统计</span><b>候选 '+Number(stats.candidates||0)+' · 审计 '+Number(stats.audited||0)+' · 复核 '+Number(stats.verified||0)+' · 最终 '+Number(stats.final_facts||0)+'</b></div>';
-  if(f.last_error)html+='<div class="ds-fact-error"><span>最近错误</span><b>'+esc(f.last_error)+' '+(f.next_retry_at?'· '+esc(f.next_retry_at):'')+'</b></div>';
-  if(f.commit_sha_short)html+='<div><span>Commit</span><b>'+esc(f.commit_sha_short)+'</b></div>';
-  html+='</div></section>';
+  html+='<div><span>尝试 / 用时</span><b>'+(attempt?('第 '+attempt+' 次'):'未开始')+' · '+esc(dsDuration(f.running_seconds))+'</b></div>';
+  html+='<div><span>最近断点</span><b>'+esc(dsText(f.last_checkpoint_at||f.updated_at))+'</b></div>';
+  html+='<div><span>Generation</span><b>'+esc(dsText(f.base_generation_short))+' → '+esc(dsText(f.published_generation_short))+'</b></div>';
+  html+='<div><span>Commit</span><b>'+esc(dsText(f.commit_sha_short))+'</b></div>';
+  html+='</div>';
+  if(f.last_error)html+='<div class="ds-fact-error"><span>最近错误'+(f.last_error_code?'（'+esc(f.last_error_code)+'）':'')+'</span><b>'+esc(f.last_error)+(f.next_retry_at?' · 下次重试 '+esc(f.next_retry_at):'')+'</b></div>';
+  html+='</section>';
   return html;
 }
 function renderDailyStatus(d){
   var body=document.getElementById('daily-status-body');
   var sub=document.getElementById('status-sub');
   if(!body)return;
-  d=d||{};var e=d.entity||{};
-  if(sub)sub.textContent='更新于 '+(d.now||'-');
+  d=d||{};
   var f=d.fact_daily||{};
+  if(sub)sub.textContent='更新于 '+(d.now||'-');
   var todayTs=Date.parse(String(d.today||'')+'T00:00:00+08:00');
   var successTs=Date.parse(String(f.last_success_date||'')+'T00:00:00+08:00');
   var staleDays=isFinite(todayTs)&&isFinite(successTs)?Math.floor((todayTs-successTs)/86400000):0;
-  var html=staleDays>2?'<div class="ds-stale-alert"><b>小档案已 '+staleDays+' 天未更新</b><span>最近成功：'+esc(f.last_success_date||'-')+'。可在下方补跑断掉的日期。</span></div>':'';
-  html+='<div class="ds-grid">';
-  html+=dsTile(!!e.yesterday_done,'前一天 · 小档案整理',d.yesterday,'已整理','还没整理');
-  html+='</div>';
+  var html=staleDays>2?'<div class="ds-stale-alert"><b>Fact 已 '+staleDays+' 天没有成功提取</b><span>最近成功：'+esc(f.last_success_date||'-')+'。可用下面的补跑按钮拉起断掉的那天。</span></div>':'';
+  if(f.enabled===false)html+='<div class="ds-stale-alert"><b>每日 Fact 任务当前是关闭状态</b><span>网关侧没有启用自动提取，下面显示的是最后一次留下的记录。</span></div>';
   html+=renderDailyFactStatus(f);
-  html+='<div class="ds-note">今天 '+esc(d.today||'')+'：档案整理 '+(e.today_done?'✅':'—')+'。<br>每日整理任务通常在第二天首次聊天时处理，今天显示“—”属正常。</div>';
-  html+='<div class="ds-stats">'+
-    '<div class="ds-stat"><b>'+(e.nodes||0)+'</b><span>小档案</span></div>'+
-    '<div class="ds-stat"><b>'+(e.relations||0)+'</b><span>关系</span></div>'+
-    '</div>';
-  html+='<div class="ds-meta">';
-  html+='<div class="ds-meta-row"><span>档案最近更新</span><b>'+esc(e.updated||e.last_processed||'-')+'</b></div>';
-  if((e.recent_processed||[]).length)html+='<div class="ds-meta-row ds-meta-list"><span>最近整理的日子</span><div class="ds-day-chips">'+e.recent_processed.slice().reverse().map(function(x){return '<i>'+esc(x)+'</i>'}).join('')+'</div></div>';
-  html+='</div>';
+  html+='<div class="ds-note">每日 Fact 任务读取前一天的原始聊天记录，在第二天首次聊天时触发。'+
+    '今天是 '+esc(d.today||'-')+'，上面显示的是 '+esc(f.target_date||d.yesterday||'-')+' 的处理结果；'+
+    '最近一次成功提取：'+esc(f.last_success_date||'尚无记录')+'。<br>'+
+    '状态停在“未触发”多半只是当天还没开始聊，用补跑按钮可以手动拉起。</div>';
   body.innerHTML=html;
 }
 function startDailyStatusRealtime(){
@@ -10989,10 +10959,11 @@ var API_TABS=[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。只影响聊天、Fact 和召回配置。'},
-  {key:'memory',label:'记忆',info:'这一栏管人物与事件档案、Fact 提取和言语要求提取。每日 Fact 任务直接读取原始聊天记录。',groups:[
+  {key:'memory',label:'记忆',info:'这一栏管人物与事件档案、Fact 提取、言语要求提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'}
+    {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'},
+    {key:'chat_digest',label:'截断总结',info:'每次自动截断都会丢掉一批完整轮次。这一步把被丢掉的那批对话压成一段当日短文（单条约 500 字，合并后约 800 字），下一轮直接放进系统区，让助手还记得刚才聊了什么、当时是什么气氛和态度。只在发生截断时调用一次，普通每轮聊天不调用。这一组留空时会自动退回「言语要求提取」的供应商和模型。'}
   ]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},

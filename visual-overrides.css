@@ -370,47 +370,15 @@ body.chat-active .chat-worldbook-list{
 .facts-kicker{color:var(--ck-accent)!important}
 .facts-title-block p{color:var(--ck-muted)!important}
 #tab-graph .graph-hero,
-#tab-status .ds-tile,
-#tab-status .ds-note,
-#tab-status .ds-stat,
-#tab-status .ds-meta{
+#tab-status .ds-note{
   border-color:var(--ck-line)!important;
   background:var(--ck-surface)!important;
   box-shadow:var(--ck-shadow-xs)!important;
 }
 
-/* ---- Status page: memory-line ledger tiles, tokenized status colors ---- */
-#tab-status .ds-tile{border-radius:var(--ck-radius-md)!important}
-#tab-status .ds-note{border-radius:var(--ck-radius-md)!important}
-#tab-status .ds-stat,
-#tab-status .ds-meta{border-radius:var(--ck-radius-md)!important}
-#tab-status .ds-tile-title{color:var(--ck-text)!important}
-#tab-status .ds-tile-sub,
-#tab-status .ds-note,
-#tab-status .ds-stat span,
-#tab-status .ds-meta-row>span{color:var(--ck-muted)!important}
-#tab-status .ds-stat b,
-#tab-status .ds-meta-row>b{color:var(--ck-text)!important}
-#tab-status .ds-stat b{font-family:var(--ck-font-data)!important}
-#tab-status .ds-ok{background:var(--ck-accent-wash)!important;border-color:var(--ck-accent-soft)!important}
-#tab-status .ds-wait{background:#f8f0dd!important;border-color:#ecd6a6!important}
-#tab-status .ds-meta-row{border-bottom-color:var(--ck-line-soft)!important}
-#tab-status .ds-day-chips i{
-  border:1px solid var(--ck-line-soft)!important;
-  border-radius:var(--ck-radius-sm)!important;
-  background:var(--ck-surface-soft)!important;
-  color:var(--ck-muted)!important;
-}
-body.dark #tab-status .ds-tile,
-body.dark #tab-status .ds-note,
-body.dark #tab-status .ds-stat,
-body.dark #tab-status .ds-meta{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
-body.dark #tab-status .ds-tile-title,
-body.dark #tab-status .ds-stat b,
-body.dark #tab-status .ds-meta-row>b{color:var(--ck-text)!important}
-body.dark #tab-status .ds-ok{background:var(--ck-accent-wash)!important;border-color:var(--ck-accent-soft)!important}
-body.dark #tab-status .ds-wait{background:#2b2415!important;border-color:#5c4d2a!important}
-body.dark #tab-status .ds-day-chips i{background:var(--ck-surface-soft)!important;border-color:var(--ck-line)!important;color:var(--ck-muted)!important}
+/* ---- Status page: 只剩每日 Fact 提取，说明卡跟随 token ---- */
+#tab-status .ds-note{border-radius:var(--ck-radius-md)!important;color:var(--ck-muted)!important}
+body.dark #tab-status .ds-note{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
 
 /* ---- Legacy memory pages (category / search / detail): retire the blue-gray ---- */
 /* Detail hero: replace the near-black slab with a quiet paper hero */

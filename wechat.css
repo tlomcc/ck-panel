@@ -1181,35 +1181,7 @@ body.dark #tab-search .search-entry-meta span{background:#303033!important;color
 #tab-graph .graph-actions .btn{border-color:#ddd!important;border-radius:6px!important;background:#fff!important;color:var(--wx-primary-ink)!important;box-shadow:none!important}
 /* 信息网 eg-* 皮肤已回归 style.css 单一来源（Phase 6） */
 
-/* Daily status: semantic state without oversized emoji decoration. */
-#tab-status .ds-grid{
-  gap:1px!important;
-  overflow:hidden!important;
-  border-radius:10px!important;
-  background:var(--wx-line-soft)!important;
-}
-#tab-status .ds-tile{
-  min-height:74px!important;
-  padding:14px!important;
-  border:0!important;
-  border-radius:0!important;
-  background:#fff!important;
-}
-#tab-status .ds-tile-icon{
-  width:28px!important;
-  height:28px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  border-radius:6px!important;
-  background:#e7e7e7!important;
-  color:#888!important;
-  font-size:18px!important;
-  font-weight:600!important;
-}
-#tab-status .ds-ok .ds-tile-icon{background:var(--wx-primary)!important;color:#fff!important}
-#tab-status .ds-tile-title{color:#222!important;font-weight:600!important}
-#tab-status .ds-tile-sub{color:#888!important}
+/* Daily status: 页面只剩每日 Fact 提取，微信皮肤只需拍平说明卡。 */
 #tab-status .ds-note{
   padding:13px 14px!important;
   border:0!important;
@@ -1217,53 +1189,19 @@ body.dark #tab-search .search-entry-meta span{background:#303033!important;color
   background:#fff!important;
   color:#777!important;
 }
-#tab-status .ds-stats{
-  gap:1px!important;
-  overflow:hidden!important;
-  border-radius:10px!important;
-  background:var(--wx-line-soft)!important;
-}
-#tab-status .ds-stat{
-  min-height:72px!important;
-  border:0!important;
-  border-radius:0!important;
-  background:#fff!important;
-}
-#tab-status .ds-stat b{color:#222!important;font-size:21px!important}
-#tab-status .ds-stat span{color:#999!important}
-#tab-status .ds-meta{
-  border:0!important;
-  border-radius:10px!important;
-  background:#fff!important;
-}
-#tab-status .ds-meta-row{border-color:var(--wx-line-soft)!important}
-#tab-status .ds-meta-row > span{color:#888!important}
-#tab-status .ds-meta-row > b{color:#333!important}
-#tab-status .ds-day-chips i{background:#eee!important;color:#777!important}
 
 /* API configuration: clear section tabs, readable help, and flat form groups. */
 /* #tab-apiconfig 全部皮肤已回归 style.css 单一来源（Phase 6） */
 
 body.dark #tab-graph .graph-hero,
-body.dark #tab-status .ds-tile,
-body.dark #tab-status .ds-note,
-body.dark #tab-status .ds-stat,
-body.dark #tab-status .ds-meta{
+body.dark #tab-status .ds-note{
   border-color:#2c2c2e!important;
   background:#1c1c1e!important;
   box-shadow:none!important;
 }
-body.dark #tab-graph .graph-hero h2,
-body.dark #tab-status .ds-tile-title,
-body.dark #tab-status .ds-stat b,
-body.dark #tab-status .ds-meta-row > b{color:#eee!important}
+body.dark #tab-graph .graph-hero h2{color:#eee!important}
 body.dark #tab-graph .graph-hero p,
-body.dark #tab-status .ds-note,
-body.dark #tab-status .ds-tile-sub{color:#999!important}
-body.dark #tab-status .ds-grid,
-body.dark #tab-status .ds-stats{background:#2a2a2c!important}
-body.dark #tab-status .ds-day-chips i{background:#303033!important;color:#999!important}
-body.dark #tab-status .ds-meta-row{border-color:#2a2a2c!important}
+body.dark #tab-status .ds-note{color:#999!important}
 @media(max-width:560px){
   #tab-graph .graph-hero{min-height:100px!important}
 }
