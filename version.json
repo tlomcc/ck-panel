@@ -1,6 +1,17 @@
 {
-  "version": "chat-v202-plus-tray-and-panels",
+  "version": "chat-v203-profile-and-legacy-purge",
   "notes": [
+    "小档案（人物/事件卡片）整条链路彻底删除：网关 entity.py 与 migrate_entity_cards.py 整文件移除，/entity-graph、/entity-backfill、/entity-revectorize 三条接口下线，实时抽取、每日巩固、工作记忆注入和向量化全部清掉；Fact 事实库、召回、每日 Fact worker 不受影响",
+    "网关聊天链路不再注入「最近聊到」小档案工作记忆块",
+    "MCP 后端同步清理：召回不再把 [小档案] 正文和原文证据注入模型，定时任务不再写 entity-profiles.json，/entity-graph 端点和 read_repo 白名单里的两个档案文件一并移除",
+    "API 配置「记忆」页删掉「小档案」供应商组（mem_profile）；网关密钥说明里的档案整理模型/快速模型两项也删了",
+    "「事实与向量」总览页不再请求 /entity-graph：以前它和 Fact 接口并发请求，档案接口一挂整页连 Fact 数据都看不到；现在只读 Fact 接口，右上角改显示「向量 generation」",
+    "删除面板里一直隐藏着的整套记忆分类 / 搜索 / 记忆详情页（含批量导出、批量删除、重命名、编辑 modal），以及它每隔几十秒静默拉一次 MCP 记忆库的定时器。MCP 后端的记忆读写工具全部保留，AI 仍可正常写记忆",
+    "删除「关系网 · 小档案」页（#tab-graph）及其全部渲染代码；Fact 详情复用的底部弹层和下滑关闭手势保留",
+    "删除聊天顶栏那三枚状态条（模型 / 网关 session / 召回状态）：它被两份 CSS 用 !important 永久隐藏，内容在网关页、记忆与缓存页和调试台都看得到",
+    "清掉 852 条指向已删除元素的死 CSS 规则（旧首页、旧信息网浏览器、记忆分类页、实体图谱 explorer 等），script.js 减少约 1700 行，style.css 减少约 3000 行",
+    "删除仓库里两个从未被引用的调试页 test-list-split.html 和 test-plus-pagination.html",
+    "「清理历史」的确认框改用面板共用确认框，不再自带一套旧样式",
     "聊天 ➕ 功能区改成一页平铺 12 个图标：以前分两页，第二页只有 4 个按钮却永远占着两行、下面空一整行；左右翻页箭头早就被另一份 CSS 隐藏、代码却还在维护，圆点还叠着两代样式——分页、箭头、圆点、滑动整套拆掉",
     "➕ 图标大小以前被三个 CSS 文件写成 25 / 24 / 21px 互相压，现在只在一处定义",
     "删掉指向不存在元素的整套 .chat-side-tabs 样式（4 个文件 22 处）和对应的 JS 查询",

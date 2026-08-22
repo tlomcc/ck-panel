@@ -107,7 +107,7 @@ function dailyStatusContext(){
   assert(!dom.byId['daily-status-body'].innerHTML.includes('daily-fact-retry'),'已发布不该出现补跑按钮');
 })();
 
-/* ---- 2. 总览：不再读 graph 的小档案字段 ---- */
+/* ---- 2. 总览：只读 Fact 接口，不再打 /entity-graph ---- */
 (function overviewIsFactOnly(){
   const dom=makeDom();
   const ids=['archive-spine-facts','archive-spine-vectors','archive-spine-vectors-note',
@@ -120,18 +120,16 @@ function dailyStatusContext(){
     archiveOverviewRenderFacts:()=>rendered.push('facts'),
     document:{getElementById:dom.getElementById}};
   vm.createContext(context);
-  ['archiveOverviewSetText','archiveOverviewPercent','archiveOverviewLast','archiveOverviewRenderHealth','renderArchiveFactOverview']
+  ['archiveOverviewSetText','archiveOverviewPercent','archiveOverviewRenderHealth','renderArchiveFactOverview']
     .forEach(name=>vm.runInContext(extractFunction(name),context));
 
-  const graph={top_nodes:[{key:'a',type:'person',has_vector:false}],counts:{nodes:99,relations:88},
-    processed_days:['2026-08-20'],indexed_days:['2026-08-21']};
-  const facts={updated:'2026-08-22',counts:{total:60,active:50,expired:10,vector_ok:47,vector_missing:3},stale_vector_count:1,
+  const facts={updated:'2026-08-22',generation:'gen-2026082201',counts:{total:60,active:50,expired:10,vector_ok:47,vector_missing:3},stale_vector_count:1,
     items:[],facets:{categories:[]}};
-  context.renderArchiveFactOverview(graph,facts);
+  context.renderArchiveFactOverview(facts);
 
   assert.strictEqual(String(dom.byId['archive-spine-facts'].textContent),'50');
   assert.strictEqual(String(dom.byId['archive-spine-vectors'].textContent),'94%');
-  assert.strictEqual(String(dom.byId['archive-overview-indexed'].textContent),'向量化：2026-08-21');
+  assert.strictEqual(String(dom.byId['archive-overview-indexed'].textContent),'向量 generation：gen-20260822');
   const status=String(dom.byId['archive-overview-status'].textContent);
   assert(status.includes('已读取 50 条 Active facts'),'总览状态文案不对：'+status);
   assert(status.includes('其中 4 项向量需要检查'),'待检查项数算错：'+status);
@@ -142,6 +140,9 @@ function dailyStatusContext(){
   assert(health.includes('已过期 Fact')&&health.includes('<b>10</b>'),'过期 Fact 卡不对');
   assert(!health.includes('openArchiveType'),'健康卡还在往信息网跳');
   assert.deepStrictEqual(rendered,['fields','facts']);
+  const fetchSource=extractFunction('archiveOverviewFetch');
+  assert(!/entityGraphFetch/.test(fetchSource),'总览不能再打 /entity-graph');
+  assert(/ENTITY_FACTS_URL/.test(fetchSource),'总览必须只读 Fact 接口');
 })();
 
 /* ---- 3. API 配置：记忆页新增截断总结组 ---- */
@@ -153,8 +154,8 @@ function dailyStatusContext(){
   const memory=context.API_TABS.filter(t=>t.key==='memory')[0];
   assert(memory,'找不到记忆 tab');
   const keys=memory.groups.map(g=>g.key).join(',');
-  assert.strictEqual(keys,'mem_profile,fact_extract,speech_preference_extract,chat_digest');
-  const group=memory.groups[3];
+  assert.strictEqual(keys,'fact_extract,speech_preference_extract,chat_digest');
+  const group=memory.groups[2];
   assert.strictEqual(group.label,'截断总结');
   assert(group.info.includes('言语要求提取'),'说明里要写清没配时会回落到哪一组');
   assert(context.allApiGroups().some(g=>g.key==='chat_digest'),'allApiGroups 里没有 chat_digest');
@@ -179,17 +180,26 @@ function dailyStatusContext(){
   assert(!/\.archive-spine-track/.test(styleCss),'style.css 里仍有已删除的 .archive-spine-track 规则');
 })();
 
-/* ---- 5. index.html：信息网入口下线、总览不再有小档案面板 ---- */
+/* ---- 5. index.html：小档案/信息网、隐藏的记忆分类与搜索整套已删除 ---- */
 (function navAndOverviewMarkup(){
-  const nav=/<button class="side-nav-item[^"]*" data-tab="graph"[^>]*>/.exec(indexHtml);
-  assert(nav,'找不到 graph 导航项');
-  assert(/hidden/.test(nav[0])&&/legacy-nav-entry/.test(nav[0]),'信息网入口没有按遗留项隐藏：'+nav[0]);
-  assert(indexHtml.includes('id="tab-graph"'),'实体详情落地页不能删，事实库还要跳进去');
+  assert(!/data-tab="graph"/.test(indexHtml),'信息网入口必须彻底删掉，不是隐藏');
+  assert(!indexHtml.includes('id="tab-graph"'),'关系网·小档案落地页必须删掉');
+  assert(!/data-tab="categories"/.test(indexHtml)&&!indexHtml.includes('id="tab-categories"'),'隐藏的记忆分类页必须删掉');
+  assert(!/data-tab="search"/.test(indexHtml)&&!indexHtml.includes('id="tab-search"'),'隐藏的记忆搜索页必须删掉');
+  assert(!indexHtml.includes('id="page-detail"'),'隐藏的记忆详情页必须删掉');
+  assert(!indexHtml.includes('legacy-nav-entry'),'不再需要 legacy 导航项这个类');
+  assert(!source.includes('mem_profile'),'小档案供应商组必须从 API 配置里删掉');
+  ['id="newModal"','id="renameModal"','id="editModal"','id="cat-grid"','id="search-input"','id="eg-cards"','id="eg-search"']
+    .forEach(dead=>assert(!indexHtml.includes(dead),'仍残留隐藏子系统 DOM：'+dead));
   ['archive-type-list','archive-recent-entities','archive-overview-consolidated',
    'archive-spine-profiles','archive-spine-relations','查看信息网','最近更新的小档案','档案分布']
     .forEach(dead=>assert(!indexHtml.includes(dead),'总览仍残留：'+dead));
-  assert(indexHtml.includes('id="day-num"'),'day-num 被 script.js:758 无判空引用，不能删');
+  assert(indexHtml.includes('id="day-num"'),'day-num 被启动流程无判空引用，不能删');
   assert(indexHtml.includes('id="archive-spine-facts"')&&indexHtml.includes('id="archive-spine-vectors"'),'总览 spine 缺 fact/向量节点');
+  // Fact 详情复用的底部弹层和手势必须留着
+  assert(indexHtml.includes('id="eg-detail-sheet"')&&indexHtml.includes('id="eg-detail-body"'),'Fact 详情弹层不能删');
+  assert(/function closeEntityDetail\(/.test(source),'Fact 详情的关闭函数不能删');
+  assert(/function egSheetTouchStart\(/.test(source),'Fact 详情的下滑手势不能删');
 })();
 
 console.log('fact-status-and-api-groups: all assertions passed');

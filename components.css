@@ -15,32 +15,7 @@
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--ck-line-strong);border-radius:999px}
 ::-webkit-scrollbar-thumb:hover{background:var(--ck-faint)}
-
-/* ---- 菜单弹层：纸面浮层 + 轻入场 ---- */
-
-.menu-popup{
-  display:none;
-  position:absolute;
-  top:60px;
-  right:16px;
-  min-width:150px;
-  padding:6px;
-  border:1px solid var(--ck-line);
-  border-radius:var(--ck-radius-md);
-  background:var(--ck-surface);
-  box-shadow:var(--ck-shadow-md);
-  z-index:60;
-}
 .menu-popup.show{display:block;animation:ckPopIn .16s var(--ck-ease)}
-.menu-popup-item{
-  padding:12px 16px;
-  border-radius:var(--ck-radius-sm);
-  color:var(--ck-text);
-  font-size:13px;
-  cursor:pointer;
-}
-.menu-popup-item:hover{background:var(--ck-accent-wash)}
-.menu-popup-item:active{background:var(--ck-accent-soft)}
 .menu-popup-item.danger{color:var(--ck-danger)}
 @keyframes ckPopIn{
   from{opacity:0;transform:translateY(-4px)}
@@ -352,12 +327,9 @@ body.dark.chat-active .toast.toast-closable.toast-error .toast-close:hover{
 @media(prefers-reduced-motion:reduce){
   .toast.show{animation:none}
   body.chat-active .toast.toast-error{animation:none}
-}
+}/* ---- 模态框 / 确认框：CK 纸面卡片 ---- */
 
-/* ---- 模态框 / 确认框：CK 纸面卡片 ---- */
-
-.modal-bg,
-.confirm-bg{
+.modal-bg{
   display:none;
   position:fixed;
   inset:0;
@@ -369,7 +341,6 @@ body.dark.chat-active .toast.toast-closable.toast-error .toast-close:hover{
   justify-content:center;
 }
 .modal-bg{z-index:100}
-.confirm-bg{z-index:110}
 .modal-bg.show,
 .confirm-bg.show{display:flex;animation:ckVeilIn .2s var(--ck-ease)}
 .modal-bg.show .modal,
@@ -391,9 +362,7 @@ body.dark.chat-active .toast.toast-closable.toast-error .toast-close:hover{
 }
 body.dark .modal-bg,
 body.dark .confirm-bg{background:rgba(0,0,0,.62)}
-
-.modal,
-.confirm-box{
+.modal{
   position:relative;
   box-sizing:border-box;
   width:min(340px,calc(100vw - 36px));
@@ -467,9 +436,6 @@ body.dark .confirm-bg{background:rgba(0,0,0,.62)}
   font-size:13px;
   line-height:1.55;
 }
-
-.modal-row{display:flex;gap:10px}
-.modal-row>*{flex:1}
 .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
 .modal-btns .btn,
 .confirm-box-btns .btn{
@@ -480,17 +446,6 @@ body.dark .confirm-bg{background:rgba(0,0,0,.62)}
   font-size:12px;
   font-weight:600;
 }
-
-.confirm-box{padding:20px 18px 18px;text-align:center}
-.confirm-box p{
-  margin:0 0 18px;
-  color:var(--ck-text);
-  font-size:15px;
-  font-weight:500;
-  line-height:1.55;
-  text-align:center;
-}
-.confirm-box-btns{display:flex;gap:8px;justify-content:center}
 
 /* ---- 认证门：刻意的入口面，不是普通居中表单 ---- */
 

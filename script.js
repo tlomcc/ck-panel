@@ -2,20 +2,11 @@ var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/mcp';
 var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
-var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v202-plus-tray-and-panels';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v203-profile-and-legacy-purge';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
-try{
-  var storedEntityGraphUrl=localStorage.getItem('entityGraphUrl')||'';
-  if(storedEntityGraphUrl&&storedEntityGraphUrl.indexOf('memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run')<0){
-    ENTITY_GRAPH_URL=storedEntityGraphUrl;
-  }else if(storedEntityGraphUrl){
-    localStorage.removeItem('entityGraphUrl');
-  }
-}catch(e){}
-var PANEL_CACHE_KEY='ckPanelCacheV4';
+try{localStorage.removeItem('entityGraphUrl')}catch(e){}
 var ckDialogState={resolve:null,mode:'confirm',defaultValue:'',required:false,cancelable:true,returnFocus:null};
 function ckOpenDialog(opts){
   opts=opts||{};
@@ -357,14 +348,10 @@ function setPanelAuthLocked(locked,message){
   if(message)setLoading(locked?8:12,message);
 }
 function stopPanelDataTimers(){
-  if(typeof stopMemoryRealtime==='function')stopMemoryRealtime();
-  if(typeof stopEntityGraphRealtime==='function')stopEntityGraphRealtime();
   if(typeof stopDailyStatusRealtime==='function')stopDailyStatusRealtime();
 }
 function resumePanelDataTimers(){
   if(!panelAppStarted)return;
-  if(typeof startMemoryRealtime==='function')startMemoryRealtime();
-  if(currentPanelTab==='graph'&&typeof startEntityGraphRealtime==='function')startEntityGraphRealtime();
   if(currentPanelTab==='status'&&typeof startDailyStatusRealtime==='function')startDailyStatusRealtime();
 }
 function clearPanelAuthentication(failedKey){
@@ -506,27 +493,12 @@ function saveRequestedApiKey(key){
   }catch(e){}
   return stored;
 }
-function requestApiKey(label){return requestApiKeyDialog(label)}
 function requestApiKeyDialog(label){
   clearPanelAuthentication();
   return ensurePanelAuthenticated({forcePrompt:true,label:label||'CK 网关面板 Key'}).then(function(){return true});
 }
 function apiFetch(init){
   return panelDataFetch(API_BASE,init);
-}
-function addEntityGraphParam(url,key,value){
-  return url+(url.indexOf('?')>=0?'&':'?')+key+'='+encodeURIComponent(value);
-}
-function entityGraphUrl(full,force){
-  var url=ENTITY_GRAPH_URL;
-  if(full&&url.indexOf('full=')<0)url=addEntityGraphParam(url,'full','1');
-  if(force&&url.indexOf('refresh=')<0)url=addEntityGraphParam(url,'refresh','1');
-  if(force)url=addEntityGraphParam(url,'_t',Date.now());
-  return url;
-}
-function entityGraphFetch(full,force){
-  var init=force?{cache:'no-store'}:undefined;
-  return panelDataFetch(entityGraphUrl(full,force),init);
 }
 var MCP_TOOL_ALIASES={
   recall_memory:'mcp__memory__recall_memory',
@@ -617,21 +589,11 @@ function mcpResultText(d){
   if(/^FAILED:|^Unknown tool:/i.test(text))throw new Error(text);
   return mcpUnwrapStructuredText(text);
 }
-function rpc(tool,args){var name=mcpToolName(tool);return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:name,arguments:args||{}},id:Date.now()})}).then(function(r){return r.json()}).then(mcpResultText).catch(function(e){console.warn('[MCP]',name,e);return ''})}
-function rpcStrict(tool,args){var name=mcpToolName(tool);return apiFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:name,arguments:args||{}},id:Date.now()})}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(mcpResultText)}
 var catNameMap={timeline:'时间线',details:'详细记录',intimate:'亲密',preferences:'偏好',todo:'待办',rules:'规则',daily:'日常',feelings:'感受',dreams:'梦境',people:'人物',places:'地点',music:'音乐',food:'美食',health:'健康',work:'工作',memory:'记忆',important:'重要',archive:'归档',misc:'杂项',habits:'习惯',goals:'目标',ideas:'想法',quotes:'语录',gifts:'礼物',dates:'纪念日',promises:'承诺',fights:'吵架记录',growth:'成长',kinks:'癖好',body:'身体',toys:'玩具',fantasies:'幻想',aftercare:'事后关怀',boundaries:'边界','todo-panel':'面板待办','todo-memory':'记忆待办'};
 function getCnName(k){return catNameMap[k.toLowerCase()]||''}
-var current=null,allData={},delIdx=null,selectMode=null,selected=new Set(),currentView='active',allTags=new Set(),activeTag='',activeTags=[],editIdx=null,filterTag='',currentPanelTab='chat',returnPanelTab='chat',returnScrollY=0,graphLoaded=false,renderQueued=false,searchFilter='all',singleEntryIdx=null,tagsExpanded=false,detailReturnState=null,lastSingleTapAt=0,suppressClickUntil=0,detailHighlightQuery='';
-var factLibraryData=null,factLibraryItems=[],factLibraryLoading=false,factLibraryRequestId=0,factLibraryOffset=0,factLibraryHasMore=false,factLibrarySearchTimer=null,factLibrarySort='recent',factPendingEntityKey='',factDetailItem=null,factDetailSaving=false;
-var entityGraphData=null,entityGraphView='nodes',entityGraphMode='home',entityGraphSelectedType='',entityGraphSelectedKey='',entityGraphFullOpen=false,entityGraphZoom=1;
-var entityGraphQuery='',entityGraphType='all',entityGraphSort='importance';
-var archiveOverviewData={graph:null,facts:null},archiveOverviewLoading=false,archiveOverviewRequestId=0;
-var entityGraphRefreshTimer=null,entityGraphLoading=false;
-var currentSort='time',currentSortDir='desc';
-var touchState={startX:0,startY:0,swiping:false,moved:false,idx:-1,offset:0,startOffset:0,openIdx:-1,pointerId:null};
-var entityPinchState={active:false,startDist:0,startZoom:1};
-var syncingCategories={};
-var categoryWriteVersions={},categoryWriteChains={};
+var currentPanelTab='chat';
+var factLibraryData=null,factLibraryItems=[],factLibraryLoading=false,factLibraryRequestId=0,factLibraryOffset=0,factLibraryHasMore=false,factLibrarySearchTimer=null,factLibrarySort='recent',factDetailItem=null,factDetailSaving=false;
+var archiveOverviewData={facts:null},archiveOverviewLoading=false,archiveOverviewRequestId=0;
 var EMPTY_CATEGORY_MARKER='[ck-panel-empty]';
 function memoryRawContent(raw){
   if(raw==null)return '';
@@ -655,101 +617,10 @@ function memoryRawContent(raw){
   }
   return normalizeMemoryMarkdownText(text);
 }
-function parseEntries(raw){
-  raw=memoryRawContent(raw);
-  if(!raw||!raw.trim()||raw.trim()===EMPTY_CATEGORY_MARKER)return[];
-  var blocks=raw.split(/^[ \t]*---[ \t]*$/m),entries=[];
-  for(var i=0;i<blocks.length;i++){
-    var rest=blocks[i].trim();if(!rest)continue;
-    var meta={imp:5,time:'',last:'',date:'',tags:'',summary:'',pin:false,resolved:false,archived:false};
-    var lines=rest.split('\n');
-    var first=lines[0]||'';
-    var bodyLines=lines;
-    if(first.charAt(0)==='['){
-      var head=first;
-      var parsedHeadTokens=0;
-      while(head.charAt(0)==='['){
-        var end=head.indexOf(']');
-        if(end<=0)break;
-        var token=head.slice(1,end);
-        var colon=token.indexOf(':');
-        var key=(colon>=0?token.slice(0,colon):token).trim().toLowerCase();
-        var val=(colon>=0?token.slice(colon+1):'').trim();
-        if(key==='pin')meta.pin=!val||/^(true|1|yes|y|on)$/i.test(val);
-        else if(key==='resolved')meta.resolved=!val||/^(true|1|yes|y|on)$/i.test(val);
-        else if(key==='archived')meta.archived=!val||/^(true|1|yes|y|on)$/i.test(val);
-        else if(key==='imp'){var impVal=parseInt(val,10);meta.imp=isNaN(impVal)?5:impVal;}
-        else if(key==='time')meta.time=val;
-        else if(key==='last')meta.last=val;
-        else if(key==='tags')meta.tags=val;
-        else if(key==='summary')meta.summary=val;
-        else break;
-        parsedHeadTokens++;
-        head=head.slice(end+1).replace(/^[ \t]*/,'');
-      }
-      if(parsedHeadTokens>0){
-        bodyLines=lines.slice(1);
-        var leftover=head.trim();
-        if(leftover)bodyLines=[leftover].concat(bodyLines);
-      }
-    }
-    var ct=bodyLines.join('\n').trim();
-    if(ct)entries.push({meta:meta,content:ct});
-  }
-  return entries.sort(function(a,b){return compareEntryTime(a,b,0,0,'desc')});
-}
 function timeAgo(dateStr){if(!dateStr)return'';var d=new Date(dateStr);if(isNaN(d.getTime())){var norm=String(dateStr).replace(/[.\/]/g,'-').replace(/-+/g,'-').replace(/-$/,'');d=new Date(norm)}if(isNaN(d.getTime()))return'';var now=new Date(),diff=Math.floor((now-d)/864e5);if(diff<=0)return'今天';if(diff===1)return'昨天';if(diff<30)return diff+'天前';if(diff<365)return Math.floor(diff/30)+'个月前';return Math.floor(diff/365)+'年前'}
 function daysSince(){return Math.floor((new Date()-new Date(2026,2,26))/864e5)}
 function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function normalizeDateKey(s){return String(s||'').slice(0,10).replace(/[./]/g,'-')}
-function entryDate(e){return (e.meta&&(e.meta.time||e.meta.last||e.meta.date))||''}
-function entryTags(e){return (e.meta&&e.meta.tags?e.meta.tags:'').split(',').map(function(t){return t.trim()}).filter(Boolean)}
-function entryTitle(e){
-  var summary=(e&&e.meta&&e.meta.summary)?String(e.meta.summary).trim():'';
-  if(summary)return summary;
-  var content=String((e&&e.content)||'').trim();
-  return shortText((content.split('\n').find(function(line){return line.trim()})||content),80)||'未命名记忆';
-}
-function syncActiveTag(){activeTag=activeTags.length===1?activeTags[0]:'';filterTag=activeTag}
-function hasActiveTags(){return activeTags.length>0}
-function entryMatchesTags(e,tags){
-  if(!tags||!tags.length)return true;
-  var set=new Set(entryTags(e));
-  return tags.every(function(t){return set.has(t)});
-}
-function decayedScore(e){
-  var days=e.meta.last?Math.floor((new Date()-new Date(e.meta.last))/864e5):0;
-  if(e.meta.pin&&e.meta.imp>=10)return Number.POSITIVE_INFINITY;
-  if(e.meta.pin&&e.meta.imp>=9)return Math.max(e.meta.imp*Math.pow(0.99,days),4);
-  return e.meta.imp*Math.pow(0.99,days);
-}
-function parseEntryTimeValue(s){
-  if(!s)return null;
-  var normalized=String(s).trim().replace(/\./g,'-').replace(/\//g,'-');
-  var t=Date.parse(normalized);
-  return isNaN(t)?normalized:t;
-}
-function compareEntryTimeAsc(ea,eb,a,b){
-  var va=parseEntryTimeValue(entryDate(ea)),vb=parseEntryTimeValue(entryDate(eb));
-  if(va===null&&vb===null)return a-b;
-  if(va===null)return 1;
-  if(vb===null)return -1;
-  if(typeof va==='number'&&typeof vb==='number'){
-    if(va!==vb)return va-vb;
-  }else{
-    var cmp=String(va).localeCompare(String(vb));
-    if(cmp!==0)return cmp;
-  }
-  return a-b;
-}
-function compareEntryTime(ea,eb,a,b,dir){
-  var da=entryDate(ea),db=entryDate(eb);
-  if(!da&&!db)return a-b;
-  if(!da)return 1;
-  if(!db)return -1;
-  var cmp=compareEntryTimeAsc(ea,eb,a,b);
-  return dir==='asc'?cmp:-cmp;
-}
 function init(){
   syncPanelVersionBadge();
   startPanelVersionWatcher();
@@ -785,8 +656,10 @@ function startPanelDataApp(){
   }catch(e){}
   if(!document.getElementById('tab-'+startTab))startTab='chat';
   switchPanelTab(startTab);
-  loadAll();
-  startMemoryRealtime();
+  // 启动遮罩以前要等 MCP 记忆分类全部读完才收；那套隐藏页已经删掉了，
+  // 现在首屏 tab 切好就可以收。别删这两行，否则面板会永远停在启动画面。
+  setLoading(100,'已就绪');
+  hideLoadingSoon(120);
 }
 function setLoading(pct,msg){
   var inner=document.getElementById('loading-inner');
@@ -798,140 +671,12 @@ function hideLoadingSoon(delay){
   var wrap=document.getElementById('loading-wrap');
   if(wrap)setTimeout(function(){wrap.classList.add('done')},delay||120);
 }
-function setSyncStatus(msg){
-  var el=document.getElementById('console-sub');
-  if(el)el.textContent=msg;
-}
-function rebuildTags(){
-  allTags=new Set();
-  Object.keys(allData).forEach(function(cat){
-    (allData[cat].entries||[]).forEach(function(e){
-      if(e.meta&&e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)allTags.add(tag)});
-    });
-  });
-}
-function renderAll(){
-  updateStats();renderGrid();renderTags();renderHomeInsights();
-  if(currentPanelTab==='search'){
-    var q=document.getElementById('search-input').value.trim();
-    if(!q&&!hasActiveTags()&&searchFilter==='all')renderSearchLanding();
-    else onSearch();
-  }
-}
-function scheduleRender(){
-  if(renderQueued)return;
-  renderQueued=true;
-  setTimeout(function(){renderQueued=false;renderAll()},80);
-}
-function loadPanelCache(){
-  if(!isPanelAuthenticated())return false;
-  try{
-    var raw=localStorage.getItem(PANEL_CACHE_KEY);
-    if(!raw)return false;
-    var cached=JSON.parse(raw);
-    if(!cached||cached.version!==4||!cached.data)return false;
-    allData=cached.data;
-    rebuildTags();
-    renderAll();
-    setSyncStatus('已先显示本地缓存，后台更新中');
-    setLoading(18,'已显示缓存，正在更新...');
-    hideLoadingSoon(120);
-    return true;
-  }catch(e){
-    return false;
-  }
-}
-function savePanelCache(){
-  try{
-    localStorage.setItem(PANEL_CACHE_KEY,JSON.stringify({version:4,ts:Date.now(),data:allData}));
-  }catch(e){
-    try{localStorage.removeItem(PANEL_CACHE_KEY)}catch(_e){}
-  }
-}
-function updateStats(){
-  var keys=Object.keys(allData),total=0,active=0,archived=0;
-  keys.forEach(function(k){allData[k].entries.forEach(function(e){total++;if(e.meta.archived)archived++;else active++})});
-  var totalEl=document.getElementById('st-total'),activeEl=document.getElementById('st-active'),archivedEl=document.getElementById('st-archived');
-  if(totalEl)totalEl.textContent=total;
-  if(activeEl)activeEl.textContent=active;
-  if(archivedEl)archivedEl.textContent=archived;
-}
-function flattenEntries(){
-  var list=[];
-  Object.keys(allData).forEach(function(cat){
-    allData[cat].entries.forEach(function(e,idx){
-      var date=entryDate(e);
-      list.push({cat:cat,idx:idx,entry:e,date:date,score:e.meta.imp+(e.meta.pin?2:0)});
-    });
-  });
-  return list;
-}
-function passesSearchFilter(item){
-  var e=item.entry;
-  if(searchFilter==='pinned')return !!e.meta.pin;
-  return true;
-}
-function sortSearchItems(items){
-  return items.sort(function(a,b){
-    return b.date.localeCompare(a.date)||b.score-a.score;
-  });
-}
 function shortText(s,n){
   s=(s||'').replace(/\s+/g,' ').trim();
   return s.length>n?s.slice(0,n)+'...':s;
 }
-function renderMiniList(elId,items,emptyText,reasonFn){
-  var el=document.getElementById(elId);if(!el)return;
-  if(!items.length){el.innerHTML='<div class="empty-state small">'+emptyText+'</div>';return}
-  var html='';
-  items.forEach(function(item){
-    var e=item.entry,reason=reasonFn?reasonFn(item):'';
-    var title=getCnName(item.cat)||item.cat;
-    html+='<div class="mini-item" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'" onclick="openEntry(this.dataset.cat,parseInt(this.dataset.idx,10))"><div class="mini-top"><span>'+esc(title)+'</span><b>'+e.meta.imp+'/10</b></div><div class="mini-title">'+esc(entryTitle(e))+'</div><div class="mini-text">'+esc(shortText(e.content,80))+'</div>'+(reason?'<div class="mini-reason">'+esc(reason)+'</div>':'')+'</div>';
-  });
-  el.innerHTML=html;
-}
-function renderHomeInsights(){
-  var listEl=document.getElementById('today-roll-list');
-  var countEl=document.getElementById('today-roll-count');
-  var focusCountEl=document.getElementById('recent-focus-count');
-  if(!listEl)return;
-  var today=dateKey(new Date()),items=[],seq=0;
-  Object.keys(allData).forEach(function(cat){
-    (allData[cat].entries||[]).forEach(function(e,idx){
-      var d=entryDate(e);
-      if(!e.meta.archived&&d&&normalizeDateKey(d)===today)items.push({cat:cat,idx:idx,entry:e,date:d,order:seq});
-      seq++;
-    });
-  });
-  items.sort(function(a,b){
-    var d=a.date.localeCompare(b.date);
-    return d!==0?d:a.order-b.order;
-  });
-  if(countEl)countEl.textContent=items.length+' 条';
-  if(!items.length){
-    listEl.innerHTML='<div class="empty-state small">今天还没有新增记忆</div>';
-  }else{
-    listEl.innerHTML=items.map(function(item){
-      var e=item.entry,title=getCnName(item.cat)||item.cat;
-      var tags=entryTags(e).slice(0,3).map(function(t){return'<span>#'+esc(t)+'</span>'}).join('');
-      return '<div class="today-roll-item" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'" onclick="openEntry(this.dataset.cat,parseInt(this.dataset.idx,10))"><div class="today-roll-top"><b>'+esc(title)+'</b><small>'+esc(item.date)+'</small></div><div class="today-roll-text">'+esc(shortText(e.content,120))+'</div>'+(tags?'<div class="today-roll-tags">'+tags+'</div>':'')+'</div>';
-    }).join('');
-  }
-  var focus=flattenEntries().filter(function(item){
-    return !item.entry.meta.archived&&item.entry.meta.imp>=8;
-  }).sort(function(a,b){
-    var d=(b.date||'').localeCompare(a.date||'');
-    return d!==0?d:b.score-a.score;
-  }).slice(0,5);
-  if(focusCountEl)focusCountEl.textContent=focus.length+' 条';
-  renderMiniList('recent-focus-list',focus,'暂无高权重更新',function(item){
-    return (item.date?timeAgo(item.date)+' · ':'')+(item.entry.meta.pin?'置顶 · ':'')+'重要性 '+item.entry.meta.imp+'/10';
-  });
-}
 function archiveOverviewSetText(id,value){var el=document.getElementById(id);if(el)el.textContent=value}
 function archiveOverviewPercent(part,total){part=numOr(part,0);total=numOr(total,0);return total?Math.max(0,Math.min(100,Math.round(part*100/total))):0}
-function archiveOverviewLast(list){return Array.isArray(list)&&list.length?String(list[list.length-1]||''):'尚无记录'}
 function archiveOverviewSeenLabel(value){
   var text=String(value||'').trim();
   if(!text)return '最近更新';
@@ -980,14 +725,14 @@ function archiveOverviewRenderHealth(facts){
   ];
   box.innerHTML=cards.map(function(card){return '<button class="archive-health-card archive-health-'+card.tone+'" type="button" onclick="'+card.action+'"><span>'+esc(card.label)+'</span><b>'+esc(card.value)+'</b><small>'+esc(card.note)+'</small></button>'}).join('');
 }
-function renderArchiveFactOverview(graph,facts){
-  graph=graph||{};facts=facts||{};
+function renderArchiveFactOverview(facts){
+  facts=facts||{};
   var counts=facts.counts||{},factTotal=numOr(counts.active,counts.total||0),factOk=numOr(counts.vector_ok,0),vectorPct=archiveOverviewPercent(factOk,factTotal);
   archiveOverviewSetText('archive-spine-facts',factTotal);
   archiveOverviewSetText('archive-spine-vectors',vectorPct+'%');
   archiveOverviewSetText('archive-spine-vectors-note',factOk+'/'+factTotal+' 正常');
-  // graph 只剩这一条在用：dev-log 的向量化日期，属于向量健康而不是小档案。
-  archiveOverviewSetText('archive-overview-indexed','向量化：'+archiveOverviewLast(graph.indexed_days));
+  var generation=String(facts.generation||'');
+  archiveOverviewSetText('archive-overview-indexed','向量 generation：'+(generation?generation.slice(0,12):'尚无记录'));
   archiveOverviewSetText('archive-overview-updated',facts.updated?('更新于 '+facts.updated):'已读取当前事实库');
   var attention=numOr(counts.vector_missing,0)+numOr(counts.vector_zero,0)+numOr(counts.vector_dimension_error,0)+numOr(counts.vector_invalid,0)+numOr(facts.stale_vector_count,0);
   archiveOverviewSetText('archive-overview-status','已读取 '+factTotal+' 条 Active facts；'+(attention?('其中 '+attention+' 项向量需要检查。'):'当前向量健康检查全部正常。'));
@@ -997,45 +742,39 @@ function renderArchiveFactOverview(graph,facts){
 }
 function archiveOverviewFetch(force){
   var factUrl=ENTITY_FACTS_URL+'?limit=8&offset=0&sort=recent'+(force?'&refresh=1&_t='+Date.now():'');
-  return Promise.all([
-    entityGraphFetch(true,!!force),
-    panelDataFetch(factUrl,{cache:'no-store'},{label:'CK 档案与事实总览'})
-  ]).then(function(responses){
-    if(!responses[0].ok)throw new Error('档案接口 HTTP '+responses[0].status);
-    if(!responses[1].ok)throw new Error('事实接口 HTTP '+responses[1].status);
-    return Promise.all([responses[0].json(),responses[1].json()]);
+  return panelDataFetch(factUrl,{cache:'no-store'},{label:'CK 事实与向量总览'}).then(function(response){
+    if(!response.ok)throw new Error('事实接口 HTTP '+response.status);
+    return response.json();
   }).then(function(data){
-    if(!data[0]||!Array.isArray(data[0].top_nodes))throw new Error('档案数据格式无效');
-    if(!data[1]||!Array.isArray(data[1].items)||!data[1].counts)throw new Error('事实数据格式无效');
-    return {graph:data[0],facts:data[1]};
+    if(!data||!Array.isArray(data.items)||!data.counts)throw new Error('事实数据格式无效');
+    return {facts:data};
   });
 }
 function loadArchiveFactOverview(force){
   force=force===true;
   if(archiveOverviewLoading)return Promise.resolve(archiveOverviewData);
-  if(!force&&archiveOverviewData.graph&&archiveOverviewData.facts){renderArchiveFactOverview(archiveOverviewData.graph,archiveOverviewData.facts);return Promise.resolve(archiveOverviewData)}
+  if(!force&&archiveOverviewData.facts){renderArchiveFactOverview(archiveOverviewData.facts);return Promise.resolve(archiveOverviewData)}
   var requestId=++archiveOverviewRequestId;
   archiveOverviewLoading=true;
-  archiveOverviewLoadingState(force?'正在刷新档案与事实总览…':'正在读取档案与事实总览…');
+  archiveOverviewLoadingState(force?'正在刷新事实与向量总览…':'正在读取事实与向量总览…');
   return archiveOverviewFetch(force).then(function(data){
     if(requestId!==archiveOverviewRequestId)return data;
     archiveOverviewData=data;
-    renderArchiveFactOverview(data.graph,data.facts);
+    renderArchiveFactOverview(data.facts);
     return data;
   }).catch(function(err){
     if(requestId!==archiveOverviewRequestId)return archiveOverviewData;
-    if(archiveOverviewData.graph&&archiveOverviewData.facts){
-      renderArchiveFactOverview(archiveOverviewData.graph,archiveOverviewData.facts);
+    if(archiveOverviewData.facts){
+      renderArchiveFactOverview(archiveOverviewData.facts);
       archiveOverviewSetText('archive-overview-status','刷新失败，继续显示上次读取的数据：'+(err&&err.message?err.message:'请稍后重试'));
     }else{
       archiveOverviewSetText('archive-overview-status','总览暂时读取失败：'+(err&&err.message?err.message:'请稍后重试'));
       archiveOverviewSetText('archive-overview-updated','读取失败');
-      ['archive-field-list','archive-recent-facts','archive-health-grid'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML='<div class="facts-empty facts-empty-error"><b>暂时读不到</b><span>不会修改任何档案或事实数据。</span></div>'});
+      ['archive-field-list','archive-recent-facts','archive-health-grid'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML='<div class="facts-empty facts-empty-error"><b>暂时读不到</b><span>不会修改任何事实或向量数据。</span></div>'});
     }
     return archiveOverviewData;
   }).finally(function(){if(requestId===archiveOverviewRequestId)archiveOverviewLoading=false});
 }
-function openArchiveType(type){entityGraphType=String(type||'all');switchPanelTab('graph')}
 function openArchiveFactFilter(field,vectorStatus){
   field=String(field||'');vectorStatus=String(vectorStatus||'');
   var query=document.getElementById('facts-query'),category=document.getElementById('facts-category'),person=document.getElementById('facts-person'),state=document.getElementById('facts-state'),sort=document.getElementById('facts-sort'),clear=document.getElementById('facts-query-clear');
@@ -1052,204 +791,9 @@ function openArchiveFactFilter(field,vectorStatus){
   if(hadData)loadFactLibrary(true,false);
 }
 function openArchiveField(encoded){var field='';try{field=decodeURIComponent(String(encoded||''))}catch(e){field=String(encoded||'')}openArchiveFactFilter(field,'')}
-function openArchiveEntity(encoded){openFactEntity(String(encoded||''))}
 function openArchiveFact(encoded){var key='';try{key=decodeURIComponent(String(encoded||''))}catch(e){key=String(encoded||'')}if(key)openFactDetail(key)}
-function openEntry(cat,idx){
-  if(!allData[cat]||!allData[cat].entries[idx])return;
-  var entry=allData[cat].entries[idx];
-  var fromDetail=document.getElementById('page-detail').classList.contains('active')&&cat===current&&singleEntryIdx===null;
-  var searchInput=document.getElementById('search-input');
-  var highlight=(currentPanelTab==='search'&&searchInput)?searchInput.value.trim():'';
-  detailReturnState=fromDetail?{cat:current,view:currentView,scrollY:window.scrollY||0,filterTag:filterTag,sort:currentSort,sortDir:currentSortDir}:null;
-  openDetail(cat,{view:entry.meta.archived?'archived':'active',singleIdx:idx,fromDetail:fromDetail,highlightQuery:highlight});
-}
-function focusEntry(idx){
-  setTimeout(function(){
-    var el=document.getElementById('entry-'+idx);
-    var text=document.getElementById('text-'+idx);
-    if(!el)return;
-    if(text&&text.classList.contains('collapsed')){
-      text.classList.remove('collapsed');
-      var expand=text.nextElementSibling;
-      if(expand&&expand.classList.contains('entry-expand'))expand.textContent='收起';
-    }
-    el.scrollIntoView({behavior:'smooth',block:'center'});
-    el.classList.add('focus-entry');
-    setTimeout(function(){el.classList.remove('focus-entry')},2200);
-  },180);
-}
-function hideEntityGraph(){
-  switchPanelTab('overview');
-}
-function startEntityGraphRealtime(){
-  stopEntityGraphRealtime();
-  entityGraphRefreshTimer=setInterval(function(){
-    if(currentPanelTab==='graph')loadEntityGraph(false,true,{silent:true,preserveView:true});
-  },30000);
-}
-function stopEntityGraphRealtime(){
-  if(entityGraphRefreshTimer){
-    clearInterval(entityGraphRefreshTimer);
-    entityGraphRefreshTimer=null;
-  }
-}
-function loadEntityGraph(showPanel,force,opts){
-  opts=opts||{};
-  var box=document.getElementById('entity-console');
-  var list=document.getElementById('eg-cards');
-  var detail=document.getElementById('entity-detail');
-  var status=document.getElementById('graph-status');
-  if(showPanel&&currentPanelTab!=='graph'){switchPanelTab('graph',{forceGraphRefresh:!!force});return}
-  if(entityGraphLoading)return;
-  entityGraphLoading=true;
-  if(!opts.preserveView)entityGraphMode='home';
-  if(box)box.classList.add('loading');
-  if(!opts.silent||!entityGraphData){
-    if(status)status.textContent=force?'正在读取最新信息网...':'正在读取信息网...';
-    if(list)list.innerHTML='<div class="empty-state small">加载中...</div>';
-    if(detail)detail.innerHTML='<div class="empty-state small">等待数据...</div>';
-  }
-  entityGraphFetch(true,!!force).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(data){
-    if(!data||typeof data!=='object'||Array.isArray(data)||(!data.counts&&!data.top_nodes&&!data.recent_relations))throw new Error('Invalid graph data');
-    graphLoaded=true;
-    entityGraphData=data;
-    if(box)box.classList.remove('loading');
-    if(status)status.textContent='已读取完整信息网数据。点击节点、关系或上方分类查看明细。';
-    renderEntityGraph(data);
-  }).catch(function(){
-    if(box)box.classList.remove('loading');
-    if(opts.silent&&entityGraphData){
-      if(status)status.textContent='自动更新失败，继续显示上次读取的数据。';
-      return;
-    }
-    if(status)status.textContent='没有读到可用的信息网数据。';
-    if(list)list.innerHTML='<div class="entity-error">暂时读不到。接口当前没有返回可用的节点/关系数据。</div>';
-    if(detail)detail.innerHTML='';
-    var stats=document.getElementById('entity-stats');
-    if(stats)stats.innerHTML='';
-  }).then(function(){
-    entityGraphLoading=false;
-  });
-}
-function graphTerm(s){return String(s||'').trim().toLowerCase()}
-function graphNodeKey(n){return String((n&&n.key)||(n&&n.name)||'').trim()}
-function graphNodeName(n){return String((n&&n.name)||(n&&n.key)||'').trim()}
 function numOr(v,def){var n=Number(v);return isFinite(n)?n:def}
-function findGraphNode(data,key){
-  var term=graphTerm(key),nodes=(data&&data.top_nodes)||[];
-  for(var i=0;i<nodes.length;i++){
-    var n=nodes[i],aliases=n.aliases||[];
-    if(graphTerm(n.key)===term||graphTerm(n.name)===term)return n;
-    for(var j=0;j<aliases.length;j++){if(graphTerm(aliases[j])===term)return n}
-  }
-  return null;
-}
-function relationTouchesNode(r,n){
-  var terms=[graphTerm(n.key),graphTerm(n.name)];
-  return terms.indexOf(graphTerm(r.source))>=0||terms.indexOf(graphTerm(r.target))>=0;
-}
-function entityTypeLabel(type){
-  var map={person:'人',event:'事',place:'地点',thing:'物品/作品',mood:'情绪',topic:'主题'};
-  return map[String(type||'').toLowerCase()]||String(type||'节点');
-}
-function entityFactLabel(key){
-  var map={
-    relation_to_caicai:'关系',closeness:'亲密度',role_tags:'身份',personality:'性格',
-    likes:'喜欢',dislikes:'雷区',habits:'习惯',key_dates:'重要日期',status:'近况',
-    home_location:'常驻地',interaction_notes:'相处要点',
-    when:'时间',when_precision:'时间精度',participants:'当事人',places:'地点',
-    trigger:'起因',process:'经过',outcome:'结果',emotion_impact:'情绪影响',
-    significance:'意义',follow_up:'后续',desc:'说明'
-  };
-  return map[key]||key;
-}
-function entityFactText(value){
-  if(value===null||value===undefined)return '';
-  if(Array.isArray(value)){
-    return value.map(function(item){
-      if(item&&typeof item==='object'){
-        var label=item.label||item.name||'';
-        var date=item.date||item.value||'';
-        return (label&&date)?label+' '+date:(label||date||JSON.stringify(item));
-      }
-      return String(item);
-    }).filter(Boolean).join('、');
-  }
-  if(typeof value==='object')return JSON.stringify(value);
-  return String(value);
-}
-function entityFactsList(facts){
-  if(!facts||typeof facts!=='object'||Array.isArray(facts))return [];
-  var preferred=['relation_to_caicai','closeness','role_tags','personality','likes','dislikes','habits','home_location','key_dates','status','interaction_notes','when','when_precision','participants','places','trigger','process','outcome','emotion_impact','significance','follow_up','desc'];
-  var keys=Object.keys(facts).sort(function(a,b){
-    var ai=preferred.indexOf(a),bi=preferred.indexOf(b);
-    if(ai<0)ai=999;if(bi<0)bi=999;
-    return ai===bi?a.localeCompare(b):ai-bi;
-  });
-  return keys.map(function(key){return {key:key,label:entityFactLabel(key),text:entityFactText(facts[key])}}).filter(function(row){return row.text});
-}
-function renderEntityFacts(facts){
-  var rows=entityFactsList(facts);
-  if(!rows.length)return '';
-  return '<div class="entity-detail-block"><b>结构化事实</b><div class="entity-facts">'+rows.map(function(row){
-    return '<div class="entity-fact"><span>'+esc(row.label)+'</span><p>'+esc(row.text)+'</p></div>';
-  }).join('')+'</div></div>';
-}
-function graphNodePreview(n){
-  if(!n)return '';
-  var profile=String(n.profile||'').trim();
-  if(profile)return profile;
-  var factRows=entityFactsList(n.facts);
-  if(factRows.length)return factRows.slice(0,3).map(function(row){return row.label+'：'+row.text}).join('；');
-  return String(n.summary||'').trim();
-}
-function entityGraphCoverage(data){
-  var nodes=(data&&data.top_nodes)||[];
-  var facts=0,profiles=0,typeCounts={};
-  nodes.forEach(function(n){
-    if(graphNodePreview(n))profiles++;
-    if(entityFactsList(n&&n.facts).length)facts++;
-    var t=String((n&&n.type)||'').toLowerCase()||'node';
-    typeCounts[t]=(typeCounts[t]||0)+1;
-  });
-  return {nodes:nodes.length,profiles:profiles,facts:facts,typeCounts:typeCounts};
-}
-function renderEntitySourceRefs(refs){
-  if(!Array.isArray(refs)||!refs.length)return '';
-  return '<div class="entity-detail-block"><b>来源</b>'+refs.slice(-5).reverse().map(function(ref){
-    var bits=[ref.date,ref.path].filter(Boolean).join(' · ');
-    var body=ref.quote||ref.summary||'';
-    return '<p><strong>'+esc(bits||'source')+'</strong>'+(body?'：'+esc(body):'')+'</p>';
-  }).join('')+'</div>';
-}
-function renderEntityGraph(data){
-  var updated=document.getElementById('entity-updated');
-  var status=document.getElementById('graph-status');
-  var counts=data.counts||{};
-  var coverage=entityGraphCoverage(data);
-  var processed=(data.processed_days||data.indexed_days||[]).length;
-  var empty=(counts.nodes||coverage.nodes||0)===0&&(counts.relations||0)===0;
-  if(updated)updated.textContent=(data.updated?'更新于 '+data.updated:'已读取档案')+(processed?' · 已整理 '+processed+' 天':'');
-  if(status){
-    status.style.display=empty?'':'none';
-    if(empty)status.textContent='读取成功，但还没有档案。通常是当天整理任务还没生成。';
-  }
-  renderEntityStatbar(data,coverage);
-  renderEntityTypeChips(data);
-  renderEntityCards();
-  if(factPendingEntityKey){
-    var pendingKey=factPendingEntityKey;
-    factPendingEntityKey='';
-    setTimeout(function(){
-      if(entityGraphData&&findGraphNode(entityGraphData,pendingKey))openEntityDetail('node',pendingKey);
-    },0);
-  }
-}
 /* ===== Fact / 档案共享只读助手 ===== */
-function factTypeClass(type){
-  var t=String(type||'topic').toLowerCase();
-  return ENTITY_TYPE_ORDER.indexOf(t)>=0?t:'topic';
-}
 function factLibraryFilterValue(id){
   var el=document.getElementById(id);
   return el?String(el.value||'').trim():'';
@@ -1293,38 +837,6 @@ function clearFactSearch(){
 }
 function onFactFilterChange(){loadFactLibrary(true,false)}
 function onFactSortChange(value){factLibrarySort=String(value||'recent');loadFactLibrary(true,false)}
-function renderEntityDetail(data,type,key){
-  if(type==='relation'){
-    var rel=(data.recent_relations||[])[parseInt(key,10)];
-    if(!rel)return '<div class="empty-state small">没有找到这条关系</div>';
-    return '<div class="entity-detail-title">'+esc(rel.source||'')+' <span>→</span> '+esc(rel.target||'')+'</div><div class="entity-detail-sub">'+esc(rel.relation||'关系')+' · '+esc(rel.last_seen||'')+'</div><div class="entity-detail-block"><b>关系说明</b><p>'+esc(rel.detail||'暂无说明')+'</p></div><div class="entity-detail-grid"><span>重要性 '+numOr(rel.importance,5)+'</span><span>出现 '+numOr(rel.count,1)+' 次</span><span>首次 '+esc(rel.first_seen||'')+'</span></div>'+renderEntitySourceRefs(rel.source_refs)+rawEntityBlock(rel);
-  }
-  var node=findGraphNode(data,key)||{key:key,name:key,summary:''};
-  var rels=(data.recent_relations||[]).filter(function(r){return relationTouchesNode(r,node)});
-  var aliases=(node.aliases||[]).filter(Boolean);
-  var evidence=(node.evidence||[]).filter(Boolean);
-  var links=(node.links||[]).filter(Boolean);
-  var profile=String(node.profile||'').trim();
-  var summary=String(node.summary||'').trim();
-  var html='<div class="entity-detail-title">'+esc(graphNodeName(node))+'</div><div class="entity-detail-sub">'+esc(entityTypeLabel(node.type))+' · 重要性 '+numOr(node.importance,5)+' · 提及 '+numOr(node.mentions,0)+'</div>';
-  if(aliases.length)html+='<div class="entity-chip-row">'+aliases.map(function(a){return '<span>'+esc(a)+'</span>'}).join('')+'</div>';
-  html+='<div class="entity-detail-block"><b>一句话画像</b><p>'+esc(profile||summary||'暂无说明')+'</p></div>';
-  html+=renderEntityFacts(node.facts);
-  if(summary&&summary!==profile)html+='<div class="entity-detail-block"><b>旧摘要</b><p>'+esc(summary)+'</p></div>';
-  if(evidence.length)html+='<div class="entity-detail-block"><b>证据 / 原文线索</b>'+evidence.map(function(e){return '<p>'+esc(e)+'</p>'}).join('')+'</div>';
-  html+=renderEntitySourceRefs(node.source_refs);
-  if(links.length)html+='<div class="entity-detail-block"><b>节点内关联</b>'+links.map(function(l){return '<p>'+esc(l.relation||'关联')+' → '+esc(l.target||'')+(l.detail?'：'+esc(l.detail):'')+'</p>'}).join('')+'</div>';
-  if(rels.length)html+='<div class="entity-detail-block"><b>相关关系</b>'+rels.map(function(r){return '<p>'+esc(r.source||'')+' → '+esc(r.target||'')+'：'+esc(r.relation||'')+(r.detail?'，'+esc(r.detail):'')+'</p>'}).join('')+'</div>';
-  return html+rawEntityBlock(node);
-}
-function openFactEntity(encodedKey){
-  var key='';try{key=decodeURIComponent(String(encodedKey||''))}catch(e){key=String(encodedKey||'')}
-  if(!key)return;
-  factPendingEntityKey=key;
-  closeEntityDetail();
-  switchPanelTab('graph',{forceGraphRefresh:false});
-}
-
 /* ===== 独立 Fact 库 v2：动态分类、原文锚点与版本历史 ===== */
 function factStateLabel(state){
   return String(state||'active').toLowerCase()==='expired'?'过期':'有效';
@@ -1582,170 +1094,9 @@ function openFactDetail(factId){
   factDetailSaving=false;factDetailItem=null;body.innerHTML='<div class="fact-detail-loading">正在读取这条 Fact…</div>';body.scrollTop=0;sheet.classList.add('show');document.body.classList.add('eg-sheet-open');
   panelDataFetch(ENTITY_FACTS_URL+'/'+encodeURIComponent(String(factId||'')),{cache:'no-store'},{label:'CK Fact 详情'}).then(function(resp){if(!resp.ok)throw new Error('HTTP '+resp.status);return resp.json()}).then(function(data){if(!data||!data.item)throw new Error('Fact 详情格式无效');factDetailItem=data.item;if(!factDetailItem.generation)factDetailItem.generation=data.generation||'';body.innerHTML=renderFactDetail(factDetailItem);body.scrollTop=0}).catch(function(err){body.innerHTML='<div class="facts-empty facts-empty-error"><b>这条 Fact 暂时读不到</b><span>'+esc(err&&err.message?err.message:'请稍后重试')+'</span></div>'});
 }
-function rawEntityBlock(obj){
-  return '<details class="entity-raw"><summary>结构原文</summary><pre>'+esc(JSON.stringify(obj,null,2))+'</pre></details>';
-}
 /* ===== 信息网 · 可搜索卡片视图（新版） ===== */
 var ENTITY_TYPE_ORDER=['person','event','place','thing','mood','topic'];
 
-function renderEntityStatbar(data,coverage){
-  var bar=document.getElementById('entity-stats');
-  if(!bar)return;
-  var counts=data.counts||{};
-  var pills=[
-    {n:counts.nodes||coverage.nodes||0,l:'档案'},
-    {n:counts.relations||0,l:'关系'},
-    {n:coverage.facts||0,l:'有明细'},
-    {n:counts.orphan_nodes||0,l:'孤立'}
-  ];
-  bar.innerHTML=pills.map(function(p){return '<div class="eg-stat"><b>'+p.n+'</b><span>'+esc(p.l)+'</span></div>'}).join('');
-}
-
-function entityTypeCounts(data){
-  var nodes=(data&&data.top_nodes)||[],map={};
-  nodes.forEach(function(n){
-    var t=String((n&&n.type)||'').toLowerCase();
-    if(ENTITY_TYPE_ORDER.indexOf(t)<0)t='topic';
-    map[t]=(map[t]||0)+1;
-  });
-  return map;
-}
-
-function renderEntityTypeChips(data){
-  var box=document.getElementById('eg-type-filters');
-  if(!box)return;
-  var nodes=(data&&data.top_nodes)||[];
-  var rels=(data&&data.recent_relations)||[];
-  var tc=entityTypeCounts(data);
-  var chips=[{v:'all',l:'全部',n:nodes.length}];
-  ENTITY_TYPE_ORDER.forEach(function(t){if(tc[t])chips.push({v:t,l:entityTypeLabel(t),n:tc[t]})});
-  if(rels.length)chips.push({v:'relation',l:'关系',n:rels.length});
-  var hasCurrent=chips.some(function(c){return c.v===entityGraphType});
-  if(!hasCurrent)entityGraphType='all';
-  box.innerHTML=chips.map(function(c){
-    var on=entityGraphType===c.v?' active':'';
-    return '<button class="eg-chip'+on+'" onclick="setEntityType(\''+escAttr(c.v)+'\')">'+esc(c.l)+'<i>'+c.n+'</i></button>';
-  }).join('');
-}
-
-function setEntityType(t){
-  entityGraphType=t||'all';
-  renderEntityTypeChips(entityGraphData);
-  renderEntityCards();
-}
-function onEntitySearch(v){
-  entityGraphQuery=String(v||'').trim().toLowerCase();
-  var clr=document.getElementById('eg-search-clear');
-  if(clr)clr.style.display=entityGraphQuery?'':'none';
-  renderEntityCards();
-}
-function clearEntitySearch(){
-  var inp=document.getElementById('eg-search');
-  if(inp)inp.value='';
-  entityGraphQuery='';
-  var clr=document.getElementById('eg-search-clear');
-  if(clr)clr.style.display='none';
-  renderEntityCards();
-}
-function onEntitySort(v){
-  entityGraphSort=v||'importance';
-  renderEntityCards();
-}
-
-function entityNodeSearchText(n){
-  var bits=[graphNodeName(n),entityTypeLabel(n.type),n.profile,n.summary];
-  (n.aliases||[]).forEach(function(a){bits.push(a)});
-  entityFactsList(n.facts).forEach(function(f){bits.push(f.label);bits.push(f.text)});
-  return bits.filter(Boolean).join(' ').toLowerCase();
-}
-function entityRelSearchText(r){
-  return [r.source,r.target,r.relation,r.detail].filter(Boolean).join(' ').toLowerCase();
-}
-function entitySortVal(o,kind){
-  if(entityGraphSort==='mentions')return kind==='relation'?(o.count||0):(o.mentions||0);
-  if(entityGraphSort==='recent'){var d=String(o.last_seen||o.first_seen||'').replace(/[^0-9]/g,'');return parseInt(d||'0',10)}
-  return o.importance||0;
-}
-function entityFilteredRows(){
-  var data=entityGraphData;if(!data)return [];
-  var q=entityGraphQuery,rows=[];
-  if(entityGraphType==='relation'){
-    (data.recent_relations||[]).forEach(function(r,i){
-      if(q&&entityRelSearchText(r).indexOf(q)<0)return;
-      rows.push({kind:'relation',raw:r,key:String(i)});
-    });
-    if(entityGraphSort==='name')rows.sort(function(a,b){return String((a.raw&&a.raw.source)||'').localeCompare(String((b.raw&&b.raw.source)||''))});
-    else rows.sort(function(a,b){return entitySortVal(b.raw,'relation')-entitySortVal(a.raw,'relation')});
-    return rows;
-  }
-  (data.top_nodes||[]).forEach(function(n){
-    var t=String(n.type||'').toLowerCase();if(ENTITY_TYPE_ORDER.indexOf(t)<0)t='topic';
-    if(entityGraphType!=='all'&&t!==entityGraphType)return;
-    if(q&&entityNodeSearchText(n).indexOf(q)<0)return;
-    rows.push({kind:'node',raw:n,key:graphNodeKey(n)});
-  });
-  if(entityGraphSort==='name')rows.sort(function(a,b){return graphNodeName(a.raw).localeCompare(graphNodeName(b.raw))});
-  else rows.sort(function(a,b){return entitySortVal(b.raw,'node')-entitySortVal(a.raw,'node')});
-  return rows;
-}
-
-function renderEntityCards(){
-  var box=document.getElementById('eg-cards');
-  var cnt=document.getElementById('eg-count');
-  if(!box)return;
-  if(!box.dataset.egDelegated){
-    box.dataset.egDelegated='1';
-    box.addEventListener('click',function(ev){
-      var card=ev.target&&ev.target.closest?ev.target.closest('.eg-card[data-eg-key]'):null;
-      if(!card||!box.contains(card))return;
-      openEntityDetail(card.getAttribute('data-eg-type')||'node',card.dataset.egKey||'');
-    });
-  }
-  if(!entityGraphData){box.innerHTML='<div class="empty-state small">加载中...</div>';return}
-  var rows=entityFilteredRows();
-  if(cnt)cnt.textContent='显示 '+rows.length+' 张';
-  if(!rows.length){
-    box.innerHTML='<div class="empty-state small">'+(entityGraphQuery?'没有匹配“'+esc(entityGraphQuery)+'”的档案':'这个分类下暂时没有内容')+'</div>';
-    return;
-  }
-  box.innerHTML=rows.map(function(row){
-    return row.kind==='relation'?renderRelationCard(row.raw,row.key):renderEntityCard(row.raw,row.key);
-  }).join('');
-}
-function renderEntityCard(n,key){
-  var t=String(n.type||'').toLowerCase();if(ENTITY_TYPE_ORDER.indexOf(t)<0)t='topic';
-  var preview=graphNodePreview(n)||'暂无说明';
-  var facts=entityFactsList(n.facts).slice(0,4);
-  var chips=facts.map(function(f){return '<span class="eg-fact-chip"><i>'+esc(f.label)+'</i>'+esc(shortText(f.text,16))+'</span>'}).join('');
-  var aliases=(n.aliases||[]).filter(Boolean);
-  var aliasStr=aliases.length?'<span class="eg-card-alias">'+esc(aliases.slice(0,3).join(' / '))+'</span>':'';
-  return '<button class="eg-card eg-type-'+t+'" data-eg-type="node" data-eg-key="'+escAttr(key)+'">'+
-    '<div class="eg-card-top"><span class="eg-badge eg-badge-'+t+'">'+esc(entityTypeLabel(t))+'</span>'+
-    '<span class="eg-card-name">'+esc(graphNodeName(n))+'</span>'+aliasStr+
-    '<span class="eg-card-imp">★'+numOr(n.importance,5)+'</span></div>'+
-    '<div class="eg-card-profile">'+esc(shortText(preview,92))+'</div>'+
-    (chips?'<div class="eg-card-facts">'+chips+'</div>':'')+
-    '</button>';
-}
-function renderRelationCard(r,key){
-  return '<button class="eg-card eg-type-relation" data-eg-type="relation" data-eg-key="'+escAttr(key)+'">'+
-    '<div class="eg-card-top"><span class="eg-badge eg-badge-relation">关系</span>'+
-    '<span class="eg-card-name">'+esc(r.source||'')+' → '+esc(r.target||'')+'</span>'+
-    '<span class="eg-card-imp">★'+numOr(r.importance,5)+'</span></div>'+
-    '<div class="eg-card-profile"><b class="eg-rel-name">'+esc(r.relation||'关系')+'</b> '+esc(shortText(r.detail||'暂无说明',86))+'</div>'+
-    '<div class="eg-card-facts"><span class="eg-fact-chip"><i>最近</i>'+esc(r.last_seen||'-')+'</span><span class="eg-fact-chip"><i>出现</i>'+numOr(r.count,1)+'次</span></div>'+
-    '</button>';
-}
-function openEntityDetail(type,key){
-  if(!entityGraphData)return;
-  var sheet=document.getElementById('eg-detail-sheet');
-  var body=document.getElementById('eg-detail-body');
-  if(!sheet||!body)return;
-  body.innerHTML=renderEntityDetail(entityGraphData,type,key);
-  body.scrollTop=0;
-  sheet.classList.add('show');
-  document.body.classList.add('eg-sheet-open');
-}
 function closeEntityDetail(){
   var sheet=document.getElementById('eg-detail-sheet');
   if(sheet)sheet.classList.remove('show');
@@ -1923,810 +1274,11 @@ function keyCfgFetch(init,opts){
   return panelDataFetch(KEY_CONFIG_URL+'?_t='+Date.now(),init,{label:'CK 网关面板 Key'});
 }
 
-function renderTags(){
-  var bar=document.getElementById('tags-bar');
-  var tagCounts={};
-  Object.keys(allData).forEach(function(cat){
-    allData[cat].entries.forEach(function(e){
-      if(e.meta.tags)e.meta.tags.split(',').forEach(function(t){
-        var tag=t.trim();if(tag){tagCounts[tag]=(tagCounts[tag]||0)+1}
-      })
-    })
-  });
-  var sorted=Object.keys(tagCounts).sort(function(a,b){return tagCounts[b]-tagCounts[a]});
-  var selected=new Set(activeTags);
-  var tagLimit=4;
-  var visible=tagsExpanded?sorted:sorted.slice(0,tagLimit);
-  activeTags.forEach(function(t){if(visible.indexOf(t)<0&&sorted.indexOf(t)>=0)visible.push(t)});
-  if(bar)bar.classList.toggle('expanded',tagsExpanded);
-  var html='';
-  visible.forEach(function(t){html+='<div class="tag-btn'+(selected.has(t)?' active':'')+'" data-tag="'+escAttr(t)+'" onclick="toggleTag(this.dataset.tag)">'+esc(t)+' ('+tagCounts[t]+')</div>'});
-  bar.innerHTML=html||'<div class="empty-state small">暂无标签</div>';
-  var summary=document.getElementById('tag-summary');
-  if(summary)summary.textContent=sorted.length?(activeTags.length?'已选 '+activeTags.length+' 个':(tagsExpanded?'全部 '+sorted.length+' 个':'常用 '+Math.min(tagLimit,sorted.length)+' / '+sorted.length)):'暂无标签';
-  var expandBtn=document.querySelector('.tag-expand-btn');
-  if(expandBtn)expandBtn.textContent=tagsExpanded?'收起标签':'更多标签';
-  var clearBtn=document.getElementById('tag-clear');
-  if(clearBtn){if(activeTags.length)clearBtn.classList.add('show');else clearBtn.classList.remove('show')}
-  renderActiveFilters(null,(document.getElementById('search-input')||{}).value||'');
-}
-
-function toggleTagsExpand(){
-  tagsExpanded=!tagsExpanded;
-  renderTags();
-}
-function switchSearchFilter(mode){
-  mode=mode||'all';
-  searchFilter=(searchFilter===mode&&mode!=='all')?'all':mode;
-  document.querySelectorAll('.search-filter').forEach(function(btn){
-    btn.classList.toggle('active',btn.getAttribute('data-filter')===searchFilter);
-  });
-  onSearch();
-}
-function filterByTag(t){
-  activeTags=t?[t]:[];
-  syncActiveTag();
-  applyTagFilterChange();
-}
-function toggleTag(t){
-  if(!t)activeTags=[];
-  else if(activeTags.indexOf(t)>=0)activeTags=activeTags.filter(function(tag){return tag!==t});
-  else activeTags=activeTags.concat(t);
-  syncActiveTag();
-  applyTagFilterChange();
-}
-function applyTagFilterChange(){
-  if(currentPanelTab!=='search')switchPanelTab('search');
-  renderTags();
-  onSearch();
-  if(current&&document.getElementById('page-detail').classList.contains('active'))renderEntries();
-  window.scrollTo(0,0);
-}
-function getSearchItems(query){
-  var q=(query||'').trim().toLowerCase();
-  var items=flattenEntries().filter(function(item){
-    var e=item.entry,cat=item.cat,cn=getCnName(cat),tagText=e.meta.tags||'';
-    if(!entryMatchesTags(e,activeTags))return false;
-    if(q){
-      var hay=(cat+' '+cn+' '+tagText+' '+e.content).toLowerCase();
-      if(hay.indexOf(q)<0)return false;
-    }
-    return passesSearchFilter(item);
-  });
-  return sortSearchItems(items);
-}
-function searchFilterName(){
-  if(searchFilter==='pinned')return'置顶';
-  return'全部';
-}
-function renderActiveFilters(itemsCount,query){
-  var bar=document.getElementById('active-filter-bar');
-  if(!bar)return;
-  var chips=[];
-  if(query)chips.push('<span class="filter-chip">关键词：'+esc(query)+'</span>');
-  if(searchFilter!=='all')chips.push('<span class="filter-chip">范围：'+esc(searchFilterName())+'</span>');
-  activeTags.forEach(function(t){chips.push('<button class="filter-chip removable" data-tag="'+escAttr(t)+'" onclick="toggleTag(this.dataset.tag)">#'+esc(t)+' ×</button>')});
-  if(!chips.length){bar.innerHTML='';return}
-  var count=itemsCount===null||itemsCount===undefined?'':'<b>'+itemsCount+' 条</b>';
-  bar.innerHTML='<div class="active-filter-main"><span>当前筛选</span>'+chips.join('')+'</div>'+count;
-}
-function renderSearchLanding(){
-  var list=flattenEntries();
-  document.getElementById('search-results').innerHTML='<div class="search-empty-card"><div class="search-empty-title">输入关键词开始搜索</div><div class="search-empty-sub">也可以点上方标签缩小范围</div></div>';
-  var count=document.getElementById('search-count');
-  if(count)count.textContent='共 '+list.length+' 条记忆';
-  renderActiveFilters(null,'');
-}
-function renderSearchResultItem(item,query){
-  var e=item.entry;
-  var tags=(e.meta.tags||'').split(',').map(function(t){return t.trim()}).filter(Boolean).slice(0,3);
-  var meta=[];
-  meta.push(e.meta.imp+'/10');
-  if(e.meta.pin)meta.push('置顶');
-  if(item.date)meta.push(timeAgo(item.date));
-  tags.forEach(function(t){meta.push('#'+t)});
-  var title=entryTitle(e);
-  var text=shortText(e.content,150);
-  var body=query?highlightText(text,query):esc(text);
-  var textHtml=(e.meta&&String(e.meta.summary||'').trim())?'<div class="search-result-text">'+body+'</div>':'';
-  return '<div class="search-result-item search-entry" data-cat="'+escAttr(item.cat)+'" data-idx="'+item.idx+'"><div class="search-entry-main" onclick="openEntry(this.parentNode.dataset.cat,parseInt(this.parentNode.dataset.idx,10))"><div class="search-result-cat">'+esc(item.cat)+'</div><div class="search-result-title">'+esc(title)+'</div>'+textHtml+'<div class="search-entry-meta">'+meta.map(function(m){return'<span>'+esc(m)+'</span>'}).join('')+'</div></div><button class="open-entry-btn" onclick="openEntry(this.parentNode.dataset.cat,parseInt(this.parentNode.dataset.idx,10))">打开</button></div>';
-}
-function renderSearchResults(items,query){
-  var title=query?'关键词：'+query:'筛选结果';
-  var count=document.getElementById('search-count');
-  if(count)count.textContent=title+' · '+items.length+' 条';
-  renderActiveFilters(items.length,query);
-  if(!items.length){document.getElementById('search-results').innerHTML='<div class="empty-state">没有找到匹配记忆</div>';return}
-  var html='<div class="search-result-head"><span>明细</span><b>'+items.length+'</b></div>';
-  items.slice(0,80).forEach(function(item){html+=renderSearchResultItem(item,query)});
-  if(items.length>80)html+='<div class="empty-state small">只显示前 80 条，请加关键词缩小范围</div>';
-  document.getElementById('search-results').innerHTML=html;
-}
-function onSearch(){
-  var q=(document.getElementById('search-input').value||'').trim().toLowerCase();
-  var cb=document.getElementById('search-clear');if(q)cb.classList.add('show');else cb.classList.remove('show');
-  document.getElementById('search-results').style.display='block';
-  if(!q&&!hasActiveTags()&&searchFilter==='all'){renderSearchLanding();return}
-  renderSearchResults(getSearchItems(q),q);
-}
-function clearSearch(){document.getElementById('search-input').value='';document.getElementById('search-clear').classList.remove('show');activeTags=[];syncActiveTag();searchFilter='all';document.querySelectorAll('.search-filter').forEach(function(btn){btn.classList.toggle('active',btn.getAttribute('data-filter')==='all')});renderTags();renderSearchLanding();renderGrid()}
-function highlightText(text,query){
-  if(!query)return esc(text);
-  var escaped=esc(text);
-  try{
-    var re=new RegExp('('+query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
-    // Split off HTML entities (&amp; &lt; ...) so highlighting never lands inside one and corrupts it.
-    return escaped.split(/(&[a-zA-Z]+;|&#[0-9]+;)/).map(function(seg,i){
-      if(i%2===1)return seg; // entity segment, leave untouched
-      return seg.replace(re,'<span class="highlight">$1</span>');
-    }).join('');
-  }catch(e){return escaped}
-}
-function renderGrid(){
-  var keys=Object.keys(allData);
-  var q=(document.getElementById('search-input').value||'').toLowerCase();
-  var filtered=keys.filter(function(k){
-    var d=allData[k];
-    if(hasActiveTags()){if(!d.entries.some(function(e){return entryMatchesTags(e,activeTags)}))return false}
-    if(!q)return true;
-    if(k.toLowerCase().indexOf(q)>=0)return true;
-    return d.entries.some(function(e){return e.content.toLowerCase().indexOf(q)>=0});
-  });
-  filtered.sort(function(a,b){
-    var da=allData[a].entries.length,db=allData[b].entries.length;
-    if(db!==da)return db-da;
-    return a.localeCompare(b);
-  });
-  var groups=[
-    {key:'us',title:'我们 / us',items:[]},
-    {key:'her',title:'她 / her',items:[]},
-    {key:'sys',title:'系统 / sys',items:[]},
-    {key:'todo',title:'待办 / todo',items:[]},
-    {key:'chat',title:'聊天 / chat',items:[]},
-    {key:'tech',title:'技术 / tech',items:[]},
-    {key:'other',title:'其他',items:[]}
-  ];
-  var groupMap={us:groups[0],her:groups[1],sys:groups[2],todo:groups[3],chat:groups[4],tech:groups[5],other:groups[6]};
-  filtered.forEach(function(k){
-    var key='other';
-    if(k.indexOf('us-')===0)key='us';
-    else if(k.indexOf('her-')===0)key='her';
-    else if(k.indexOf('sys-')===0)key='sys';
-    else if(k.indexOf('todo-')===0)key='todo';
-    else if(k.indexOf('chat-log')===0)key='chat';
-    else if(k.indexOf('tech-')===0||k.indexOf('dev-')===0)key='tech';
-    groupMap[key].items.push(k);
-  });
-  var html='';
-  groups.forEach(function(group){
-    if(!group.items.length)return;
-    var section='<section class="cat-section"><div class="cat-section-head"><span>'+esc(group.title)+'</span><small>'+group.items.length+' 类</small></div><div class="cat-section-list">';
-    group.items.forEach(function(k){
-      section+=renderCategoryCard(k);
-    });
-    html+=section+'</div></section>';
-  });
-  document.getElementById('cat-grid').innerHTML=filtered.length?html:'<div class="empty-state">无结果</div>';
-}
-function renderCategoryCard(k){
-  var d=allData[k],ac=0,arc=0,chars=0,high=0,last='';
-  d.entries.forEach(function(e){
-    if(e.meta.archived)arc++;else{ac++;chars+=e.content.length}
-    if(e.meta.imp>=8||e.meta.pin)high++;
-    var dt=entryDate(e);
-    if(dt&&dt>last)last=dt;
-  });
-  var cn=getCnName(k);
-  var prefix=k.indexOf('-')>0?k.split('-')[0]:k.slice(0,2);
-  var detail=(cn?cn+' · ':'')+(last?timeAgo(last):'无日期')+(arc>0?' · 归档 '+arc:'');
-  return '<div class="cat-card" data-cat="'+escAttr(k)+'" onclick="openDetail(this.dataset.cat)"><div class="cat-card-body"><div class="cat-left"><div class="cat-mark">'+esc(prefix)+'</div><div class="cat-main"><div class="cat-card-name">'+esc(k)+'</div><div class="cat-card-detail">'+esc(detail)+'</div></div></div><div class="cat-card-right"><div class="cat-card-num">'+ac+'</div><div class="cat-card-detail">'+high+' 重点 · '+chars+' 字</div></div></div></div>';
-}
-function openDetail(k,opts){
-  opts=opts||{};
-  document.body.classList.remove('chat-active');
-  chatToggleSessions(false,true);
-  chatToggleSettings(false,true);
-  chatTogglePlus(false);
-  if(!opts.fromDetail)detailReturnState=null;
-  if(document.getElementById('page-memory').classList.contains('active')){
-    returnPanelTab=opts.fromTab||currentPanelTab||'overview';
-    returnScrollY=window.scrollY||0;
-  }
-  current=k;selectMode=null;selected.clear();currentView=opts.view||'active';
-  singleEntryIdx=typeof opts.singleIdx==='number'?opts.singleIdx:null;
-  detailHighlightQuery=singleEntryIdx!==null?(opts.highlightQuery||''):'';
-  if(!opts.keepFilter)filterTag='';
-  document.getElementById('select-bar').classList.remove('show');
-  document.getElementById('menu-popup').classList.remove('show');
-  document.getElementById('d-title').textContent=k;
-  document.getElementById('d-sub').textContent=singleEntryIdx!==null?'单条记忆 · '+countInfo():countInfo();
-  document.getElementById('page-detail').classList.toggle('single-entry-view',singleEntryIdx!==null);
-  updateSwitchCounts();updateSortButtons();renderEntries();
-  document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(currentView==='active'&&i===0)||(currentView==='archived'&&i===1))});
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
-  document.getElementById('page-detail').classList.add('active');
-  if(opts.focusIdx!==undefined)focusEntry(opts.focusIdx);
-  else window.scrollTo(0,0);
-}
-function countInfo(){
-  var d=allData[current],a=0,ar=0;
-  d.entries.forEach(function(e){if(e.meta.archived)ar++;else a++});
-  return '活跃 '+a+' · 归档 '+ar;
-}
-function updateSwitchCounts(){
-  var d=allData[current],a=0,ar=0;
-  d.entries.forEach(function(e){if(e.meta.archived)ar++;else a++});
-  document.getElementById('active-count').textContent='('+a+')';
-  document.getElementById('archived-count').textContent='('+ar+')';
-}
-function switchView(v){
-  currentView=v;
-  document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(v==='active'&&i===0)||(v==='archived'&&i===1))});
-  renderEntries();
-}
-function renderPinnedCard(i,e){
-  var tags=entryTags(e).slice(0,2);
-  var meta=['重要性 '+e.meta.imp+'/10'];
-  if(entryDate(e))meta.push(timeAgo(entryDate(e)));
-  tags.forEach(function(t){meta.push('#'+t)});
-  var click=selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')';
-  var checked=selectMode&&selected.has(i);
-  var select=selectMode?'<div class="select-circle'+(checked?' checked':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
-  return '<article class="pinned-card" onclick="'+click+'">'+select+'<div class="pinned-card-main"><div class="pinned-card-text">'+esc(e.content)+'</div><div class="pinned-card-meta">'+meta.map(function(m){return'<span>'+esc(m)+'</span>'}).join('')+'</div></div><button class="pinned-card-pin" onclick="event.stopPropagation();quickPin('+i+')" aria-label="取消置顶">★</button></article>';
-}
-function renderEntryCard(i,e,isLong,compact){
-  var circle=selectMode?'<div class="select-circle'+(selected.has(i)?' checked':'')+(selectMode==='delete'?' select-danger':'')+'" onclick="event.stopPropagation();toggleSelect('+i+')"></div>':'';
-  var metaHtml='<div class="entry-meta">';
-  if(!compact&&e.meta.pin)metaHtml+='<span class="entry-badge pin">★ 置顶</span>';
-  if(e.meta.imp>=7)metaHtml+='<span class="entry-badge imp-high">'+e.meta.imp+'/10</span>';
-  else metaHtml+='<span class="entry-badge">'+e.meta.imp+'/10</span>';
-  if(!compact&&e.meta.tags)e.meta.tags.split(',').forEach(function(t){var tag=t.trim();if(tag)metaHtml+='<span class="entry-badge">#'+esc(tag)+'</span>'});
-  if(entryDate(e))metaHtml+='<span class="entry-badge entry-date-badge">'+timeAgo(entryDate(e))+'</span>';
-  if(!compact){
-    var days=e.meta.last?Math.floor((new Date()-new Date(e.meta.last))/864e5):0;var score;if(e.meta.pin&&e.meta.imp>=10){score='∞'}else if(e.meta.pin&&e.meta.imp>=9){score=Math.max(e.meta.imp*Math.pow(0.99,days),4).toFixed(2)}else{score=(e.meta.imp*Math.pow(0.99,days)).toFixed(2)}var scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' = '+score;
-    if(e.meta.pin&&e.meta.imp>=10)scoreDetail='imp:10 [pin] \u4e0d\u8870\u51cf';
-    else if(e.meta.pin&&e.meta.imp>=9)scoreDetail='imp:'+e.meta.imp+' \u00d7 0.99^'+days+' (\u4fdd\u5e954)';
-    metaHtml+='<span class="entry-badge score-badge" style="color:#e67e22;position:relative;cursor:pointer" data-score="'+scoreDetail+'">⚡'+score+'</span>';
-  }
-  metaHtml+='</div>';
-  var actionHtml='<div class="entry-actions"><div class="entry-action-btn'+(e.meta.pin?' active':'')+'" onclick="event.stopPropagation();quickPin('+i+')">★</div><div class="entry-action-btn" onclick="event.stopPropagation();showEdit('+i+')">编辑</div>';
-  if(compact)actionHtml+='<div class="entry-action-btn open" onclick="event.stopPropagation();openEntry(current,'+i+')">打开</div>';
-  actionHtml+='<div class="entry-action-btn danger" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
-  actionHtml+='</div>';
-  var html='<div class="entry-wrap'+(compact?' pinned-entry-wrap':'')+(selectMode&&selected.has(i)?' selected':'')+'"><div class="entry-del-bg" onpointerdown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onclick="event.stopPropagation();showDelConfirm('+i+')">删除</div>';
-  var swipeAttrs=window.PointerEvent?' onpointerdown="ps(event,'+i+')" onpointermove="pm(event,'+i+')" onpointerup="pe(event,'+i+')" onpointercancel="pe(event,'+i+')"':' ontouchstart="ts(event,'+i+')" ontouchmove="tm(event,'+i+')" ontouchend="te(event,'+i+')"';
-  var itemAttrs=compact?' onclick="'+(selectMode?'toggleSelect('+i+')':'openEntry(current,'+i+')')+'"':swipeAttrs+' onclick="onEntryCardClick('+i+')"';
-  var textClick='';
-  var contentHtml=(singleEntryIdx!==null&&detailHighlightQuery)?highlightText(e.content,detailHighlightQuery):esc(e.content);
-  html+='<div class="entry-item" id="entry-'+i+'"'+itemAttrs+'>';
-  html+=circle+'<div class="entry-card-main"><div class="entry-text'+(isLong?' collapsed':'')+'" id="text-'+i+'"'+textClick+'>'+contentHtml+'</div>';
-  if(isLong)html+='<div class="entry-expand" onclick="event.stopPropagation();if(!selectMode)openEntry(current,'+i+')">查看正文</div>';
-  html+=metaHtml+actionHtml+'</div></div></div>';
-  return html;
-}
-function entryVisibleInDetail(e,i){
-  if(singleEntryIdx!==null&&i!==singleEntryIdx)return false;
-  if(currentView==='active'&&e.meta.archived)return false;
-  if(currentView==='archived'&&!e.meta.archived)return false;
-  if(singleEntryIdx===null&&filterTag&&!(e.meta.tags&&e.meta.tags.indexOf(filterTag)>=0))return false;
-  return true;
-}
-function sortEntryIndexes(idxs,entries){
-  return idxs.sort(function(a,b){
-    var ea=entries[a],eb=entries[b],cmp=0;
-    if(currentSort==='time'){
-      return compareEntryTime(ea,eb,a,b,currentSortDir);
-    }else if(currentSort==='weight'){
-      var sa=decayedScore(ea),sb=decayedScore(eb);
-      if(sa===sb)return compareEntryTime(ea,eb,a,b,currentSortDir);
-      else cmp=sa<sb?-1:1;
-    }
-    return currentSortDir==='asc'?cmp:-cmp;
-  });
-}
-function renderEntries(){
-  var entries=allData[current].entries,pinned=[],normal=[];
-  for(var i=0;i<entries.length;i++){
-    var e=entries[i];
-    if(!entryVisibleInDetail(e,i))continue;
-    if(singleEntryIdx===null&&e.meta.pin)pinned.push(i);
-    else normal.push(i);
-  }
-  normal=sortEntryIndexes(normal,entries);
-  var html='',count=pinned.length+normal.length;
-  if(pinned.length){
-    html+='<section class="pinned-window"><div class="pinned-window-head"><div><span>置顶</span><small>当前分类</small></div><b>'+pinned.length+' 条</b></div><div class="pinned-window-track">';
-    pinned.forEach(function(i){html+=renderPinnedCard(i,entries[i])});
-    html+='</div></section>';
-  }
-  if(pinned.length&&normal.length)html+='<div class="entry-section-head"><span>普通记忆</span><small>'+normal.length+' 条</small></div>';
-  normal.forEach(function(i){html+=renderEntryCard(i,entries[i],entries[i].content.length>100,false)});
-  document.getElementById('d-entries').innerHTML=count?html:'<div class="empty-state">暂无条目</div>';
-  updateSwitchCounts();
-}
-function quickPin(i){
-  var cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries),entry=next[i];
-  if(!entry)return;
-  entry.meta.pin=!entry.meta.pin;
-  var version=nextCategoryVersion(cat);
-  setCategoryEntries(cat,next);
-  toast((entry.meta.pin?'已置顶':'已取消置顶')+'，后台同步中');
-  queueEntryUpdate(cat,i,entry,{version:version,rollback:before,failMsg:'同步失败，已回滚'});
-}
-function startSwipeAt(x,y,i){
-  if(touchState.openIdx!==-1&&touchState.openIdx!==i)closeSwipe(touchState.openIdx);
-  touchState.startX=x;touchState.startY=y;
-  touchState.swiping=false;touchState.moved=false;touchState.idx=i;touchState.offset=touchState.openIdx===i?86:0;touchState.startOffset=touchState.offset;
-}
-function moveSwipeAt(x,y,i,e){
-  var dx=touchState.startX-x;
-  var dy=Math.abs(y-touchState.startY);
-  if(!touchState.swiping&&dy>Math.abs(dx))return;
-  if(!touchState.swiping&&Math.abs(dx)<15)return;
-  touchState.swiping=true;touchState.moved=true;
-  if(e&&e.preventDefault)e.preventDefault();
-  var el=document.getElementById('entry-'+i);
-  if(!el)return;
-  var wrap=el.closest('.entry-wrap');
-  if(wrap)wrap.classList.add('swiping');
-  var offset=Math.max(0,Math.min(86,touchState.startOffset+dx));
-  touchState.offset=offset;
-  el.style.transform='translate3d(-'+offset+'px,0,0)';
-  el.style.transition='none';
-}
-function endSwipe(i){
-  if(selectMode||!touchState.moved)return;
-  var el=document.getElementById('entry-'+i);
-  var wrap=el?el.closest('.entry-wrap'):null;
-  var open=touchState.offset>=46;
-  if(el){
-    el.style.transition='transform 0.22s cubic-bezier(.2,.8,.2,1)';
-    el.style.transform=open?'translate3d(-86px,0,0)':'translate3d(0,0,0)';
-  }
-  if(wrap){
-    wrap.classList.remove('swiping');
-    wrap.classList.toggle('swiped',open);
-  }
-  touchState.openIdx=open?i:-1;
-  touchState.swiping=false;
-  suppressClickUntil=Date.now()+280;
-  setTimeout(function(){touchState.moved=false},300);
-}
-function ts(e,i){
-  if(selectMode||e.touches.length!==1)return;
-  startSwipeAt(e.touches[0].clientX,e.touches[0].clientY,i);
-}
-function tm(e,i){
-  if(selectMode||e.touches.length!==1)return;
-  moveSwipeAt(e.touches[0].clientX,e.touches[0].clientY,i,e);
-}
-function te(e,i){endSwipe(i)}
-function ps(e,i){
-  if(selectMode||(e.pointerType==='mouse'&&e.button!==0))return;
-  touchState.pointerId=e.pointerId;
-  if(e.currentTarget&&e.currentTarget.setPointerCapture){
-    try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_e){}
-  }
-  startSwipeAt(e.clientX,e.clientY,i);
-}
-function pm(e,i){
-  if(selectMode||touchState.pointerId!==e.pointerId)return;
-  moveSwipeAt(e.clientX,e.clientY,i,e);
-}
-function pe(e,i){
-  if(touchState.pointerId!==null&&touchState.pointerId!==e.pointerId)return;
-  endSwipe(i);
-  touchState.pointerId=null;
-}
-function onEntryCardClick(i){
-  if(selectMode){toggleSelect(i);return}
-  if(touchState.openIdx===i){closeSwipe(i);return}
-  if(singleEntryIdx===null&&!touchState.moved)openEntry(current,i);
-}
-function showEdit(i){
-  editIdx=i;var e=allData[current].entries[i];
-  document.getElementById('edit-content').value=e.content;
-  var sel=document.getElementById('edit-imp');sel.innerHTML='';
-  for(var n=1;n<=10;n++)sel.innerHTML+='<option value="'+n+'"'+(e.meta.imp===n?' selected':'')+'>'+n+'</option>';
-  document.getElementById('edit-pin').value=e.meta.pin?'1':'0';
-  document.getElementById('edit-tags').value=e.meta.tags||'';
-  document.getElementById('edit-archived').value=e.meta.archived?'1':'0';
-  document.getElementById('editModal').classList.add('show');
-}
-function hideEdit(){document.getElementById('editModal').classList.remove('show');editIdx=null}
-function saveEdit(){
-  if(editIdx===null)return;
-  var cat=current,idx=editIdx,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries),e=next[idx];
-  if(!e)return;
-  var nc=document.getElementById('edit-content').value.trim();
-  if(nc)e.content=nc;
-  e.meta.imp=parseInt(document.getElementById('edit-imp').value);
-  e.meta.pin=document.getElementById('edit-pin').value==='1';
-  e.meta.tags=document.getElementById('edit-tags').value.trim();
-  e.meta.archived=document.getElementById('edit-archived').value==='1';
-  var version=nextCategoryVersion(cat);
-  hideEdit();
-  setCategoryEntries(cat,next);
-  toast('已保存，后台同步中');
-  queueEntryUpdate(cat,idx,e,{version:version,rollback:before,failMsg:'保存同步失败，已回滚'});
-}
-function showDelConfirm(i){
-  suppressClickUntil=0;
-  delIdx=i;
-  var btn=document.querySelector('#confirmDel .btn-red');
-  if(btn){btn.disabled=false;btn.textContent='删除'}
-  document.getElementById('confirmDel').classList.add('show');
-}
-function cancelDel(){document.getElementById('confirmDel').classList.remove('show');delIdx=null;resetSwipes()}
-function confirmDel(){
-  if(delIdx===null||!allData[current]||!allData[current].entries[delIdx]){cancelDel();return}
-  var idx=delIdx,cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries);
-  next.splice(idx,1);
-  var btn=document.querySelector('#confirmDel .btn-red');
-  if(btn){btn.disabled=false;btn.textContent='删除'}
-  document.getElementById('confirmDel').classList.remove('show');delIdx=null;
-  resetSwipes();
-  var version=nextCategoryVersion(cat);
-  setCategoryEntries(cat,next);
-  toast('已删除，后台同步中');
-  queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'删除同步失败，已恢复'});
-}
-function closeSwipe(i){
-  var el=document.getElementById('entry-'+i);
-  if(!el)return;
-  var wrap=el.closest('.entry-wrap');
-  el.style.transition='transform 0.2s ease';
-  el.style.transform='translate3d(0,0,0)';
-  if(wrap)wrap.classList.remove('swiping','swiped');
-  if(touchState.openIdx===i)touchState.openIdx=-1;
-}
-function resetSwipes(){
-  document.querySelectorAll('.entry-item').forEach(function(el){
-    el.style.transition='transform 0.2s ease';
-    el.style.transform='translate3d(0,0,0)';
-    var wrap=el.closest('.entry-wrap');
-    if(wrap)wrap.classList.remove('swiping','swiped');
-  });
-  touchState.openIdx=-1;
-}
-function toggleMenu(){document.getElementById('menu-popup').classList.toggle('show')}
-function startSelect(mode){
-  selectMode=mode;selected.clear();
-  document.getElementById('menu-popup').classList.remove('show');
-  document.getElementById('select-bar').classList.add('show');
-  var btn=document.getElementById('select-action-btn');
-  btn.textContent=mode==='export'?'导出 (0)':'删除 (0)';
-  btn.className=mode==='export'?'btn btn-blue btn-sm':'btn btn-red btn-sm';
-  renderEntries();renderHomeInsights();
-}
-function cancelSelect(){selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');renderEntries()}
-function toggleSelect(i){
-  if(selected.has(i))selected.delete(i);else selected.add(i);
-  document.getElementById('select-action-btn').textContent=(selectMode==='export'?'导出':'删除')+' ('+selected.size+')';
-  renderEntries();
-}
-function selectAll(){
-  var entries=allData[current].entries,view=[];
-  entries.forEach(function(e,i){if(entryVisibleInDetail(e,i))view.push(i)});
-  if(selected.size===view.length)selected.clear();else view.forEach(function(i){selected.add(i)});
-  document.getElementById('select-action-btn').textContent=(selectMode==='export'?'导出':'删除')+' ('+selected.size+')';
-  renderEntries();
-}
-function doSelectAction(){
-  if(!selected.size){toast('请选择条目');return}
-  if(selectMode==='export'){
-    var entries=allData[current].entries;
-    var content=Array.from(selected).sort(function(a,b){return a-b}).map(function(i){return entries[i].content}).join('\n---\n');
-    var blob=new Blob([content],{type:'text/plain;charset=utf-8'});
-    var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=current+'_export.txt';a.click();URL.revokeObjectURL(url);toast('已导出');
-    selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');renderEntries();return;
-  }else{
-    var idxs=Array.from(selected).sort(function(a,b){return b-a});
-    ckConfirmDialog('将删除选中的 '+idxs.length+' 条记忆，此操作无法撤销。',{title:'批量删除',confirmText:'删除',danger:true}).then(function(ok){
-      if(!ok)return;
-      var cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries);
-      idxs.forEach(function(i){next.splice(i,1)});
-      var btn=document.getElementById('select-action-btn');
-      if(btn)btn.disabled=false;
-      selectMode=null;selected.clear();document.getElementById('select-bar').classList.remove('show');
-      var version=nextCategoryVersion(cat);
-      setCategoryEntries(cat,next);
-      toast('已删除 '+idxs.length+' 条，后台同步中');
-      queueCategoryWrite(cat,next,{version:version,rollback:before,failMsg:'批量删除同步失败，已恢复'});
-    });
-    return;
-  }
-}
-function showRename(){document.getElementById('menu-popup').classList.remove('show');document.getElementById('rename-input').value=current;document.getElementById('renameModal').classList.add('show')}
-function hideRename(){document.getElementById('renameModal').classList.remove('show')}
-function doRename(){
-  var nn=document.getElementById('rename-input').value.trim();
-  if(!nn||nn===current){hideRename();return}
-  if(allData[nn]){toast('分类已存在');return}
-  var old=current,entries=cloneEntries(allData[old].entries),backup=allData[old],version=nextCategoryVersion(nn);
-  nextCategoryVersion(old);
-  allData[nn]={entries:entries};delete allData[old];current=nn;
-  hideRename();document.getElementById('d-title').textContent=nn;document.getElementById('d-sub').textContent=countInfo();renderAll();savePanelCache();toast('已重命名，后台同步中');
-  syncingCategories[nn]=(syncingCategories[nn]||0)+1;
-  var priorNn=categoryWriteChains[nn]||Promise.resolve();
-  var priorOld=categoryWriteChains[old]||Promise.resolve();
-  var job=Promise.all([priorNn.catch(function(){}),priorOld.catch(function(){})]).then(function(){
-    return writeCategoryEntries(nn,cloneEntries(entries));
-  }).then(function(){
-    return rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+old+'.md'});
-  });
-  categoryWriteChains[nn]=job;
-  categoryWriteChains[old]=job;
-  job.then(function(){
-    toast('重命名已同步');
-  }).catch(function(){
-    if(categoryWriteVersions[nn]===version){
-      delete allData[nn];allData[old]=backup;current=old;
-      document.getElementById('d-title').textContent=old;document.getElementById('d-sub').textContent=countInfo();
-      renderAll();renderEntries();savePanelCache();toast('重命名同步失败，已恢复');
-    }else{
-      toast('重命名后台同步失败，请刷新确认');
-    }
-  }).then(function(){
-    syncingCategories[nn]=Math.max(0,(syncingCategories[nn]||1)-1);
-    if(!syncingCategories[nn])delete syncingCategories[nn];
-  });
-}
-function delCategory(){
-  document.getElementById('menu-popup').classList.remove('show');
-  var category=current;
-  ckConfirmDialog('分类“'+category+'”及其中的记忆将一并删除。',{title:'删除分类',confirmText:'删除',danger:true}).then(function(ok){
-    if(!ok||current!==category)return;
-    var cat=current,backup=allData[cat],version=nextCategoryVersion(cat);
-    delete allData[cat];savePanelCache();toast('已删除分类，后台同步中');goMemory();
-    syncingCategories[cat]=(syncingCategories[cat]||0)+1;
-    var prior=categoryWriteChains[cat]||Promise.resolve();
-    var job=prior.catch(function(){}).then(function(){
-      return rpcStrict('delete_repo',{repo:'memory-server',path:'memories/'+cat+'.md'});
-    });
-    categoryWriteChains[cat]=job;
-    job.then(function(){
-      toast('分类已同步删除');
-    }).catch(function(){
-      if(categoryWriteVersions[cat]===version){
-        allData[cat]=backup;savePanelCache();renderAll();toast('分类删除失败，已恢复');
-      }else{
-        toast('分类删除后台同步失败，请刷新确认');
-      }
-    }).then(function(){
-      syncingCategories[cat]=Math.max(0,(syncingCategories[cat]||1)-1);
-      if(!syncingCategories[cat])delete syncingCategories[cat];
-    });
-  });
-}
-function addEntry(){
-  var input=document.getElementById('add-input'),text=input.value.trim();if(!text)return;
-  var imp=parseInt(document.getElementById('add-imp').value),tags=document.getElementById('add-tags').value.trim();
-  var today=dateKey(new Date());
-  var cat=current,before=cloneEntries(allData[cat].entries),next=cloneEntries(allData[cat].entries);
-  next.push({meta:{imp:imp,time:today,last:today,tags:tags,pin:false,resolved:false,archived:false},content:text});
-  singleEntryIdx=null;
-  input.value='';document.getElementById('add-tags').value='';document.getElementById('char-count').textContent='0 字';
-  var version=nextCategoryVersion(cat);
-  setCategoryEntries(cat,next);
-  var wraps=document.querySelectorAll('.entry-wrap');if(wraps.length)wraps[wraps.length-1].classList.add('new-entry');
-  toast('已添加，后台同步中');
-  queueEntryAppend(cat,next[next.length-1],{version:version,rollback:before,failMsg:'添加同步失败，已回滚'});
-}
-function updateCount(){document.getElementById('char-count').textContent=document.getElementById('add-input').value.length+' 字'}
 function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
-function cloneEntries(entries){
-  return JSON.parse(JSON.stringify(entries||[]));
-}
-function nextCategoryVersion(category){
-  categoryWriteVersions[category]=(categoryWriteVersions[category]||0)+1;
-  return categoryWriteVersions[category];
-}
-function renderCategoryState(category){
-  if(current===category&&document.getElementById('page-detail').classList.contains('active')){
-    updateSwitchCounts();
-    renderEntries();
-  }
-  updateStats();
-  renderHomeInsights();
-  savePanelCache();
-}
-function setCategoryEntries(category,entries){
-  if(!allData[category])allData[category]={entries:[]};
-  allData[category].entries=entries;
-  renderCategoryState(category);
-}
-function writeCategoryEntries(category,entries){
-  var content=serializeEntries(entries);
-  return rpcStrict('write_memory',{category:category,content:content}).then(function(){
-    function verify(tries){
-      return rpcStrict('read_memory',{category:category}).then(function(raw){
-        var actual=(!raw||raw==='Empty')?'':serializeEntries(parseEntries(raw));
-        if(actual.trim()===content.trim())return raw;
-        if(tries<=0)throw new Error('write verification failed');
-        return wait(450).then(function(){return verify(tries-1)});
-      });
-    }
-    return verify(3);
-  });
-}
-function sameEntryCore(a,b){
-  a=a||{};b=b||{};
-  var am=a.meta||{},bm=b.meta||{};
-  return String(a.content||'').trim()===String(b.content||'').trim()&&
-    (parseInt(am.imp)||5)===(parseInt(bm.imp)||5)&&
-    String(am.time||'')===String(bm.time||'')&&
-    String(am.last||'')===String(bm.last||'')&&
-    String(am.date||'')===String(bm.date||'')&&
-    String(am.summary||'')===String(bm.summary||'')&&
-    String(am.tags||'').trim()===String(bm.tags||'').trim()&&
-    !!am.pin===!!bm.pin&&!!am.archived===!!bm.archived;
-}
-function readCategoryParsed(category){
-  return rpcStrict('read_memory',{category:category}).then(function(raw){return parseEntries(raw||'')});
-}
-function verifyEntryAt(category,index,expected,tries){
-  return readCategoryParsed(category).then(function(entries){
-    if(entries[index]&&sameEntryCore(entries[index],expected))return entries;
-    if(tries<=0)throw new Error('entry verification failed');
-    return wait(450).then(function(){return verifyEntryAt(category,index,expected,tries-1)});
-  });
-}
-function verifyAppendedEntry(category,expected,tries){
-  return readCategoryParsed(category).then(function(entries){
-    for(var i=entries.length-1;i>=0;i--){
-      if(sameEntryCore(entries[i],expected))return entries;
-    }
-    if(tries<=0)throw new Error('append verification failed');
-    return wait(450).then(function(){return verifyAppendedEntry(category,expected,tries-1)});
-  });
-}
-function writeEntryUpdate(category,index,entry){
-  var m=entry.meta||{};
-  return rpcStrict('update_entry',{
-    category:category,
-    index:index,
-    content:entry.content||'',
-    importance:parseInt(m.imp)||5,
-    tags:m.tags||'',
-    time:m.time||'',
-    last:m.last||'',
-    pin:!!m.pin,
-    archived:!!m.archived
-  }).then(function(){return verifyEntryAt(category,index,entry,3)});
-}
-function writeEntryAppend(category,entry){
-  var m=entry.meta||{};
-  return rpcStrict('append_memory',{
-    category:category,
-    content:entry.content||'',
-    importance:parseInt(m.imp)||5,
-    tags:m.tags||'',
-    time:m.time||'',
-    last:m.last||'',
-    pin:!!m.pin
-  }).then(function(){return verifyAppendedEntry(category,entry,3)});
-}
 function errText(err){
   var msg=err&&err.message?err.message:String(err||'');
   msg=msg.replace(/\s+/g,' ').trim();
   return msg?('：'+msg.slice(0,90)):'';
-}
-function queueCategoryJob(category,run,opts){
-  opts=opts||{};
-  var version=opts.version||categoryWriteVersions[category]||0;
-  syncingCategories[category]=(syncingCategories[category]||0)+1;
-  var prior=categoryWriteChains[category]||Promise.resolve();
-  var job=prior.catch(function(){}).then(run);
-  categoryWriteChains[category]=job;
-  job.then(function(result){
-    if(opts.applyResult&&categoryWriteVersions[category]===version)opts.applyResult(result);
-    if(opts.successMsg&&categoryWriteVersions[category]===version)toast(opts.successMsg);
-  }).catch(function(err){
-    if(opts.rollback&&categoryWriteVersions[category]===version){
-      setCategoryEntries(category,cloneEntries(opts.rollback));
-      toast((opts.failMsg||'同步失败，已回滚')+errText(err));
-    }else{
-      toast((opts.failMsgNoRollback||'后台同步失败，请刷新确认')+errText(err));
-    }
-  }).then(function(){
-    syncingCategories[category]=Math.max(0,(syncingCategories[category]||1)-1);
-    if(!syncingCategories[category])delete syncingCategories[category];
-  });
-  return job;
-}
-function queueCategoryWrite(category,entries,opts){
-  var snapshot=cloneEntries(entries);
-  return queueCategoryJob(category,function(){return writeCategoryEntries(category,snapshot)},opts);
-}
-function reconcileIndexStateForReplace(category,newEntries){
-  if(category!==current)return;
-  var old=(allData[category]&&allData[category].entries)||[];
-  newEntries=newEntries||[];
-  function moved(idx){return !old[idx]||!newEntries[idx]||!sameEntryCore(old[idx],newEntries[idx])}
-  if(delIdx!==null&&moved(delIdx)){var dc=document.getElementById('confirmDel');if(dc)dc.classList.remove('show');delIdx=null}
-  if(editIdx!==null&&moved(editIdx)){var em=document.getElementById('editModal');if(em&&em.classList.contains('show')){em.classList.remove('show');toast('列表已更新，请重新编辑')}editIdx=null}
-  if(selectMode&&selected.size){
-    var desync=false;selected.forEach(function(i){if(moved(i))desync=true});
-    if(desync){
-      selected.clear();
-      var sb=document.getElementById('select-action-btn');if(sb)sb.textContent=(selectMode==='export'?'导出':'删除')+' (0)';
-    }
-  }
-  if(touchState.openIdx!==-1&&moved(touchState.openIdx))touchState.openIdx=-1;
-}
-function queueEntryUpdate(category,index,entry,opts){
-  var snapshot=cloneEntries([entry])[0];
-  opts=opts||{};
-  opts.applyResult=function(entries){reconcileIndexStateForReplace(category,entries);setCategoryEntries(category,entries)};
-  return queueCategoryJob(category,function(){return writeEntryUpdate(category,index,snapshot)},opts);
-}
-function queueEntryAppend(category,entry,opts){
-  var snapshot=cloneEntries([entry])[0];
-  opts=opts||{};
-  opts.applyResult=function(entries){reconcileIndexStateForReplace(category,entries);setCategoryEntries(category,entries)};
-  return queueCategoryJob(category,function(){return writeEntryAppend(category,snapshot)},opts);
-}
-function serializeEntries(entries){
-  if(!entries||!entries.length)return EMPTY_CATEGORY_MARKER;
-  return entries.map(function(e){
-    var m=e.meta,p=[];
-    if(m.pin)p.push('[pin]');if(m.resolved)p.push('[resolved]');if(m.archived)p.push('[archived]');
-    p.push('[imp:'+m.imp+']');if(m.time)p.push('[time:'+m.time+']');if(m.last)p.push('[last:'+m.last+']');if(m.date)p.push('[date:'+m.date+']');if(m.tags)p.push('[tags:'+m.tags+']');if(m.summary)p.push('[summary:'+m.summary+']');
-    return p.join('')+'\n'+e.content;
-  }).join('\n---\n');
-}
-function showModal(){document.getElementById('newModal').classList.add('show');document.getElementById('new-name').focus()}
-function hideModal(){document.getElementById('newModal').classList.remove('show');document.getElementById('new-name').value=''}
-function createCat(){
-  var name=document.getElementById('new-name').value.trim();if(!name)return;
-  if(allData[name]){hideModal();openDetail(name);return}
-  allData[name]={entries:[]};hideModal();renderGrid();updateStats();renderHomeInsights();savePanelCache();openDetail(name);
-  var version=nextCategoryVersion(name);
-  toast('已创建，后台同步中');
-  queueCategoryWrite(name,[],{version:version,failMsgNoRollback:'分类创建同步失败'}).catch(function(){
-    if(categoryWriteVersions[name]===version&&allData[name]&&!(allData[name].entries||[]).length){
-      delete allData[name];savePanelCache();renderGrid();goMemory();
-    }
-  });
-}
-function goMemory(){
-  if(singleEntryIdx!==null&&detailReturnState&&detailReturnState.cat===current){
-    var state=detailReturnState;
-    detailReturnState=null;
-    singleEntryIdx=null;
-    document.getElementById('page-detail').classList.remove('single-entry-view');
-    detailHighlightQuery='';
-    currentView=state.view||'active';
-    filterTag=state.filterTag||'';
-    activeTags=filterTag?[filterTag]:[];
-    syncActiveTag();
-    currentSort=state.sort||currentSort;
-    currentSortDir=state.sortDir||currentSortDir;
-    selectMode=null;selected.clear();
-    document.getElementById('select-bar').classList.remove('show');
-    document.getElementById('menu-popup').classList.remove('show');
-    document.getElementById('d-sub').textContent=countInfo();
-    updateSwitchCounts();updateSortButtons();renderEntries();
-    document.querySelectorAll('.switch-item').forEach(function(el,i){el.classList.toggle('active',(currentView==='active'&&i===0)||(currentView==='archived'&&i===1))});
-    setTimeout(function(){window.scrollTo(0,state.scrollY||0)},0);
-    return;
-  }
-  var target=returnPanelTab||currentPanelTab||'overview';
-  selectMode=null;selected.clear();singleEntryIdx=null;
-  document.getElementById('page-detail').classList.remove('single-entry-view');
-  detailHighlightQuery='';
-  if(target!=='search'){
-    filterTag='';activeTags=[];syncActiveTag();
-    document.getElementById('search-input').value='';
-    document.getElementById('search-results').style.display='none';
-  }
-  document.getElementById('select-bar').classList.remove('show');
-  document.getElementById('cat-grid').style.display='grid';
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
-  document.getElementById('page-memory').classList.add('active');
-  updateStats();renderGrid();renderTags();renderHomeInsights();
-  switchPanelTab(target,{restoreScroll:returnScrollY});
 }
 var toastAutoHideTimer=null;
 var toastAutoHideDuration=0;
@@ -2924,7 +1476,6 @@ var chatImageEncodingCount=0;
 var chatDraftFiles=[];
 var chatFileSeq=0;
 var chatFileReadingCount=0;
-var chatCleanHistoryResolver=null;
 var chatDebugScrollRaf=0;
 var chatDebugScrollTimer=0;
 function chatSessionId(){
@@ -2935,23 +1486,9 @@ function chatCleanEndpoint(cfg){
   return base+'/ck/clean-history';
 }
 function chatShowCleanHistoryConfirm(){
-  var modal=document.getElementById('chatCleanConfirm');
-  if(!modal)return ckConfirmDialog('将清理历史消息中的图片和召回内容。',{title:'清理历史',confirmText:'确认',danger:true});
-  if(chatCleanHistoryResolver){var prev=chatCleanHistoryResolver;chatCleanHistoryResolver=null;prev(false);}
-  modal.classList.add('show');
-  return new Promise(function(resolve){
-    chatCleanHistoryResolver=function(ok){
-      modal.classList.remove('show');
-      chatCleanHistoryResolver=null;
-      resolve(!!ok);
-    };
-  });
-}
-function chatCancelCleanHistory(){
-  if(chatCleanHistoryResolver)chatCleanHistoryResolver(false);
-}
-function chatConfirmCleanHistory(){
-  if(chatCleanHistoryResolver)chatCleanHistoryResolver(true);
+  // 原来这里挂着一个自己的 .confirm-bg 弹窗（和已删除的记忆分类页共用那套样式）。
+  // 现在统一走面板共用的 ckConfirmDialog，样式和其他确认框一致。
+  return ckConfirmDialog('将清理历史消息中的图片和召回内容。',{title:'清理历史',confirmText:'确认',danger:true});
 }
 function chatCleanHistoryVisibleCounts(){
   var stats={images:0,recalls:0};
@@ -3313,11 +1850,6 @@ function chatUsageFlag(usage,key){
     if(Number(v)>0)return true;
   }
   return false;
-}
-function chatMoney(value,currency){
-  var n=Number(value)||0;
-  var digits=n>=1?4:(n>=.01?5:6);
-  return String(currency||'¥')+n.toFixed(digits);
 }
 function chatCostAmountText(value,currency){
   var n=Number(value)||0;
@@ -5095,23 +3627,6 @@ function chatSpeechPreferencesEndpoint(cfg){
 }
 var chatSpeechConsoleState={data:null,loading:false,saving:false,editorSnapshot:''};
 var chatSpeechPreferenceManualBusy=false;
-function chatSpeechConsoleRulesText(rules){
-  return JSON.stringify(Array.isArray(rules)?rules:[],null,2);
-}
-function chatSpeechConsoleDiffHtml(diff){
-  diff=diff&&typeof diff==='object'?diff:{};
-  var groups=[
-    ['新增',Array.isArray(diff.added)?diff.added:[],function(item){return item.instruction||item.key||''}],
-    ['删除',Array.isArray(diff.deleted)?diff.deleted:[],function(item){return item.instruction||item.key||''}],
-    ['调整',Array.isArray(diff.adjusted)?diff.adjusted:[],function(item){return (item.after&&item.after.instruction)||item.key||''}]
-  ];
-  var html=[];
-  groups.forEach(function(group){
-    if(!group[1].length)return;
-    html.push('<div><b>'+group[0]+' '+group[1].length+'</b><span>'+group[1].map(function(item){return esc(group[2](item))}).join('；')+'</span></div>');
-  });
-  return html.length?html.join(''):'<div><b>对比</b><span>与上一版本没有规则变化</span></div>';
-}
 // 聊天抽屉里的措辞偏好只做纯预览：只显示条数和规则正文，
 // 不显示版本号、diff、标题栏或任何操作按钮组。修改、保存、发布、启停
 // 全部集中在独立的「规则管理」页，避免预览区堆满管理控件。
@@ -6554,30 +5069,11 @@ function chatAssistantWaitLabel(m){
   return '等待 '+Math.max(0,Math.round(waitMs/1000))+'s';
 }
 function chatUpdateRuntime(cfg,usage){
-  cfg=cfg||chatLoadConfig();
+  // 顶栏那三枚状态条（模型 / 网关 session / 召回状态）已删除：它被两份 CSS 用 !important
+  // 永久隐藏，而这三项在「网关」「记忆与缓存」面板和调试台里都能看到，属于重复信息。
+  // 这个函数保留下来只做一件仍然有用的事：轮询开启时给 body 打标记，
+  // 由它决定是否隐藏消息上的缓存勾号和单条价格。
   if(document.body)document.body.classList.toggle('chat-polling-on',chatPollingView().enabled===true);
-  var model=document.getElementById('chat-runtime-model');
-  var cache=document.getElementById('chat-runtime-cache');
-  var recall=document.getElementById('chat-runtime-recall');
-  var route=apiProvidersLoaded?chatMainRouteConfig():null;
-  if(model){
-    if(route&&route.ok)model.textContent=route.providerName+' · '+route.model+' · '+chatShortSession(cfg.sessionId);
-    else if(!apiProvidersLoaded)model.textContent='主链路读取中 · '+chatShortSession(cfg.sessionId);
-    else model.textContent='主链路未配置 · '+chatShortSession(cfg.sessionId);
-  }
-  if(recall){
-    var recallMeta=chatRecallMeta(cfg.recall!==false,cfg.recallMode);
-    var factMode=chatFactRecallModeMeta(cfg.factRecallMode);
-    recall.textContent=recallMeta.label+(recallMeta.enabled?' · '+factMode.shortLabel:'')+(cfg.useMcp===true?' · MCP':'');
-  }
-  if(cache){
-    var read=chatUsageCacheRead(usage||{});
-    var create=chatUsageCacheCreate(usage||{});
-    var meta=chatCacheStrategyMeta(cfg.cacheStrategy);
-    var modeText=meta.label+'｜'+meta.debugText+'｜TTL '+chatCacheStrategyTtlLabel(meta);
-    if(read||create)cache.textContent=modeText+'｜读取 '+read+' / 创建 '+create;
-    else cache.textContent=modeText;
-  }
 }
 function chatRenderTrimState(cfg){
   var current=document.getElementById('chat-trim-current');
@@ -7037,37 +5533,6 @@ function chatSelectSession(id){
 function chatLoadLocalMessages(){
   chatLoadSessions();
   chatMessages=chatCurrentSession().messages||[];
-}
-function chatRefreshView(){
-  if(chatSending){
-    toast('正在请求中，先停止或等完成');
-    return;
-  }
-  chatFlushAssistantRevealQueue();
-  var refreshBtn=document.getElementById('chat-refresh-btn');
-  if(refreshBtn)refreshBtn.classList.add('is-spinning');
-  chatSetStatus('正在刷新...');
-  var cfg=chatLoadConfig();
-  chatLoadSessions();
-  if(cfg.sessionId&&chatSessions.some(function(s){return s.id===cfg.sessionId})){
-    chatActiveSessionId=cfg.sessionId;
-  }else{
-    chatActiveSessionId=(chatSessions[0]&&chatSessions[0].id)||chatSessionId();
-    cfg.sessionId=chatActiveSessionId;
-    chatSaveConfigObject(cfg);
-  }
-  chatMessages=chatCurrentSession().messages||[];
-  chatLoadDebugRecords();
-  chatWriteForm(cfg);
-  chatRenderSessions();
-  chatRenderMessages();
-  chatLayoutCompose();
-  chatUpdateRuntime(cfg);
-  setTimeout(function(){
-    if(refreshBtn)refreshBtn.classList.remove('is-spinning');
-    chatSetStatus('已刷新');
-    toast('聊天界面已刷新');
-  },260);
 }
 function chatSaveLocalMessages(){
   var s=chatCurrentSession();
@@ -8969,7 +7434,6 @@ function chatFlushAssistantRevealQueue(options){
   }
   return true;
 }
-function chatSleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
 function chatAbortableSleep(ms,signal){
   return new Promise(function(resolve){
     if(signal&&signal.aborted)return resolve(true);
@@ -10744,47 +9208,6 @@ async function chatSubmitPendingMessages(options){
     }
   }
 }
-document.addEventListener('click',function(e){
-  if(e.target.closest('.entry-del-bg'))return;
-  if(Date.now()<suppressClickUntil){
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  }
-},true);
-document.addEventListener('click',function(e){var m=document.getElementById('menu-popup');if(m&&m.classList.contains('show')&&!e.target.closest('.menu-btn')&&!e.target.closest('.menu-popup'))m.classList.remove('show')});
-function isSingleDetailBackTarget(target){
-  if(singleEntryIdx===null)return false;
-  if(!document.getElementById('page-detail').classList.contains('active'))return false;
-  if(!target.closest('#d-entries'))return false;
-  if(target.closest('button,.back-btn,.entry-action-btn,.entry-expand,.menu-btn,.menu-popup,.switch-bar,.sort-bar,.select-bar,.add-area,.modal-bg,.confirm-bg,.score-badge'))return false;
-  return true;
-}
-function goBackFromSingleDetail(target){
-  if(isSingleDetailBackTarget(target)){
-    suppressClickUntil=Date.now()+520;
-    goMemory();
-  }
-}
-document.addEventListener('dblclick',function(e){
-  if(isSingleDetailBackTarget(e.target)){
-    e.preventDefault();
-    e.stopPropagation();
-    goBackFromSingleDetail(e.target);
-  }
-});
-document.addEventListener('touchend',function(e){
-  if(!isSingleDetailBackTarget(e.target))return;
-  var now=Date.now();
-  if(now-lastSingleTapAt<320){
-    lastSingleTapAt=0;
-    suppressClickUntil=now+650;
-    e.preventDefault();
-    e.stopPropagation();
-    goMemory();
-  }else{
-    lastSingleTapAt=now;
-  }
-},{passive:false});
 function switchPanelTab(tab,opts) {
   opts=opts||{};
   if(!isPanelAuthenticated()){
@@ -10812,22 +9235,6 @@ function switchPanelTab(tab,opts) {
   if(tab==='overview'){
     loadArchiveFactOverview(false);
   }
-  if(tab==='categories'){
-    document.getElementById('cat-grid').style.display='grid';
-    renderGrid();
-  }
-  if(tab==='search'){
-    renderTags();
-    document.getElementById('search-results').style.display='block';
-    if(!document.getElementById('search-input').value.trim()&&!hasActiveTags()&&searchFilter==='all')renderSearchLanding();
-    else onSearch();
-  }
-  if(tab==='graph'){
-    loadEntityGraph(false,true,{preserveView:graphLoaded&&!opts.forceGraphRefresh});
-    startEntityGraphRealtime();
-  }else{
-    stopEntityGraphRealtime();
-  }
   if(tab==='facts'){
     if(!factLibraryData)loadFactLibrary(true,true);
     else renderFactLibrary(factLibraryData);
@@ -10853,152 +9260,6 @@ function switchPanelTab(tab,opts) {
 var memoryRealtimeTimer=null;
 var memoryLoadInFlight=false;
 var MEMORY_SYNC_INTERVAL_MS=45000;
-function hasPendingCategoryWrites(){
-  return Object.keys(syncingCategories||{}).some(function(k){return (syncingCategories[k]||0)>0});
-}
-function normalizeMemoryCategories(text){
-  var seen=Object.create(null),out=[];
-  String(text||'').split('\n').map(function(x){return x.trim()}).filter(Boolean).forEach(function(cat){
-    if(cat==='Empty'||seen[cat])return;
-    seen[cat]=true;
-    out.push(cat);
-  });
-  return out;
-}
-function waitRetryDelay(attempt){
-  return wait(Math.min(1600,250*Math.pow(2,attempt||0)));
-}
-function rpcStrictRetry(tool,args,attempts){
-  attempts=attempts||3;
-  var run=function(n){
-    return rpcStrict(tool,args).catch(function(err){
-      if(n>=attempts-1)throw err;
-      return waitRetryDelay(n).then(function(){return run(n+1)});
-    });
-  };
-  return run(0);
-}
-function readMemoryCategoryWithRetry(category){
-  return rpcStrictRetry('read_memory',{category:category},3).then(function(raw){
-    return {category:category,entries:parseEntries(raw),ok:true};
-  }).catch(function(err){
-    return {category:category,entries:null,ok:false,error:err};
-  });
-}
-function readMemoryCategoriesLimited(cats,onProgress){
-  var limit=3,index=0,done=0,failed=0,results=[];
-  return new Promise(function(resolve){
-    function launch(){
-      while(index<cats.length&&limit>0){
-        (function(cat){
-          index++;limit--;
-          readMemoryCategoryWithRetry(cat).then(function(result){
-            results.push(result);
-            done++;
-            if(!result.ok)failed++;
-            if(onProgress){try{onProgress(done,cats.length,failed,result)}catch(e){}}
-          }).then(function(){
-            limit++;
-            if(done>=cats.length)resolve({results:results,failed:failed});
-            else launch();
-          });
-        })(cats[index]);
-      }
-      if(!cats.length)resolve({results:[],failed:0});
-    }
-    launch();
-  });
-}
-function startMemoryRealtime(){
-  stopMemoryRealtime();
-  memoryRealtimeTimer=setInterval(function(){
-    if(hasPendingCategoryWrites())return;
-    loadAll({silent:true,skipCache:true,realtime:true});
-  },MEMORY_SYNC_INTERVAL_MS);
-}
-function stopMemoryRealtime(){
-  if(memoryRealtimeTimer){
-    clearInterval(memoryRealtimeTimer);
-    memoryRealtimeTimer=null;
-  }
-}
-function loadAll(opts){
-  opts=opts||{};
-  if(!isPanelAuthenticated())return ensurePanelAuthenticated().then(function(){return loadAll(opts)});
-  if(memoryLoadInFlight)return Promise.resolve(false);
-  memoryLoadInFlight=true;
-  var hadCache=false;
-  if(!opts.skipCache)hadCache=loadPanelCache();
-  if(!hadCache&&!opts.silent)setLoading(4,'正在读取仓库分类...');
-  return rpcStrictRetry('list_memories',{},3).then(function(t){
-    var cats=normalizeMemoryCategories(t);
-    if(!cats.length){
-      if(allData&&Object.keys(allData).length){
-        setSyncStatus('仓库返回空列表，保留本地内容');
-        if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(160)}
-        return false;
-      }
-      allData={};allTags=new Set();renderAll();savePanelCache();
-      setSyncStatus('仓库暂无记忆');
-      if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(160)}
-      return true;
-    }
-    var previous=allData||{},next={};
-    cats.forEach(function(c){next[c]=previous[c]||{entries:[]}});
-    allData=next;rebuildTags();renderAll();
-    setSyncStatus((opts.realtime?'实时同步中 ':'正在同步 ')+cats.length+' 个分类');
-    if(!hadCache&&!opts.silent)hideLoadingSoon(180);
-    return readMemoryCategoriesLimited(cats,function(loaded,total,failed,result){
-      if(result.ok&&!syncingCategories[result.category]){
-        allData[result.category]={entries:result.entries};
-      }
-      if(!opts.silent&&!hadCache)setLoading(Math.round(loaded/total*100),'同步仓库 '+loaded+'/'+total);
-      if(result.ok&&current===result.category&&document.getElementById('page-detail').classList.contains('active')){
-        updateSwitchCounts();renderEntries();
-      }
-      if(loaded===total||(!hadCache&&(loaded===1||loaded%3===0))){
-        rebuildTags();renderAll();
-      }
-    }).then(function(summary){
-      rebuildTags();renderAll();savePanelCache();
-      var total=cats.length,ok=total-summary.failed;
-      setSyncStatus(summary.failed?'已同步 '+ok+'/'+total+'，失败项保留上次内容':'已和 GitHub 仓库同步');
-      if(!opts.silent){setLoading(100,'已同步');hideLoadingSoon(120)}
-      return summary.failed===0;
-    });
-  }).catch(function(){
-    setSyncStatus(hadCache?'仓库暂时没连上，显示本地缓存':'仓库暂时没连上');
-    if(!hadCache){
-      allData={};allTags=new Set();renderAll();
-      var grid=document.getElementById('cat-grid');
-      if(grid)grid.innerHTML='<div class="empty-state">加载失败，请稍后刷新</div>';
-    }
-    if(!opts.silent)hideLoadingSoon(200);
-    return false;
-  }).then(function(result){
-    memoryLoadInFlight=false;
-    return result;
-  },function(err){
-    memoryLoadInFlight=false;
-    throw err;
-  });
-}
-function updateSortButtons(){
-  document.querySelectorAll('.sort-btn').forEach(function(el){
-    var key=el.getAttribute('data-sort');
-    var active=key===currentSort;
-    el.classList.toggle('active',active);
-    var label=key==='time'?'按时间':'按权重';
-    el.textContent=active?label+' '+(currentSortDir==='asc'?'↑':'↓'):label;
-    el.title=active?(currentSortDir==='asc'?'正序':'倒序'):'点击排序';
-  });
-}
-function switchSort(s){
-  if(currentSort===s)currentSortDir=currentSortDir==='asc'?'desc':'asc';
-  else{currentSort=s;currentSortDir='asc'}
-  updateSortButtons();
-  renderEntries();
-}
 document.addEventListener('click',function(e){
   var badge=e.target.closest('.score-badge');
   if(!badge)return;
@@ -11192,8 +9453,7 @@ var API_TABS=[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。只影响聊天、Fact 和召回配置。'},
-  {key:'memory',label:'记忆',info:'这一栏管人物与事件档案、Fact 提取、言语要求提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
-    {key:'mem_profile',label:'小档案',info:'AI 会自动把聊到的人、发生的事，整理成一张张好查的小卡片。这里直接选择负责整理小档案的供应商和模型。'},
+  {key:'memory',label:'记忆',info:'这一栏管 Fact 提取、言语要求提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'},
     {key:'chat_digest',label:'截断总结',info:'每次自动截断都会丢掉一批完整轮次。这一步把被丢掉的那批对话压成一段当日短文（单条约 500 字，合并后约 800 字），下一轮直接放进系统区，让助手还记得刚才聊了什么、当时是什么气氛和态度。只在发生截断时调用一次，普通每轮聊天不调用。这一组留空时会自动退回「言语要求提取」的供应商和模型。'}
@@ -11209,11 +9469,6 @@ function allApiGroups(){
   var out=[];
   API_TABS.forEach(function(t){(t.groups||[]).forEach(function(g){out.push(g)})});
   return out;
-}
-function findApiGroup(k){
-  var groups=allApiGroups();
-  for(var i=0;i<groups.length;i++){if(groups[i].key===k)return groups[i]}
-  return null;
 }
 function apiProviderLibrarySlot(){
   if(!apiProviders||typeof apiProviders!=='object'||Array.isArray(apiProviders))apiProviders={};

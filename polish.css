@@ -47,10 +47,6 @@ body{
   border-radius:22px;
   box-shadow:var(--pg-shadow-lg);
 }
-.day-card::before{
-  background:radial-gradient(circle,rgba(76,195,138,.28),transparent 70%);
-}
-.day-card h2 span{color:#6fe0a6}
 
 /* —— 统计小方块 —— */
 .stat-box{
@@ -61,71 +57,17 @@ body{
 }
 .stat-box:active{transform:translateY(1px)}
 .stat-box .val{color:var(--pg-ink)}
-
-/* —— 首页控制台 / 洞察块 —— */
-.home-console,
-.home-insight-block{
-  border:1px solid var(--pg-line);
-  border-radius:var(--pg-radius);
-  box-shadow:var(--pg-shadow-md);
-}
-.console-head span{color:var(--pg-ink)}
-.mini-item{
-  border:1px solid var(--pg-line-soft);
-  border-radius:12px;
-  transition:transform .12s ease,box-shadow .18s ease,border-color .18s ease;
-}
-.mini-item:active{transform:scale(.985)}
-.mini-top span{color:var(--pg-emerald-600)}
-.focus-entry{box-shadow:0 0 0 3px rgba(46,158,107,.16),0 10px 26px rgba(46,158,107,.16)}
-
-/* —— 分类卡 —— */
-.cat-card{
-  border-radius:var(--pg-radius);
-  box-shadow:var(--pg-shadow-sm);
-  transition:transform .14s ease,box-shadow .2s ease;
-}
-.cat-card:hover{box-shadow:var(--pg-shadow-md)}
-.cat-card:active{transform:translateY(1px)}
-
-/* —— 搜索框 —— */
-.search-wrap input{
-  border:1.5px solid var(--pg-line);
-  border-radius:14px;
-}
-.search-wrap input:focus{
-  border-color:var(--pg-emerald-500);
-  box-shadow:0 0 0 4px rgba(46,158,107,.10);
-}
-
-/* —— 标签 chips —— */
-.tag-btn,.tag-expand-btn{border-radius:16px;transition:all .15s ease}
 .tag-btn.active{
   background:var(--pg-grad);
   border-color:transparent;
   box-shadow:0 4px 12px rgba(46,158,107,.28);
 }
 .search-filter.active{background:var(--pg-grad);border-color:transparent;color:#fff}
-
-/* —— 信息网：关系图英雄条 + 卡片 —— */
-.graph-hero{
-  background:var(--pg-hero);
-  border-radius:var(--pg-radius);
-  box-shadow:var(--pg-shadow-md);
-}
 /* eg-* 皮肤已回归 style.css 单一来源（Phase 6） */
 
 /* —— 详情页：开关条 / 排序条 —— */
 .switch-item.active{color:var(--pg-emerald-600)}
 .sort-btn.active{background:var(--pg-emerald-soft);color:var(--pg-emerald-600);border-color:transparent}
-
-/* —— 条目卡 —— */
-.entry-item{
-  border:1px solid var(--pg-line);
-  border-radius:14px;
-  box-shadow:var(--pg-shadow-sm);
-}
-.entry-badge.imp-high{background:var(--pg-emerald-soft);color:var(--pg-emerald-600)}
 
 /* —— 弹窗 / 确认框 / Toast 已迁入 components.css（Phase 6 第二组） —— */
 

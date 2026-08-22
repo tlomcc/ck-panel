@@ -359,15 +359,11 @@ body.chat-active .chat-worldbook-list{
   border-color:var(--ck-line)!important;
   border-radius:var(--ck-radius-md)!important;
   background:var(--ck-surface-soft)!important;
-}
-
-/* ---- Memory center: archive-* 已回归 style.css 单一来源（Phase 6） ---- */
+}/* ---- Memory center: archive-* 已回归 style.css 单一来源（Phase 6） ---- */
 .facts-page-head,
-#tab-graph,
 #tab-status{color:var(--ck-text)!important}
 .facts-kicker{color:var(--ck-accent)!important}
 .facts-title-block p{color:var(--ck-muted)!important}
-#tab-graph .graph-hero,
 #tab-status .ds-note{
   border-color:var(--ck-line)!important;
   background:var(--ck-surface)!important;
@@ -377,77 +373,13 @@ body.chat-active .chat-worldbook-list{
 /* ---- Status page: 只剩每日 Fact 提取，说明卡跟随 token ---- */
 #tab-status .ds-note{border-radius:var(--ck-radius-md)!important;color:var(--ck-muted)!important}
 body.dark #tab-status .ds-note{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
-
-/* ---- Legacy memory pages (category / search / detail): retire the blue-gray ---- */
-/* Detail hero: replace the near-black slab with a quiet paper hero */
-#page-detail .detail-top{
-  border:1px solid var(--ck-line)!important;
-  border-radius:var(--ck-radius-lg)!important;
-  background:linear-gradient(120deg,var(--ck-accent-wash),var(--ck-surface) 62%)!important;
-  color:var(--ck-text)!important;
-  box-shadow:var(--ck-shadow-xs)!important;
-}
-#page-detail .detail-top small{color:var(--ck-muted)!important}
 body.dark #page-detail .detail-top{background:linear-gradient(120deg,var(--ck-accent-wash),var(--ck-surface) 60%)!important;border-color:var(--ck-line)!important}
-
-/* Category page */
-#tab-categories .cat-grid,
-#tab-categories .cat-section{
-  border-color:var(--ck-line)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  box-shadow:var(--ck-shadow-xs)!important;
-}
-#tab-categories .cat-card,
-#tab-categories .cat-section .cat-card{background:var(--ck-surface)!important;border-bottom-color:var(--ck-line-soft)!important}
-#tab-categories .cat-card:hover{background:var(--ck-surface-soft)!important}
-#tab-categories .cat-section-head{background:var(--ck-surface-soft)!important;border-bottom-color:var(--ck-line-soft)!important}
-#tab-categories .cat-card-name{color:var(--ck-text)!important}
-#tab-categories .cat-card-num{color:var(--ck-text)!important;font-family:var(--ck-font-data)!important}
-#tab-categories .cat-card-detail{color:var(--ck-muted)!important}
-#tab-categories .cat-mark{
-  border-radius:var(--ck-radius-sm)!important;
-  background:var(--ck-accent-wash)!important;
-  color:var(--ck-accent-strong)!important;
-}
 body.dark #tab-categories .cat-grid,
 body.dark #tab-categories .cat-section,
 body.dark #tab-categories .cat-card,
 body.dark #tab-categories .cat-section .cat-card{border-color:var(--ck-line)!important;background:var(--ck-surface)!important}
 body.dark #tab-categories .cat-mark{background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
-
-/* Search page */
-#tab-search .search-head{background:transparent!important}
-#tab-search .search-clear{background:var(--ck-line-soft)!important;color:var(--ck-muted)!important}
-#tab-search .search-panel,
-#tab-search .search-suggest,
-#tab-search .search-result-item,
-#tab-search .search-entry{
-  border:1px solid var(--ck-line)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-  box-shadow:none!important;
-}
-#tab-search .search-result-item:hover{background:var(--ck-surface-soft)!important}
-#tab-search .search-filter{
-  border:1px solid var(--ck-line)!important;
-  border-radius:var(--ck-radius-pill)!important;
-  background:var(--ck-surface)!important;
-  color:var(--ck-muted)!important;
-}
 #tab-search .search-filter.active{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
-#tab-search .search-result-cat{color:var(--ck-accent-strong)!important}
-#tab-search .search-result-text,
-#tab-search .search-entry .search-result-text{color:var(--ck-text)!important}
-#tab-search .search-result-head,
-#tab-search .search-suggest-title{color:var(--ck-muted)!important}
-#tab-search .search-empty-card{
-  border:1px dashed var(--ck-line-strong)!important;
-  border-radius:var(--ck-radius-md)!important;
-  background:var(--ck-surface)!important;
-}
-#tab-search .search-empty-title{color:var(--ck-text)!important}
-#tab-search .search-empty-sub{color:var(--ck-muted)!important}
 body.dark #tab-search .search-panel,
 body.dark #tab-search .search-suggest,
 body.dark #tab-search .search-result-item,
@@ -627,38 +559,6 @@ body.chat-active .chat-plus-grid>button:focus-visible{outline:none!important}
   position:relative!important;
   overflow:hidden!important;
   padding:20px 22px!important;
-}
-#tab-graph .graph-hero>div:first-child{
-  position:relative!important;
-  padding-left:15px!important;
-}
-#tab-graph .graph-hero>div:first-child::before{
-  content:"";
-  position:absolute;
-  left:0;
-  top:3px;
-  width:2px;
-  height:42px;
-  border-radius:var(--ck-radius-pill);
-  background:linear-gradient(180deg,var(--ck-accent),rgba(var(--ck-accent-rgb),.12));
-}
-#tab-graph .graph-hero h2{
-  font-size:22px!important;
-  line-height:1.2!important;
-  letter-spacing:-.2px!important;
-}
-#tab-graph .graph-hero p{line-height:1.65!important}
-#tab-graph .graph-hero::after{
-  content:"";
-  position:absolute;
-  right:24px;
-  top:20px;
-  width:56px;
-  height:56px;
-  border:1px solid rgba(var(--ck-accent-rgb),.10);
-  border-radius:50%;
-  box-shadow:0 0 0 9px rgba(var(--ck-accent-rgb),.028);
-  pointer-events:none;
 }
 #tab-status .tab-head{
   position:relative!important;
