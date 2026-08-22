@@ -190,13 +190,10 @@ function testPanelWiring(){
   assert.ok(/<label>当日截断总结<textarea id="chat-daily-digest-pack"[^>]*readonly/.test(html),
     '结构必须和本轮召回内容对齐：裸 label + readonly textarea');
 
-  // 注入位置选择器在总结块下面，默认项排第一。
-  const select=html.slice(html.indexOf('id="chat-daily-digest-injection-position"'));
-  assert.ok(html.indexOf('id="chat-daily-digest-injection-position"')>digest,'注入位置放在总结内容下面');
-  assert.ok(/^[^>]*><option value="system_tail"/.test(select),'默认注入位置必须是第一项');
-  ['system_after_main','system_after_anchor','latest_user_prefix','latest_user_suffix'].forEach(function(value){
-    assert.ok(select.indexOf('value="'+value+'"')>=0,'注入位置缺少可选项 '+value);
-  });
+  // 注入位置不可选：位置固定在系统区最后一块，选择器必须已经撤掉。
+  assert.ok(html.indexOf('id="chat-daily-digest-injection-position"')<0,
+    '注入位置选择器必须撤掉，位置固定不可选');
+  assert.ok(/注入位置固定在系统区最后一块/.test(html),'卡片上要写清位置固定在哪里');
 
   assert.ok(css.includes('#chat-daily-digest-pack{max-height:220px!important}')||
     /#chat-daily-digest-pack,\s*\n?body\.chat-active \.chat-settings #chat-memory-pack\{max-height:220px!important\}/.test(css),
@@ -205,14 +202,11 @@ function testPanelWiring(){
 
   // 配置、持久化、请求体三处都要接上，少一处功能就断。
   assert.ok(source.includes("dailyDigestEnabled:true"),'默认开启');
-  assert.ok(source.includes("dailyDigestInjectionPosition:'system_tail'"),'默认注入位置');
-  assert.ok(source.includes("cfg.dailyDigestInjectionPosition=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail')"),
-    '读写配置都要归一化注入位置');
+  assert.ok(!/dailyDigestInjectionPosition/.test(source),
+    '注入位置已固定在网关侧，面板不该再存、读或发这个字段');
   assert.strictEqual((source.match(/dailyDigests:chatDailyDigestNormalize\(s\.dailyDigests\)/g)||[]).length,2,
     'chatNormalizeSession 和 chatSessionStorageData 都要带上 dailyDigests，否则刷新就丢');
   assert.ok(source.includes('daily_digest_pack:chatDailyDigestPack(cfg,currentSession)'),'请求体要带注入包');
-  assert.ok(source.includes("daily_digest_injection_position:chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail')"),
-    '请求体要带注入位置');
   assert.ok(source.includes("return base+'/ck/chat-digest/prepare'"),'端点必须指向网关的无状态生成接口');
 
   // 成功静默、失败出声。

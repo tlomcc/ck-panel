@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v196-fact-status-and-digest-api';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v197-digest-cache-position';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3548,7 +3548,6 @@ function chatDefaultConfig(){
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
-    dailyDigestInjectionPosition:'system_tail',
     costPricing:chatDefaultCostPricing(),
     worldbooks:[]
   };
@@ -3935,7 +3934,6 @@ function chatLoadConfig(){
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
-  cfg.dailyDigestInjectionPosition=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail');
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
@@ -3973,7 +3971,6 @@ function chatSaveConfigObject(cfg){
   delete cfg.autoTrimThreshold;
   delete cfg.autoTrimDrop;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
-  cfg.dailyDigestInjectionPosition=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail');
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   try{localStorage.setItem(CHAT_CACHE_STRATEGY_KEY,cfg.cacheStrategy)}catch(e){}
@@ -4866,7 +4863,6 @@ function chatReadForm(){
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
-    dailyDigestInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-daily-digest-injection-position',saved.dailyDigestInjectionPosition),'system_tail'),
     costPricing:chatReadCostPricing(saved.costPricing),
     worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
@@ -7523,8 +7519,6 @@ function chatRenderDailyDigest(cfg){
   var entries=pruned.entries;
   chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestDisplayText(entries));
   chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
-  var positionEl=document.getElementById('chat-daily-digest-injection-position');
-  if(positionEl)positionEl.value=chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail');
   var hint=document.getElementById('chat-daily-digest-hint');
   if(hint){
     if(cfg.dailyDigestEnabled===false){
@@ -7533,8 +7527,7 @@ function chatRenderDailyDigest(cfg){
       hint.textContent='今天还没有发生过截断。截断成功时静默生成，不会打扰你。';
     }else{
       var chars=chatDailyDigestPack(cfg,session).length;
-      hint.textContent='今天 '+entries.length+' 条 · 注入 '+chars+' 字 · 位置：'+
-        chatInjectionPositionLabel(cfg.dailyDigestInjectionPosition)+'。明天零点自动作废。';
+      hint.textContent='今天 '+entries.length+' 条 · 注入 '+chars+' 字 · 位置：系统区最后一块（紧挨历史消息）。明天零点自动作废。';
     }
   }
   return entries;
@@ -7545,7 +7538,7 @@ function chatSaveDailyDigestSetting(auto){
     chatDailyDigestSetStatus(
       cfg.dailyDigestEnabled===false
         ?'已保存：当日截断总结已关闭'
-        :'已保存：注入位置 '+chatInjectionPositionLabel(cfg.dailyDigestInjectionPosition),
+        :'已保存：当日截断总结已启用',
       'ok'
     );
     toast('当日截断总结设置已保存');
@@ -10212,8 +10205,8 @@ async function chatSubmitPendingMessages(options){
     system:chatComposeSystemPrompt(cfg),
     worldbook_pack:chatWorldbookPack(cfg),
     worldbook_injection_position:chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail'),
+    // 注入位置不发：网关把总结固定钉在 system 最后一块，缓存断点之前。
     daily_digest_pack:chatDailyDigestPack(cfg,currentSession),
-    daily_digest_injection_position:chatNormalizeInjectionPosition(cfg.dailyDigestInjectionPosition,'system_tail'),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     nc_context_injection:cfg.ncContextInjection!==false,

@@ -16,7 +16,6 @@ This contract protects prompt cache hits between CK panel and CK gateway.
   "worldbook_pack": "stable worldbook text",
   "worldbook_injection_position": "system_tail",
   "daily_digest_pack": "today's truncation digests, oldest first, each prefixed with its time range",
-  "daily_digest_injection_position": "system_tail",
   "api_base": "upstream base URL",
   "upstream_key": "upstream key",
   "upstream_format": "anthropic when cache_strategy is native_stable or native_tiered; otherwise omit for auto detection",
@@ -116,7 +115,7 @@ For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text bloc
 
 This is not upstream hidden chain-of-thought. It is user-visible role text that the panel folds under "思考" and keeps in visible/transport history, so later turns can quote or remember it. Changing the prompt changes the system prefix and can invalidate prompt-cache hits.
 
-`worldbook_injection_position`, `ck_thinking_injection_position`, `memory_pack_injection_position`, and `daily_digest_injection_position` may use these values:
+`worldbook_injection_position`, `ck_thinking_injection_position`, and `memory_pack_injection_position` may use these values:
 
 - `system_after_main`: as a system block immediately after the main system prompt.
 - `system_after_anchor`: as a system block after the CK session anchor.
@@ -124,7 +123,9 @@ This is not upstream hidden chain-of-thought. It is user-visible role text that 
 - `latest_user_prefix`: prepended to the latest real user message.
 - `latest_user_suffix`: appended to the latest real user message.
 
-Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor`; worldbook, memory pack and daily digest use `system_tail`. Inside `system_tail` the daily digest is emitted before memory pack and worldbook, so its default position is exactly "after the system prompt and the pseudo-thinking block". Use `latest_user_*` only for compatibility testing, because those positions sit near the dynamic recall context and usually give weaker prompt-cache reuse than stable system positions.
+Defaults preserve current CK behavior: pseudo-thinking uses `system_after_anchor`; worldbook and memory pack use `system_tail`. Use `latest_user_*` only for compatibility testing, because those positions sit near the dynamic recall context and usually give weaker prompt-cache reuse than stable system positions.
+
+The daily digest has no position option. It is always emitted as the very last `system` block, after worldbook and memory pack and therefore after every system breakpoint — that is, immediately in front of the surviving history messages, in the slot the trimmed messages used to occupy. This is a cache decision, not a prompt-ordering preference: the digest changes once per trim, and a trim already forces the message region to be rebuilt, so a change there costs nothing extra. Emitting it earlier would drag the main prompt, session anchor, speech preferences, memory pack and worldbook into the same invalidation, which is the whole stable prefix. `daily_digest_injection_position` is accepted and ignored for backward compatibility; the `meta` event reports `injection_positions.daily_digest` as `system_last` or `off`.
 
 `use_mcp` and `mcp_url` are optional and must default to disabled. Enabling MCP adds tool schemas to the upstream request and may change prompt-cache prefixes. Keep MCP off for normal cache-hit testing; turn it on only when the user explicitly wants tool access. The gateway sorts external MCP tools by name and caches `tools/list` results so transient MCP errors do not flip the upstream tools prefix from populated to empty.
 
@@ -208,7 +209,7 @@ Use gateway debug records to check:
 
 ## Daily truncation digest
 
-`daily_digest_pack` carries the panel-owned digests of turns that auto-trim has already removed from this window. It is injected as a `<ck_daily_digest>` system block and is meant to read as the assistant's own memory of the day, not as reference material.
+`daily_digest_pack` carries the panel-owned digests of turns that auto-trim has already removed from this window. It is injected as the last `<ck_daily_digest>` system block — see the injection-position section above for why that slot is fixed — and is meant to read as the assistant's own memory of the day, not as reference material.
 
 The gateway side is stateless. `POST /ck/chat-digest/prepare` (alias `/chat-digest/prepare`) takes `{key, session_id, event_id, reason, tz_offset_minutes, messages, previous}` and returns `{ok, prepared, text, merge_with_previous, start_ts, end_ts, range_label, provider_model}`. It performs exactly one model call and stores nothing; a `503` with `error_code` in `chat_digest_not_configured | chat_digest_timeout | chat_digest_failed` never blocks the trim that already happened.
 
