@@ -1869,6 +1869,26 @@ body.chat-active .chat-debug-empty{
   box-shadow:0 6px 18px rgba(15,23,42,.06)!important;
 }
 
+body.chat-active .chat-debug-topic{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  margin:10px 2px 2px!important;
+  color:#6b7c74!important;
+  font-size:10.5px!important;
+  font-weight:750!important;
+  letter-spacing:.05em!important;
+}
+body.chat-active .chat-debug-topic::after{
+  content:""!important;
+  flex:1!important;
+  height:1px!important;
+  background:rgba(148,163,184,.28)!important;
+}
+body.chat-active .chat-debug-topic:first-child{margin-top:0!important}
+body.dark.chat-active .chat-debug-topic{color:#8b9791!important}
+body.dark.chat-active .chat-debug-topic::after{background:rgba(148,163,184,.2)!important}
+
 body.chat-active .chat-debug-record{
   position:relative!important;
   padding-right:42px!important;

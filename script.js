@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v200-folders-usability';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v201-debug-panel-grouping';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -3766,7 +3766,7 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   var savedEl=document.getElementById('chat-cache-saved-mode');
   if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(savedMeta);
   var debugMode=document.getElementById('chat-debug-cache-mode');
-  if(debugMode)debugMode.textContent='【缓存模式】'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+'｜记忆召回：'+recallMeta.label;
+  if(debugMode)debugMode.textContent='【已保存的设置】'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+'｜记忆召回：'+recallMeta.label+'（本轮实际生效值看下面的 🧊 缓存诊断）';
   var detail=document.getElementById('chat-cache-mode-detail');
   if(detail)detail.textContent='当前选择：'+meta.label+'｜发送：'+meta.sendText+'｜'+chatCacheStrategyTtlDetail(meta);
   var status=document.getElementById('chat-cache-save-status');
@@ -5842,10 +5842,45 @@ function chatDebugFactRecallPriority(record){
   if(record.event==='debug')return 2;
   return 1;
 }
+function chatDebugCacheDiagKey(record){
+  if(!record||record.event!=='debug')return '';
+  var data=record.data&&typeof record.data==='object'?record.data:{};
+  if(!data.cache_anchors&&!data.canonical_changes)return '';
+  if(chatDebugFactRecallSignature(record))return '';
+  var id=String(data.debug_id||'').trim();
+  return id?('cache-diag:'+id):'';
+}
+function chatDebugMergeCacheDiag(base,next){
+  var merged={};
+  Object.keys(base||{}).forEach(function(key){merged[key]=base[key]});
+  var baseData=(base&&base.data&&typeof base.data==='object')?base.data:{};
+  var nextData=(next&&next.data&&typeof next.data==='object')?next.data:{};
+  var data={};
+  Object.keys(baseData).forEach(function(key){data[key]=baseData[key]});
+  Object.keys(nextData).forEach(function(key){
+    var value=nextData[key];
+    if(value===undefined||value===null||value==='')return;
+    data[key]=value;
+  });
+  merged.data=data;
+  merged.ts=Math.max(Number((base&&base.ts)||0),Number((next&&next.ts)||0))||merged.ts;
+  return merged;
+}
 function chatDebugNormalizeRecords(list){
-  var out=[],factIndexes={};
+  var out=[],factIndexes={},cacheIndexes={};
   (Array.isArray(list)?list:[]).forEach(function(record){
     if(!record||typeof record!=='object')return;
+    var cacheKey=chatDebugCacheDiagKey(record);
+    if(cacheKey){
+      var cacheIndex=cacheIndexes[cacheKey];
+      if(cacheIndex===undefined){
+        cacheIndexes[cacheKey]=out.length;
+        out.push(record);
+        return;
+      }
+      out[cacheIndex]=chatDebugMergeCacheDiag(out[cacheIndex],record);
+      return;
+    }
     var signature=chatDebugFactRecallSignature(record);
     if(!signature){out.push(record);return;}
     var existingIndex=factIndexes[signature];
@@ -5990,6 +6025,79 @@ function chatDecorateDebugBody(html,record){
   html=html.replace(/(cache_creation(?:_input)?_tokens[=:：]\s*)([0-9][0-9,]*)/gi,'$1<span class="chat-debug-cache-number">$2</span>');
   return html;
 }
+var CHAT_DEBUG_TOPICS=[
+  {key:'request',label:'请求与传输'},
+  {key:'cache',label:'缓存'},
+  {key:'recall',label:'召回与 Fact'},
+  {key:'timing',label:'计时'},
+  {key:'usage',label:'用量与计费'},
+  {key:'trim',label:'截断与总结'},
+  {key:'error',label:'错误'},
+  {key:'other',label:'其他'}
+];
+function chatDebugTopicLabel(topic){
+  for(var i=0;i<CHAT_DEBUG_TOPICS.length;i++){if(CHAT_DEBUG_TOPICS[i].key===topic)return CHAT_DEBUG_TOPICS[i].label}
+  return '其他';
+}
+function chatDebugTopicRank(topic){
+  for(var i=0;i<CHAT_DEBUG_TOPICS.length;i++){if(CHAT_DEBUG_TOPICS[i].key===topic)return i}
+  return CHAT_DEBUG_TOPICS.length;
+}
+function chatDebugRecordTopic(record,text){
+  var ev=record&&record.event?String(record.event):'';
+  var data=(record&&record.data&&typeof record.data==='object')?record.data:{};
+  text=String(text||'');
+  if(ev==='error')return 'error';
+  if(ev==='meta'||ev==='tool')return 'request';
+  if(ev==='usage'||ev==='done')return 'usage';
+  if(ev==='latency')return 'timing';
+  if(ev==='intent_rewrite'||ev==='memory')return 'recall';
+  if(ev==='daily_digest')return 'trim';
+  if(ev==='gateway')return 'other';
+  if(ev==='debug'){
+    if(data.mode==='new_session')return 'request';
+    if(data.latency_probe)return 'timing';
+    if(data.mcp_error)return 'request';
+    if(data.cache_anchors||data.canonical_changes)return 'cache';
+    if(data.fact_stats_queued||data.recall_error||data.recall_query||data.memory_chars!==undefined)return 'recall';
+  }
+  if(text.indexOf('截断')>=0||text.indexOf('措辞偏好')>=0||text.indexOf('总结')>=0)return 'trim';
+  if(text.indexOf('缓存')>=0)return 'cache';
+  if(text.indexOf('Fact')>=0||text.indexOf('召回')>=0)return 'recall';
+  return 'other';
+}
+function chatDebugRoundOpener(record){
+  if(!record)return false;
+  if(record.event==='meta')return true;
+  return record.event==='debug'&&record.data&&record.data.mode==='new_session';
+}
+function chatDebugGroupedIndexes(list){
+  // 调试台是流式日志，到达顺序天生打散：缓存诊断被意图改写和 Fact 召回顶开，
+  // 三条计时也各来各的。这里按「一轮请求」切段，段内按主题稳定排序，
+  // 让同类紧挨在一起；每条记录自己的时间戳仍然如实显示。
+  list=Array.isArray(list)?list:[];
+  var segments=[],current=null;
+  list.forEach(function(record,index){
+    if(!current||chatDebugRoundOpener(record)){current=[];segments.push(current)}
+    current.push(index);
+  });
+  var out=[];
+  segments.forEach(function(indexes){
+    indexes.map(function(index){
+      var record=list[index];
+      var text='';
+      try{text=chatDebugLine(record)}catch(e){text=''}
+      return {index:index,topic:chatDebugRecordTopic(record,text)};
+    }).map(function(item,order){
+      item.order=order;
+      return item;
+    }).sort(function(a,b){
+      var diff=chatDebugTopicRank(a.topic)-chatDebugTopicRank(b.topic);
+      return diff!==0?diff:(a.order-b.order);
+    }).forEach(function(item){out.push(item)});
+  });
+  return out;
+}
 function chatDebugRecordHtml(record,index){
   var line=chatDebugLine(record);
   var m=line.match(/^\[([0-9:]+)\]\s*([\s\S]*)$/);
@@ -6008,7 +6116,15 @@ function chatRenderDebugRecords(){
     chatScrollDebugBottom();
     return;
   }
-  el.innerHTML=chatDebugRecords.map(chatDebugRecordHtml).join('');
+  var html='',lastTopic='';
+  chatDebugGroupedIndexes(chatDebugRecords).forEach(function(item){
+    if(item.topic!==lastTopic){
+      html+='<div class="chat-debug-topic"><span>'+esc(chatDebugTopicLabel(item.topic))+'</span></div>';
+      lastTopic=item.topic;
+    }
+    html+=chatDebugRecordHtml(chatDebugRecords[item.index],item.index);
+  });
+  el.innerHTML=html;
   chatScrollDebugBottom();
 }
 function chatScrollDebugBottom(){
@@ -6140,6 +6256,10 @@ function chatFormatRecallDiag(data){
   lines.push('🧮 明细合计 '+sec(diag.phase_sum_seconds)+'｜实际总耗时 '+sec(diag.total_seconds));
   return lines.join('\n');
 }
+function chatFormatFactStatsLine(data){
+  data=data&&typeof data==='object'?data:{};
+  return '📈 Fact 召回统计｜最终注入 '+(data.fact_stats_count||0)+' 条｜模式：'+chatRecallModeDisplayLabel(data.recall_mode)+'｜epoch '+(data.recall_mode_epoch||0)+'｜异步写入';
+}
 function chatFormatDebug(ev,data){
   data=data||{};
   if(ev==='intent_rewrite')return chatFormatIntentRewrite(data);
@@ -6182,33 +6302,13 @@ function chatFormatDebug(ev,data){
     var requestToolsText=requestTools!==undefined?('｜本轮上游tools：'+(requestTools||0)):'';
     var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+requestToolsText+mcpCache):'｜MCP：关闭';
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
-    var strategy=data.effective_cache_strategy||data.cache_strategy||'single_5m';
-    var strategyMeta=chatCacheStrategyMeta(strategy);
-    var ttl=data.prompt_cache_ttl||data.cache_control_ttl||chatCacheStrategyTtlLabel(strategyMeta);
-    var strategyText=strategyMeta.label+'｜发送：'+strategyMeta.debugText+'｜TTL：'+ttl;
-    var recallMeta=chatRecallMeta(data.recall_enabled!==false,data.recall_mode);
-    var factRecallMode=chatFactRecallModeMeta(data.fact_recall_mode);
-    var currentRecallMode=chatRecallModeDisplayLabel(data.recall_mode||recallMeta.mode);
-    var previousRecallMode=data.previous_recall_mode?chatRecallModeDisplayLabel(data.previous_recall_mode):'';
-    var recallTransition=data.mode_switched
-      ? ('｜模式切换：'+(previousRecallMode||'-')+' → '+currentRecallMode)
-      : (data.mode_initialized?'｜模式初始化：'+currentRecallMode:'');
-    var recallEpoch=data.recall_mode_epoch!==undefined?('｜epoch '+data.recall_mode_epoch):'';
-    var injectText=data.gateway_context_injected===true
-      ? ('｜本轮注入：'+(data.gateway_context_chars||0)+'字')
-      : (data.gateway_context_injected===false?'｜本轮无召回注入':'');
-    var recallText='｜记忆召回：'+recallMeta.label+'｜路径：'+factRecallMode.label+'｜有效模式：'+currentRecallMode+recallTransition+recallEpoch+injectText;
-    var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
-    var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
     var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
     var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')+' / 当日总结 '+(data.injection_positions.daily_digest||'-')):'';
     var dailyDigestText=data.daily_digest_chars?('｜当日截断总结：'+data.daily_digest_chars+' 字'):'';
     var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
     var backendNoticeState=data.backend_switch_notification_enabled===false?'通知关闭':(data.backend_switch_notification_injected?'已注入切换通知':(data.backend_switch_detected?'切换但静默':'未切换'));
     var backendText=data.backend_name?('｜后端：'+data.backend_name+' · '+(data.backend_model||data.model||'-')+'（'+backendNoticeState+'）'):'';
-    var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'仅同步措辞偏好',pending_rebuild:'已准备操作后的下一条消息'};
-    var boundaryText=data.cache_rebuild_boundary?('｜缓存重建边界：'+(boundaryLabels[data.cache_rebuild_boundary]||data.cache_rebuild_boundary)):'';
-    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+backendText+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+dailyDigestText+thinkingText+injectionText+targetText+recallText+'｜缓存策略：'+strategyText+boundaryText+idleText+cleanText+mcpText;
+    return '🧭 请求信息｜会话：'+(data.session_id||'-')+'｜模型：'+(data.model||'-')+backendText+'｜历史来源：'+sourceText+'｜历史条数：'+(data.history_messages||0)+windowText+'｜首条锚点：'+(data.session_anchor_chars||0)+' 字｜世界书：'+(data.worldbook_chars||0)+' 字'+dailyDigestText+thinkingText+injectionText+targetText+mcpText;
   }
   if(ev==='memory'){
     return chatFormatRecallDiag(data);
@@ -6244,10 +6344,22 @@ function chatFormatDebug(ev,data){
       :data.skipped);
     return '🗂 当日截断总结｜'+(data.merged?'并入上一条':'新增一条')+'｜'+(data.range||'-')+'｜'+(data.chars||0)+' 字｜覆盖 '+(data.rounds||0)+' 轮｜当日共 '+(data.entries||0)+' 条｜'+(data.provider_model||'-')+'｜'+(data.duration_ms||0)+'ms';
   }
+  if(ev==='speech_preference_prepare'){
+    if(data.skipped)return '🗣 措辞偏好提取｜跳过：'+data.skipped;
+    if(data.ok===false)return '⚠️ 措辞偏好提取失败｜本批 '+(data.messages||0)+' 条｜丢弃 '+(data.dropped_rounds||0)+' 轮｜'+(data.duration_ms||0)+'ms｜'+(data.stopped?'已被停止｜':'')+(data.error||'未知原因');
+    return '🗣 措辞偏好提取｜本批 '+(data.messages||0)+' 条｜丢弃 '+(data.dropped_rounds||0)+' 轮｜版本 '+(data.speech_preference_revision||'-')+'（待生效 '+(data.speech_preference_pending_revision||'-')+' / 已生效 '+(data.speech_preference_applied_revision||'-')+'）｜'+(data.duration_ms||0)+'ms';
+  }
+  if(ev==='speech_preference_prepare_failed_nonblocking'){
+    return '⚠️ 措辞偏好提取失败（不阻塞截断）｜保留旧规则｜触发：'+(data.trim_trigger||'-')+'｜计划丢弃 '+(data.planned_dropped||0)+' 轮｜进重试队列 '+(data.queued_rows||0)+' 条｜'+(data.error||'未知原因');
+  }
+  if(ev==='trim_gateway_sync'){
+    if(data.ok===false)return '⚠️ 截断同步网关失败｜'+(data.error||'未知原因');
+    return '✂️ 截断同步网关｜触发：'+(data.trigger||'-')+'｜丢弃 '+(data.dropped||0)+' 轮';
+  }
+  if(ev==='auto_trim_idle_error'){
+    return '⚠️ 空闲自动截断失败｜'+(data.error||'未知原因');
+  }
   if(ev==='debug'){
-    if(data.fact_stats_queued){
-      return '📈 Fact 召回统计｜最终注入 '+(data.fact_stats_count||0)+' 条｜模式：'+chatRecallModeDisplayLabel(data.recall_mode)+'｜epoch '+(data.recall_mode_epoch||0)+'｜异步写入';
-    }
     if(data.latency_probe&&typeof data.latency_probe==='object'){
       var lp=data.latency_probe;
       return '⏱ 网关首字链路｜请求编号 '+(lp.debug_id||'-')+'｜收到请求→发起上游请求 '+(lp.t1_to_t2_ms!==undefined?lp.t1_to_t2_ms:'-')+'ms｜发起上游请求→收到上游首个网络数据块 '+(lp.t2_to_t3_first_chunk_ms!==undefined?lp.t2_to_t3_first_chunk_ms:'-')+'ms｜收到上游首个网络数据块→发出首个面板增量 '+(lp.t3_first_chunk_to_t4_ms!==undefined?lp.t3_first_chunk_to_t4_ms:'-')+'ms｜收到上游首个可显示文本→发出首个面板增量 '+(lp.t3_first_text_to_t4_ms!==undefined?lp.t3_first_text_to_t4_ms:'-')+'ms｜发出首个面板增量→收到上游完整响应 '+(lp.t4_to_upstream_full_ms!==undefined?lp.t4_to_upstream_full_ms:'-')+'ms';
@@ -6258,14 +6370,25 @@ function chatFormatDebug(ev,data){
     if(data.cache_anchors||data.canonical_changes){
       var changes=(Array.isArray(data.canonical_changes)?data.canonical_changes:[]).join('；')||'无';
       changes=changes.replace(/canonical inject: session=/g,'会话=').replace(/ users=/g,'｜用户消息数=').replace(/ restored_past=/g,'｜已恢复旧消息=');
-      var diagMeta=data.cache_strategy?chatCacheStrategyMeta(data.cache_strategy):null;
-      var diagMode=diagMeta?('｜模式：'+diagMeta.label+'｜发送：'+diagMeta.debugText+'｜TTL：'+(data.prompt_cache_ttl||chatCacheStrategyTtlLabel(diagMeta))):'';
+      var diagMeta=chatCacheStrategyMeta(data.effective_cache_strategy||data.cache_strategy||'single_5m');
+      var diagTtl=data.prompt_cache_ttl||data.cache_control_ttl||chatCacheStrategyTtlLabel(diagMeta);
+      var diagMode='｜策略：'+diagMeta.label+'｜发送：'+diagMeta.debugText+'｜TTL：'+diagTtl;
+      var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'仅同步措辞偏好',pending_rebuild:'已准备操作后的下一条消息'};
+      var boundaryText=data.cache_rebuild_boundary?('｜重建边界：'+(boundaryLabels[data.cache_rebuild_boundary]||data.cache_rebuild_boundary)):'';
+      var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
+      var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
       var activeRecallMode=chatRecallModeDisplayLabel(data.recall_mode||(data.recall_enabled===false?'off':'full'));
       var priorRecallMode=data.previous_recall_mode?chatRecallModeDisplayLabel(data.previous_recall_mode):'';
       var transition=data.mode_switched?('｜召回切换：'+(priorRecallMode||'-')+' → '+activeRecallMode):(data.mode_initialized?'｜召回模式初始化':'');
+      var pathText=data.fact_recall_mode?('｜路径：'+chatFactRecallModeMeta(data.fact_recall_mode).label):'';
       var cleanup='｜epoch '+(data.recall_mode_epoch||0)+'｜清理注入 '+(data.cleared_injected_context_count||0)+'｜清理 canonical '+(data.canonical_sessions_cleared||0);
-      var diagRecall=data.recall_enabled===false?'｜召回关闭':(data.gateway_context_injected?'｜召回已注入':'｜无召回注入');
-      return '🧊 缓存诊断'+diagMode+diagRecall+'｜召回模式：'+activeRecallMode+transition+cleanup+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint);
+      var diagRecall=data.recall_enabled===false?'｜召回关闭':(data.gateway_context_injected?('｜召回已注入 '+(data.gateway_context_chars||0)+'字'):'｜无召回注入');
+      var cacheDiag='🧊 缓存诊断'+diagMode+boundaryText+idleText+cleanText+diagRecall+'｜召回模式：'+activeRecallMode+pathText+transition+cleanup+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint);
+      if(data.fact_stats_queued)cacheDiag+='\n'+chatFormatFactStatsLine(data);
+      return cacheDiag;
+    }
+    if(data.fact_stats_queued){
+      return chatFormatFactStatsLine(data);
     }
     if(data.recall_query||data.memory_chars!==undefined){
       return chatFormatRecallDiag(data)+'\n🔎 召回查询｜'+String(data.recall_query||'').slice(0,180);
