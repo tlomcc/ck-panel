@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v194-daily-digest';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v195-daily-digest-session-switch';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -6728,6 +6728,7 @@ async function chatDeleteSession(id,event){
   chatSaveSessions();
   chatRenderSessions();
   chatRenderMessages();
+  chatRenderDailyDigest(cfg);
   chatUpdateRuntime(cfg);
   chatSetStatus('对话已删除');
 }
@@ -7596,10 +7597,13 @@ function chatDailyDigestScheduleForTrim(cfg,plan){
   }).catch(function(){});
 }
 async function chatDailyDigestRequest(cfg,job){
-  cfg=cfg||chatLoadConfig();
+  // 这个请求是异步落地的，配置可能在截断之后被改过（关掉功能、换网关地址、换 Key），
+  // 所以这里不复用截断当时的快照，重新读一次。
+  cfg=chatLoadConfig();
   job=job||{};
   var messages=Array.isArray(job.messages)?job.messages:[];
   if(!messages.length)return null;
+  if(cfg.dailyDigestEnabled===false)return null;
   var panelKey=String(cfg.panelKey||'').trim();
   if(!panelKey)return null;
   var session=chatDailyDigestFindSession(job.sessionId)||chatCurrentSession();
@@ -9864,6 +9868,8 @@ function chatNewSession(){
   chatSaveSessions();
   chatRenderSessions();
   chatRenderMessages();
+  // 新会话没有任何截断总结，面板不能还挂着上一个会话的内容。
+  chatRenderDailyDigest(cfg);
   chatDebug('debug',{session_id:cfg.sessionId,mode:'new_session',history:'empty'});
   chatUpdateRuntime(cfg);
   chatSetStatus();

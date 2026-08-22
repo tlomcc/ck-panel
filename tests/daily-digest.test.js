@@ -224,6 +224,18 @@ function testPanelWiring(){
 
   const schedule=extractFunction('chatDailyDigestScheduleForTrim');
   assert.ok(schedule.includes('chatDailyDigestChain'),'多次截断必须串行，否则合并判断看不到上一条');
+
+  // 换会话/新会话/删会话之后，面板不能还挂着上一个会话的总结。
+  assert.ok(extractFunction('chatWriteForm').includes('chatRenderDailyDigest(cfg)'),
+    'chatSelectSession 走 chatWriteForm，必须在那里重渲染');
+  assert.ok(extractFunction('chatNewSession').includes('chatRenderDailyDigest(cfg)'),
+    '新会话必须清空总结显示');
+  assert.ok(source.slice(source.indexOf('async function chatDeleteSession'),
+    source.indexOf('function chatSelectSession')).includes('chatRenderDailyDigest(cfg)'),
+    '删除会话后必须重渲染总结');
+  // 异步落地时配置可能已经变了，必须重新读一次而不是用截断当时的快照。
+  assert.ok(request.includes('cfg=chatLoadConfig();'),'落地前要重新读配置');
+  assert.ok(request.includes('cfg.dailyDigestEnabled===false)return null'),'期间被关掉就不要再写入');
 }
 
 testDayKeyAndClock();
