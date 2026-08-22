@@ -1481,62 +1481,7 @@ body.dark .select-circle.checked{
 }
 /* button:disabled/.btn:disabled 已迁入 components.css（Phase 6 第二组） */
 
-/* Entity graph category flow */
-.entity-stats{
-  display:flex!important;
-  flex-direction:column;
-  gap:10px;
-  margin-bottom:12px;
-}/* Larger{
-  height:300px;
-}
-
-@media (max-width:520px){
-}
-.entity-facts{
-  display:grid;
-  gap:8px;
-}
-.entity-fact{
-  display:grid;
-  grid-template-columns:88px minmax(0,1fr);
-  gap:10px;
-  align-items:start;
-  padding:9px 10px;
-  border:1px solid var(--ck-border);
-  border-radius:10px;
-  background:var(--ck-surface-2);
-}
-.entity-fact span{
-  color:var(--ck-muted);
-  font-size:11px;
-  font-weight:800;
-  line-height:1.5;
-}
-.entity-fact p{
-  margin:0;
-  color:var(--ck-text);
-  font-size:12px;
-  line-height:1.65;
-  word-break:break-word;
-}
-
-@media (max-width:520px){
-  .entity-fact{
-    grid-template-columns:1fr;
-    gap:4px;
-  }
-}
-.eg-chip.active{background:var(--ck-accent);border-color:var(--ck-accent);color:#fff;font-weight:600}
-.eg-chip.active i{background:rgba(255,255,255,.26);color:#fff}
-body.dark .eg-badge-person{background:#1e2a38;color:#94b7df}
-body.dark .eg-badge-event{background:#33291a;color:#d6a862}
-body.dark .eg-badge-place{background:#173029;color:#66c2b0}
-body.dark .eg-badge-thing{background:#2a2338;color:#b391d4}
-body.dark .eg-badge-mood{background:#341f29;color:#d68aa8}
-body.dark .eg-badge-topic{background:#232b30;color:#93a2ad}
-body.dark .eg-badge-relation{background:var(--ck-accent-wash);color:var(--ck-accent)}
-
+/* ===== Fact 详情底部弹层（信息网页面已删，这套 eg-detail 外壳由 Fact 详情复用） ===== */
 .eg-detail-sheet{position:fixed;inset:0;z-index:150;display:none}
 .eg-detail-sheet.show{display:block}
 .eg-detail-mask{position:absolute;inset:0;background:rgba(20,36,28,.44)}
@@ -1552,21 +1497,6 @@ body.eg-sheet-open{overflow:hidden}
   .eg-detail-panel{left:50%;right:auto;transform:translateX(-50%);width:560px;max-width:94vw}
 }
 
-body.dark .eg-statbar{background:var(--ck-line)}
-body.dark .eg-stat{background:var(--ck-surface)}
-body.dark .eg-stat b{color:var(--ck-text)}
-body.dark .eg-search-clear{background:#2a2f3a}
-body.dark .eg-chip{background:var(--ck-accent-wash);border-color:var(--ck-line);color:var(--ck-accent)}
-body.dark .eg-chip i{background:var(--ck-surface);color:var(--ck-muted)}
-body.dark .eg-chip.active{background:var(--ck-accent);border-color:var(--ck-accent);color:#10241a}
-body.dark .eg-chip.active i{background:rgba(0,0,0,.18);color:#10241a}
-body.dark .eg-status{background:#1d202b;border-color:#343846}
-body.dark .eg-card{background:var(--ck-surface);border-color:var(--ck-line);border-left-color:var(--ck-line-strong)}
-body.dark .eg-card:hover{background:var(--ck-surface-soft)}
-body.dark .eg-card-name{color:var(--ck-text)}
-body.dark .eg-card-profile{color:var(--ck-muted)}
-body.dark .eg-fact-chip{background:var(--ck-accent-wash);color:var(--ck-accent);border-color:var(--ck-line)}
-body.dark .eg-fact-chip i{color:var(--ck-faint)}
 body.dark .eg-detail-panel{background:var(--ck-surface)}
 body.dark .eg-detail-close{background:var(--ck-surface-soft)}
 body.dark .eg-detail-panel::before{background:var(--ck-line-strong)}
