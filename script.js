@@ -4,7 +4,7 @@ var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_GRAPH_URL=GRAPH_API_BASE+'/entity-graph';
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v201-debug-panel-grouping';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v202-plus-tray-and-panels';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{
@@ -2924,7 +2924,6 @@ var chatImageEncodingCount=0;
 var chatDraftFiles=[];
 var chatFileSeq=0;
 var chatFileReadingCount=0;
-var chatPlusPager={currentPage:0,totalPages:0};
 var chatCleanHistoryResolver=null;
 var chatDebugScrollRaf=0;
 var chatDebugScrollTimer=0;
@@ -9193,88 +9192,15 @@ function chatTogglePlus(force){
   var btn=document.getElementById('chat-plus-btn');
   if(!panel)return;
   var open=typeof force==='boolean'?force:!panel.classList.contains('open');
-  if(open){
-    chatPlusRenderPager(chatPlusPager.currentPage||0);
-  }
   panel.classList.toggle('open',open);
   if(document.body)document.body.classList.toggle('chat-plus-open',open);
   panel.setAttribute('aria-hidden',open?'false':'true');
-  panel.querySelectorAll('.chat-plus-page').forEach(function(page){
-    var active=open&&page.classList.contains('active');
-    page.querySelectorAll('button').forEach(function(button){button.tabIndex=active?0:-1});
-  });
-  panel.querySelectorAll('.chat-plus-dot').forEach(function(dot){dot.tabIndex=open?0:-1});
+  panel.querySelectorAll('button').forEach(function(button){button.tabIndex=open?0:-1});
   if(btn){
     btn.classList.toggle('open',open);
     btn.setAttribute('aria-expanded',open?'true':'false');
     btn.setAttribute('aria-label',open?'收起更多功能':'更多功能');
   }
-}
-function chatPlusRenderPager(pageIndex){
-  var container=document.getElementById('chat-plus-pages');
-  var dotsWrap=document.getElementById('chat-plus-dots');
-  var prevBtn=document.getElementById('chat-plus-prev');
-  var nextBtn=document.getElementById('chat-plus-next');
-  if(!container||!dotsWrap)return;
-  var pages=container.querySelectorAll('.chat-plus-page');
-  var totalPages=pages.length;
-  var currentPage=Math.max(0,Math.min(totalPages-1,Number(pageIndex)||0));
-  chatPlusPager.currentPage=currentPage;
-  chatPlusPager.totalPages=totalPages;
-  pages.forEach(function(page,i){
-    var active=i===currentPage;
-    page.classList.toggle('active',i===currentPage);
-    page.classList.toggle('before',i<currentPage);
-    page.classList.toggle('after',i>currentPage);
-    page.setAttribute('aria-hidden',active?'false':'true');
-    page.querySelectorAll('button').forEach(function(btn){
-      btn.tabIndex=active?0:-1;
-    });
-  });
-  if(prevBtn)prevBtn.hidden=totalPages<=1||currentPage===0;
-  if(nextBtn)nextBtn.hidden=totalPages<=1||currentPage>=totalPages-1;
-  if(totalPages<=1){
-    dotsWrap.innerHTML='';
-    return;
-  }
-  var dots=[];
-  for(var i=0;i<totalPages;i++){
-    dots.push('<button class="chat-plus-dot'+(i===currentPage?' active':'')+'" type="button" onclick="event.stopPropagation();chatPlusSetPage('+i+')" aria-label="切换到第 '+(i+1)+' 页"'+(i===currentPage?' aria-current="page"':'')+'></button>');
-  }
-  dotsWrap.innerHTML=dots.join('');
-}
-function chatPlusSetPage(pageIndex){
-  chatPlusRenderPager(pageIndex);
-}
-function chatPlusPrevPage(){
-  chatPlusRenderPager((chatPlusPager.currentPage||0)-1);
-}
-function chatPlusNextPage(){
-  chatPlusRenderPager((chatPlusPager.currentPage||0)+1);
-}
-function chatPlusHandleTouchStart(e){
-  var touch=e&&e.touches&&e.touches[0];
-  if(!touch)return;
-  chatPlusPager.touchStartX=touch.clientX;
-  chatPlusPager.touchStartY=touch.clientY;
-}
-function chatPlusHandleTouchEnd(e){
-  var touch=e&&e.changedTouches&&e.changedTouches[0];
-  var startX=chatPlusPager.touchStartX;
-  var startY=chatPlusPager.touchStartY;
-  chatPlusPager.touchStartX=null;
-  chatPlusPager.touchStartY=null;
-  if(!touch||!Number.isFinite(startX)||!Number.isFinite(startY))return;
-  var dx=touch.clientX-startX;
-  var dy=touch.clientY-startY;
-  if(Math.abs(dx)<42||Math.abs(dx)<=Math.abs(dy)*1.2)return;
-  if(e.cancelable)e.preventDefault();
-  if(dx<0)chatPlusNextPage();
-  else chatPlusPrevPage();
-}
-function chatPlusHandleTouchCancel(){
-  chatPlusPager.touchStartX=null;
-  chatPlusPager.touchStartY=null;
 }
 function chatClosePlusOnOutside(e){
   var panel=document.getElementById('chat-plus-panel');
@@ -9283,17 +9209,10 @@ function chatClosePlusOnOutside(e){
   chatTogglePlus(false);
 }
 function chatInitPlusPager(){
-  var container=document.getElementById('chat-plus-pages');
-  chatPlusRenderPager(chatPlusPager.currentPage||0);
-  if(container&&!container.dataset.swipeReady){
-    container.dataset.swipeReady='1';
-    container.addEventListener('touchstart',chatPlusHandleTouchStart,{passive:true});
-    container.addEventListener('touchend',chatPlusHandleTouchEnd,{passive:false});
-    container.addEventListener('touchcancel',chatPlusHandleTouchCancel,{passive:true});
-  }
-  var plusPanel=document.getElementById('chat-plus-panel');
-  if(container&&plusPanel&&!plusPanel.classList.contains('open')){
-    plusPanel.querySelectorAll('button').forEach(function(button){button.tabIndex=-1});
+  // 功能区从「分页 + 左右箭头 + 圆点 + 滑动」改成一页平铺，这里只负责让收起时不可 Tab 聚焦。
+  var panel=document.getElementById('chat-plus-panel');
+  if(panel&&!panel.classList.contains('open')){
+    panel.querySelectorAll('button').forEach(function(button){button.tabIndex=-1});
   }
 }
 function chatSettingTitle(tab){
@@ -9460,7 +9379,6 @@ function chatSwitchSideTab(tab,silent){
   if(title)title.textContent=chatSettingTitle(tab);
   var version=document.getElementById('chat-debug-version');
   if(version)version.classList.toggle('show',tab==='debug');
-  document.querySelectorAll('.chat-side-tabs button').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-chat-side')===tab)});
   document.querySelectorAll('.chat-side-panel').forEach(function(p){p.classList.toggle('active',p.id==='chat-side-'+tab)});
   if(!silent){
     var cfg=chatMergeLiveToggleState(chatLoadConfig());

@@ -212,8 +212,7 @@ body.chat-active .chat-online-dot{
   50%{box-shadow:0 0 0 5px rgba(var(--ck-accent-rgb),.08)}
 }
 @media(prefers-reduced-motion:reduce){
-  body.chat-active .chat-online-dot{animation:none!important}
-}
+  body.chat-active .chat-online-dot{animation:none!important}}
 body.chat-active .chat-bubble{
   box-sizing:border-box!important;
   min-width:0!important;
@@ -340,8 +339,7 @@ body.chat-active .chat-settings.open{
   to{opacity:1;transform:translateY(0) scale(1)}
 }
 @media(prefers-reduced-motion:reduce){
-  body.chat-active .chat-settings.open{animation:none!important}
-}
+  body.chat-active .chat-settings.open{animation:none!important}}
 /* 会话列表：活动项带左侧记忆线，与全站一致的选中语言 */
 body.chat-active .chat-session-row{
   border-radius:var(--ck-radius-sm)!important;
@@ -537,34 +535,28 @@ body.dark.chat-active .chat-settings-head{
 /* ---- Chat attachment tray: CK tool sheet, not a WeChat grid ---- */
 body.chat-active .chat-plus-panel{background:var(--ck-surface-overlay)!important;backdrop-filter:blur(18px) saturate(118%)!important;-webkit-backdrop-filter:blur(18px) saturate(118%)!important}
 body.chat-active .chat-plus-panel.open{border-top-color:var(--ck-line)!important}
-body.chat-active .chat-plus-page > button{color:var(--ck-text-soft)!important}
-body.chat-active .chat-plus-page > button:active{background:var(--ck-accent-wash)!important}
+body.chat-active .chat-plus-grid > button{color:var(--ck-text-soft)!important}
+body.chat-active .chat-plus-grid > button:active{background:var(--ck-accent-wash)!important}
 body.chat-active .chat-plus-panel span,
-body.chat-active .chat-plus-page > button:nth-child(n) span,
-body.chat-active .chat-plus-page > button.chat-toggle-on span,
-body.chat-active .chat-plus-page > button.chat-toggle-off span{
+body.chat-active .chat-plus-grid > button.chat-toggle-on span,
+body.chat-active .chat-plus-grid > button.chat-toggle-off span{
   border:1px solid var(--ck-line)!important;
   border-radius:var(--ck-radius-md)!important;
   background:var(--ck-surface-soft)!important;
   color:var(--ck-accent-strong)!important;
 }
 body.chat-active .chat-plus-panel b,
-body.chat-active .chat-plus-page > button.chat-toggle-off b{color:var(--ck-muted)!important}
-body.chat-active .chat-plus-page > button.chat-toggle-on span{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
-body.chat-active .chat-plus-page > button.chat-toggle-off span,
-body.chat-active .chat-plus-page > button.chat-toggle-off b{color:var(--ck-faint)!important}
-body.chat-active .chat-plus-dot::after{background:var(--ck-line-strong)!important}
-body.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!important}
+body.chat-active .chat-plus-grid > button.chat-toggle-off b{color:var(--ck-muted)!important}
+body.chat-active .chat-plus-grid > button.chat-toggle-on span{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent-strong)!important}
+body.chat-active .chat-plus-grid > button.chat-toggle-off span,
+body.chat-active .chat-plus-grid > button.chat-toggle-off b{color:var(--ck-faint)!important}
 body.dark.chat-active .chat-plus-panel{background:var(--ck-surface-overlay)!important}
 body.dark.chat-active .chat-plus-panel span,
-body.dark.chat-active .chat-plus-page > button:nth-child(n) span,
-body.dark.chat-active .chat-plus-page > button.chat-toggle-on span,
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off span{border-color:var(--ck-line)!important;background:var(--ck-surface-soft)!important;color:var(--ck-accent)!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-on span{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off span,
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off b{color:var(--ck-faint)!important}
-body.dark.chat-active .chat-plus-dot::after{background:var(--ck-line-strong)!important}
-body.dark.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-on span,
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off span{border-color:var(--ck-line)!important;background:var(--ck-surface-soft)!important;color:var(--ck-accent)!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-on span{border-color:var(--ck-accent)!important;background:var(--ck-accent-wash)!important;color:var(--ck-accent)!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off span,
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off b{color:var(--ck-faint)!important}
 
 /* ---- Memory web: nodes and lines, desaturated entity types ---- */
 /* 信息网 eg-* 已回归 style.css 单一来源（Phase 6） */
@@ -600,8 +592,7 @@ body.dark.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!i
   body.chat-active .chat-messages{padding-inline:10px!important}
   body.chat-active .chat-bubble.user,
   body.chat-active .chat-bubble.user:not(.has-images){max-width:88%!important}
-  body.chat-active .chat-bubble.assistant{max-width:94%!important}
-}
+  body.chat-active .chat-bubble.assistant{max-width:94%!important}}
 
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{
@@ -609,15 +600,12 @@ body.dark.chat-active .chat-plus-dot.active::after{background:var(--ck-accent)!i
     animation-duration:.01ms!important;
     animation-iteration-count:1!important;
     transition-duration:.01ms!important;
-  }
-}
+  }}
 
 /* ---- Final refinement: quieter chrome, real line icons, one memory line ---- */
-/* Attachment icons were already SVG in the markup; this prevents legacy CSS
-   from painting them as black filled glyphs on narrow screens. */
-body.chat-active .chat-plus-page>button span svg{
-  width:21px!important;
-  height:21px!important;
+/* 图标尺寸只在 wechat.css 的 `.chat-plus-panel span svg` 里定一次，这里不再重复给宽高，
+   否则同一个图标会有 25/24/21px 三个版本互相压。这里只管描边和显示方式。 */
+body.chat-active .chat-plus-grid>button span svg{
   display:block!important;
   fill:none!important;
   stroke:currentColor!important;
@@ -625,13 +613,13 @@ body.chat-active .chat-plus-page>button span svg{
   stroke-linecap:round!important;
   stroke-linejoin:round!important;
 }
-body.chat-active .chat-plus-page>button:hover span,
-body.chat-active .chat-plus-page>button:focus-visible span{
+body.chat-active .chat-plus-grid>button:hover span,
+body.chat-active .chat-plus-grid>button:focus-visible span{
   border-color:var(--ck-accent)!important;
   background:var(--ck-accent-wash)!important;
   color:var(--ck-accent-strong)!important;
 }
-body.chat-active .chat-plus-page>button:focus-visible{outline:none!important}
+body.chat-active .chat-plus-grid>button:focus-visible{outline:none!important}
 
 /* Give secondary pages the same title-to-content rhythm as the overview.
    （API 控制室一侧已回归 style.css 单一来源，此处仅保留信息网/状态页） */

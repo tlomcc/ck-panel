@@ -412,8 +412,7 @@ body.dark.chat-active .chat-send.chat-stop-btn:not(:disabled){background:#d94c4c
   body.chat-active .chat-compose-row{grid-template-columns:36px minmax(0,1fr) 58px!important;gap:7px!important}
   body.chat-active .chat-plus-btn{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important}
   body.chat-active .chat-send{width:58px!important;height:36px!important;min-width:58px!important;min-height:36px!important;padding:0 10px!important}
-  body.chat-active #chat-input{min-height:38px!important;padding:7px 10px!important;font-size:15px!important}
-}
+  body.chat-active #chat-input{min-height:38px!important;padding:7px 10px!important;font-size:15px!important}}
 
 /* ======================= Chat overlays ======================= */
 
@@ -618,35 +617,6 @@ body.chat-active .chat-settings-head .chat-icon-btn{
   color:#888!important;
   font-size:20px!important;
 }
-body.chat-active .chat-side-tabs{
-  flex:0 0 auto!important;
-  display:grid!important;
-  grid-template-columns:repeat(6,minmax(0,1fr))!important;
-  gap:0!important;
-  padding:0 8px!important;
-  border-bottom:1px solid var(--wx-line)!important;
-  background:#fff!important;
-  overflow-x:auto!important;
-}
-body.chat-active .chat-side-tabs button{
-  min-width:68px!important;
-  height:44px!important;
-  padding:0 5px!important;
-  border:0!important;
-  border-bottom:2px solid transparent!important;
-  border-radius:0!important;
-  background:transparent!important;
-  color:#777!important;
-  font-size:12px!important;
-  font-weight:500!important;
-  white-space:nowrap!important;
-}
-body.chat-active .chat-side-tabs button.active{
-  border-bottom-color:var(--wx-primary)!important;
-  background:transparent!important;
-  color:var(--wx-primary-ink)!important;
-  font-weight:600!important;
-}
 body.chat-active .chat-side-panel{
   flex:1 1 auto!important;
   min-height:0!important;
@@ -779,12 +749,9 @@ body.chat-active .chat-field-hint{color:#888!important;font-size:11px!important;
     transform:translateX(-50%)!important;
   }
   body.chat-active .chat-settings-head{height:58px!important;min-height:58px!important;padding-top:5px!important}
-  body.chat-active .chat-side-tabs{padding:0 4px!important}
-  body.chat-active .chat-side-tabs button{min-width:64px!important;height:42px!important;font-size:12px!important}
   body.chat-active .chat-side-panel{padding:14px 12px calc(20px + env(safe-area-inset-bottom))!important;scrollbar-gutter:auto!important}
   body.chat-active .chat-cache-strategy-select-row{grid-template-columns:1fr!important;gap:5px!important}
-  body.chat-active .chat-cache-mode-actions{grid-template-columns:1fr!important}
-}
+  body.chat-active .chat-cache-mode-actions{grid-template-columns:1fr!important}}
 
 /* ======================= 全局（非聊天视图）微信化 ======================= */
 
@@ -898,14 +865,10 @@ body.dark.chat-active .chat-session-item .chat-session-preview{color:#999!import
 body.dark.chat-active .chat-session-item .chat-session-meta,
 body.dark.chat-active .chat-session-del{color:#707074!important}
 body.dark.chat-active .chat-session-empty-hint{border-color:#3a3a3c!important;color:#888!important}
-
 body.dark.chat-active .chat-settings,
-body.dark.chat-active .chat-settings-head,
-body.dark.chat-active .chat-side-tabs{background:#1c1c1e!important;border-color:#2f2f31!important}
+body.dark.chat-active .chat-settings-head{background:#1c1c1e!important;border-color:#2f2f31!important}
 body.dark.chat-active .chat-settings-head b{color:#f1f1f1!important}
 body.dark.chat-active .chat-settings-head .chat-icon-btn{background:#303033!important;color:#aaa!important}
-body.dark.chat-active .chat-side-tabs button{color:#999!important}
-body.dark.chat-active .chat-side-tabs button.active{border-bottom-color:var(--wx-primary)!important;color:#60d394!important;background:transparent!important}
 body.dark.chat-active .chat-side-panel{background:#000!important;color:#e8e8e8!important}
 body.dark.chat-active .chat-settings label{color:#999!important}
 body.dark.chat-active .chat-settings input:not([type=checkbox]):not([type=radio]),
@@ -1114,8 +1077,7 @@ body:not(.chat-active) .tab-head p{color:#888!important;font-size:12px!important
   #tab-overview .today-roll-list,
   #tab-overview .insight-mini-list{max-height:260px!important}
   #tab-categories .cat-grid{gap:12px!important}
-  #tab-categories .cat-card-right{max-width:38%!important}
-}
+  #tab-categories .cat-card-right{max-width:38%!important}}
 
 body.dark.chat-active .chat-version-badge{border-color:#3b403d!important;background:#292c2a!important;color:#9ba39e!important}
 
@@ -1208,8 +1170,7 @@ body.dark #tab-graph .graph-hero h2{color:#eee!important}
 body.dark #tab-graph .graph-hero p,
 body.dark #tab-status .ds-note{color:#999!important}
 @media(max-width:560px){
-  #tab-graph .graph-hero{min-height:100px!important}
-}
+  #tab-graph .graph-hero{min-height:100px!important}}
 
 /* ======================= Memory detail states ======================= */
 #page-detail{
@@ -1688,8 +1649,7 @@ body.dark.chat-active .chat-tool-card{background:#151b23!important}
     height:42px!important;
     max-height:42px!important;
   }
-  body.chat-active.chat-editing .chat-edit-actions{min-height:32px!important;height:32px!important}
-}
+  body.chat-active.chat-editing .chat-edit-actions{min-height:32px!important;height:32px!important}}
 
 @media(max-width:560px){
   #page-detail{padding:10px 14px calc(68px + env(safe-area-inset-bottom))!important}
@@ -1700,14 +1660,12 @@ body.dark.chat-active .chat-tool-card{background:#151b23!important}
   #page-detail .add-area-foot{align-items:flex-end!important}
   #page-detail .add-area-options{display:grid!important;grid-template-columns:minmax(76px,1fr) minmax(76px,1fr) auto!important}
   #page-detail #add-tags{width:100%!important;min-width:0!important}
-  #page-detail .add-area-options .btn{padding:0 12px!important}
-}
+  #page-detail .add-area-options .btn{padding:0 12px!important}}
 
 @media(max-width:340px){
   #page-detail{padding-left:10px!important;padding-right:10px!important}
   #page-detail .add-area-foot{align-items:stretch!important;flex-direction:column!important}
-  #page-detail .add-area-options{width:100%!important}
-}
+  #page-detail .add-area-options{width:100%!important}}
 
 /* Single-entry drill-down keeps only the content being inspected. */
 #page-detail.single-entry-view .switch-bar,
@@ -1848,40 +1806,31 @@ body.chat-active .chat-plus-panel{
   transform:none!important;
 }
 body.chat-active .chat-plus-panel.open{
-  max-height:244px!important;
+  max-height:340px!important;
   margin-top:9px!important;
   padding-top:16px!important;
-  padding-bottom:8px!important;
+  padding-bottom:10px!important;
   border-top:1px solid #dedede!important;
 }
-body.chat-active .chat-plus-pages{
-  height:148px!important;
-  touch-action:pan-y!important;
-}
-body.chat-active .chat-plus-page{
+body.chat-active .chat-plus-grid{
   grid-template-columns:repeat(4,minmax(0,1fr))!important;
-  grid-template-rows:repeat(2,70px)!important;
+  grid-auto-rows:70px!important;
   gap:8px 12px!important;
   opacity:1!important;
-  transform:translateX(110%)!important;
-  transition:transform .18s ease!important;
+  transform:none!important;
 }
-body.chat-active .chat-plus-page.before{transform:translateX(-110%)!important}
-body.chat-active .chat-plus-page.after{transform:translateX(110%)!important}
-body.chat-active .chat-plus-page.active{transform:translateX(0)!important}
-body.chat-active .chat-plus-page > button{
+body.chat-active .chat-plus-grid > button{
   height:70px!important;
   gap:6px!important;
   padding:0!important;
   border-radius:7px!important;
   color:#272727!important;
 }
-body.chat-active .chat-plus-page > button:hover{background:transparent!important;transform:none!important}
-body.chat-active .chat-plus-page > button:active{background:rgba(0,0,0,.035)!important;transform:scale(.97)!important}
+body.chat-active .chat-plus-grid > button:hover{background:transparent!important;transform:none!important}
+body.chat-active .chat-plus-grid > button:active{background:rgba(0,0,0,.035)!important;transform:scale(.97)!important}
 body.chat-active .chat-plus-panel span,
-body.chat-active .chat-plus-page > button:nth-child(n) span,
-body.chat-active .chat-plus-page > button.chat-toggle-on span,
-body.chat-active .chat-plus-page > button.chat-toggle-off span{
+body.chat-active .chat-plus-grid > button.chat-toggle-on span,
+body.chat-active .chat-plus-grid > button.chat-toggle-off span{
   width:50px!important;
   height:50px!important;
   flex:0 0 50px!important;
@@ -1892,8 +1841,8 @@ body.chat-active .chat-plus-page > button.chat-toggle-off span{
   box-shadow:none!important;
 }
 body.chat-active .chat-plus-panel span svg{
-  width:25px!important;
-  height:25px!important;
+  width:24px!important;
+  height:24px!important;
   fill:none!important;
   stroke:currentColor!important;
   stroke-width:1.55!important;
@@ -1901,102 +1850,64 @@ body.chat-active .chat-plus-panel span svg{
   stroke-linejoin:round!important;
 }
 body.chat-active .chat-plus-panel b,
-body.chat-active .chat-plus-page > button.chat-toggle-off b{
+body.chat-active .chat-plus-grid > button.chat-toggle-off b{
   color:#686868!important;
   font-size:11px!important;
   font-weight:400!important;
   line-height:1.1!important;
 }
-body.chat-active .chat-plus-page > button.chat-toggle-on span{
+body.chat-active .chat-plus-grid > button.chat-toggle-on span{
   border-color:#9fdfb8!important;
   color:var(--wx-primary)!important;
 }
-body.chat-active .chat-plus-page > button.chat-toggle-off span,
-body.chat-active .chat-plus-page > button.chat-toggle-off b{
+body.chat-active .chat-plus-grid > button.chat-toggle-off span,
+body.chat-active .chat-plus-grid > button.chat-toggle-off b{
   color:#a0a0a0!important;
 }
-body.chat-active .chat-plus-arrow{display:none!important}
-body.chat-active .chat-plus-dots{
-  min-height:16px!important;
-  gap:6px!important;
-  padding:5px 0 0!important;
-}
-body.chat-active .chat-plus-dot{
-  position:relative!important;
-  width:16px!important;
-  height:16px!important;
-  min-width:16px!important;
-  min-height:16px!important;
-  background:transparent!important;
-}
-body.chat-active .chat-plus-dot::after{
-  content:""!important;
-  position:absolute!important;
-  left:50%!important;
-  top:50%!important;
-  width:5px!important;
-  height:5px!important;
-  border-radius:50%!important;
-  background:#c9c9c9!important;
-  transform:translate(-50%,-50%)!important;
-}
-body.chat-active .chat-plus-dot.active{background:transparent!important;transform:none!important}
-body.chat-active .chat-plus-dot.active::after{background:#858585!important}
 body.dark.chat-active .chat-plus-panel{background:#202022!important}
 body.dark.chat-active .chat-plus-panel.open{border-top-color:#343436!important}
 body.dark.chat-active .chat-plus-panel span,
-body.dark.chat-active .chat-plus-page > button:nth-child(n) span,
-body.dark.chat-active .chat-plus-page > button.chat-toggle-on span,
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off span{
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-on span,
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off span{
   border-color:#3b3b3e!important;
   background:#2c2c2e!important;
   color:#d1d1d1!important;
 }
 body.dark.chat-active .chat-plus-panel b{color:#aaa!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-on span{border-color:#307b4f!important;color:#70d89c!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off span,
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off b{color:#737373!important}
-body.dark.chat-active .chat-plus-dot{background:transparent!important}
-body.dark.chat-active .chat-plus-dot::after{background:#505054!important}
-body.dark.chat-active .chat-plus-dot.active{background:transparent!important}
-body.dark.chat-active .chat-plus-dot.active::after{background:#98989d!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-on span{border-color:#307b4f!important;color:#70d89c!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off span,
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off b{color:#737373!important}
 
 @media(max-width:760px){
   body.chat-active .chat-plus-panel{
     padding-left:14px!important;
     padding-right:14px!important;
   }
-  body.chat-active .chat-plus-panel.open{max-height:236px!important;padding-top:14px!important;padding-bottom:7px!important}
-  body.chat-active .chat-plus-pages{height:142px!important}
-  body.chat-active .chat-plus-page{grid-template-rows:repeat(2,67px)!important;gap:7px 8px!important}
-  body.chat-active .chat-plus-page > button{height:67px!important}
-  body.chat-active .chat-plus-panel span,
-  body.chat-active .chat-plus-page > button:nth-child(n) span,
-  body.chat-active .chat-plus-page > button.chat-toggle-on span,
-  body.chat-active .chat-plus-page > button.chat-toggle-off span{
-    width:48px!important;
-    height:48px!important;
-    flex-basis:48px!important;
+  body.chat-active .chat-plus-panel.open{max-height:330px!important;padding-top:14px!important;padding-bottom:9px!important}
+  body.chat-active .chat-plus-grid{grid-auto-rows:67px!important;gap:7px 8px!important}
+  body.chat-active .chat-plus-grid > button{height:67px!important}
+body.chat-active .chat-plus-panel span,
+body.chat-active .chat-plus-grid > button.chat-toggle-on span,
+body.chat-active .chat-plus-grid > button.chat-toggle-off span{
+    width:46px!important;
+    height:46px!important;
+    flex-basis:46px!important;
   }
-  body.chat-active .chat-plus-panel span svg{width:24px!important;height:24px!important}
-}
+  body.chat-active .chat-plus-panel span svg{width:22px!important;height:22px!important}}
 
 @media(max-height:500px) and (orientation:landscape){
   body.chat-active .chat-plus-panel.open{
-    max-height:112px!important;
+    max-height:170px!important;
     margin-top:7px!important;
     padding-top:9px!important;
     padding-bottom:4px!important;
   }
-  body.chat-active .chat-plus-pages{height:68px!important}
-  body.chat-active .chat-plus-page{
-    grid-template-columns:repeat(8,minmax(0,1fr))!important;
-    grid-template-rows:68px!important;
+  body.chat-active .chat-plus-grid{
+    grid-template-columns:repeat(6,minmax(0,1fr))!important;
+    grid-auto-rows:64px!important;
     gap:6px!important;
   }
-  body.chat-active .chat-plus-page > button{height:68px!important}
-  body.chat-active .chat-plus-dots{min-height:14px!important;padding-top:1px!important}
-}
+  body.chat-active .chat-plus-grid > button{height:64px!important}}
 
 /* Text-file drafts share the image attachment rhythm without previewing file contents. */
 body.chat-active .chat-draft-files{
@@ -2087,8 +1998,7 @@ body.dark.chat-active .chat-draft-file-remove:hover,
 body.dark.chat-active .chat-draft-file-remove:focus-visible{background:#3a464f!important;color:#fff!important}
 @media(max-width:760px){
   body.chat-active .chat-draft-files{padding-left:0!important;padding-right:0!important;max-height:108px!important}
-  body.chat-active .chat-draft-file{flex-basis:100%!important;max-width:none!important;min-height:46px!important}
-}
+  body.chat-active .chat-draft-file{flex-basis:100%!important;max-width:none!important;min-height:46px!important}}
 
 /* Sent text files stay compact until the reader asks to inspect their contents. */
 body.chat-active .chat-bubble.user.has-files{
@@ -2309,5 +2219,103 @@ body.dark.chat-active .chat-file-content pre::-webkit-scrollbar-thumb{background
   body.chat-active .chat-file-toggle{gap:6px!important;padding-left:7px!important;padding-right:5px!important}
   body.chat-active .chat-file-main{gap:5px!important}
   body.chat-active .chat-file-main small{font-size:8px!important}
-  body.chat-active .chat-file-copy{width:44px!important;min-width:44px!important}
+  body.chat-active .chat-file-copy{width:44px!important;min-width:44px!important}}
+
+/* ============================================================
+   聊天设置抽屉：统一节奏（➕ 功能区点进去的 7 个面板）
+   这一段是这些面板排版的最终来源。以前每个面板各写一套：
+   同屏 8 种 padding、5 种圆角、7 档字号、4 种按钮高度、两种绿，
+   还有几处特异度打架的死样式。要改这些面板的排版，改这里，
+   不要再在前面的分散规则里加新值。
+   ============================================================ */
+
+/* 表单行：裸 label 只是纵向容器，不需要圆角（原来给了 14px，看不见但会误导） */
+body.chat-active .chat-settings label{border-radius:0!important}
+
+/* 只读输入框必须一眼看出不能编辑（原来被通用 input 白底规则压掉了） */
+body.chat-active .chat-settings input[readonly]:not([type=checkbox]):not([type=radio]),
+body.chat-active .chat-settings textarea[readonly]{
+  background:#f4f5f4!important;
+  color:#6f6f6f!important;
+  cursor:default!important;
+}
+body.dark.chat-active .chat-settings input[readonly]:not([type=checkbox]):not([type=radio]),
+body.dark.chat-active .chat-settings textarea[readonly]{background:#191f26!important;color:#8e9a94!important}
+
+/* 补充说明文字只有一档字号：卡片内的 <p class="chat-field-hint"> 原来被
+   `.chat-memory-card p` 抢成 12px，同一个类渲染出两种大小 */
+body.chat-active .chat-memory-card p.chat-field-hint,
+body.chat-active .chat-settings .chat-field-hint{
+  color:#888!important;
+  font-size:11px!important;
+  line-height:1.65!important;
+}
+
+/* 大文本框统一有高度上限，避免 rows=9 的那个把整页顶长 */
+body.chat-active .chat-settings #chat-thinking-prompt,
+body.chat-active .chat-settings #chat-system{
+  max-height:220px!important;
+}
+
+/* 面板里的按钮只有两种：底部主操作全宽实心，行内次要操作描边。高度统一 36px。 */
+body.chat-active .chat-settings .chat-wide-btn,
+body.chat-active .chat-settings .chat-cache-save-btn,
+body.chat-active .chat-settings .chat-debug-toolbar .btn,
+body.chat-active .chat-settings .chat-actions .btn{
+  min-height:36px!important;
+  height:36px!important;
+  border-radius:8px!important;
+  font-size:13px!important;
+  font-weight:600!important;
+}
+/* 实心按钮统一用微信绿，不再和 tokens 里的 #2f8f62 混着来 */
+body.chat-active .chat-settings .chat-wide-btn,
+body.chat-active .chat-settings .chat-cache-save-btn{
+  border:0!important;
+  background:var(--wx-primary)!important;
+  color:#fff!important;
+  box-shadow:none!important;
+}
+body.chat-active .chat-settings .chat-wide-btn.chat-btn-secondary{
+  background:#fff!important;
+  border:1px solid var(--wx-line)!important;
+  color:#333!important;
+}
+body.dark.chat-active .chat-settings .chat-wide-btn.chat-btn-secondary{
+  background:#1b222a!important;
+  border-color:#2b3540!important;
+  color:#e6ede9!important;
+}
+
+/* 保存按钮列按内容宽度走，右边不再恒定空出 60px；状态文字预留一行高度，
+   报错换行时整行不再跳动 */
+body.chat-active .chat-cache-mode-actions{
+  grid-template-columns:auto minmax(0,1fr)!important;
+}
+body.chat-active .chat-cache-save-btn{
+  padding:0 14px!important;
+}
+body.chat-active .chat-cache-save-status{
+  min-height:32px!important;
+  display:flex!important;
+  align-items:center!important;
+}
+
+/* 「当前轮数」这张卡是状态而不是说明，给它一条区分线（原来 class 写了但没有任何样式） */
+body.chat-active .chat-trim-state{
+  border-left:3px solid var(--wx-primary)!important;
+}
+body.dark.chat-active .chat-trim-state{border-left-color:#2f9c63!important}
+
+/* 世界书：列表区和「当前这一条」的编辑区之间要有分界，否则连成一片分不清在改哪条 */
+body.chat-active #chat-side-worldbook .chat-worldbook-list{
+  padding-bottom:12px!important;
+  border-bottom:1px solid var(--wx-line-soft)!important;
+}
+body.dark.chat-active #chat-side-worldbook .chat-worldbook-list{border-bottom-color:#2b3540!important}
+
+/* 措辞偏好预览不再自己开一层滚动条（外层 .chat-side-panel 已经能滚） */
+body.chat-active .chat-settings .chat-speech-preview{
+  max-height:none!important;
+  overflow:visible!important;
 }

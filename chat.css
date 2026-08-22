@@ -1078,11 +1078,11 @@ body.chat-active .chat-plus-panel{
 }
 
 body.chat-active .chat-plus-panel.open{
-  max-height:240px!important;
+  max-height:340px!important;
   opacity:1!important;
   pointer-events:auto!important;
   margin-top:8px!important;
-  padding:10px 34px 2px!important;
+  padding:10px 4px 4px!important;
   transform:translateY(0)!important;
 }
 
@@ -1091,108 +1091,17 @@ body.chat-active.chat-plus-open .chat-compose{
   overflow:visible!important;
 }
 
-body.chat-active .chat-plus-pages{
-  position:relative!important;
-  display:block!important;
-  overflow:hidden!important;
-  height:146px!important;
-  flex:none!important;
-  min-height:0!important;
-}
-
-body.chat-active .chat-plus-pages::-webkit-scrollbar{
-  display:none!important;
-}
-
-body.chat-active .chat-plus-page{
-  position:absolute!important;
-  inset:0!important;
+/* 功能区是一页平铺的图标网格：不分页、没有左右箭头和圆点，行数跟着按钮数量走。 */
+body.chat-active .chat-plus-grid{
   width:100%!important;
   display:grid!important;
   grid-template-columns:repeat(4,minmax(0,1fr))!important;
-  grid-template-rows:repeat(2,1fr)!important;
+  grid-auto-rows:68px!important;
   gap:10px!important;
   box-sizing:border-box!important;
-  opacity:0!important;
-  pointer-events:none!important;
-  transform:translateX(14px)!important;
-  transition:opacity .24s ease,transform .24s ease!important;
 }
 
-body.chat-active .chat-plus-page.before{
-  transform:translateX(-14px)!important;
-}
-
-body.chat-active .chat-plus-page.active{
-  opacity:1!important;
-  pointer-events:auto!important;
-  transform:translateX(0)!important;
-}
-
-body.chat-active .chat-plus-dots{
-  display:flex!important;
-  justify-content:center!important;
-  align-items:center!important;
-  gap:6px!important;
-  padding:8px 0 2px!important;
-  min-height:20px!important;
-}
-
-body.chat-active .chat-plus-dot{
-  width:8px!important;
-  height:8px!important;
-  min-width:8px!important;
-  min-height:8px!important;
-  padding:0!important;
-  border:0!important;
-  border-radius:50%!important;
-  background:rgba(15,23,42,.2)!important;
-  transition:background .2s ease,transform .2s ease!important;
-  cursor:pointer!important;
-}
-
-body.chat-active .chat-plus-dot.active{
-  background:rgba(7,193,96,.72)!important;
-  transform:scale(1.2)!important;
-}
-
-body.chat-active .chat-plus-arrow{
-  position:absolute!important;
-  top:50%!important;
-  z-index:3!important;
-  width:28px!important;
-  height:44px!important;
-  min-width:28px!important;
-  min-height:44px!important;
-  padding:0!important;
-  border:1px solid rgba(139,156,146,.26)!important;
-  border-radius:999px!important;
-  background:rgba(255,255,255,.86)!important;
-  color:#557463!important;
-  box-shadow:0 6px 16px rgba(15,23,42,.08)!important;
-  cursor:pointer!important;
-  transform:translateY(-50%)!important;
-  transition:background .18s ease,color .18s ease,opacity .18s ease!important;
-}
-
-body.chat-active .chat-plus-arrow-left{
-  left:2px!important;
-}
-
-body.chat-active .chat-plus-arrow-right{
-  right:2px!important;
-}
-
-body.chat-active .chat-plus-arrow[hidden]{
-  display:none!important;
-}
-
-body.chat-active .chat-plus-arrow:hover{
-  background:#fff!important;
-  color:#178f55!important;
-}
-
-body.chat-active .chat-plus-page > button{
+body.chat-active .chat-plus-grid > button{
   min-width:0!important;
   height:68px!important;
   display:flex!important;
@@ -1208,20 +1117,20 @@ body.chat-active .chat-plus-page > button{
   cursor:pointer!important;
 }
 
-body.chat-active .chat-plus-page > button:hover{background:rgba(7,193,96,.06)!important}
+body.chat-active .chat-plus-grid > button:hover{background:rgba(7,193,96,.06)!important}
 
-body.chat-active .chat-plus-page > button.chat-toggle-on span{
+body.chat-active .chat-plus-grid > button.chat-toggle-on span{
   background:#07c160!important;
   color:#fff!important;
   border-color:rgba(7,193,96,.72)!important;
 }
 
-body.chat-active .chat-plus-page > button.chat-toggle-off span{
+body.chat-active .chat-plus-grid > button.chat-toggle-off span{
   background:#eef2f3!important;
   color:#8a949c!important;
 }
 
-body.chat-active .chat-plus-page > button.chat-toggle-off b{
+body.chat-active .chat-plus-grid > button.chat-toggle-off b{
   color:#8a949c!important;
 }
 
@@ -1454,8 +1363,6 @@ body.chat-active .chat-settings-head .chat-icon-btn{
   background:#f0f3f2!important;
   color:#8c939e!important;
 }
-
-body.chat-active .chat-side-tabs{display:none!important}
 
 body.chat-active .chat-side-panel{
   flex:1 1 auto!important;
@@ -2177,13 +2084,9 @@ body.dark.chat-active .chat-settings-mask{background:rgba(0,0,0,.58)!important}
 body.dark.chat-active .chat-settings-head .chat-icon-btn{background:#2a2f3a!important;color:#aeb6c0!important}
 body.dark.chat-active .chat-plus-panel span{background:#10161d!important;color:#57c78c!important}
 body.dark.chat-active .chat-plus-panel b{color:#aab3bd!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-on span{background:#07a853!important;color:#fff!important;border-color:rgba(7,193,96,.62)!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off span{background:#202732!important;color:#697480!important}
-body.dark.chat-active .chat-plus-page > button.chat-toggle-off b{color:#697480!important}
-body.dark.chat-active .chat-plus-dot{background:rgba(255,255,255,.25)!important}
-body.dark.chat-active .chat-plus-dot.active{background:rgba(7,193,96,.8)!important}
-body.dark.chat-active .chat-plus-arrow{border-color:rgba(255,255,255,.12)!important;background:rgba(16,22,29,.9)!important;color:#aab3bd!important}
-body.dark.chat-active .chat-plus-arrow:hover{background:#16202a!important;color:#57c78c!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-on span{background:#07a853!important;color:#fff!important;border-color:rgba(7,193,96,.62)!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off span{background:#202732!important;color:#697480!important}
+body.dark.chat-active .chat-plus-grid > button.chat-toggle-off b{color:#697480!important}
 body.dark.chat-active .chat-new-message-tip{
   border-color:rgba(7,193,96,.34)!important;
   background:rgba(22,29,36,.94)!important;
@@ -2295,21 +2198,6 @@ body.dark.chat-active .chat-cost-amount-estimated{
     border-radius:8px!important;
     font-size:14px!important;
   }
-  body.chat-active .chat-plus-page{
-    gap:8px 6px!important;
-  }
-  body.chat-active .chat-plus-panel.open{
-    max-height:236px!important;
-    margin-top:7px!important;
-    padding-top:9px!important;
-  }
-  body.chat-active .chat-plus-pages{height:136px!important}
-  body.chat-active .chat-plus-page > button{height:64px!important}
-  body.chat-active .chat-plus-panel span{
-    width:40px!important;
-    height:40px!important;
-    border-radius:10px!important;
-  }
   body.chat-active .chat-bubble.user{
     padding:8px 10px 7px 10px!important;
     min-width:54px!important;
@@ -2319,8 +2207,7 @@ body.dark.chat-active .chat-cost-amount-estimated{
     min-height:110px!important;
   }
   body.chat-active .chat-settings #chat-system,
-  body.chat-active .chat-settings #chat-memory-pack{max-height:190px!important}
-}
+  body.chat-active .chat-settings #chat-memory-pack{max-height:190px!important}}
 
 /* Compose grid lock: keep the input from spanning across action buttons. */
 body.chat-active .chat-compose-row > .chat-plus-btn{grid-column:1!important}
@@ -2520,12 +2407,7 @@ body.chat-active .chat-plus-panel.open{
 }
 
 body.chat-active .chat-plus-panel button{
-  border-radius:14px!important;
   transition:background .16s ease,transform .16s ease!important;
-}
-
-body.chat-active .chat-plus-panel button:hover{
-  transform:translateY(-1px)!important;
 }
 
 body.chat-active .chat-plus-panel span{
@@ -2763,8 +2645,7 @@ body.dark.chat-active .chat-debug-cache-mode{
   }
   body.chat-active .chat-compose{
     padding-top:7px!important;
-  }
-}
+  }}
 
 body.chat-active .chat-msg-separator,
 body.chat-active .chat-msg-cost{
@@ -2844,8 +2725,7 @@ body.dark.chat-active .chat-debug-version.show{
   body.chat-active .chat-send{
     animation:none!important;
     transition:none!important;
-  }
-}
+  }}
 
 @keyframes ckChatBubbleIn{
   from{opacity:0;transform:translateY(6px)}
@@ -3234,8 +3114,7 @@ body.dark.chat-active .chat-session-empty-plus{
   body.chat-active .chat-session-item .chat-session-meta{
     max-width:94px!important;
     font-size:10px!important;
-  }
-}
+  }}
 
 @media(prefers-reduced-motion:reduce){
   body.chat-active .chat-session-row,
@@ -3246,8 +3125,7 @@ body.dark.chat-active .chat-session-empty-plus{
   body.chat-active .chat-session-row:hover,
   body.chat-active .chat-session-empty-hint:hover{
     transform:none!important;
-  }
-}
+  }}
 
 body.chat-active .chat-bubble{
   border-radius:16px!important;
@@ -3346,8 +3224,7 @@ body.dark.chat-active .chat-bubble.assistant{
   body.chat-active .chat-bubble.user.has-images{
     width:min(360px,86%)!important;
     max-width:min(360px,86%)!important;
-  }
-}
+  }}
 
 /* Chat-like interaction polish: stable old rows, elastic new rows, softer controls. */
 body.chat-active .chat-messages{
@@ -3473,8 +3350,7 @@ body.chat-active .chat-stream-plain{
   }
   body.chat-active .chat-messages{
     scroll-behavior:auto;
-  }
-}
+  }}
 
 /* 2026-07-02 soft private chat polish. */
 body.chat-active{
@@ -3635,32 +3511,6 @@ body.chat-active .chat-plus-panel.open{
   border-top:1px solid rgba(212,226,220,.68)!important;
 }
 
-body.chat-active .chat-plus-page > button{
-  border-radius:12px!important;
-}
-
-body.chat-active .chat-plus-page > button:active{
-  transform:scale(.96)!important;
-}
-
-body.chat-active .chat-plus-panel span{
-  width:42px!important;
-  height:42px!important;
-  border:0!important;
-  border-radius:50%!important;
-  box-shadow:0 6px 14px rgba(55,79,68,.08)!important;
-}
-
-body.chat-active .chat-plus-page > button:nth-child(1) span{background:#dff6eb!important;color:#347756!important}
-body.chat-active .chat-plus-page > button:nth-child(2) span{background:#dbeeff!important;color:#3e73a7!important}
-body.chat-active .chat-plus-page > button:nth-child(3) span{background:#eadfff!important;color:#7352a8!important}
-body.chat-active .chat-plus-page > button:nth-child(4) span{background:#ffe6ef!important;color:#a75372!important}
-body.chat-active .chat-plus-page > button:nth-child(5) span{background:#ffe9d2!important;color:#ad6a2f!important}
-body.chat-active .chat-plus-page > button:nth-child(6) span{background:#fff6cf!important;color:#997227!important}
-body.chat-active .chat-plus-page > button:nth-child(7) span{background:#e9f7ff!important;color:#4382a4!important}
-body.chat-active .chat-plus-page > button:nth-child(8) span{background:#dcf8f4!important;color:#368178!important}
-body.chat-active .chat-plus-page > button:nth-child(9) span{background:#eceff3!important;color:#697783!important}
-
 body.dark.chat-active #page-memory,
 body.dark.chat-active .chat-shell,
 body.dark.chat-active .chat-main,
@@ -3704,8 +3554,7 @@ body.dark.chat-active .chat-thinking{
 @media(prefers-reduced-motion:reduce){
   body.chat-active .chat-online-dot{
     animation:none!important;
-  }
-}
+  }}
 
 /* 2026-07-02 image thumbnails and original viewer. */
 body.chat-active .chat-bubble.user.has-images{
@@ -3920,8 +3769,7 @@ body.chat-active.chat-editing .chat-edit-image-remove{
   body.chat-active.chat-editing .chat-edit-actions{
     padding-left:0!important;
     padding-right:0!important;
-  }
-}
+  }}
 
 /* User metadata lives below the action buttons, outside the bubble. */
 body.chat-active .chat-bubble.user:not(.has-images){
@@ -4031,12 +3879,11 @@ body.chat-active .chat-recall-mode-card{
   background:linear-gradient(180deg,#f5fff8,#ffffff)!important;
 }
 
+/* 边框/圆角/底色统一由 wechat.css 的 .chat-switch 和 visual-overrides 的卡面给。
+   这里原来还写了浅绿描边和浅绿底色，特异度相同但排在它们前面，从来没生效过，已删。 */
 body.chat-active .chat-recall-switch{
   margin:8px 0 10px!important;
   padding:10px 11px!important;
-  border:1px solid rgba(18,140,76,.16)!important;
-  border-radius:8px!important;
-  background:rgba(244,255,248,.86)!important;
   user-select:none!important;
 }
 
@@ -4163,15 +4010,15 @@ body.chat-active #chat-side-debug .chat-debug{
   }
   body.chat-active .chat-msg-row.user>.chat-msg-meta{
     max-width:min(300px,88%)!important;
-  }
-}
+  }}
 body.chat-active .chat-scroll-jumps{position:absolute!important;top:50%!important;right:max(8px,env(safe-area-inset-right))!important;z-index:34!important;display:flex!important;flex-direction:column!important;gap:8px!important;width:32px!important;transform:translate3d(18px,-50%,0)!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important;transition:opacity .16s ease,transform .2s cubic-bezier(.2,.8,.2,1),visibility 0s linear .2s!important}
 body.chat-active .chat-scroll-jumps.show{transform:translate3d(0,-50%,0)!important;opacity:.2!important;visibility:visible!important;pointer-events:auto!important;transition-delay:0s!important}
 body.chat-active .chat-scroll-jumps>button{display:grid!important;place-items:center!important;width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;margin:0!important;padding:0!important;border:0!important;border-radius:50%!important;background:rgba(250,252,251,.68)!important;box-shadow:0 2px 8px rgba(31,45,38,.16),0 0 0 1px rgba(255,255,255,.48) inset!important;color:rgba(57,72,64,.86)!important;cursor:pointer!important;backdrop-filter:blur(12px) saturate(1.08)!important}
 body.chat-active .chat-scroll-jumps>button svg{width:17px!important;height:17px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}
 body.chat-active .chat-scroll-jumps>button:disabled{opacity:.28!important;cursor:default!important}
 body.dark.chat-active .chat-scroll-jumps>button{background:rgba(35,42,38,.68)!important;color:rgba(220,232,225,.84)!important}
-@media(max-width:760px){body.chat-active .chat-scroll-jumps{right:max(6px,env(safe-area-inset-right))!important;width:30px!important}body.chat-active .chat-scroll-jumps>button{width:30px!important;height:30px!important;min-width:30px!important;min-height:30px!important}}
+@media(max-width:760px){body.chat-active .chat-scroll-jumps{right:max(6px,env(safe-area-inset-right))!important;width:30px!important}
+body.chat-active .chat-scroll-jumps>button{width:30px!important;height:30px!important;min-width:30px!important;min-height:30px!important}}
 
 /* Session folders and search */
 body.chat-active .chat-session-tools{padding:9px 12px 0;background:#f8f8fa!important}
