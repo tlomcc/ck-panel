@@ -40,6 +40,10 @@ const functionNames=[
   'chatUsageHasTokenFields',
   'chatUsageHasBillingMeta',
   'chatUsageCost',
+  'chatApiPricingToCostPricing',
+  'chatApiPricingKey',
+  'chatApiPricingLookup',
+  'chatPricingForUsage',
   'chatNormalizeCacheStrategy',
   'chatCacheStrategyMeta'
 ];
@@ -47,6 +51,9 @@ const functionNames=[
 const context={console};
 vm.createContext(context);
 vm.runInContext(functionNames.map(extractFunction).join('\n'),context);
+// 单价现在按"这一轮是谁答的"取。默认没有任何一条 API 维护过价格，
+// 于是全部落回 chatCurrentCostPricing()，也就是下面这些老断言原本测的那条路。
+context.chatPollingView=()=>({enabled:false,pricing:null});
 
 const defaults=context.chatNormalizeCostPricing({});
 assert.strictEqual(defaults.outputPerMTokens,25);
@@ -118,8 +125,30 @@ const authoritative=context.chatUsageCost(Object.assign({},usage,{
 assert.strictEqual(authoritative.status,'known');
 assert.strictEqual(authoritative.total,.123,'authoritative upstream billing must win');
 
-assert.strictEqual(context.chatNormalizeCacheStrategy('cost_optimized'),'native_tiered');
-const tiered=context.chatCacheStrategyMeta('native_tiered');
+// —— 每条 API 自己维护的单价：谁答的就按谁的价算 ——
+// 轮询页给"乙"维护了一份贵得多的价格，网关回的 provider_name 就是"乙"。
+context.chatPollingView=()=>({
+  enabled:true,
+  pricing:{'乙':{currency:'$',input:50,output:250,cache_create:60,cache_read:5,multiplier:1}}
+});
+const perApi=context.chatUsageCost(Object.assign({},usage,{provider_name:'乙'}));
+assert.strictEqual(perApi.status,'calculated');
+assert.strictEqual(perApi.pricing.inputPerMTokens,50,'必须用这条 API 自己维护的输入价');
+assert.strictEqual(perApi.pricing.cacheCreate5mPerMTokens,60,'缓存创建只填一个价，5m/1h 套同一个数');
+assert.strictEqual(perApi.pricing.cacheCreate1hPerMTokens,60);
+assert.strictEqual(perApi.pricing.multiplier,1);
+assert(perApi.total>context.chatUsageCost(usage).total,'维护过的贵价必须真的把总价算高');
+// 名字对不上（没维护过这条）就落回面板默认价，绝不能变成 0 或者不显示。
+const unmaintained=context.chatUsageCost(Object.assign({},usage,{provider_name:'丙'}));
+assert.strictEqual(unmaintained.pricing.inputPerMTokens,pricing.inputPerMTokens);
+assert.strictEqual(unmaintained.status,'calculated');
+// 供应商 ID 也是一路可用的键：改名以后老价格还能对上。
+context.chatPollingView=()=>({enabled:true,pricing:{'p-9':{input:0,output:0,cache_create:0,cache_read:0,multiplier:1}}});
+const byId=context.chatUsageCost(Object.assign({},usage,{provider_id:'p-9'}));
+assert.strictEqual(byId.total,0,'单价全填 0 就该算出 0');
+context.chatPollingView=()=>({enabled:false,pricing:null});
+
+assert.strictEqual(context.chatNormalizeCacheStrategy('cost_optimized'),'native_tiered');const tiered=context.chatCacheStrategyMeta('native_tiered');
 assert.strictEqual(tiered.ttl,'mixed');
 assert.strictEqual(tiered.requestTtl,'1h');
 assert.strictEqual(tiered.retentionSeconds,3600);

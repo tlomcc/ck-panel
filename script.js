@@ -1769,6 +1769,81 @@ function chatCurrentCostPricing(){
     return chatDefaultCostPricing();
   }
 }
+/* ---- 计费总闸 + 每条 API 自己的价格 ---- */
+// 分工（2026-08-23 用户定的）：
+//   设置页那个开关＝总闸。关掉聊天面板一律不显示价格，轮询页的"显示价格"也压不过它。
+//   单价不再在这里填，改成在「聊天轮询」页给每条 API 各维护一份，谁答的就按谁的价算。
+// 兜底很重要：没维护过的 API 用面板默认单价，否则改造完用户会以为价格功能坏了。
+//
+// 这两个开关每条消息渲染时都要问一次，所以必须缓存：ckChatConfigV2 里装着系统提示词
+// 和全部世界书，几百条消息各 JSON.parse 一遍会把渲染拖死。写配置的唯一出口
+// chatSaveConfigObject 负责作废这份缓存。
+var chatDisplayToggleCache=null;
+function chatDisplayToggleInvalidate(){chatDisplayToggleCache=null}
+function chatDisplayToggles(){
+  if(chatDisplayToggleCache)return chatDisplayToggleCache;
+  var out={billing:true,usage:false};
+  try{
+    var raw=JSON.parse(localStorage.getItem(CHAT_CONFIG_KEY)||'{}');
+    out.billing=raw.billingEnabled!==false;
+    out.usage=raw.usageStatsEnabled===true;
+  }catch(e){}
+  chatDisplayToggleCache=out;
+  return out;
+}
+function chatBillingEnabled(){return chatDisplayToggles().billing}
+function chatUsageStatsEnabled(){return chatDisplayToggles().usage}
+// 轮询页存的是用户手填的那几个数；这里翻译成 chatUsageCost 认识的 costPricing 形状。
+// 缓存创建只让用户填一个价（5m/1h 两档他不关心），两档都套同一个数。
+function chatApiPricingToCostPricing(raw,base){
+  base=base||chatDefaultCostPricing();
+  raw=(raw&&typeof raw==='object')?raw:{};
+  var num=function(value,fallback){
+    var n=Number(value);
+    return (isFinite(n)&&n>=0)?n:fallback;
+  };
+  var pick=function(a,b){return a!==undefined&&a!==null&&a!==''?a:b};
+  var create=num(pick(raw.cache_create,raw.cacheCreate),base.cacheCreate5mPerMTokens);
+  return {
+    mode:base.mode,
+    currency:String(raw.currency||base.currency||'¥').trim()||'¥',
+    inputPerMTokens:num(pick(raw.input,raw.inputPerMTokens),base.inputPerMTokens),
+    outputPerMTokens:num(pick(raw.output,raw.outputPerMTokens),base.outputPerMTokens),
+    cacheReadPerMTokens:num(pick(raw.cache_read,raw.cacheRead),base.cacheReadPerMTokens),
+    cacheCreate5mPerMTokens:create,
+    cacheCreate1hPerMTokens:create,
+    cacheCreateLegacyPerMTokens:create,
+    ttlCreatePricingConfigured:true,
+    multiplier:num(raw.multiplier,base.multiplier)
+  };
+}
+function chatApiPricingKey(value){
+  return String(value===undefined||value===null?'':value).trim().toLowerCase();
+}
+// 网关每轮都会回 provider_name；用它反查这条 API 维护过的价格。
+// 供应商 ID 也一起当键，改名之后老价格还能对上。
+function chatApiPricingLookup(usage){
+  var map=chatPollingView().pricing;
+  if(!map||typeof map!=='object')return null;
+  var obj=chatUsagePayload(usage);
+  var candidates=[
+    chatUsageBillingProvider(usage),
+    obj&&obj.provider_name,
+    obj&&obj.provider_id,
+    usage&&usage.provider_name,
+    usage&&usage.provider_id
+  ];
+  for(var i=0;i<candidates.length;i++){
+    var key=chatApiPricingKey(candidates[i]);
+    if(key&&map[key])return map[key];
+  }
+  return null;
+}
+function chatPricingForUsage(usage){
+  var base=chatCurrentCostPricing();
+  var entry=chatApiPricingLookup(usage);
+  return entry?chatApiPricingToCostPricing(entry,base):base;
+}
 function chatReadCostPricing(saved){
   var base=chatNormalizeCostPricing(saved);
   return chatNormalizeCostPricing({
@@ -1950,7 +2025,8 @@ function chatUsageIsNcProvider(usage){
 }
 function chatUsageCost(usage){
   usage=usage&&usage.usage?usage.usage:(usage||{});
-  var pricing=chatCurrentCostPricing();
+  // 单价按"这一轮是谁答的"取：轮询页给每条 API 各维护一份，没维护的落回面板默认价。
+  var pricing=chatPricingForUsage(usage);
   var input=chatUsageInputBillable(usage);
   var inputTotal=chatUsageInputTotal(usage);
   var output=chatUsageNumber(usage,'output_tokens','completion_tokens');
@@ -2051,6 +2127,15 @@ function chatAttachAssistantCost(msg,usage){
   msg.apiCostCurrency=cost.currency||'';
   if(cost.status==='known'||cost.status==='estimated'||cost.status==='calculated')msg.apiCost=cost.total;
   else delete msg.apiCost;
+  // 用量统计那一行要的原始 token。以前只存了钱，token 数没留下来，
+  // 刷新一次页面就再也算不出命中率了，所以这里一并落盘。
+  if(cost.hasUsage){
+    msg.tkIn=cost.input;
+    msg.tkInTotal=cost.inputTotal;
+    msg.tkOut=cost.output;
+    msg.tkRead=cost.read;
+    msg.tkCreate=cost.create;
+  }
   return msg;
 }
 function chatAssistantCostLabel(msg){
@@ -2060,7 +2145,8 @@ function chatAssistantCostLabel(msg){
   if(!Object.prototype.hasOwnProperty.call(msg,'apiCost'))return '';
   var value=Number(msg.apiCost);
   if(!isFinite(value)||value<0)return '';
-  return (status==='estimated'?'估算 ':status==='calculated'?'按单价 ':'')+chatCostAmountText(value,msg.apiCostCurrency||'');
+  // 用户明确要求：聊天面板直接给价格数字，前面不再加任何来源前缀。
+  return chatCostAmountText(value,msg.apiCostCurrency||'');
 }
 function chatAssistantCostHtml(msg){
   var label=chatAssistantCostLabel(msg);
@@ -2093,7 +2179,6 @@ function chatDefaultConfig(){
     cacheStrategy:'single_5m',
     recallHistoryRetentionSeconds:300,
     promptCacheTtl:'5m',
-    fullWindowContext:true,
     splitAssistantReplies:true,
     autoTrimEnabled:true,
     autoTrimKeepRounds:CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
@@ -2502,6 +2587,7 @@ function chatLoadConfig(){
   return cfg;
 }
 function chatSaveConfigObject(cfg){
+  chatDisplayToggleInvalidate();
   cfg=cfg&&typeof cfg==='object'?Object.assign({},cfg):{};
   cfg.gatewayUrl=GRAPH_API_BASE;
   cfg.mcpUrl=API_BASE;
@@ -3408,7 +3494,6 @@ function chatReadForm(){
     cacheStrategy:cacheStrategyValue,
     recallHistoryRetentionSeconds:cacheMeta.retentionSeconds,
     promptCacheTtl:cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl,
-    fullWindowContext:chatFieldChecked('chat-full-window-context',saved.fullWindowContext!==false),
     splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
     autoTrimKeepRounds:trimCfg.keep,
@@ -3421,6 +3506,8 @@ function chatReadForm(){
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
     costPricing:chatReadCostPricing(saved.costPricing),
+    billingEnabled:chatFieldChecked('chat-billing-enabled',saved.billingEnabled!==false),
+    usageStatsEnabled:chatFieldChecked('chat-usage-stats-enabled',saved.usageStatsEnabled===true),
     worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
   cfg=chatMergeActiveWorldbookDraft(cfg);
@@ -3464,7 +3551,10 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-cost-multiplier',costPricing.multiplier);
   chatRenderCostPricingModeHint(costPricing.mode);
   chatSyncCacheStrategyFields(true);
-  chatSetFieldChecked('chat-full-window-context',cfg.fullWindowContext!==false);
+  chatSetFieldChecked('chat-billing-enabled',cfg.billingEnabled!==false);
+  chatSetFieldChecked('chat-usage-stats-enabled',cfg.usageStatsEnabled===true);
+  chatApplyDisplayGateClasses();
+  chatRenderTickLegend();
   chatUpdateSplitReplyButton(cfg);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatRenderDailyDigest(cfg);
@@ -3567,6 +3657,38 @@ function chatSaveCostMode(){
   chatRenderCostPricingModeHint(mode);
   toast('计费方式已切换：'+chatCostModeLabel(mode));
   return cfg;
+}
+// 设置页那两个显示开关（计费总闸 / 用量统计）：勾完立刻生效，不用再点保存。
+function chatSaveDisplayToggles(){
+  var cfg=chatSaveConfig(true);
+  chatApplyDisplayGateClasses();
+  chatRenderMessages({respectUserScroll:true});
+  toast('计费'+(cfg.billingEnabled!==false?'已开启':'已关闭')+
+    '｜用量统计'+(cfg.usageStatsEnabled===true?'已开启':'已关闭'));
+  return cfg;
+}
+// 用量统计开关和计费总闸共用 chatDisplayToggles() 那份缓存，见上面的说明。
+// √ 的颜色说明。故意用 chatCacheTickHtml 现造真勾号，而不是在 HTML 里另抄一份 SVG——
+// 抄一份就会出现"说明里的颜色和消息上的颜色不一样"这种最难查的偏差。
+var CHAT_TICK_LEGEND_ROWS=[
+  ['full','高比例缓存命中：这一轮几乎整段前缀都是从缓存里读的，最省钱。'],
+  ['partial','部分缓存命中：读到了缓存，但同时又创建了不少新缓存。'],
+  ['created','已创建缓存：这一轮没读到缓存，但缓存已经建好，下一轮就能读了。'],
+  ['below_minimum','没到门槛：可缓存的前缀不足约 4096 tokens，上游不给建缓存。'],
+  ['miss','未读取缓存：前缀变了或者缓存已过期，这一轮整段重算。'],
+  ['sent','已发送：这一轮没拿到缓存数据（比如轮询模式下的某些上游不回用量）。']
+];
+function chatRenderTickLegend(){
+  var box=document.getElementById('chat-tick-legend');
+  if(!box)return;
+  box.innerHTML=CHAT_TICK_LEGEND_ROWS.map(function(row){
+    var hit=row[0]==='full'||row[0]==='partial';
+    return '<div class="chat-tick-legend-row">'+
+      chatCacheTickHtml({cacheState:row[0],cacheHit:hit,cacheRead:hit?1:0})+
+      '<span>'+esc(row[1])+'</span></div>';
+  }).join('')+
+  '<p class="chat-tick-legend-note">勾号只跟"这一轮用没用上缓存"有关，和消息有没有发成功无关。'+
+  '开启轮询后默认不显示，要看就去「聊天轮询」页勾上「显示 √」。</p>';
 }
 function chatOnMcpToggle(){
   var cfg=chatReadForm();
@@ -4219,10 +4341,21 @@ function chatRenderWorldbooks(cfg){
   if(!chatWorldbookActiveId&&books.length)chatWorldbookActiveId=books[0].id;
   if(chatWorldbookActiveId&&!books.some(function(w){return w.id===chatWorldbookActiveId}))chatWorldbookActiveId=books.length?books[0].id:'';
   var enabled=books.filter(function(w){return w.enabled&&w.content.trim()}).length;
-  if(count)count.textContent=enabled+' 个启用';
-  list.innerHTML=books.length?books.map(function(w){
-    return '<button class="chat-worldbook-row '+(w.id===chatWorldbookActiveId?'active':'')+'" type="button" onclick="chatSelectWorldbook(\''+escAttr(w.id)+'\')"><span>'+esc(w.name||'未命名世界书')+'</span><small>'+(w.enabled?'启用':'停用')+' · 优先级 '+(w.priority||100)+'</small></button>';
-  }).join(''):'<div class="chat-worldbook-empty">还没有世界书</div>';
+  if(count)count.textContent=enabled+' 个启用（共 '+books.length+' 条）';
+  // 以前这里是一条一行的按钮列表：维护到 100 条整页就长得没法用了。
+  // 改成一个下拉框，无论多少条都只占一行；下面那一行是「新增世界书」。
+  // onchange 仍然走 chatSelectWorldbook，切换前把表单里的改动回写进上一条那套逻辑不变。
+  list.innerHTML=books.length?(
+    '<div class="chat-worldbook-select-row">'+
+      '<label for="chat-worldbook-select">选择</label>'+
+      '<select id="chat-worldbook-select" class="chat-worldbook-select" aria-label="选择要编辑的世界书" onchange="chatSelectWorldbook(this.value)">'+
+      books.map(function(w){
+        return '<option value="'+escAttr(w.id)+'"'+(w.id===chatWorldbookActiveId?' selected':'')+'>'+
+          esc(w.name||'未命名世界书')+' · '+(w.enabled?'启用':'停用')+' · 优先级 '+(w.priority||100)+'</option>';
+      }).join('')+
+      '</select>'+
+    '</div>'
+  ):'<div class="chat-worldbook-empty">还没有世界书，点下面的「新增世界书」开一条。</div>';
   var active=books.find(function(w){return w.id===chatWorldbookActiveId})||null;
   var name=document.getElementById('chat-worldbook-name');
   var enabledInput=document.getElementById('chat-worldbook-enabled');
@@ -5099,9 +5232,9 @@ function chatAssistantWaitLabel(m){
 function chatUpdateRuntime(cfg,usage){
   // 顶栏那三枚状态条（模型 / 网关 session / 召回状态）已删除：它被两份 CSS 用 !important
   // 永久隐藏，而这三项在「网关」「记忆与缓存」面板和调试台里都能看到，属于重复信息。
-  // 这个函数保留下来只做一件仍然有用的事：轮询开启时给 body 打标记，
-  // 由它决定是否隐藏消息上的缓存勾号和单条价格。
-  if(document.body)document.body.classList.toggle('chat-polling-on',chatPollingView().enabled===true);
+  // 这个函数保留下来只做一件仍然有用的事：把"要不要显示缓存勾号 / 单条价格"
+  // 这两个判断同步成 body 上的类，给 CSS 留一道兜底。
+  chatApplyDisplayGateClasses();
 }
 function chatRenderTrimState(cfg){
   var current=document.getElementById('chat-trim-current');
@@ -7636,6 +7769,17 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
     hidden:new Set(messages.slice(1)),
     timer:0
   };
+  // 重新生成带过来的旧答案：连同这一组新答案一起变成版本列表，挂在组内第一条上。
+  // 挂在第一条是因为整组是一起换掉的，第一条就是这一轮回复的锚点。
+  var carried=Array.isArray(opts.replyVariants)?opts.replyVariants.filter(Boolean):[];
+  if(carried.length){
+    var mine=chatReplyVariantFromMessages(messages);
+    var all=chatTrimReplyVariants(carried.concat(mine?[mine]:[]));
+    if(all.length>1){
+      messages[0].replyVariants=all;
+      messages[0].replyVariantIndex=all.length-1;
+    }
+  }
   chatMarkStaggeredMessageFresh(messages[0]);
   chatRecordFirstRenderedLatency(opts.latency);
   chatSaveLocalMessages();
@@ -7768,7 +7912,7 @@ function chatInitPlusPager(){
   }
 }
 function chatSettingTitle(tab){
-  return ({model:'提示词设置',speech:'措辞偏好',gateway:'网关连接',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';
+  return ({model:'提示词设置',speech:'措辞偏好',gateway:'设置',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
@@ -7938,6 +8082,7 @@ function chatSwitchSideTab(tab,silent){
     chatSaveConfigObject(cfg);
   }
   if(tab==='debug'){
+    chatRenderTickLegend();
     chatRenderDebugRecords();
     chatScrollDebugBottom();
   }
@@ -8012,6 +8157,11 @@ document.addEventListener('click',function(e){
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
   var th=e.target.closest('.chat-thinking-head');
   if(th&&th.parentNode){th.parentNode.classList.toggle('open');return;}
+  var rvb=e.target.closest('.chat-reply-variant-btn');
+  if(rvb){
+    chatSwitchReplyVariant(parseInt(rvb.getAttribute('data-i'),10),Number(rvb.getAttribute('data-dir')||0)||0);
+    return;
+  }
   var vb=e.target.closest('.chat-version-btn');
   if(vb){
     var vi=parseInt(vb.getAttribute('data-i'),10);
@@ -8283,6 +8433,109 @@ function chatUpdateCacheExpiryHint(keepScroll){
   if(old)old.remove();
   if(chatEnsureCacheExpiryNotice())chatRenderMessages({respectUserScroll:true});
 }
+/* ---- 助手回复的版本翻页 ---- */
+// 重新生成不再把上一条答案删掉。旧答案整组存成一个版本，新答案追加成下一个版本，
+// 气泡底下出现 ◂ ▸ 翻页——和用户消息双击改文案那套是一个交互。
+// 存的是"整组消息"而不是一段文本：分条开着时一轮回复会拆成好几个气泡，
+// 只存文本再拆一次就会和当时看到的不一样。翻页＝整组换掉。
+var CHAT_REPLY_VARIANT_MAX=6;
+function chatCloneReplyMessages(list){
+  try{
+    return JSON.parse(JSON.stringify(Array.isArray(list)?list:[]));
+  }catch(e){
+    return [];
+  }
+}
+function chatAssistantGroupRange(i){
+  if(!chatMessages[i]||chatMessages[i].role!=='assistant')return null;
+  var start=i,end=i;
+  while(start>0&&chatMessages[start-1]&&chatMessages[start-1].role==='assistant')start--;
+  while(chatMessages[end+1]&&chatMessages[end+1].role==='assistant')end++;
+  return {start:start,end:end};
+}
+function chatNormalizeReplyVariant(v){
+  v=v&&typeof v==='object'?v:{};
+  var messages=chatCloneReplyMessages(v.messages).filter(function(m){return m&&m.role==='assistant'});
+  if(!messages.length)return null;
+  messages.forEach(function(m){delete m.replyVariants;delete m.replyVariantIndex});
+  return {ts:Number(v.ts)||Number(messages[0].ts)||0,messages:messages};
+}
+function chatStoredReplyVariants(m){
+  return (Array.isArray(m&&m.replyVariants)?m.replyVariants:[]).map(chatNormalizeReplyVariant).filter(Boolean);
+}
+function chatReplyVariantFromMessages(list){
+  return chatNormalizeReplyVariant({messages:list});
+}
+function chatReplyVariantInfo(i){
+  var range=chatAssistantGroupRange(i);
+  if(!range)return null;
+  var head=chatMessages[range.start];
+  var variants=chatStoredReplyVariants(head);
+  if(variants.length<2)return null;
+  var index=Math.max(0,Math.min(variants.length-1,Math.floor(Number(head.replyVariantIndex)||0)));
+  return {range:range,head:head,variants:variants,index:index,total:variants.length};
+}
+// 点重新生成时先把当前这一组存下来：已经有版本记录就沿用，没有就现造第一版。
+function chatCollectReplyVariants(range){
+  if(!range)return [];
+  var stored=chatStoredReplyVariants(chatMessages[range.start]);
+  if(stored.length)return stored;
+  var current=chatReplyVariantFromMessages(chatMessages.slice(range.start,range.end+1));
+  return current?[current]:[];
+}
+function chatTrimReplyVariants(list){
+  list=(list||[]).filter(Boolean);
+  return list.length>CHAT_REPLY_VARIANT_MAX?list.slice(list.length-CHAT_REPLY_VARIANT_MAX):list;
+}
+function chatAssistantVariantSignature(m,i){
+  if(!m||m.role!=='assistant')return '';
+  var range=chatAssistantGroupRange(i);
+  if(!range)return '';
+  var head=chatMessages[range.start];
+  if(!head||!Array.isArray(head.replyVariants))return '';
+  return head.replyVariants.length+':'+(Math.floor(Number(head.replyVariantIndex)||0));
+}
+function chatReplyVariantNavHtml(i){
+  var info=chatReplyVariantInfo(i);
+  if(!info)return '';
+  var prevDisabled=info.index<=0?' disabled aria-disabled="true"':'';
+  var nextDisabled=info.index>=info.total-1?' disabled aria-disabled="true"':'';
+  return '<div class="chat-version-nav assistant" aria-label="回复版本">'+
+    '<button class="chat-version-btn chat-reply-variant-btn" type="button" data-i="'+i+'" data-dir="-1" title="上一版回复"'+prevDisabled+'>◂</button>'+
+    '<span>'+esc(String(info.index+1))+'/'+esc(String(info.total))+'</span>'+
+    '<button class="chat-version-btn chat-reply-variant-btn" type="button" data-i="'+i+'" data-dir="1" title="下一版回复"'+nextDisabled+'>▸</button>'+
+    '</div>';
+}
+function chatSwitchReplyVariant(i,dir){
+  if(chatSending)return;
+  if(chatEditingIndex>=0)chatCancelEdit();
+  var info=chatReplyVariantInfo(i);
+  if(!info)return;
+  var target=Math.max(0,Math.min(info.total-1,info.index+(Number(dir)||0)));
+  if(target===info.index)return;
+  var replacement=chatCloneReplyMessages(info.variants[target].messages);
+  if(!replacement.length)return;
+  // 时间戳和 turnId 一律沿用"当前这一组"的：换的是这一轮的答案，不是插了一段旧对话。
+  // 不改的话轮次分组（chat-history 按 turnId 数轮）和时间顺序都会错。
+  var oldGroup=chatMessages.slice(info.range.start,info.range.end+1);
+  var turnId=String((oldGroup[0]&&oldGroup[0].turnId)||'');
+  var baseTs=Number(oldGroup[0]&&oldGroup[0].ts)||Date.now();
+  replacement.forEach(function(msg,index){
+    var old=oldGroup[index];
+    msg.ts=Number(old&&old.ts)||(baseTs+index);
+    if(turnId)msg.turnId=turnId;
+  });
+  replacement[0].replyVariants=info.variants;
+  replacement[0].replyVariantIndex=target;
+  Array.prototype.splice.apply(chatMessages,[info.range.start,oldGroup.length].concat(replacement));
+  // 翻页把屏幕上的内容换了，隐藏的 transport 就和显示的不一致了，必须让它作废：
+  // 下一轮改走 window_messages，也就是"以页面上看到的为准"重建历史，绝不会出现
+  // 「显示 A、发给模型 B」。前面那些用户消息网关会按原文哈希还原成冻结版本，
+  // 前缀仍然逐字一致，真正要重算的只有被换掉的这一段往后——这已经是物理下限。
+  chatInvalidateTransportForEdit();
+  chatSaveLocalMessages();
+  chatRenderMessages({respectUserScroll:true});
+}
 function chatVersionNavHtml(m,i,role){
   var info=chatMessageVersionInfo(m);
   if(!info.total||info.total<=1)return '';
@@ -8338,20 +8591,24 @@ function chatRenderMessageRow(m,i){
   var userMeta=role==='user'?chatUserMessageMetaHtml(m,isGroupLast):'';
   if(role==='user'&&m.sendFailed)userMeta+='<button class="chat-user-retry" type="button" data-act="retry" data-i="'+i+'">发送失败 · 点击重试</button>';
   var time=role==='assistant'?chatMessageTimingHtml(m,role,isGroupLast):'';
+  var usage=(role==='assistant'&&isGroupLast)?chatAssistantUsageHtml(m):'';
   var imageCount=chatMessageImages(m).length;
   var fileCount=chatMessageFileCount(m&&m.text);
   var bubbleState=(imageCount?' has-images':'')+(fileCount?' has-files':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
   var versionNav=pending?'':chatVersionNavHtml(m,i,role);
+  // 助手这边翻的是"整轮回复的版本"（重新生成攒出来的），挂在这一组的最后一条上，
+  // 和重新生成按钮同一行位置，避免用户在中间某个气泡下面找翻页。
+  if(!versionNav&&role==='assistant'&&isGroupLast)versionNav=chatReplyVariantNavHtml(i);
   var animKey=chatMessageAnimKey(m);
   var fresh=chatFreshMessageKeys.has(animKey)?' chat-fresh':'';
   var staggered=chatStaggeredMessageKeys.has(animKey)?' chat-staggered':'';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+versionNav+tools+userMeta+time+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+versionNav+tools+userMeta+time+usage+'</div>';
 }
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-  var signature=[m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
+  var signature=[m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;
@@ -8384,6 +8641,38 @@ function chatMessageTimingHtml(m,role,showTimestamp){
 }
 function chatUserMessageMetaHtml(m,showTimestamp){
   return chatMessageTimingHtml(m,'user',showTimestamp);
+}
+// 用量统计那一行：日期下面一行小字，只用符号不写字。
+// ↑未命中输入 ↓输出 ⚡缓存命中 ✚缓存创建 ◎命中率
+function chatUsageTokenText(value){
+  var n=Math.max(0,Math.round(Number(value)||0));
+  return String(n);
+}
+function chatAssistantUsageHtml(m){
+  if(!chatUsageStatsEnabled())return '';
+  if(!m||m.role!=='assistant')return '';
+  var input=Math.max(0,Number(m.tkIn)||0);
+  var output=Math.max(0,Number(m.tkOut)||0);
+  var read=Math.max(0,Number(m.tkRead)||0);
+  var create=Math.max(0,Number(m.tkCreate)||0);
+  if(!(input||output||read||create))return '';
+  var total=Math.max(0,Number(m.tkInTotal)||0)||(input+read+create);
+  var ratio=total>0?Math.round(read*1000/total)/10:0;
+  var bits=[
+    ['↑',chatUsageTokenText(input),'输入（未命中缓存）'],
+    ['↓',chatUsageTokenText(output),'输出'],
+    ['⚡',chatUsageTokenText(read),'缓存命中'],
+    ['✚',chatUsageTokenText(create),'缓存创建'],
+    ['◎',ratio+'%','缓存命中率（命中 ÷ 输入总量 '+chatUsageTokenText(total)+'）']
+  ];
+  return '<div class="chat-msg-usage" title="输入 '+escAttr(chatUsageTokenText(input))+
+    ' · 输出 '+escAttr(chatUsageTokenText(output))+
+    ' · 缓存命中 '+escAttr(chatUsageTokenText(read))+
+    ' · 缓存创建 '+escAttr(chatUsageTokenText(create))+
+    ' · 命中率 '+escAttr(ratio+'%')+'">'+
+    bits.map(function(bit){
+      return '<span title="'+escAttr(bit[2])+'"><i aria-hidden="true">'+esc(bit[0])+'</i>'+esc(bit[1])+'</span>';
+    }).join('')+'</div>';
 }
 function chatCacheTickHtml(m){
   var state=String((m&&m.cacheState)||((m&&m.cacheHit)?'full':'sent'));
@@ -8817,10 +9106,20 @@ function chatRegenerateFromUser(i){
     }
   }
   if(!m||m.role!=='user'||!chatMessageHasContent(m))return;
+  // 旧答案不删了：整组存成"上一版"带着走，新答案回来以后追加成下一版，
+  // 气泡底下就出现 ◂ ▸ 翻页。这里仍然要把它从 chatMessages 里摘掉——
+  // 这一轮要重发，不能把上一版答案当成历史再发给模型。
+  var carry=[];
+  if(chatMessages[i+1]&&chatMessages[i+1].role==='assistant'){
+    carry=chatCollectReplyVariants(chatAssistantGroupRange(i+1));
+  }
   chatMessages=chatMessages.slice(0,i+1);
   chatMessages[i].role='pending_user';
   chatMessages[i].regenerateRequest=true;
   chatMessages[i].regenerateCutoff=i;
+  if(carry.length)chatMessages[i].replyVariantsCarry=chatTrimReplyVariants(carry).slice(-Math.max(1,CHAT_REPLY_VARIANT_MAX-1));
+  // 收不到新的就保留原来存着的那份：上一次重新生成被停/失败时答案已经摘掉了，
+  // 这里再删一遍就等于把旧答案彻底弄丢。
   chatMessages[i].cacheHit=false;
   delete chatMessages[i].cacheRead;
   delete chatMessages[i].cacheCreate;
@@ -8954,12 +9253,21 @@ async function chatSubmitPendingMessages(options){
   if(requestState&&requestState.stopped)return;
   var windowMessagesForRequest=chatWindowContextMessages();
   var userMessageIndexes=[];
+  // 重新生成时带着走的"上一版回复"。先接过来，等新回复落地时挂到新的那一组上，
+  // 翻页才有得翻。故意不在这里删：万一这次发送被停止或失败，字段还留在消息上，
+  // 用户再点一次重新生成/重试时旧答案不会凭空消失。真正落地后才清。
+  var carriedReplyVariants=[];
+  var carriedReplyOwners=[];
   pending.forEach(function(m){
     var i=chatMessages.indexOf(m);
     if(i>=0&&m&&m.role==='pending_user'){
       m.role='user';
       m.ts=submitTs;
       m.cacheHit=false;
+      if(Array.isArray(m.replyVariantsCarry)&&m.replyVariantsCarry.length){
+        carriedReplyVariants=m.replyVariantsCarry;
+        carriedReplyOwners.push(m);
+      }
       delete m.pendingId;
       delete m.regenerateRequest;
       delete m.regenerateCutoff;
@@ -9061,7 +9369,12 @@ async function chatSubmitPendingMessages(options){
   if(currentImages.length)body.images=currentImages.map(function(img){
     return {name:img.name||'图片',mime:img.mime||'',dataUrl:img.dataUrl,width:img.width||0,height:img.height||0,size:img.size||0};
   });
-  if((regenerateRequest||cfg.fullWindowContext!==false||trimResult.trimmed||speechBoundaryNow)&&!transportForRequest.length)body.window_messages=windowMessagesForRequest;
+  // 以前这里还有一个「同窗口全量上下文」开关在把关。它已经删掉：网关每轮都回
+  // transport_messages，所以从第二轮起这个分支根本走不到；真走到的时候（首轮、
+  // 重新生成、截断后、切版本）另外几个条件已经各自成立，把它关掉只会让上下文变少、
+  // 什么都省不了。现在的规则就一条：没有隐藏 transport 可用，就把页面上看到的
+  // 这份可见历史整份发过去——发出去的永远等于屏幕上显示的。
+  if(!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
   var requestBodyText=JSON.stringify(body);
   var assistantText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
@@ -9271,7 +9584,9 @@ async function chatSubmitPendingMessages(options){
     stopStreamRender();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants});
+    // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
+    carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
     requestCompleted=true;
     chatSetStatus('完成');
   }catch(e){
@@ -9605,8 +9920,8 @@ function providerFingerprint(p){
 // 1. apiPollingConfig() 是纯读取，绝不修改 apiProviders。渲染时顺手写全局配置，
 //    会让"只是看了一眼页面"也把轮询字段混进下一次保存。写入一律走 apiPollingWrite()。
 // 2. 只存供应商 ID 和模型，Key/URL 永远从供应商库实时解析，不复制。
-// 3. 两个显示开关不参与 config_revision，否则用户勾一下复选框就会把网关的
-//    粘性游标重置掉，白白丢失当前正在用的可用 API。
+// 3. 显示开关和每条 API 的价格都不参与 config_revision，否则用户勾一下复选框或者
+//    改一个单价就会把网关的粘性游标重置掉，白白丢失当前正在用的可用 API。
 // 4. 每条候选可以单独绑一个缓存策略。空字符串＝跟随聊天页的全局策略，
 //    也就是老配置读出来一律是空，行为和改造前完全一致。绑了策略的那条，
 //    网关切到它的时候会连缓存断点一起换过去。缓存策略必须参与 config_revision，
@@ -9616,6 +9931,47 @@ var API_POLLING_KEY='chat_polling';
 function apiPollingNormalizeStrategy(value){
   var raw=String(value||'').trim();
   return raw?chatNormalizeCacheStrategy(raw):'';
+}
+// 每条候选可以自己维护一份价格（用户手填，面板不去猜）。
+// null＝这条没维护过，聊天页按面板默认单价兜底；只要维护过就整份取它的。
+// 缓存创建只让填一个价：5m/1h 两档对用户没意义，两档套同一个数。
+function apiPollingNormalizePricing(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  var d=chatDefaultCostPricing();
+  var num=function(value,fallback){
+    var n=Number(value);
+    return (isFinite(n)&&n>=0)?n:fallback;
+  };
+  var pick=function(a,b){return a!==undefined&&a!==null&&a!==''?a:b};
+  return {
+    currency:String(raw.currency||d.currency||'¥').trim().slice(0,4)||'¥',
+    input:num(pick(raw.input,raw.inputPerMTokens),d.inputPerMTokens),
+    output:num(pick(raw.output,raw.outputPerMTokens),d.outputPerMTokens),
+    cache_create:num(pick(raw.cache_create,raw.cacheCreate),d.cacheCreate5mPerMTokens),
+    cache_read:num(pick(raw.cache_read,raw.cacheRead),d.cacheReadPerMTokens),
+    multiplier:num(raw.multiplier,d.multiplier)
+  };
+}
+// 聊天页要在 API 配置没加载时也能算价，所以把价格按"供应商 ID + 显示名"两种键
+// 镜像一份到 localStorage。网关每轮回的是 provider_name，靠名字这一路对上。
+function apiPollingPricingMirror(polling){
+  var byId=Object.create(null),out=Object.create(null);
+  try{
+    providerLibraryList().forEach(function(p){byId[String(p&&p.id)]=p});
+  }catch(e){}
+  (polling&&Array.isArray(polling.order)?polling.order:[]).forEach(function(item){
+    var pricing=apiPollingNormalizePricing(item&&item.pricing);
+    if(!pricing)return;
+    var id=String((item&&item.provider_id)||'');
+    if(id)out[chatApiPricingKey(id)]=pricing;
+    var p=byId[id];
+    if(!p)return;
+    [p.name,(typeof providerDisplayName==='function'?providerDisplayName(p):'')].forEach(function(name){
+      var key=chatApiPricingKey(name);
+      if(key)out[key]=pricing;
+    });
+  });
+  return out;
 }
 function apiPollingConfig(){
   var raw=(apiProviders&&typeof apiProviders==='object'&&!Array.isArray(apiProviders))
@@ -9630,13 +9986,16 @@ function apiPollingConfig(){
     order.push({
       provider_id:id,
       model:String(item.model||'').trim(),
-      cache_strategy:apiPollingNormalizeStrategy(item.cache_strategy||item.cacheStrategy)
+      cache_strategy:apiPollingNormalizeStrategy(item.cache_strategy||item.cacheStrategy),
+      pricing:apiPollingNormalizePricing(item.pricing)
     });
   });
   return {
     enabled:raw.enabled===true,
     primary_retry_enabled:raw.primary_retry_enabled===true,
     primary_retry_interval:Math.max(5,Math.min(200,Number(raw.primary_retry_interval)||20)),
+    show_message_status:raw.show_message_status===true,
+    show_billing_price:raw.show_billing_price===true,
     order:order,
     config_revision:String(raw.config_revision||'').trim()
   };
@@ -9648,11 +10007,14 @@ function apiPollingWrite(next){
     enabled:next.enabled===true,
     primary_retry_enabled:next.primary_retry_enabled===true,
     primary_retry_interval:Math.max(5,Math.min(200,Number(next.primary_retry_interval)||20)),
+    show_message_status:next.show_message_status===true,
+    show_billing_price:next.show_billing_price===true,
     order:(Array.isArray(next.order)?next.order:[]).map(function(x){
       return {
         provider_id:String(x&&x.provider_id||''),
         model:String(x&&x.model||''),
-        cache_strategy:apiPollingNormalizeStrategy(x&&x.cache_strategy)
+        cache_strategy:apiPollingNormalizeStrategy(x&&x.cache_strategy),
+        pricing:apiPollingNormalizePricing(x&&x.pricing)
       };
     }),
     config_revision:String(next.config_revision||'')
@@ -9660,7 +10022,7 @@ function apiPollingWrite(next){
   chatPollingViewInvalidate();
   return apiProviders[API_POLLING_KEY];
 }
-function apiPollingItemFor(p,model,cacheStrategy){
+function apiPollingItemFor(p,model,cacheStrategy,pricing){
   model=String(model||(p&&p.model)||'').trim();
   var url=String(p&&p.url||'').trim();
   var key=String(p&&p.key||'').trim();
@@ -9670,6 +10032,7 @@ function apiPollingItemFor(p,model,cacheStrategy){
     provider:p,
     model:model,
     cache_strategy:apiPollingNormalizeStrategy(cacheStrategy),
+    pricing:apiPollingNormalizePricing(pricing),
     available:!missing,
     missing:missing
   };
@@ -9688,7 +10051,7 @@ function apiPollingItemsFromOrder(order){
     // 供应商库里已经删掉的引用自然消失，不用额外清理
     if(!p||used[id])return;
     used[id]=1;
-    out.push(apiPollingItemFor(p,item.model,item.cache_strategy));
+    out.push(apiPollingItemFor(p,item.model,item.cache_strategy,item.pricing));
   });
   return out;
 }
@@ -9721,36 +10084,63 @@ function chatPollingViewPersist(){
     var polling=apiPollingConfig();
     localStorage.setItem(CHAT_POLLING_VIEW_KEY,JSON.stringify({
       enabled:polling.enabled===true,
-      revision:String(polling.config_revision||'')
+      revision:String(polling.config_revision||''),
+      showMessageStatus:polling.show_message_status===true,
+      showBillingPrice:polling.show_billing_price===true,
+      pricing:apiPollingPricingMirror(polling)
     }));
   }catch(e){}
   chatPollingViewInvalidate();
-  if(document.body)document.body.classList.toggle('chat-polling-on',chatPollingView().enabled===true);
+  chatApplyDisplayGateClasses();
 }
 function chatPollingView(){
   if(chatPollingViewCache)return chatPollingViewCache;
-  var view={enabled:false,revision:''};
+  var view={enabled:false,revision:'',showMessageStatus:false,showBillingPrice:false,pricing:null};
   if(typeof apiProvidersLoaded!=='undefined'&&apiProvidersLoaded){
     var polling=apiPollingConfig();
     view={
       enabled:polling.enabled===true,
-      revision:polling.config_revision||apiPollingRevision(polling)
+      revision:polling.config_revision||apiPollingRevision(polling),
+      showMessageStatus:polling.show_message_status===true,
+      showBillingPrice:polling.show_billing_price===true,
+      pricing:apiPollingPricingMirror(polling)
     };
   }else{
     try{
       var raw=JSON.parse(localStorage.getItem(CHAT_POLLING_VIEW_KEY)||'{}');
       view={
         enabled:raw.enabled===true,
-        revision:String(raw.revision||'')
+        revision:String(raw.revision||''),
+        showMessageStatus:raw.showMessageStatus===true,
+        showBillingPrice:raw.showBillingPrice===true,
+        pricing:(raw.pricing&&typeof raw.pricing==='object'&&!Array.isArray(raw.pricing))?raw.pricing:null
       };
     }catch(e){}
   }
   chatPollingViewCache=view;
   return view;
 }
-// 轮询关闭时强制显示 √ 和价格，两个开关只在轮询开启时才起作用。
-function chatShouldShowMessageStatus(){return chatPollingView().enabled!==true}
-function chatShouldShowBillingPrice(){return chatPollingView().enabled!==true}
+// 轮询关闭时照常显示 √ 和价格；开启轮询后这两样各由轮询页自己的勾选框决定（默认关）。
+// 价格头上还压着一道总闸：设置页关掉计费，轮询这边勾了也不显示。
+function chatShouldShowMessageStatus(){
+  var view=chatPollingView();
+  if(view.enabled!==true)return true;
+  return view.showMessageStatus===true;
+}
+function chatShouldShowBillingPrice(){
+  if(!chatBillingEnabled())return false;
+  var view=chatPollingView();
+  if(view.enabled!==true)return true;
+  return view.showBillingPrice===true;
+}
+// 渲染路径已经按上面两个判断决定要不要输出节点，body 上这两个类只是给 CSS
+// 留一道兜底（增量刷新、旧节点残留时不至于漏出来）。
+function chatApplyDisplayGateClasses(){
+  if(!document.body)return;
+  document.body.classList.toggle('chat-polling-on',chatPollingView().enabled===true);
+  document.body.classList.toggle('chat-hide-tick',!chatShouldShowMessageStatus());
+  document.body.classList.toggle('chat-hide-cost',!chatShouldShowBillingPrice());
+}
 function isGgProvider(p){
   var name=String(p&&p.name||'').trim().toLowerCase();
   var host=providerHost(p&&p.url).toLowerCase();
@@ -10032,8 +10422,10 @@ function apiPollingDraftGet(){
       enabled:polling.enabled,
       primary_retry_enabled:polling.primary_retry_enabled,
       primary_retry_interval:polling.primary_retry_interval,
+      show_message_status:polling.show_message_status,
+      show_billing_price:polling.show_billing_price,
       order:polling.order.map(function(x){
-        return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy};
+        return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy,pricing:x.pricing};
       })
     };
   }
@@ -10046,7 +10438,7 @@ function apiPollingDraftItems(){
 // 顺带清掉指向已删除供应商的死引用。
 function apiPollingDraftSync(items){
   apiPollingDraftGet().order=items.map(function(x){
-    return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy};
+    return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy,pricing:x.pricing};
   });
 }
 // 供应商库里还没加进轮询的那些，才是"可以添加"的
@@ -10087,6 +10479,54 @@ function apiPollingStrategySelectHtml(item,index){
   html+='</select>';
   return html;
 }
+// 每条 API 的价格编辑器。用户自己维护，面板不去猜、不去联网查。
+// 展开状态记在内存里：这一页任何操作都会整页重渲染，不记住的话每改一个数就合起来。
+var apiPollingPriceOpen=Object.create(null);
+function apiPollingPriceToggle(id,open){
+  if(open)apiPollingPriceOpen[String(id)]=1;
+  else delete apiPollingPriceOpen[String(id)];
+}
+function apiPollingEffectivePricing(entry){
+  var p=apiPollingNormalizePricing(entry&&entry.pricing);
+  if(p)return p;
+  var d=chatDefaultCostPricing();
+  return {
+    currency:d.currency,
+    input:d.inputPerMTokens,
+    output:d.outputPerMTokens,
+    cache_create:d.cacheCreate5mPerMTokens,
+    cache_read:d.cacheReadPerMTokens,
+    multiplier:d.multiplier
+  };
+}
+var API_POLLING_PRICE_FIELDS=[
+  ['input','输入 / 1M'],
+  ['output','输出 / 1M'],
+  ['cache_create','缓存创建 / 1M'],
+  ['cache_read','缓存命中 / 1M'],
+  ['multiplier','倍率']
+];
+function apiPollingPriceHtml(item,index){
+  var p=apiPollingEffectivePricing(item);
+  var id=String(item.provider_id||'');
+  var open=apiPollingPriceOpen[id]?' open':'';
+  var summary=p.currency+' '+p.input+' / '+p.output+' · 倍率 '+p.multiplier;
+  var html='<details class="api-polling-price"'+open+
+    ' ontoggle="apiPollingPriceToggle(\''+escAttr(id)+'\',this.open)">'+
+    '<summary><span>价格</span><b>'+esc(summary)+'</b></summary>'+
+    '<div class="api-polling-price-grid">'+
+    '<label>币种<input class="api-polling-price-input" type="text" maxlength="4" data-price-index="'+index+
+      '" data-price-field="currency" value="'+escAttr(p.currency)+'"></label>';
+  API_POLLING_PRICE_FIELDS.forEach(function(field){
+    html+='<label>'+esc(field[1])+'<input class="api-polling-price-input" type="number" min="0" step="0.0001" data-price-index="'+
+      index+'" data-price-field="'+escAttr(field[0])+'" value="'+escAttr(String(p[field[0]]))+'"></label>';
+  });
+  html+='</div>'+
+    '<p class="api-polling-price-note">按每 100 万 token 填。最终价＝（输入＋输出＋缓存创建＋缓存命中）× 倍率。'+
+    '改完记得点上面的「保存轮询配置」。</p>'+
+    '</details>';
+  return html;
+}
 function renderApiPolling(){
   var draft=apiPollingDraftGet();
   var items=apiPollingDraftItems();
@@ -10107,8 +10547,13 @@ function renderApiPolling(){
   html+='<div class="api-polling-options">'+
     '<label class="api-toggle"><input id="api-polling-enabled" type="checkbox"'+(draft.enabled?' checked':'')+' onchange="apiPollingToggleControls()"><span>启用聊天 API 轮询</span></label>'+
     '<div class="api-primary-retry '+(draft.enabled?'':'disabled')+(draft.primary_retry_enabled?'':' off')+'"><label class="api-toggle"><input id="api-polling-primary-retry" type="checkbox"'+(draft.primary_retry_enabled?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>回主重试</span></label><label class="api-primary-retry-interval"><span>备用 API 连续使用</span><input id="api-polling-primary-interval" type="number" min="5" max="200" step="1" value="'+draft.primary_retry_interval+'"'+(draft.enabled&&draft.primary_retry_enabled?'':' disabled')+' onblur="this.value=Math.max(5,Math.min(200,Number(this.value)||20))"><span>次后重试第 1 个</span></label><p>第 1 个恢复后会继续固定使用；仍失败则按队列顺序回到备用。</p></div>'+
+    '<div class="api-polling-display'+(draft.enabled?'':' disabled')+'">'+
+      '<label class="api-toggle"><input id="api-polling-show-price" type="checkbox"'+(draft.show_billing_price?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>显示价格</span></label>'+
+      '<label class="api-toggle"><input id="api-polling-show-status" type="checkbox"'+(draft.show_message_status?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>显示 √</span></label>'+
+      '<p>只在开启轮询后起作用：轮询开着时默认两样都不显示，勾上才显示。关闭轮询一律照常显示。价格还要看聊天页「设置」里的计费总闸——那边关掉，这里勾了也不显示。</p>'+
+    '</div>'+
     '</div>';
-  html+='<p class="api-polling-note">每个候选 API 单次最多等待 60 秒，超时立即切下一个；开启轮询后不显示 √ 和价格，回复会等整段生成完再显示。关闭轮询后恢复正常显示。</p>';
+  html+='<p class="api-polling-note">每个候选 API 单次最多等待 60 秒，超时立即切下一个；开启轮询后回复会等整段生成完再显示。</p>';
   html+='<div class="api-polling-list">';
   if(!items.length){
     html+='<div class="api-polling-empty">轮询队列是空的。从下面挑一个供应商加进来，加几个就轮几个。</div>';
@@ -10123,7 +10568,9 @@ function renderApiPolling(){
           '<div class="api-polling-selects">'+
             apiPollingModelSelectHtml(item,index)+
             apiPollingStrategySelectHtml(item,index)+
-          '</div></div>'+
+          '</div>'+
+          apiPollingPriceHtml(item,index)+
+        '</div>'+
         '<span class="api-polling-status" data-base-status="'+escAttr(status)+'">'+esc(status)+'</span>'+
         '<div class="api-polling-actions">'+
           '<button class="btn btn-outline btn-sm" type="button" title="上移" aria-label="上移"'+(index===0?' disabled':'')+' onclick="moveApiPolling('+index+',-1)">↑</button>'+
@@ -10159,19 +10606,60 @@ function apiPollingCollectSwitches(){
   var enabled=document.getElementById('api-polling-enabled');
   var retry=document.getElementById('api-polling-primary-retry');
   var interval=document.getElementById('api-polling-primary-interval');
+  var showPrice=document.getElementById('api-polling-show-price');
+  var showStatus=document.getElementById('api-polling-show-status');
   if(enabled)draft.enabled=!!enabled.checked;
   if(retry)draft.primary_retry_enabled=!!retry.checked;
   if(interval)draft.primary_retry_interval=Math.max(5,Math.min(200,Number(interval.value)||20));
+  if(showPrice)draft.show_billing_price=!!showPrice.checked;
+  if(showStatus)draft.show_message_status=!!showStatus.checked;
+  apiPollingCollectPrices(draft);
+  return draft;
+}
+// 价格输入框故意不挂 onchange：这一页每次改动都整页重渲染，挂了就会边打字边重建
+// 输入框、光标乱跳。改成和"备用次数"一样，任何一次真正的操作再统一从 DOM 读回来。
+function apiPollingCollectPrices(draft){
+  draft=draft||apiPollingDraftGet();
+  if(!document.querySelectorAll)return draft;
+  var nodes=document.querySelectorAll('.api-polling-price-input');
+  if(!nodes||!nodes.length)return draft;
+  var touched=Object.create(null);
+  Array.prototype.forEach.call(nodes,function(node){
+    var index=parseInt(node.getAttribute('data-price-index'),10);
+    var field=String(node.getAttribute('data-price-field')||'');
+    var entry=draft.order[index];
+    if(!entry||!field)return;
+    if(!touched[index]){
+      // 先把这一条的当前生效价整份铺开，再用输入框覆盖，避免只填一个格子就把其余清成 0。
+      entry.pricing=apiPollingEffectivePricing(entry);
+      touched[index]=1;
+    }
+    if(field==='currency'){
+      entry.pricing.currency=String(node.value||'').trim().slice(0,4)||'¥';
+      return;
+    }
+    // 注意 Number('')===0：清空的输入框必须当成"没改"，不然一不小心就把单价变成 0。
+    var raw=String(node.value===undefined||node.value===null?'':node.value).trim();
+    if(!raw)return;
+    var n=Number(raw);
+    if(isFinite(n)&&n>=0)entry.pricing[field]=n;
+  });
   return draft;
 }
 function apiPollingToggleControls(){
   var draft=apiPollingCollectSwitches();
-  var card=document.querySelector('.api-primary-retry');
+  var card=document.querySelector?document.querySelector('.api-primary-retry'):null;
+  var display=document.querySelector?document.querySelector('.api-polling-display'):null;
   var retry=document.getElementById('api-polling-primary-retry');
   var interval=document.getElementById('api-polling-primary-interval');
+  var showPrice=document.getElementById('api-polling-show-price');
+  var showStatus=document.getElementById('api-polling-show-status');
   if(card){card.classList.toggle('disabled',!draft.enabled);card.classList.toggle('off',!draft.primary_retry_enabled)}
+  if(display)display.classList.toggle('disabled',!draft.enabled);
   if(retry)retry.disabled=!draft.enabled;
   if(interval)interval.disabled=!draft.enabled||!draft.primary_retry_enabled;
+  if(showPrice)showPrice.disabled=!draft.enabled;
+  if(showStatus)showStatus.disabled=!draft.enabled;
 }
 function moveApiPolling(index,delta){
   apiPollingCollectSwitches();
@@ -10192,8 +10680,9 @@ function addApiPollingProvider(){
   if(!provider){toast('这个供应商已经不在供应商库里了');return}
   var draft=apiPollingDraftGet();
   if(draft.order.some(function(x){return String(x.provider_id)===id})){toast('这个供应商已经在队列里了');return}
-  // 模型默认跟随供应商的默认模型，缓存策略默认跟随聊天页，用户不用再填一遍；想换在行内改就行。
-  draft.order.push({provider_id:id,model:'',cache_strategy:''});
+  // 模型默认跟随供应商的默认模型，缓存策略默认跟随聊天页，价格先给面板默认单价，
+  // 用户不用再从零填一遍；想换在行内改就行。
+  draft.order.push({provider_id:id,model:'',cache_strategy:'',pricing:apiPollingEffectivePricing(null)});
   renderApiConfig();
   toast('已加入队列：'+providerDisplayName(provider)+'（记得点「保存轮询配置」）',4000);
 }
@@ -10241,9 +10730,11 @@ function saveApiPolling(){
     enabled:draft.enabled,
     primary_retry_enabled:draft.primary_retry_enabled,
     primary_retry_interval:draft.primary_retry_interval,
+    show_message_status:draft.show_message_status,
+    show_billing_price:draft.show_billing_price,
     // 顺序保存用户自己排好的这几条（含暂时不可用的），保留他的优先级意图。
     order:items.map(function(x){
-      return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy};
+      return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy,pricing:x.pricing};
     })
   };
   next.config_revision=apiPollingRevision(next,items);

@@ -17,14 +17,14 @@ const css={
 };
 const allCss=Object.values(css).join('\n');
 
-// ── ➕ 功能区：一页平铺，分页那套（箭头/圆点/滑动）整体拆掉 ──────────────
+// ── ➕ 功能区：一页 2 行 4 列，其余上滑（原生滚动）出来；分页那套整体拆掉 ────
 assert(/id="chat-plus-grid"/.test(html),'the plus tray must be a single grid');
 assert(!/chat-plus-page/.test(html),'paged plus tray markup must be gone');
 assert(!/chat-plus-dots|chat-plus-dot"/.test(html),'plus pager dots must be gone');
 assert(!/chat-plus-arrow/.test(html),'plus pager arrows must be gone');
 const trayButtons=(html.match(/<div class="chat-plus-grid"[\s\S]*?<\/div>/)||[''])[0];
 assert((trayButtons.match(/<button/g)||[]).length===12,'all 12 plus entries must live in one grid');
-['相册','拍摄','上传文件','提示词','网关','世界书','记忆','分条','截断','调试','清理','措辞偏好'].forEach(function(label){
+['相册','拍摄','上传文件','提示词','设置','世界书','记忆','分条','截断','调试','清理','措辞偏好'].forEach(function(label){
   assert(trayButtons.includes('<b>'+label+'</b>'),'plus tray lost entry '+label);
 });
 ['chatPlusRenderPager','chatPlusSetPage','chatPlusPrevPage','chatPlusNextPage','chatPlusHandleTouchStart','chatPlusPager'].forEach(function(name){
@@ -37,6 +37,15 @@ assert(/function chatInitPlusPager\(/.test(source),'plus tray still needs its ta
 assert(/\.chat-plus-grid\{[^}]*grid-auto-rows/.test(css.wechat.replace(/\s+/g,'')) ||
   /grid-auto-rows/.test(css.wechat),'rows must follow the entry count instead of a fixed 2×70px');
 assert(!/grid-template-rows:repeat\(2,70px\)/.test(css.wechat),'the fixed second row (permanently half empty) must be gone');
+// 只露 2 行必须靠"限高 + 网格自己能滚"实现，不许改行模板、不许回到 JS 分页。
+// 第三行要留一截 peek 当提示，而且露出来的那半个图标照样能点（真按钮，没有遮挡层）。
+const wechatFlat=css.wechat.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\s+/g,'');
+assert(/--ck-plus-view:calc\(var\(--ck-plus-row\)\*2\+/.test(wechatFlat),'the open tray must be capped at exactly 2 rows');
+assert(/--ck-plus-peek:/.test(wechatFlat),'the third row needs a visible peek so users know to scroll');
+assert(/\.chat-plus-grid\{[^}]*max-height:var\(--ck-plus-view\)/.test(wechatFlat),'the grid itself must be the scroll container');
+assert(/\.chat-plus-grid\{[^}]*overflow-y:auto/.test(wechatFlat),'scrolling must be native (finger-following), not JS-paged');
+assert(!/pointer-events:none/.test((wechatFlat.match(/\.chat-plus-grid>button\{[^}]*\}/)||[''])[0]),
+  'the half-visible row must stay clickable');
 const iconSizes=[css.chat,css.wechat,css.visual].filter(function(text){
   const flat=text.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\s+/g,'');
   const rules=flat.match(/\.chat-plus[^{}]*svg\{[^}]*\}/g)||[];
@@ -73,6 +82,14 @@ assert(/chat-manual-trim-btn[^>]*>/.test(trim)&&/btn-outline/.test(trim),'manual
 const worldbook=html.slice(html.indexOf('id="chat-side-worldbook"'),html.indexOf('id="chat-side-memory"'));
 assert(/btn-red/.test(worldbook),'deleting a worldbook entry must read as destructive');
 assert(worldbook.indexOf('当前这一条')<worldbook.indexOf('chat-worldbook-name'),'the editor needs a heading that separates it from the list');
+// 世界书改成下拉选择：维护 100 条也只占一行，选择框一栏、新增一栏。
+assert(/id="chat-worldbook-list"/.test(worldbook),'the picker container must stay (wechat.css targets it)');
+assert(/chat-worldbook-add-btn[\s\S]*?新增世界书/.test(worldbook),'新增世界书 must sit in its own row under the picker');
+assert(worldbook.indexOf('chat-worldbook-list')<worldbook.indexOf('chat-worldbook-add'),'选择框在上，新增在下');
+const worldbookRender=source.slice(source.indexOf('function chatRenderWorldbooks('));
+assert(/chat-worldbook-select[\s\S]{0,400}onchange="chatSelectWorldbook\(this\.value\)"/.test(worldbookRender),
+  'the picker must be a <select> that still routes through chatSelectWorldbook (draft flush)');
+assert(!/class="chat-worldbook-row /.test(worldbookRender),'the one-row-per-entry list must be gone');
 const model=html.slice(html.indexOf('id="chat-side-model"'),html.indexOf('id="chat-side-speech"'));
 assert(model.indexOf('伪思考链</b>')<model.indexOf('chat-fake-thinking'),'the switch needs its explanation above it, not a hint below a later field');
 

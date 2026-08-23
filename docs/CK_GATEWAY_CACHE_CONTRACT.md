@@ -60,7 +60,14 @@ Optimistic rendering must not mutate the transport contract. The panel may persi
 
 `transport_messages` is the exception: it is not display history. It is the gateway-returned hidden upstream transport history and must be sent back unchanged on the next turn for serverless instance switches and cold starts. The panel should omit this field when it has no hidden transport yet, and the gateway should ignore empty transport arrays so `window_messages` or gateway session history can still be used.
 
-Regeneration is the explicit exception to transport reuse. The panel removes the assistant reply being regenerated, clears the now-stale hidden transport, and sends the complete remaining visible user/assistant list in `window_messages`. The latest user also remains in `text` as the reply target; the gateway's existing current-user-tail deduplication prevents that user turn from being appended twice.
+Regeneration is the explicit exception to transport reuse. Since `chat-v208` regeneration no longer deletes the previous answer from the display: the assistant group being regenerated is snapshotted into a reply-variant list carried on the pending user message, and the new answer is appended as the next variant, so the bubble grows `◂ n/N ▸` paging. The wire behavior is unchanged: the assistant group is still removed from `chatMessages` for the request (the turn is being re-sent, so the previous answer must not be replayed as history), the now-stale hidden transport is cleared, and the complete remaining visible user/assistant list is sent in `window_messages`. Only the active variant ever lives in `chatMessages`, so `window_messages` always carries exactly one version. The latest user also remains in `text` as the reply target; the gateway's existing current-user-tail deduplication prevents that user turn from being appended twice.
+
+Switching a reply variant (`◂` / `▸`) replaces the whole assistant group in place and must invalidate the hidden transport for the same reason an edit does. What is *not* guaranteed is that the cache survives: changing assistant text at position *k* changes every upstream byte from *k* onward, so any anchor at or after *k* necessarily misses. That is physics, not a bug. What *is* guaranteed:
+
+- **the request never disagrees with the screen.** The panel must not keep a transport array whose assistant text differs from the displayed variant. Clearing it forces the next turn onto `window_messages`, which is derived from what is displayed.
+- **only the tail is rebuilt.** Everything before the switched group is untouched, and canonical injection restores the older user messages to their frozen byte-identical form by original-text hash, so the prefix up to the last user message can still be read from cache.
+
+Variant snapshots never leave the device: `replyVariants` is panel-local storage only, exactly like `versions` on edited user messages.
 
 The gateway should send hidden history through a dedicated `transport` SSE event:
 
@@ -142,6 +149,8 @@ For the Claude-compatible `/v1/messages` gateway route used by RikkaHub, prompt-
 - the gateway can still apply canonical injection to restore frozen old user messages.
 
 This mode matches CK window semantics: staying in the same window keeps forwarding that window's full context; creating or selecting another window uses another session/history.
+
+There is no longer a user-facing switch for this. The panel used to expose a `同窗口全量上下文` checkbox (`fullWindowContext`) that gated whether `window_messages` was attached; it was removed in `chat-v208` because it could never do anything useful. The gateway returns `transport_messages` on every completed turn, so from turn 2 onward the transport branch always wins and `window_messages` is never sent regardless of the checkbox; and in every case where transport *is* empty (first turn, regeneration, post-trim, speech boundary, variant switch) some other condition already forced the field, so unchecking it could only degrade context without saving anything. The gateway never read it as a body field. The rule is now unconditional: **when there is no usable hidden transport, send the visible history that is on screen.**
 
 ## Local Session Storage
 

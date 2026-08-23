@@ -77,4 +77,56 @@ assert(fingerprint.includes('上一轮断点全部作废'),'一个断点都读�
 assert(!fingerprint.includes("'前缀一致'"),'旧的「前缀一致」文案会被误当成证据，必须换掉');
 assert(fingerprint.includes('哈希不含断点标记'),'哈希语义变了（剥掉 cache_control），要在面板上写明');
 
+// ── 调试记录页的排版（2026-08-23 用户要求）─────────────────────────────
+// 1. 计费标准整块搬去「设置」，只剩一个总闸；这一页不再填任何单价。
+// 2. 页顶换成 √ 颜色说明，默认折叠。
+// 3. 「已保存的设置」默认折叠——展开着太占地方。
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const debugPanel=html.slice(html.indexOf('id="chat-side-debug"'));
+['chat-cost-input-price','chat-cost-output-price','chat-cost-cache-read-price',
+ 'chat-cost-cache-create-5m-price','chat-cost-cache-create-1h-price','chat-cost-multiplier',
+ 'chat-cost-currency','chat-cost-mode'].forEach(function(id){
+  assert(!html.includes('id="'+id+'"'),'单价输入框必须全部撤掉，价格改在轮询页按 API 维护：'+id);
+});
+assert(!debugPanel.includes('计费标准'),'计费标准整块必须搬去设置页');
+const gateway=html.slice(html.indexOf('id="chat-side-gateway"'),html.indexOf('id="chat-side-worldbook"'));
+assert(/id="chat-billing-enabled"/.test(gateway),'计费总闸必须落在设置页');
+assert(/id="chat-usage-stats-enabled"/.test(gateway),'用量统计开关必须落在设置页');
+assert(!/id="chat-full-window-context"/.test(html),'同窗口全量上下文是死开关，必须删掉');
+assert(!source.includes('fullWindowContext'),'同窗口全量上下文的配置字段也要一起清掉');
+
+assert(/<details[^>]*chat-tick-legend-card[\s\S]*?id="chat-tick-legend"/.test(debugPanel),'√ 颜色说明必须是可折叠块');
+assert(!/chat-tick-legend-card[^>]*\sopen[\s>]/.test(debugPanel),'√ 颜色说明默认折叠');
+assert(/<details[^>]*chat-debug-saved-card[\s\S]*?id="chat-debug-cache-mode"/.test(debugPanel),'已保存的设置必须包在可折叠块里');
+assert(!/chat-debug-saved-card[^>]*\sopen[\s>]/.test(debugPanel),'已保存的设置默认折叠');
+assert(debugPanel.indexOf('chat-tick-legend-card')<debugPanel.indexOf('chat-debug-saved-card'),'说明排在调试记录上方');
+assert(debugPanel.indexOf('chat-debug-saved-card')<debugPanel.indexOf('id="chat-debug"'),'已保存的设置仍在调试记录之上');
+assert(source.includes('function chatRenderTickLegend'),'说明内容要用真勾号现造，别在 HTML 里另抄一份 SVG');
+assert(functionSource('chatRenderTickLegend').includes('chatCacheTickHtml'),'图例必须复用 chatCacheTickHtml，保证颜色和消息上完全一致');
+const legendRows=source.slice(source.indexOf('var CHAT_TICK_LEGEND_ROWS='),source.indexOf('function chatRenderTickLegend'));
+['full','partial','created','below_minimum','miss','sent'].forEach(function(state){
+  assert(legendRows.includes("'"+state+"'"),'√ 说明漏了状态 '+state);
+});
+
+// ── 聊天面板的价格文案：直接给数字，不写"按单价 / 估算" ────────────────────
+const costLabel=functionSource('chatAssistantCostLabel');
+assert(!costLabel.includes('按单价')&&!costLabel.includes('估算 '),'价格前面不许再加"按单价/估算"前缀');
+assert(costLabel.includes('chatCostAmountText'),'价格本身还是要显示');
+
+// ── 用量统计那一行：符号代替文字，跟日期同字号 ─────────────────────────────
+const usage=functionSource('chatAssistantUsageHtml');
+assert(usage.includes('chatUsageStatsEnabled()'),'没开用量统计就不许输出这一行');
+['↑','↓','⚡','✚','◎'].forEach(function(symbol){
+  assert(usage.includes("'"+symbol+"'"),'用量统计缺符号 '+symbol);
+});
+['输入','输出','缓存命中','缓存创建','命中率'].forEach(function(word){
+  assert(usage.includes(word),'符号要有 title 兜底解释：'+word);
+});
+assert(/chat-msg-usage/.test(usage),'用量行要有自己的 class');
+assert(/font-size:10\.5px/.test(chatCss.slice(chatCss.indexOf('.chat-msg-usage{'),chatCss.indexOf('.chat-msg-usage{')+700)),
+  '用量行字号必须和日期那一行一致（10.5px）');
+assert(functionSource('chatAttachAssistantCost').includes('msg.tkRead=cost.read'),
+  'token 数必须落盘，否则刷新一次页面就算不出命中率了');
+assert(functionSource('chatRenderMessageRow').includes('+time+usage+'),'用量行要紧跟在时间那一行下面');
+
 console.log('debug panel layout tests: OK');

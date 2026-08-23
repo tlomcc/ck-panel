@@ -1427,9 +1427,16 @@ body.chat-active .chat-plus-panel{
   border-radius:0!important;
   background:#f7f7f7!important;
   transform:none!important;
+  /* 这一份是几何的权威（chat.css 里那份只是兜底）。两行 4 列 + 第三行露半个图标，
+     其余靠原生上滑；行高/行距在这里改一次，下面 open 的高度会跟着算出来。 */
+  --ck-plus-row:70px;
+  --ck-plus-gap:8px;
+  --ck-plus-peek:35px;
+  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap)*2 + var(--ck-plus-peek));
+  --ck-plus-chrome:26px;
 }
 body.chat-active .chat-plus-panel.open{
-  max-height:340px!important;
+  max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;
   margin-top:9px!important;
   padding-top:16px!important;
   padding-bottom:10px!important;
@@ -1439,6 +1446,11 @@ body.chat-active .chat-plus-grid{
   grid-template-columns:repeat(4,minmax(0,1fr))!important;
   grid-auto-rows:70px!important;
   gap:8px 12px!important;
+  max-height:var(--ck-plus-view)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
   opacity:1!important;
   transform:none!important;
 }
@@ -1505,9 +1517,13 @@ body.dark.chat-active .chat-plus-grid > button.chat-toggle-off b{color:#737373!i
   body.chat-active .chat-plus-panel{
     padding-left:14px!important;
     padding-right:14px!important;
+    --ck-plus-row:67px;
+    --ck-plus-gap:7px;
+    --ck-plus-peek:33px;
+    --ck-plus-chrome:23px;
   }
-  body.chat-active .chat-plus-panel.open{max-height:330px!important;padding-top:14px!important;padding-bottom:9px!important}
-  body.chat-active .chat-plus-grid{grid-auto-rows:67px!important;gap:7px 8px!important}
+  body.chat-active .chat-plus-panel.open{max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;padding-top:14px!important;padding-bottom:9px!important}
+  body.chat-active .chat-plus-grid{grid-auto-rows:67px!important;gap:7px 8px!important;max-height:var(--ck-plus-view)!important}
   body.chat-active .chat-plus-grid > button{height:67px!important}
 body.chat-active .chat-plus-panel span,
 body.chat-active .chat-plus-grid > button.chat-toggle-on span,
@@ -1518,9 +1534,16 @@ body.chat-active .chat-plus-grid > button.chat-toggle-off span{
   }
   body.chat-active .chat-plus-panel span svg{width:22px!important;height:22px!important}}
 
+/* 横屏矮屏：一行放 6 个，12 个刚好两行，没有第三行可露，peek 归零。 */
 @media(max-height:500px) and (orientation:landscape){
+  body.chat-active .chat-plus-panel{
+    --ck-plus-row:64px;
+    --ck-plus-gap:6px;
+    --ck-plus-peek:0px;
+    --ck-plus-chrome:13px;
+  }
   body.chat-active .chat-plus-panel.open{
-    max-height:170px!important;
+    max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;
     margin-top:7px!important;
     padding-top:9px!important;
     padding-bottom:4px!important;
@@ -1529,6 +1552,7 @@ body.chat-active .chat-plus-grid > button.chat-toggle-off span{
     grid-template-columns:repeat(6,minmax(0,1fr))!important;
     grid-auto-rows:64px!important;
     gap:6px!important;
+    max-height:var(--ck-plus-view)!important;
   }
   body.chat-active .chat-plus-grid > button{height:64px!important}}
 
@@ -1936,6 +1960,46 @@ body.chat-active #chat-side-worldbook .chat-worldbook-list{
   border-bottom:1px solid var(--wx-line-soft)!important;
 }
 body.dark.chat-active #chat-side-worldbook .chat-worldbook-list{border-bottom-color:#2b3540!important}
+
+/* 世界书从"一条一行"改成下拉选择：不管维护了 3 条还是 100 条，这块永远只占一行。
+   排版按用户要的两栏：上一栏是选择框，下一栏是「新增世界书」。
+   下拉框沿用缓存策略那一行的样式，不另造一套控件外观。 */
+body.chat-active .chat-worldbook-select-row{
+  display:grid!important;
+  grid-template-columns:40px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:10px!important;
+  width:100%!important;
+}
+body.chat-active .chat-worldbook-select-row>label{
+  margin:0!important;
+  color:var(--wx-faint)!important;
+  font-size:12px!important;
+  white-space:nowrap!important;
+}
+body.chat-active .chat-worldbook-select{
+  width:100%!important;
+  min-width:0!important;
+  min-height:40px!important;
+  padding:8px 10px!important;
+  border:1px solid #c9ddd1!important;
+  border-radius:7px!important;
+  background:#fbfffc!important;
+  color:var(--wx-text)!important;
+  font:inherit!important;
+  font-size:13px!important;
+  text-overflow:ellipsis!important;
+}
+body.dark.chat-active .chat-worldbook-select{background:#1b222a!important;border-color:#2b3540!important;color:#e6ede9!important}
+body.chat-active .chat-worldbook-add{
+  display:flex!important;
+  justify-content:flex-start!important;
+  margin:10px 0 2px!important;
+}
+body.chat-active .chat-worldbook-add-btn{width:100%!important;justify-content:center!important;min-height:38px!important}
+body.chat-active #chat-side-worldbook .chat-worldbook-head{border-bottom:0!important;padding-bottom:0!important}
+/* 选择框自己已经是一个控件了，外面那层白卡边框纯属多余（原来是给列表用的）。 */
+body.chat-active #chat-side-worldbook .chat-worldbook-list{border-left:0!important;border-right:0!important;border-top:0!important;border-radius:0!important;background:transparent!important;padding-left:0!important;padding-right:0!important;padding-top:0!important}
 
 /* 措辞偏好预览不再自己开一层滚动条（外层 .chat-side-panel 已经能滚） */
 body.chat-active .chat-settings .chat-speech-preview{

@@ -1078,7 +1078,7 @@ body.chat-active .chat-plus-panel{
 }
 
 body.chat-active .chat-plus-panel.open{
-  max-height:340px!important;
+  max-height:calc(var(--ck-plus-view,190px) + var(--ck-plus-chrome,14px))!important;
   opacity:1!important;
   pointer-events:auto!important;
   margin-top:8px!important;
@@ -1090,6 +1090,28 @@ body.chat-active.chat-plus-open .chat-compose{
   max-height:min(520px,82vh)!important;
   overflow:visible!important;
 }
+
+/* 功能区默认只露 2 行 4 列，第三行往后要上滑才出来。
+   滑动交给浏览器原生滚动（跟手 1:1，滑多少显现多少），不做 JS 分页。
+   第三行故意露出半个图标高度当作"下面还有"的提示，露出来的那半个照样能点。 */
+body.chat-active .chat-plus-panel{
+  --ck-plus-row:68px;
+  --ck-plus-gap:10px;
+  --ck-plus-peek:34px;
+  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap)*2 + var(--ck-plus-peek));
+  --ck-plus-chrome:14px;
+}
+body.chat-active .chat-plus-grid{
+  max-height:var(--ck-plus-view)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+  scrollbar-width:thin!important;
+}
+body.chat-active .chat-plus-grid::-webkit-scrollbar{width:3px}
+body.chat-active .chat-plus-grid::-webkit-scrollbar-thumb{border-radius:3px;background:rgba(18,140,76,.22)}
+body.chat-active .chat-plus-grid::-webkit-scrollbar-track{background:transparent}
 
 /* 功能区是一页平铺的图标网格：不分页、没有左右箭头和圆点，行数跟着按钮数量走。 */
 body.chat-active .chat-plus-grid{
@@ -3816,6 +3838,47 @@ body.chat-active .chat-msg-row.user>.chat-msg-time{
   margin:0 8px 0 0!important;
 }
 
+/* 用量统计那一行：紧贴在时间那一行下面，字号跟它一致（10.5px），
+   但颜色比时间亮一档，好在一屏小字里一眼找到。符号本身再重一点。 */
+body.chat-active .chat-msg-usage{
+  display:flex!important;
+  align-items:center!important;
+  flex-wrap:wrap!important;
+  gap:7px!important;
+  align-self:flex-start!important;
+  width:auto!important;
+  max-width:min(700px,82%)!important;
+  margin:-1px 0 0 8px!important;
+  padding:0 3px!important;
+  color:#0e8f63!important;
+  font-size:10.5px!important;
+  line-height:1.15!important;
+  letter-spacing:.2px!important;
+  font-variant-numeric:tabular-nums!important;
+  white-space:nowrap!important;
+  user-select:none!important;
+}
+body.chat-active .chat-msg-usage>span{display:inline-flex!important;align-items:center!important;gap:2px!important}
+body.chat-active .chat-msg-usage i{
+  font-style:normal!important;
+  font-weight:700!important;
+  opacity:.9!important;
+}
+body.dark.chat-active .chat-msg-usage,body.theme-dark.chat-active .chat-msg-usage{color:#5fe0a8!important}
+
+/* √ 颜色说明：每行一个真勾号 + 一句话。勾号由 chatCacheTickHtml 现造，颜色自动一致。 */
+body.chat-active .chat-tick-legend{display:grid!important;gap:7px!important;padding:2px 0 0!important}
+body.chat-active .chat-tick-legend-row{
+  display:grid!important;
+  grid-template-columns:22px minmax(0,1fr)!important;
+  align-items:start!important;
+  gap:8px!important;
+  font-size:12px!important;
+  line-height:1.55!important;
+}
+body.chat-active .chat-tick-legend-row .chat-cache-tick{display:inline-flex!important;margin:2px 0 0!important}
+body.chat-active .chat-tick-legend-note{margin:4px 0 0!important;font-size:11.5px!important;line-height:1.6!important;opacity:.75!important}
+
 body.chat-active .chat-msg-row.user>.chat-msg-meta{
   position:static!important;
   left:auto!important;
@@ -4062,4 +4125,12 @@ body.chat-active .chat-recall-head,body.chat-active .chat-thinking-head{min-heig
 body.chat-active .chat-recall-body,body.chat-active .chat-thinking-body{padding:0 var(--ck-aux-block-pad-x) var(--ck-aux-block-pad-y)!important;font-size:var(--ck-aux-block-font-size)!important;line-height:var(--ck-aux-block-line-height)!important}
 body.chat-active .chat-recall.open,body.chat-active .chat-thinking.open{border-radius:var(--ck-aux-block-radius)!important}
 
-body.chat-active.chat-polling-on .chat-cache-tick,body.chat-active.chat-polling-on .chat-msg-cost{display:none!important}
+/* √ 和价格的隐藏兜底。渲染路径已经按 chatShouldShowMessageStatus /
+   chatShouldShowBillingPrice 决定要不要输出节点，这里只防增量刷新留下的旧节点。
+   两者不再绑死在"轮询开着"上：轮询页各有一个勾选框，价格头上还压着设置页的计费总闸，
+   所以判断结果由 JS 算好后落成 chat-hide-tick / chat-hide-cost 两个类。
+   chat-polling-on 仍然保留（别的样式在用，也方便排查）。 */
+body.chat-active.chat-hide-tick .chat-cache-tick{display:none!important}
+body.chat-active.chat-hide-cost .chat-msg-cost{display:none!important}
+/* 说明卡里的勾号是图例，不受"消息上不显示 √"影响——否则打开说明会是一片空白。 */
+body.chat-active.chat-hide-tick .chat-tick-legend .chat-cache-tick{display:inline-flex!important}

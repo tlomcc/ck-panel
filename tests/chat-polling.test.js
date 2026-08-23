@@ -19,12 +19,16 @@ function extractFunction(name){
 
 const POLLING_FNS=[
   'apiPollingNormalizeStrategy','chatNormalizeCacheStrategy',
+  'chatDefaultCostPricing','apiPollingNormalizePricing','apiPollingEffectivePricing',
+  'chatApiPricingKey','apiPollingPricingMirror',
+  'chatDisplayToggleInvalidate','chatDisplayToggles','chatBillingEnabled','chatUsageStatsEnabled',
   'apiPollingConfig','apiPollingWrite','apiPollingItemFor','apiPollingItems',
   'apiPollingItemsFromOrder','apiPollingAvailableItems','apiPollingRevision','providerFingerprint',
   'apiPollingDraftReset','apiPollingDraftGet','apiPollingDraftItems','apiPollingDraftSync',
-  'apiPollingCollectSwitches','apiPollingAddable','addApiPollingProvider','removeApiPolling',
+  'apiPollingCollectSwitches','apiPollingCollectPrices','apiPollingAddable',
+  'addApiPollingProvider','removeApiPolling',
   'setApiPollingModel','setApiPollingStrategy','moveApiPolling',
-  'chatPollingViewInvalidate','chatPollingView',
+  'chatPollingViewInvalidate','chatPollingView','chatApplyDisplayGateClasses',
   'chatShouldShowMessageStatus','chatShouldShowBillingPrice',
   'chatCacheStrategyMeta','apiPollingStatusText'
 ];
@@ -36,6 +40,8 @@ function pollingContext(apiProviders,extra){
     console,
     API_POLLING_KEY:'chat_polling',
     CHAT_POLLING_VIEW_KEY:'ckChatPollingView',
+    CHAT_CONFIG_KEY:'ckChatConfigV2',
+    chatDisplayToggleCache:null,
     chatPollingViewCache:null,
     apiPollingDraft:null,
     apiProviders:apiProviders,
@@ -235,19 +241,148 @@ function testChatDisplayDefaultsWhenConfigMissing(){
 
 function testChatDisplayRulesUnderPolling(){
   const cases=[
-    {enabled:false,tick:true,cost:true,note:'轮询关闭：显示状态和价格'},
-    {enabled:true,tick:false,cost:false,note:'轮询开启：无条件隐藏状态和价格'}
+    {enabled:false,show:false,tick:true,cost:true,note:'轮询关闭：两样都照常显示'},
+    {enabled:true,show:false,tick:false,cost:false,note:'轮询开启且没勾：两样都隐藏'},
+    {enabled:true,show:true,tick:true,cost:true,note:'轮询开启且勾上：两样都显示'}
   ];
   cases.forEach(item=>{
     const providers=library();
     providers.chat_polling={
       enabled:item.enabled,
+      show_message_status:item.show,
+      show_billing_price:item.show,
       order:[{provider_id:'A',model:'m-a'}]
     };
     const context=pollingContext(providers);
     assert.strictEqual(context.chatShouldShowMessageStatus(),item.tick,item.note+'（√）');
     assert.strictEqual(context.chatShouldShowBillingPrice(),item.cost,item.note+'（价格）');
   });
+}
+
+// 计费总闸：设置页关掉以后，轮询那边勾了「显示价格」也不许显示。
+// （两个开关每条消息渲染都要问一次，所以是带缓存的；改了配置必须走 invalidate。）
+function testBillingMasterSwitchBeatsPolling(){
+  const providers=library();
+  providers.chat_polling={enabled:true,show_message_status:true,show_billing_price:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  assert.strictEqual(context.chatShouldShowBillingPrice(),true,'总闸默认开着');
+  context.__store.ckChatConfigV2=JSON.stringify({billingEnabled:false});
+  context.chatDisplayToggleInvalidate();
+  assert.strictEqual(context.chatShouldShowBillingPrice(),false,'总闸关掉：轮询勾了也不显示价格');
+  assert.strictEqual(context.chatShouldShowMessageStatus(),true,'总闸只管价格，不管 √');
+  // 缓存必须真的生效：不 invalidate 就不该重新读 localStorage（否则每条消息都 parse 一遍大配置）
+  context.__store.ckChatConfigV2=JSON.stringify({billingEnabled:true});
+  assert.strictEqual(context.chatShouldShowBillingPrice(),false,'没 invalidate 前必须命中缓存');
+  context.chatDisplayToggleInvalidate();
+  assert.strictEqual(context.chatShouldShowBillingPrice(),true);
+  assert.ok(extractFunction('chatSaveConfigObject').includes('chatDisplayToggleInvalidate()'),
+    '写配置的唯一出口必须作废这份缓存');
+  // 用量统计默认关，开了才算开
+  assert.strictEqual(context.chatUsageStatsEnabled(),false,'用量统计默认关闭');
+  context.__store.ckChatConfigV2=JSON.stringify({usageStatsEnabled:true});
+  context.chatDisplayToggleInvalidate();
+  assert.strictEqual(context.chatUsageStatsEnabled(),true);
+  // 轮询整个关掉时总闸依然说了算
+  const off=pollingContext(library());
+  off.__store.ckChatConfigV2=JSON.stringify({billingEnabled:false});
+  off.chatDisplayToggleInvalidate();
+  assert.strictEqual(off.chatShouldShowBillingPrice(),false,'不开轮询也照样受总闸管');
+  // 配置坏掉时必须退回"开着"，不能因为读不到配置就把价格全藏了
+  const broken=pollingContext(library());
+  broken.__store.ckChatConfigV2='{ 这不是 JSON';
+  broken.chatDisplayToggleInvalidate();
+  assert.strictEqual(broken.chatShouldShowBillingPrice(),true,'配置坏掉时总闸退回开启');
+}
+
+// 每条 API 的价格：跟着 order 一路存到写入和本地镜像，但绝不参与 config_revision。
+function testPerApiPricingSurvivesAndStaysOutOfRevision(){
+  const providers=library();
+  const price={currency:'$',input:50,output:250,cache_create:60,cache_read:5,multiplier:1};
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a',pricing:price}]};
+  const context=pollingContext(providers);
+  const cfg=context.apiPollingConfig();
+  // 注意用 deepEqual 而不是 deepStrictEqual：vm 里造的对象换了个 realm 的原型。
+  assert.deepEqual(cfg.order[0].pricing,price,'读配置要把价格带出来');
+  const withoutPrice=context.apiPollingRevision(cfg,context.apiPollingItems());
+  providers.chat_polling.order[0].pricing=Object.assign({},price,{input:999});
+  context.chatPollingViewInvalidate();
+  const changedPrice=context.apiPollingRevision(context.apiPollingConfig(),context.apiPollingItems());
+  assert.strictEqual(changedPrice,withoutPrice,'改单价不许动 revision，否则网关粘性游标会被重置');
+
+  // 写回后本地镜像要能按供应商 ID 和显示名两种键查到
+  context.apiPollingWrite(context.apiPollingConfig());
+  context.chatPollingViewPersist=null;
+  const mirror=context.apiPollingPricingMirror(context.apiPollingConfig());
+  assert.strictEqual(mirror['a'].input,999,'按供应商 ID 查得到');
+  assert.strictEqual(mirror['甲'].input,999,'按显示名查得到（网关回的是 provider_name）');
+  // 没维护过的那条不进镜像，聊天页那边就会落回面板默认价
+  assert.strictEqual(mirror['b'],undefined);
+  assert.strictEqual(context.apiPollingNormalizePricing(null),null,'没维护过就是 null');
+}
+
+// 价格编辑器本身：默认按面板单价铺开，输入框只标 index+field，不挂 onchange
+// （挂了就会边打字边整页重渲染、光标乱跳），统一由 apiPollingCollectPrices 从 DOM 读回。
+function testPriceEditorRendersAndCollects(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers,{
+    esc:v=>String(v),
+    escAttr:v=>String(v).replace(/"/g,'&quot;'),
+    apiPollingPriceOpen:Object.create(null)
+  });
+  vm.runInContext(extractFunction('apiPollingPriceToggle'),context);
+  vm.runInContext(extractFunction('apiPollingPriceHtml'),context);
+  vm.runInContext('var API_POLLING_PRICE_FIELDS='+/var API_POLLING_PRICE_FIELDS=(\[[\s\S]*?\]);/.exec(source)[1]+';',context);
+
+  const item=context.apiPollingDraftItems()[0];
+  const html=context.apiPollingPriceHtml(item,0);
+  ['currency','input','output','cache_create','cache_read','multiplier'].forEach(field=>{
+    assert.ok(html.includes('data-price-field="'+field+'"'),'价格编辑器缺字段 '+field);
+  });
+  assert.ok(html.includes('data-price-index="0"'),'每个输入框要知道自己属于哪一条');
+  assert.ok(!/onchange=/.test(html),'价格输入框不许挂 onchange，否则打字时整页重渲染');
+  assert.ok(html.includes('<details'),'价格默认折起来，别把队列行撑长');
+  assert.ok(!/<details[^>]*\sopen/.test(html),'没展开过的行默认是折叠的');
+  assert.ok(html.includes('缓存创建')&&html.includes('缓存命中')&&html.includes('倍率'),'四项加倍率都要有');
+
+  // 只改一个格子，其余必须保持当前生效值，不能被清成 0
+  const nodes=[
+    {getAttribute:k=>({'data-price-index':'0','data-price-field':'output'})[k],value:'99'}
+  ];
+  context.document.querySelectorAll=sel=>(sel==='.api-polling-price-input'?nodes:[]);
+  context.apiPollingCollectPrices();
+  const saved=context.apiPollingDraftGet().order[0].pricing;
+  const defaults=context.chatDefaultCostPricing();
+  assert.strictEqual(saved.output,99,'改过的那一格要写进草稿');
+  assert.strictEqual(saved.input,defaults.inputPerMTokens,'没碰过的格子必须保持原值，不许被清成 0');
+  assert.strictEqual(saved.currency,defaults.currency);
+
+  // 空值 / 负数 / 非数字一律忽略，保留原值
+  nodes[0].value='';
+  context.apiPollingCollectPrices();
+  assert.strictEqual(context.apiPollingDraftGet().order[0].pricing.output,99,'清空输入框不该把单价变成 0');
+  nodes[0].value='-5';
+  context.apiPollingCollectPrices();
+  assert.strictEqual(context.apiPollingDraftGet().order[0].pricing.output,99,'负数不接受');
+}
+function testDisplaySwitchesRoundTrip(){
+  const providers=library();
+  providers.chat_polling={enabled:true,show_message_status:true,show_billing_price:false,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  const cfg=context.apiPollingConfig();
+  assert.strictEqual(cfg.show_message_status,true);
+  assert.strictEqual(cfg.show_billing_price,false);
+  const written=context.apiPollingWrite(cfg);
+  assert.strictEqual(written.show_message_status,true);
+  assert.strictEqual(written.show_billing_price,false);
+  const view=context.chatPollingView();
+  assert.strictEqual(view.showMessageStatus,true);
+  assert.strictEqual(view.showBillingPrice,false);
+  const revisionA=context.apiPollingRevision(cfg,context.apiPollingItems());
+  providers.chat_polling.show_billing_price=true;
+  context.chatPollingViewInvalidate();
+  const revisionB=context.apiPollingRevision(context.apiPollingConfig(),context.apiPollingItems());
+  assert.strictEqual(revisionA,revisionB,'勾显示开关不许动 revision');
 }
 
 function testChatDisplayFallsBackToLocalMirror(){
@@ -357,11 +492,17 @@ function testStrategyListCoversEveryCanonicalStrategy(){
 function testPollingHasHardDomFallback(){
   const apply=extractFunction('chatApplyCacheTick');
   assert.ok(apply.includes('chatShouldShowMessageStatus()'),'incremental cache tick insertion needs the polling gate');
-  assert.ok(/chat-polling-on \.chat-cache-tick/.test(css),'polling body class must hard-hide cache ticks');
-  assert.ok(/chat-polling-on \.chat-msg-cost/.test(css),'polling body class must hard-hide prices');
+  // 兜底不再绑死"轮询开着"：√ 和价格各有自己的判断（轮询子开关 + 计费总闸），
+  // JS 算完落成 chat-hide-tick / chat-hide-cost 两个 body 类，CSS 只照这两个类隐藏。
+  assert.ok(/chat-hide-tick \.chat-cache-tick\{display:none/.test(css),'body class must hard-hide cache ticks');
+  assert.ok(/chat-hide-cost \.chat-msg-cost\{display:none/.test(css),'body class must hard-hide prices');
+  assert.ok(/chat-hide-tick \.chat-tick-legend \.chat-cache-tick\{display:inline-flex/.test(css),
+    '说明卡里的图例勾号不能被"消息上不显示 √"一起藏掉');
   assert.ok(source.includes("classList.toggle('chat-polling-on'"),'runtime must synchronize the polling body class');
-  assert.ok(!source.includes('api-polling-show-status'),'obsolete status checkbox must be removed');
-  assert.ok(!source.includes('api-polling-show-price'),'obsolete price checkbox must be removed');
+  assert.ok(source.includes("classList.toggle('chat-hide-tick'"),'runtime must synchronize the tick gate class');
+  assert.ok(source.includes("classList.toggle('chat-hide-cost'"),'runtime must synchronize the cost gate class');
+  assert.ok(source.includes('api-polling-show-status'),'轮询页必须有「显示 √」勾选框');
+  assert.ok(source.includes('api-polling-show-price'),'轮询页必须有「显示价格」勾选框');
 }
 
 function testPollingLiveStatusText(){
@@ -406,6 +547,10 @@ testCacheStrategyEntersRevision();
 testStrategyListCoversEveryCanonicalStrategy();
 testChatDisplayDefaultsWhenConfigMissing();
 testChatDisplayRulesUnderPolling();
+testBillingMasterSwitchBeatsPolling();
+testPerApiPricingSurvivesAndStaysOutOfRevision();
+testPriceEditorRendersAndCollects();
+testDisplaySwitchesRoundTrip();
 testChatDisplayFallsBackToLocalMirror();
 testPollingHasHardDomFallback();
 testPollingLiveStatusText();
