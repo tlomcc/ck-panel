@@ -61,4 +61,39 @@ assert(renameCategory.includes("p.category=next"),'folder rename must move every
 assert(options.includes('<optgroup'),'provider selects must use native category groups');
 assert(!source.includes('toggleCategorizedProviderOptions'),'obsolete category expansion button must be removed');
 
+// ── 加供应商时顺手维护费用和缓存策略（2026-08-23 用户要求）─────────────────
+// 两个都是可选的：不填也能保存，价格落回面板默认价、策略跟随聊天面板。
+assert(provider.includes('providerCacheStrategyHtml(p)'),'供应商卡片要有缓存策略下拉');
+assert(provider.includes('providerPriceHtml(p)'),'供应商卡片要有费用维护块');
+assert(provider.indexOf('providerCacheStrategyHtml(p)')<provider.indexOf('prov-save'),'两块都要在「保存供应商」上面');
+assert(normalize.includes('cache_strategy:providerNormalizeCacheStrategy(p.cache_strategy||p.cacheStrategy)'),
+  '缓存策略要在 normalizeProvider 里归一（含驼峰别名）');
+assert(normalize.includes('pricing:providerNormalizePricing(p.pricing)'),'单价要在 normalizeProvider 里归一');
+assert(readCard.includes("providerNormalizeCacheStrategy(v('.prov-cache-strategy'))"),'缓存策略要从表单读回来');
+assert(readCard.includes('pricing:readProvCardPricing(card,old)'),'单价要从表单读回来');
+const saveProv=functionSource('saveProvider');
+assert(saveProv.includes('p.cache_strategy=d.cache_strategy')&&saveProv.includes('p.pricing=d.pricing'),
+  '保存供应商必须把这两项写回去');
+const fetchModels=functionSource('fetchProviderModels');
+assert(fetchModels.includes('p.cache_strategy=d.cache_strategy')&&fetchModels.includes('p.pricing=d.pricing'),
+  '拉取模型也会整份写回供应商，不带上这两项就会把刚填的价格和策略抹掉');
+assert(functionSource('addProvider').includes("cache_strategy:'',pricing:null"),
+  '新建的供应商默认两项都不填');
+// 老配置搬家：v208 把这两项存在轮询 order 上，加载时要接过来，只补不覆盖。
+const adopt=functionSource('providerAdoptLegacyPollingFields');
+assert(adopt.includes('providerNormalizeCacheStrategy(p.cache_strategy)')&&adopt.includes('providerNormalizePricing(p.pricing)'),
+  '搬家只在供应商自己没维护过时才接管老值');
+assert(functionSource('normalizeApiProviders').includes('providerAdoptLegacyPollingFields()'),
+  '加载配置时要跑一次搬家');
+// 单链路：主链路供应商自己维护了策略就按它走，没维护才跟随聊天面板。
+const effective=functionSource('chatEffectiveCacheStrategy');
+assert(effective.includes('mainRouteCacheStrategy'),'单链路要认主链路供应商那份策略');
+assert(effective.includes('chatPollingView().enabled===true'),'轮询开着时要发聊天面板那个全局策略，让网关按候选覆盖');
+assert(functionSource('chatApplyMainRouteToConfig').includes('providerCacheStrategy(route.provider)'),
+  '主链路解析时把供应商那份策略带出来');
+assert(source.includes('chatCacheStrategyMeta(chatEffectiveCacheStrategy(cfg))'),
+  '发请求时算的必须是生效策略，否则 TTL 和旧召回保留时长会跟策略不一致');
+assert(functionSource('chatRenderCacheStrategyState').includes('主链路供应商自带策略'),
+  '被供应商那份覆盖时界面必须写出来，不能让用户以为面板的选择坏了');
+
 console.log('chat thinking and provider tests: OK');

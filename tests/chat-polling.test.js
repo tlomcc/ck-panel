@@ -18,16 +18,19 @@ function extractFunction(name){
 }
 
 const POLLING_FNS=[
-  'apiPollingNormalizeStrategy','chatNormalizeCacheStrategy',
-  'chatDefaultCostPricing','apiPollingNormalizePricing','apiPollingEffectivePricing',
-  'chatApiPricingKey','apiPollingPricingMirror',
+  'providerNormalizeCacheStrategy','chatNormalizeCacheStrategy','providerCacheStrategy',
+  'chatDefaultCostPricing','chatNormalizeCostMode','chatNumberOrDefault',
+  'chatNormalizeCostPricing','chatCurrentCostPricing',
+  'providerNormalizePricing','providerEffectivePricing',
+  'chatApiPricingKey','providerPricingMirror',
   'chatDisplayToggleInvalidate','chatDisplayToggles','chatBillingEnabled','chatUsageStatsEnabled',
-  'apiPollingConfig','apiPollingWrite','apiPollingItemFor','apiPollingItems',
+  'apiPollingConfig','apiPollingWrite','apiPollingSyncFromProviders',
+  'apiPollingItemFor','apiPollingItems',
   'apiPollingItemsFromOrder','apiPollingAvailableItems','apiPollingRevision','providerFingerprint',
   'apiPollingDraftReset','apiPollingDraftGet','apiPollingDraftItems','apiPollingDraftSync',
-  'apiPollingCollectSwitches','apiPollingCollectPrices','apiPollingAddable',
+  'apiPollingCollectSwitches','apiPollingAddable',
   'addApiPollingProvider','removeApiPolling',
-  'setApiPollingModel','setApiPollingStrategy','moveApiPolling',
+  'setApiPollingModel','moveApiPolling',
   'chatPollingViewInvalidate','chatPollingView','chatApplyDisplayGateClasses',
   'chatShouldShowMessageStatus','chatShouldShowBillingPrice',
   'chatCacheStrategyMeta','apiPollingStatusText'
@@ -294,76 +297,82 @@ function testBillingMasterSwitchBeatsPolling(){
   assert.strictEqual(broken.chatShouldShowBillingPrice(),true,'配置坏掉时总闸退回开启');
 }
 
-// 每条 API 的价格：跟着 order 一路存到写入和本地镜像，但绝不参与 config_revision。
-function testPerApiPricingSurvivesAndStaysOutOfRevision(){
+// 单价 2026-08-23 起长在供应商身上：镜像覆盖整个供应商库（不只是轮询队列里那几条），
+// 而且绝不参与 config_revision——改个价把网关粘性游标重置掉就白丢当前可用的 API。
+function testProviderPricingMirrorsAndStaysOutOfRevision(){
   const providers=library();
   const price={currency:'$',input:50,output:250,cache_create:60,cache_read:5,multiplier:1};
-  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a',pricing:price}]};
+  providers.provider_library.providers[0].pricing=price;
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
   const context=pollingContext(providers);
-  const cfg=context.apiPollingConfig();
   // 注意用 deepEqual 而不是 deepStrictEqual：vm 里造的对象换了个 realm 的原型。
-  assert.deepEqual(cfg.order[0].pricing,price,'读配置要把价格带出来');
-  const withoutPrice=context.apiPollingRevision(cfg,context.apiPollingItems());
-  providers.chat_polling.order[0].pricing=Object.assign({},price,{input:999});
+  assert.deepEqual(context.apiPollingItems()[0].pricing,price,'运行时候选要带上供应商那份价');
+  const before=context.apiPollingRevision();
+  providers.provider_library.providers[0].pricing=Object.assign({},price,{input:999});
   context.chatPollingViewInvalidate();
-  const changedPrice=context.apiPollingRevision(context.apiPollingConfig(),context.apiPollingItems());
-  assert.strictEqual(changedPrice,withoutPrice,'改单价不许动 revision，否则网关粘性游标会被重置');
+  assert.strictEqual(context.apiPollingRevision(),before,'改单价不许动 revision，否则网关粘性游标会被重置');
 
-  // 写回后本地镜像要能按供应商 ID 和显示名两种键查到
-  context.apiPollingWrite(context.apiPollingConfig());
-  context.chatPollingViewPersist=null;
-  const mirror=context.apiPollingPricingMirror(context.apiPollingConfig());
+  const mirror=context.providerPricingMirror();
   assert.strictEqual(mirror['a'].input,999,'按供应商 ID 查得到');
   assert.strictEqual(mirror['甲'].input,999,'按显示名查得到（网关回的是 provider_name）');
-  // 没维护过的那条不进镜像，聊天页那边就会落回面板默认价
-  assert.strictEqual(mirror['b'],undefined);
-  assert.strictEqual(context.apiPollingNormalizePricing(null),null,'没维护过就是 null');
+  assert.strictEqual(mirror['b'],undefined,'没维护过的那条不进镜像，聊天页落回面板默认价');
+  assert.strictEqual(context.providerNormalizePricing(null),null,'没维护过就是 null');
+
+  // 关键：不在轮询队列里的供应商也要能算价（单链路那条就是这种情况）
+  const single=library();
+  single.provider_library.providers[1].pricing=price;
+  const singleContext=pollingContext(single);
+  assert.strictEqual(singleContext.providerPricingMirror()['乙'].output,250,
+    '没进轮询队列的供应商也必须能算价');
 }
 
-// 价格编辑器本身：默认按面板单价铺开，输入框只标 index+field，不挂 onchange
-// （挂了就会边打字边整页重渲染、光标乱跳），统一由 apiPollingCollectPrices 从 DOM 读回。
-function testPriceEditorRendersAndCollects(){
+// 价格编辑器长在供应商卡片里：默认折叠、预填当前生效价，输入框只标 field 不挂 onchange
+// （挂了就会边打字边整页重渲染、光标乱跳），统一由 readProvCardPricing 从 DOM 读回。
+function testProviderPriceEditorRendersAndCollects(){
   const providers=library();
-  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
   const context=pollingContext(providers,{
     esc:v=>String(v),
-    escAttr:v=>String(v).replace(/"/g,'&quot;'),
-    apiPollingPriceOpen:Object.create(null)
+    escAttr:v=>String(v).replace(/"/g,'&quot;')
   });
-  vm.runInContext(extractFunction('apiPollingPriceToggle'),context);
-  vm.runInContext(extractFunction('apiPollingPriceHtml'),context);
-  vm.runInContext('var API_POLLING_PRICE_FIELDS='+/var API_POLLING_PRICE_FIELDS=(\[[\s\S]*?\]);/.exec(source)[1]+';',context);
+  vm.runInContext('var PROVIDER_PRICE_FIELDS='+/var PROVIDER_PRICE_FIELDS=(\[[\s\S]*?\]);/.exec(source)[1]+';',context);
+  vm.runInContext(extractFunction('providerPriceHtml'),context);
+  vm.runInContext(extractFunction('readProvCardPricing'),context);
 
-  const item=context.apiPollingDraftItems()[0];
-  const html=context.apiPollingPriceHtml(item,0);
+  const provider=providers.provider_library.providers[0];
+  const html=context.providerPriceHtml(provider);
   ['currency','input','output','cache_create','cache_read','multiplier'].forEach(field=>{
     assert.ok(html.includes('data-price-field="'+field+'"'),'价格编辑器缺字段 '+field);
   });
-  assert.ok(html.includes('data-price-index="0"'),'每个输入框要知道自己属于哪一条');
   assert.ok(!/onchange=/.test(html),'价格输入框不许挂 onchange，否则打字时整页重渲染');
-  assert.ok(html.includes('<details'),'价格默认折起来，别把队列行撑长');
-  assert.ok(!/<details[^>]*\sopen/.test(html),'没展开过的行默认是折叠的');
+  assert.ok(html.includes('<details'),'价格默认折起来，别把供应商卡片撑长');
+  assert.ok(!/<details[^>]*\sopen/.test(html),'默认是折叠的');
+  assert.ok(html.includes('（默认价）'),'没维护过要写清楚现在用的是面板默认价');
   assert.ok(html.includes('缓存创建')&&html.includes('缓存命中')&&html.includes('倍率'),'四项加倍率都要有');
 
   // 只改一个格子，其余必须保持当前生效值，不能被清成 0
-  const nodes=[
-    {getAttribute:k=>({'data-price-index':'0','data-price-field':'output'})[k],value:'99'}
-  ];
-  context.document.querySelectorAll=sel=>(sel==='.api-polling-price-input'?nodes:[]);
-  context.apiPollingCollectPrices();
-  const saved=context.apiPollingDraftGet().order[0].pricing;
+  const nodes=[{getAttribute:k=>({'data-price-field':'output'})[k],value:'99'}];
+  const card={querySelectorAll:sel=>(sel==='.prov-price-input'?nodes:[])};
   const defaults=context.chatDefaultCostPricing();
-  assert.strictEqual(saved.output,99,'改过的那一格要写进草稿');
+  let saved=context.readProvCardPricing(card,provider);
+  assert.strictEqual(saved.output,99,'改过的那一格要写进供应商');
   assert.strictEqual(saved.input,defaults.inputPerMTokens,'没碰过的格子必须保持原值，不许被清成 0');
   assert.strictEqual(saved.currency,defaults.currency);
 
-  // 空值 / 负数 / 非数字一律忽略，保留原值
+  // 空值 / 负数一律忽略，保留原值
+  provider.pricing=saved;
   nodes[0].value='';
-  context.apiPollingCollectPrices();
-  assert.strictEqual(context.apiPollingDraftGet().order[0].pricing.output,99,'清空输入框不该把单价变成 0');
+  assert.strictEqual(context.readProvCardPricing(card,provider).output,99,'清空输入框不该把单价变成 0');
   nodes[0].value='-5';
-  context.apiPollingCollectPrices();
-  assert.strictEqual(context.apiPollingDraftGet().order[0].pricing.output,99,'负数不接受');
+  assert.strictEqual(context.readProvCardPricing(card,provider).output,99,'负数不接受');
+
+  // 卡片上没有价格块时（理论上不会发生）不许把已维护的价格抹掉
+  assert.deepEqual(context.readProvCardPricing({querySelectorAll:()=>[]},provider).output,99);
+
+  // 预填的是"现在实际在用的那份价"，不是出厂值：用户只点一下保存不该让价格跳变。
+  context.__store.ckChatConfigV2=JSON.stringify({costPricing:{inputPerMTokens:7,outputPerMTokens:77}});
+  const custom=context.providerEffectivePricing(null);
+  assert.strictEqual(custom.input,7,'预填要用面板当前单价');
+  assert.strictEqual(custom.output,77);
 }
 function testDisplaySwitchesRoundTrip(){
   const providers=library();
@@ -409,55 +418,66 @@ function testChatDisplayFallsBackToLocalMirror(){
 }
 
 // ---------------------------------------------------------------------------
-// 每条候选各自绑缓存策略：空＝跟随聊天页，绑了就必须一路带到写入和 revision。
+// 缓存策略 2026-08-23 起长在供应商身上：空＝跟随聊天页，设了就一路带到
+// 运行时候选、写入的 order 镜像和 config_revision。
 // ---------------------------------------------------------------------------
 function testCacheStrategyDefaultsToFollowChatPage(){
   const providers=library();
-  // 改造前保存的老配置没有 cache_strategy 字段，必须读成空（跟随聊天页），
-  // 不能被兜底成 single_5m，否则老用户的全局策略会被静默改掉。
+  // 供应商没维护策略时必须读成空（跟随聊天页），不能被兜底成 single_5m，
+  // 否则老用户的全局策略会被静默改掉。
   providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
   const context=pollingContext(providers);
-  assert.strictEqual(context.apiPollingConfig().order[0].cache_strategy,'','老配置读出来必须是空＝跟随聊天页');
-  assert.strictEqual(context.apiPollingItems()[0].cache_strategy,'','运行时候选也保持空');
+  assert.strictEqual(context.apiPollingItems()[0].cache_strategy,'','没维护过就是空＝跟随聊天页');
+  assert.strictEqual(context.providerCacheStrategy(providers.provider_library.providers[0]),'');
 }
 
 function testCacheStrategyIsNormalizedAndCarried(){
   const providers=library();
+  providers.provider_library.providers[0].cache_strategy='24H';
+  providers.provider_library.providers[1].cacheStrategy='native';
+  providers.provider_library.providers[2].cache_strategy='  ';
   providers.chat_polling={enabled:true,order:[
-    {provider_id:'A',model:'m-a',cache_strategy:'24H'},
-    {provider_id:'B',model:'m-b',cacheStrategy:'native'},
-    {provider_id:'C',model:'m-c',cache_strategy:'  '}
+    {provider_id:'A',model:'m-a'},
+    {provider_id:'B',model:'m-b'},
+    {provider_id:'C',model:'m-c'}
   ]};
   const context=pollingContext(providers);
-  const order=context.apiPollingConfig().order;
-  assert.strictEqual(order[0].cache_strategy,'prefix_24h','别名和大小写要归一');
-  assert.strictEqual(order[1].cache_strategy,'native_stable','驼峰字段名也要认');
-  assert.strictEqual(order[2].cache_strategy,'','纯空白等于没设置');
-  assert.strictEqual(context.apiPollingItems()[0].cache_strategy,'prefix_24h','策略要带到运行时候选上');
+  const items=context.apiPollingItems();
+  assert.strictEqual(items[0].cache_strategy,'prefix_24h','别名和大小写要归一');
+  assert.strictEqual(items[2].cache_strategy,'','纯空白等于没设置');
+  // normalizeProvider 认驼峰，providerCacheStrategy 只读正式字段——供应商库入口统一归一。
+  assert.strictEqual(context.providerNormalizeCacheStrategy(providers.provider_library.providers[1].cacheStrategy),
+    'native_stable','驼峰字段名在 normalizeProvider 那一层要认');
 }
 
-function testWriteKeepsCacheStrategy(){
+// order 里那份 cache_strategy 是派生镜像：写入时一律现从供应商身上取，
+// 不信调用方传进来的旧值。网关读的还是这个字段，所以网关不用改。
+function testWriteMirrorsStrategyFromProvider(){
   const providers=library();
+  providers.provider_library.providers[0].cache_strategy='assistant_latest';
   const context=pollingContext(providers);
   context.apiPollingWrite({
     enabled:true,
-    order:[{provider_id:'A',model:'m-a',cache_strategy:'assistant'},{provider_id:'B',model:'m-b'}],
+    order:[{provider_id:'A',model:'m-a',cache_strategy:'prefix_24h'},{provider_id:'B',model:'m-b'}],
     config_revision:'rev'
   });
-  assert.strictEqual(providers.chat_polling.order[0].cache_strategy,'assistant_latest','写入要保留并归一策略');
+  assert.strictEqual(providers.chat_polling.order[0].cache_strategy,'assistant_latest',
+    '写入取供应商那份，忽略调用方传的旧值');
   assert.strictEqual(providers.chat_polling.order[1].cache_strategy,'','没设的写成空，不许写成 single_5m');
+  assert.strictEqual('pricing' in providers.chat_polling.order[0],false,'价格不再存进轮询配置');
 }
 
-function testSetStrategyStaysInDraft(){
+// 草稿里只留"用哪个供应商、哪个模型"，策略和价格一律不复制一份，
+// 否则又会出现两处都能改、改完猜哪边生效。
+function testDraftKeepsOnlyProviderAndModel(){
   const providers=library();
+  providers.provider_library.providers[0].cache_strategy='native_tiered';
   providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
-  const before=JSON.stringify(providers.chat_polling);
   const context=pollingContext(providers);
-  context.setApiPollingStrategy(0,'native_tiered');
-  assert.strictEqual(context.apiPollingDraftItems()[0].cache_strategy,'native_tiered','行内选策略生效');
-  context.setApiPollingStrategy(0,'');
-  assert.strictEqual(context.apiPollingDraftItems()[0].cache_strategy,'','可以改回跟随聊天页');
-  assert.strictEqual(JSON.stringify(providers.chat_polling),before,'保存之前不得改动全局 apiProviders');
+  const entry=context.apiPollingDraftGet().order[0];
+  assert.deepEqual(Object.keys(entry).sort(),['model','provider_id'],'草稿只存供应商和模型');
+  assert.strictEqual(context.apiPollingDraftItems()[0].cache_strategy,'native_tiered','运行时候选还是按供应商那份算');
+  assert.strictEqual(source.includes('function setApiPollingStrategy'),false,'轮询页不再有改策略的入口');
 }
 
 // 缓存策略必须进 config_revision：否则别的热实例不会重新拉配置，
@@ -467,13 +487,33 @@ function testCacheStrategyEntersRevision(){
   providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
   const context=pollingContext(providers);
   const base=context.apiPollingRevision();
-  providers.chat_polling.order=[{provider_id:'A',model:'m-a',cache_strategy:'native_stable'}];
-  assert.notStrictEqual(context.apiPollingRevision(),base,'绑定缓存策略必须改变 config_revision');
+  providers.provider_library.providers[0].cache_strategy='native_stable';
+  assert.notStrictEqual(context.apiPollingRevision(),base,'供应商绑了缓存策略必须改变 config_revision');
 }
 
-// 轮询下拉里的策略清单是手写常量，必须和 chatNormalizeCacheStrategy 的
+// 在供应商库里改完策略后，apiPollingSyncFromProviders() 负责刷新 order 镜像
+// 并重算 config_revision。少了这一步，网关热实例永远看不到新策略。
+function testSyncFromProvidersRefreshesMirrorAndRevision(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}],config_revision:'old'};
+  const context=pollingContext(providers);
+  providers.provider_library.providers[0].cache_strategy='prefix_24h';
+  context.chatPollingViewInvalidate();
+  const written=context.apiPollingSyncFromProviders();
+  assert.strictEqual(written.order[0].cache_strategy,'prefix_24h','镜像要刷新成供应商那份');
+  assert.notStrictEqual(written.config_revision,'old','config_revision 必须跟着变');
+  assert.ok(extractFunction('saveProvider').includes('apiPollingSyncFromProviders()'),
+    '保存供应商时必须调这个同步，否则改了策略网关不知道');
+  // 没配过轮询的用户不该被凭空写出一个 chat_polling
+  const clean=library();
+  const cleanContext=pollingContext(clean);
+  assert.strictEqual(cleanContext.apiPollingSyncFromProviders(),null);
+  assert.strictEqual('chat_polling' in clean,false,'没配过轮询就什么都不写');
+}
+
+// 供应商表单里的策略下拉清单是手写常量，必须和 chatNormalizeCacheStrategy 的
 // 正式输出集合一致。以后新增第 6 个策略时这条会立刻失败，
-// 提醒把它补进下拉——否则新策略在轮询页永远选不到。
+// 提醒把它补进下拉——否则新策略在供应商库里永远选不到。
 function testStrategyListCoversEveryCanonicalStrategy(){
   const listed=/var API_POLLING_STRATEGY_VALUES=\[([^\]]*)\]/.exec(source);
   assert.ok(listed,'找不到 API_POLLING_STRATEGY_VALUES 常量');
@@ -485,8 +525,21 @@ function testStrategyListCoversEveryCanonicalStrategy(){
   }
   assert.deepStrictEqual(
     values.slice().sort(),[...canonical].sort(),
-    '轮询策略下拉和 chatNormalizeCacheStrategy 的正式值对不上'
+    '供应商策略下拉和 chatNormalizeCacheStrategy 的正式值对不上'
   );
+  assert.ok(extractFunction('providerCacheStrategyHtml').includes('API_POLLING_STRATEGY_VALUES'),
+    '供应商表单必须用这份常量生成下拉');
+  assert.ok(/option value=""/.test(extractFunction('providerCacheStrategyHtml')),
+    '必须有"不选"这一项：缓存策略是可选的，不选也能保存');
+  // 真跑一遍下拉渲染：5 个策略 + 一个"不选"，选中项跟着供应商那份走。
+  const context=pollingContext(library(),{esc:v=>String(v),escAttr:v=>String(v)});
+  vm.runInContext('var API_POLLING_STRATEGY_VALUES='+listed[0].replace('var API_POLLING_STRATEGY_VALUES=','')+';',context);
+  vm.runInContext(extractFunction('providerCacheStrategyHtml'),context);
+  const empty=context.providerCacheStrategyHtml({});
+  assert.strictEqual((empty.match(/<option/g)||[]).length,values.length+1,'下拉是"不选"加上全部策略');
+  assert.ok(/value=""\s+selected/.test(empty),'没维护过时默认选中"不选"');
+  const bound=context.providerCacheStrategyHtml({cache_strategy:'prefix_24h'});
+  assert.ok(/value="prefix_24h" selected/.test(bound),'维护过就要回显选中');
 }
 
 function testPollingHasHardDomFallback(){
@@ -541,15 +594,16 @@ testPrimaryRetrySettingsResetCursor();
 testRevisionTracksProviderCredentials();
 testCacheStrategyDefaultsToFollowChatPage();
 testCacheStrategyIsNormalizedAndCarried();
-testWriteKeepsCacheStrategy();
-testSetStrategyStaysInDraft();
+testWriteMirrorsStrategyFromProvider();
+testDraftKeepsOnlyProviderAndModel();
 testCacheStrategyEntersRevision();
+testSyncFromProvidersRefreshesMirrorAndRevision();
 testStrategyListCoversEveryCanonicalStrategy();
 testChatDisplayDefaultsWhenConfigMissing();
 testChatDisplayRulesUnderPolling();
 testBillingMasterSwitchBeatsPolling();
-testPerApiPricingSurvivesAndStaysOutOfRevision();
-testPriceEditorRendersAndCollects();
+testProviderPricingMirrorsAndStaysOutOfRevision();
+testProviderPriceEditorRendersAndCollects();
 testDisplaySwitchesRoundTrip();
 testChatDisplayFallsBackToLocalMirror();
 testPollingHasHardDomFallback();

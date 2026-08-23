@@ -1427,12 +1427,13 @@ body.chat-active .chat-plus-panel{
   border-radius:0!important;
   background:#f7f7f7!important;
   transform:none!important;
-  /* 这一份是几何的权威（chat.css 里那份只是兜底）。两行 4 列 + 第三行露半个图标，
-     其余靠原生上滑；行高/行距在这里改一次，下面 open 的高度会跟着算出来。 */
+  /* 这一份是几何的权威（chat.css 里那份只是兜底）。展开后正好两行 4 列，
+     第三行往后靠原生上滑；行高/行距在这里改一次，下面 open 的高度会跟着算出来。
+     peek 是"第三行露出多少"，2026-08-23 用户要求归零，公式保留它以便回调。 */
   --ck-plus-row:70px;
   --ck-plus-gap:8px;
-  --ck-plus-peek:35px;
-  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap)*2 + var(--ck-plus-peek));
+  --ck-plus-peek:0px;
+  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap) + var(--ck-plus-peek));
   --ck-plus-chrome:26px;
 }
 body.chat-active .chat-plus-panel.open{
@@ -1519,7 +1520,7 @@ body.dark.chat-active .chat-plus-grid > button.chat-toggle-off b{color:#737373!i
     padding-right:14px!important;
     --ck-plus-row:67px;
     --ck-plus-gap:7px;
-    --ck-plus-peek:33px;
+    --ck-plus-peek:0px;
     --ck-plus-chrome:23px;
   }
   body.chat-active .chat-plus-panel.open{max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;padding-top:14px!important;padding-bottom:9px!important}
@@ -1534,7 +1535,7 @@ body.chat-active .chat-plus-grid > button.chat-toggle-off span{
   }
   body.chat-active .chat-plus-panel span svg{width:22px!important;height:22px!important}}
 
-/* 横屏矮屏：一行放 6 个，12 个刚好两行，没有第三行可露，peek 归零。 */
+/* 横屏矮屏：一行放 6 个，12 个刚好两行，本来就没有第三行可露。 */
 @media(max-height:500px) and (orientation:landscape){
   body.chat-active .chat-plus-panel{
     --ck-plus-row:64px;

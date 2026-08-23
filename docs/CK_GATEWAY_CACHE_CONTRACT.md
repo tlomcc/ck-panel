@@ -110,6 +110,13 @@ For `/ck/chat`, the gateway may append a transient `<ck_reply_target>` text bloc
 - `native_stable`: use Anthropic native `/messages` with the stable system + latest completed assistant two-anchor shape. The panel sends `upstream_format: "anthropic"` and `prompt_cache_ttl: "1h"`; the gateway leaves the current user, time, recall, and reply-target blocks after the assistant anchor. This is intended for the separately validated stable Claude-native route; it is not a guarantee for an OpenAI-compatible endpoint.
 - `native_tiered`: use Anthropic native `/messages` with three `1h` anchors (stable system plus latest two completed assistants) and a final `5m` anchor on the latest real user text. This is an experiment/control-preserving cost strategy; it must remain separate from `native_stable` until the target channel passes direct and CK end-to-end A/B tests.
 
+Since `chat-v209` a provider may carry its own optional `cache_strategy` in the panel's provider library. This does not change the wire contract — the gateway still reads exactly one `cache_strategy` from the body and, under polling, one per candidate in `API_PROVIDERS.chat_polling.order[]`. It only changes who decides the value:
+
+- **single link:** if the main-route provider has a strategy, the panel sends that instead of the chat panel's global selection, and derives `prompt_cache_ttl` / `recall_history_retention_seconds` from it so all three stay consistent. An empty provider strategy means "follow the chat panel", which is the pre-v209 behavior.
+- **polling on:** the body still carries the chat panel's global strategy (the per-candidate override happens gateway-side). Each `order[]` entry's `cache_strategy` is now a *derived mirror* of its provider's value, rewritten by the panel on every write. Because the gateway detects staleness via `config_revision`, that revision must be recomputed whenever a provider's strategy changes — saving a provider does this, not just saving the polling queue.
+
+Per-provider prices live in the same place but never touch this contract or `config_revision`: they are panel-local display math over the usage numbers the gateway already reports.
+
 `recall_history_retention_seconds` defaults to `300` for `single_5m` and `assistant_latest`, `3600` for `native_stable` and `native_tiered`, and `0` for `prefix_24h`. The gateway should report `idle_seconds`, `strip_old_recall`, `stripped_gateway_context_messages`, and `stripped_gateway_context_chars` in `meta`.
 
 `ck_thinking_enabled` and `ck_thinking_prompt` are optional CK pseudo-thinking controls. When enabled, the gateway injects a stable system block that asks the model to put a short visible inner-monologue block before the normal reply:

@@ -1,7 +1,7 @@
 // 布局探针：拿真的 headless Chrome 渲染一份"去掉脚本"的 index.html，
 // 用 getBoundingClientRect 量出来，而不是读 8 份 CSS 靠猜（见 memory: ck-panel-headless-css-probe）。
 // 量三件事：
-//   1. ➕ 功能区展开后只露 2 行 4 列，第三行留一截可点的 peek，整块能上滑；
+//   1. ➕ 功能区展开后正好露 2 行 4 列，第三行完全靠上滑出来；
 //   2. 用量统计那一行紧跟在时间那一行下面，字号一致；
 //   3. 世界书那一页无论多少条都只占一行（下拉框），新增按钮在它下面一栏。
 const fs=require('fs');
@@ -27,7 +27,10 @@ let html=fs.readFileSync(path.join(outDir,'index.html'),'utf8');
 html=html.replace(/<script\b[\s\S]*?<\/script>/g,'');
 
 // 手动摆出"聊天页 + ➕ 展开 + 设置抽屉开在世界书页"的状态，再插几条假消息。
+// 先把所有过渡关掉：➕ 面板是 max-height 动画展开的，不关就会量到动画中间的高度，
+// 同一份 CSS 每次跑出来的数都不一样（曾经量到 h=0 和露出 35.9px 两种结果）。
 const stage=`
+<style>*,*::before,*::after{transition:none!important;animation:none!important}</style>
 <script>
 document.body.className='chat-active chat-plus-open';
 var app=document.getElementById('chat-app')||document.body;
@@ -74,6 +77,9 @@ const out={
   wbSelect:rect(document.getElementById('chat-worldbook-select')),
   wbAdd:rect(document.querySelector('.chat-worldbook-add')),
   legendOpen:!!(document.querySelector('.chat-tick-legend-card')||{}).open,
+  usageLegendOpen:!!(document.querySelector('.chat-usage-legend-card')||{}).open,
+  legendInGateway:!!document.querySelector('#chat-side-gateway .chat-tick-legend-card'),
+  usageLegendInGateway:!!document.querySelector('#chat-side-gateway .chat-usage-legend-card'),
   savedOpen:!!(document.querySelector('.chat-debug-saved-card')||{}).open
 };
 console.log('CKPROBE '+JSON.stringify(out));
@@ -136,11 +142,11 @@ if(m.grid&&m.buttons.length===12){
   const rowH=m.buttons[0].h;
   const visible=rows.map(top=>+(Math.min(m.grid.bottom,top+rowH)-Math.max(m.grid.top,top)).toFixed(1));
   check(visible[0]>=rowH-1&&visible[1]>=rowH-1,'前两行必须完整露出',{visible,rowH});
-  check(visible[2]>rowH*0.25&&visible[2]<rowH*0.75,'第三行只该露出大约半个（用户要求"图标只要出来半个"）',{visible,rowH});
+  check(visible[2]<=1,'展开后正好两行：第三行一点都不许露（2026-08-23 用户要求）',{visible,rowH});
   check(m.gridScrollHeight>m.gridClientHeight+8,'第三行往后必须靠滚动出来',{scroll:m.gridScrollHeight,client:m.gridClientHeight});
   check(m.grid.overflowY==='auto'||m.grid.overflowY==='scroll','滚动必须是原生的（跟手 1:1）',m.grid.overflowY);
   const peeked=m.buttons.filter(b=>b.top===rows[2]);
-  check(peeked.every(b=>b.pointerEvents!=='none'),'露出半个的那一行照样要能点',peeked.map(b=>b.pointerEvents));
+  check(peeked.every(b=>b.pointerEvents!=='none'),'滑上来以后第三行要能点',peeked.map(b=>b.pointerEvents));
   check(m.buttonLabels.includes('设置'),'➕ 里的入口已经改名叫「设置」',m.buttonLabels);
 }else{
   check(false,'➕ 功能区应该有 12 个按钮',m.buttons.length);
@@ -165,8 +171,11 @@ if(m.wbList&&m.wbSelect&&m.wbAdd){
   check(false,'世界书那一页没渲染出来',{list:m.wbList,select:m.wbSelect,add:m.wbAdd});
 }
 
-// ── 两个默认折叠块 ───────────────────────────────────────────────────
+// ── 三个默认折叠块 ───────────────────────────────────────────────────
 check(m.legendOpen===false,'√ 颜色说明默认折叠');
+check(m.usageLegendOpen===false,'用量符号说明默认折叠');
+check(m.legendInGateway===true,'√ 颜色说明搬到「设置」页的计费开关那块');
+check(m.usageLegendInGateway===true,'用量符号说明跟在「开启用量统计」下面');
 check(m.savedOpen===false,'已保存的设置默认折叠');
 
 if(fail.length){

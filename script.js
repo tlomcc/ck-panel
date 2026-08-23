@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v207-adaptive-digest-budget';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v209-provider-price-and-strategy';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2202,6 +2202,19 @@ function chatNormalizeCacheStrategy(value){
   if(raw==='native_stable'||raw==='native'||raw==='native_cache'||raw==='stable_native'||raw==='anthropic_native'||raw==='anthropic_stable'||raw==='uocode_stable'||raw==='uocode_native'||raw==='native_5m')return 'native_stable';
   return 'single_5m';
 }
+// 这一轮真正生效的缓存策略：轮询关着时，主链路供应商自己维护的策略优先；
+// 它没维护（空）就跟随聊天面板下面选的那一个。轮询开着时一律发聊天面板那个全局
+// 策略，网关会在切到具体候选时按候选自己的策略覆盖掉——那份也来自供应商。
+function chatEffectiveCacheStrategy(cfg){
+  cfg=cfg||{};
+  var pollingOn=false;
+  try{pollingOn=chatPollingView().enabled===true}catch(e){}
+  if(!pollingOn){
+    var bound=providerNormalizeCacheStrategy(cfg.mainRouteCacheStrategy);
+    if(bound)return bound;
+  }
+  return chatNormalizeCacheStrategy(cfg.cacheStrategy);
+}
 function chatCacheStrategyMeta(value){
   var strategy=chatNormalizeCacheStrategy(value);
   if(strategy==='prefix_24h'){
@@ -2386,9 +2399,17 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   var savedMeta=chatCacheStrategyMeta(savedCfg.cacheStrategy);
   var recallMeta=chatRecallMeta(savedCfg.recall!==false,savedCfg.recallMode);
   var savedEl=document.getElementById('chat-cache-saved-mode');
-  if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(savedMeta);
+  // 供应商自己维护了策略时，这里必须写出来：否则用户在面板选了 5min，
+  // 实际按供应商那份走，看不到任何提示就会以为面板的选择坏了。
+  var bound=providerNormalizeCacheStrategy(savedCfg.mainRouteCacheStrategy);
+  var pollingOn=false;
+  try{pollingOn=chatPollingView().enabled===true}catch(e){}
+  var boundText=(bound&&!pollingOn)
+    ?('｜主链路供应商自带策略：'+chatCacheStrategyMeta(bound).label+'（本轮按它走，不看上面这个选择）')
+    :'';
+  if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+boundText;
   var debugMode=document.getElementById('chat-debug-cache-mode');
-  if(debugMode)debugMode.textContent='【已保存的设置】'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+'｜记忆召回：'+recallMeta.label+'（本轮实际生效值看下面的 🧊 缓存诊断）';
+  if(debugMode)debugMode.textContent='【已保存的设置】'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜旧召回保留：'+savedMeta.retentionSeconds+'s｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+boundText+'｜记忆召回：'+recallMeta.label+'（本轮实际生效值看下面的 🧊 缓存诊断）';
   var detail=document.getElementById('chat-cache-mode-detail');
   if(detail)detail.textContent='当前选择：'+meta.label+'｜发送：'+meta.sendText+'｜'+chatCacheStrategyTtlDetail(meta);
   var status=document.getElementById('chat-cache-save-status');
@@ -2473,12 +2494,15 @@ function chatApplyMainRouteToConfig(cfg,route){
   cfg.model='';
   cfg.mainRouteProvider='';
   cfg.mainRouteHost='';
+  cfg.mainRouteCacheStrategy='';
   if(route.ok){
     cfg.apiBase=route.apiBase;
     cfg.upstreamKey=route.upstreamKey;
     cfg.model=route.model;
     cfg.mainRouteProvider=route.providerName;
     cfg.mainRouteHost=route.providerHost;
+    // 供应商自己维护的缓存策略（可选）。空＝跟随聊天面板下面选的那一个。
+    cfg.mainRouteCacheStrategy=providerCacheStrategy(route.provider);
   }
   cfg.chatApiSource='api_config_main_io';
   cfg.mainRouteReady=route.ok===true;
@@ -2597,6 +2621,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.model;
   delete cfg.mainRouteProvider;
   delete cfg.mainRouteHost;
+  delete cfg.mainRouteCacheStrategy;
   delete cfg.mainRouteReady;
   delete cfg.mainRouteReason;
   delete cfg.chatApiSource;
@@ -3555,6 +3580,7 @@ function chatWriteForm(cfg){
   chatSetFieldChecked('chat-usage-stats-enabled',cfg.usageStatsEnabled===true);
   chatApplyDisplayGateClasses();
   chatRenderTickLegend();
+  chatRenderUsageLegend();
   chatUpdateSplitReplyButton(cfg);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatRenderDailyDigest(cfg);
@@ -3689,6 +3715,20 @@ function chatRenderTickLegend(){
   }).join('')+
   '<p class="chat-tick-legend-note">勾号只跟"这一轮用没用上缓存"有关，和消息有没有发成功无关。'+
   '开启轮询后默认不显示，要看就去「聊天轮询」页勾上「显示 √」。</p>';
+}
+// 用量统计那一行的符号说明。符号本身取 CHAT_USAGE_SYMBOL_ROWS，
+// 和消息上那一行是同一份数据，不会出现"说明里的符号和消息上不一样"。
+function chatRenderUsageLegend(){
+  var box=document.getElementById('chat-usage-legend');
+  if(!box)return;
+  box.innerHTML=CHAT_USAGE_SYMBOL_ROWS.map(function(row){
+    return '<div class="chat-usage-legend-row">'+
+      '<i aria-hidden="true">'+esc(row[0])+'</i>'+
+      '<b>'+esc(row[1])+'</b>'+
+      '<span>'+esc(row[2])+'</span></div>';
+  }).join('')+
+  '<p class="chat-tick-legend-note">这一行跟在助手最后一条消息的时间下面，顺序就是上面这个顺序。'+
+  '数字是 token 数，不是钱；钱看它旁边的价格。</p>';
 }
 function chatOnMcpToggle(){
   var cfg=chatReadForm();
@@ -6962,7 +7002,7 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
       if(result.trimmed){
         await chatSyncTrimmedHistoryToGateway(cfg,result);
         var quietPrefix=(
-          chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'
+          chatEffectiveCacheStrategy(cfg)==='prefix_24h'
           && chatAutoTrimConfigFrom(cfg).prefixSilent
         );
         if(!quietPrefix)toast(
@@ -8081,8 +8121,12 @@ function chatSwitchSideTab(tab,silent){
     cfg.chatSideTab=tab;
     chatSaveConfigObject(cfg);
   }
-  if(tab==='debug'){
+  // 两块折叠说明（√ 的颜色 / 用量符号）都长在「设置」页的计费开关下面。
+  if(tab==='gateway'){
     chatRenderTickLegend();
+    chatRenderUsageLegend();
+  }
+  if(tab==='debug'){
     chatRenderDebugRecords();
     chatScrollDebugBottom();
   }
@@ -8401,7 +8445,8 @@ function chatHasCacheNoticeAfter(ts){
   });
 }
 function chatCacheExpiryInfo(){
-  var meta=chatCacheStrategyMeta((chatLoadConfig()||{}).cacheStrategy);
+  // 用生效策略：主链路供应商自己绑了 prefix_24h 时，也不该弹"缓存要过期了"。
+  var meta=chatCacheStrategyMeta(chatEffectiveCacheStrategy(chatLoadConfig()||{}));
   if(meta&&meta.value==='prefix_24h'){
     return {ttlMs:0,text:''};
   }
@@ -8415,7 +8460,7 @@ function chatEnsureCacheExpiryNotice(){
   var session=chatCurrentSession();
   var cfg=chatLoadConfig()||{};
   if(
-    chatNormalizeCacheStrategy(cfg.cacheStrategy)==='prefix_24h'
+    chatEffectiveCacheStrategy(cfg)==='prefix_24h'
     && chatAutoTrimConfigFrom(cfg).prefixSilent
   )return false;
   var referenceTs=chatCacheActivityReference(session,lastTs).timestamp;
@@ -8643,7 +8688,15 @@ function chatUserMessageMetaHtml(m,showTimestamp){
   return chatMessageTimingHtml(m,'user',showTimestamp);
 }
 // 用量统计那一行：日期下面一行小字，只用符号不写字。
-// ↑未命中输入 ↓输出 ⚡缓存命中 ✚缓存创建 ◎命中率
+// 符号的含义只在这一份常量里写一次，设置页那个「符号是什么意思」折叠说明直接复用它，
+// 免得改了消息上的符号、说明里还是旧的。
+var CHAT_USAGE_SYMBOL_ROWS=[
+  ['↑','输入（未命中缓存）','这一轮真正重新计算的输入 token，按输入单价计费。'],
+  ['↓','输出','这一轮模型生成的 token，按输出单价计费。'],
+  ['⚡','缓存命中','从缓存里直接读到的输入 token，单价最便宜，越大越省钱。'],
+  ['✚','缓存创建','这一轮新写进缓存的 token，比普通输入贵一点，下一轮才能读。'],
+  ['◎','缓存命中率','缓存命中 ÷ 输入总量（输入＋命中＋创建），越高越好。']
+];
 function chatUsageTokenText(value){
   var n=Math.max(0,Math.round(Number(value)||0));
   return String(n);
@@ -8658,20 +8711,25 @@ function chatAssistantUsageHtml(m){
   if(!(input||output||read||create))return '';
   var total=Math.max(0,Number(m.tkInTotal)||0)||(input+read+create);
   var ratio=total>0?Math.round(read*1000/total)/10:0;
-  var bits=[
-    ['↑',chatUsageTokenText(input),'输入（未命中缓存）'],
-    ['↓',chatUsageTokenText(output),'输出'],
-    ['⚡',chatUsageTokenText(read),'缓存命中'],
-    ['✚',chatUsageTokenText(create),'缓存创建'],
-    ['◎',ratio+'%','缓存命中率（命中 ÷ 输入总量 '+chatUsageTokenText(total)+'）']
+  var values=[
+    chatUsageTokenText(input),
+    chatUsageTokenText(output),
+    chatUsageTokenText(read),
+    chatUsageTokenText(create),
+    ratio+'%'
+  ];
+  var titles=[
+    '输入（未命中缓存）','输出','缓存命中','缓存创建',
+    '缓存命中率（命中 ÷ 输入总量 '+chatUsageTokenText(total)+'）'
   ];
   return '<div class="chat-msg-usage" title="输入 '+escAttr(chatUsageTokenText(input))+
     ' · 输出 '+escAttr(chatUsageTokenText(output))+
     ' · 缓存命中 '+escAttr(chatUsageTokenText(read))+
     ' · 缓存创建 '+escAttr(chatUsageTokenText(create))+
     ' · 命中率 '+escAttr(ratio+'%')+'">'+
-    bits.map(function(bit){
-      return '<span title="'+escAttr(bit[2])+'"><i aria-hidden="true">'+esc(bit[0])+'</i>'+esc(bit[1])+'</span>';
+    CHAT_USAGE_SYMBOL_ROWS.map(function(row,index){
+      return '<span title="'+escAttr(titles[index])+'"><i aria-hidden="true">'+esc(row[0])+'</i>'+
+        esc(values[index])+'</span>';
     }).join('')+'</div>';
 }
 function chatCacheTickHtml(m){
@@ -9292,7 +9350,7 @@ async function chatSubmitPendingMessages(options){
   var imageOnlySummary=currentImages.length?('[图片'+(currentImages.length>1?'x'+currentImages.length:'')+']'):'';
   var anchorText=chatEnsureSessionAnchor(text||imageOnlySummary);
   currentSession=chatCurrentSession();
-  var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
+  var cacheMeta=chatCacheStrategyMeta(chatEffectiveCacheStrategy(cfg));
   var cacheStrategy=cacheMeta.value;
   var recallRetention=cacheMeta.retentionSeconds;
   var promptCacheTtl=cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl;
@@ -9906,7 +9964,11 @@ function normalizeProvider(p){
     url:String(p.url||'').trim(),
     key:String(p.key||'').trim(),
     model:String(p.model||'').trim(),
-    models:cleanModelList(p.models,p.model)
+    models:cleanModelList(p.models,p.model),
+    // 这两个都是可选的（2026-08-23 用户要求，从轮询页搬上来的）：
+    // cache_strategy 空＝跟随聊天面板下面选的那一个；pricing null＝没维护过，按面板默认价。
+    cache_strategy:providerNormalizeCacheStrategy(p.cache_strategy||p.cacheStrategy),
+    pricing:providerNormalizePricing(p.pricing)
   };
 }
 function providerFingerprint(p){
@@ -9915,27 +9977,19 @@ function providerFingerprint(p){
   return (url||key)?(url+'\n'+key):String(p&&p.id||'');
 }
 
-/* ---- 聊天 API 轮询配置 ---- */
-// 设计约束（上一版就是踩了这几条才把面板搞崩的）：
-// 1. apiPollingConfig() 是纯读取，绝不修改 apiProviders。渲染时顺手写全局配置，
-//    会让"只是看了一眼页面"也把轮询字段混进下一次保存。写入一律走 apiPollingWrite()。
-// 2. 只存供应商 ID 和模型，Key/URL 永远从供应商库实时解析，不复制。
-// 3. 显示开关和每条 API 的价格都不参与 config_revision，否则用户勾一下复选框或者
-//    改一个单价就会把网关的粘性游标重置掉，白白丢失当前正在用的可用 API。
-// 4. 每条候选可以单独绑一个缓存策略。空字符串＝跟随聊天页的全局策略，
-//    也就是老配置读出来一律是空，行为和改造前完全一致。绑了策略的那条，
-//    网关切到它的时候会连缓存断点一起换过去。缓存策略必须参与 config_revision，
-//    否则别的热实例不会重新拉配置，改了策略却还在按旧策略打断点。
-var API_POLLING_KEY='chat_polling';
-// 空值必须保持为空（"跟随聊天页"），不能被 chatNormalizeCacheStrategy 兜底成 single_5m。
-function apiPollingNormalizeStrategy(value){
+/* ---- 供应商自己的缓存策略和单价（可选，谁答的按谁的算）---- */
+// 2026-08-23 用户定的分工：加供应商的时候就在供应商库里把费用和缓存策略一并维护好，
+// 轮询页不再重复维护一次。轮询队列里那几条只挑"用哪个供应商、哪个模型"。
+// 两个字段都可以不填：
+//   cache_strategy 空 → 跟随聊天面板下面选的全局策略（和改造前行为完全一致）；
+//   pricing null → 按面板默认单价兜底，绝不能因为没维护过就把价格显示成 0。
+// 空值必须保持为空，不能被 chatNormalizeCacheStrategy 兜底成 single_5m。
+function providerNormalizeCacheStrategy(value){
   var raw=String(value||'').trim();
   return raw?chatNormalizeCacheStrategy(raw):'';
 }
-// 每条候选可以自己维护一份价格（用户手填，面板不去猜）。
-// null＝这条没维护过，聊天页按面板默认单价兜底；只要维护过就整份取它的。
 // 缓存创建只让填一个价：5m/1h 两档对用户没意义，两档套同一个数。
-function apiPollingNormalizePricing(raw){
+function providerNormalizePricing(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
   var d=chatDefaultCostPricing();
   var num=function(value,fallback){
@@ -9952,27 +10006,99 @@ function apiPollingNormalizePricing(raw){
     multiplier:num(raw.multiplier,d.multiplier)
   };
 }
+function providerCacheStrategy(p){
+  return providerNormalizeCacheStrategy(p&&p.cache_strategy);
+}
+// 没维护过就整份铺"现在实际在用的那份价"（面板默认价），供输入框预填和聊天页兜底共用。
+// 必须用 chatCurrentCostPricing 而不是硬编码默认值：否则用户只是点了一下「保存供应商」，
+// 价格就会从他自己的旧单价悄悄跳回出厂值。
+function providerEffectivePricing(p){
+  var kept=providerNormalizePricing(p&&p.pricing);
+  if(kept)return kept;
+  var d=(typeof chatCurrentCostPricing==='function')?chatCurrentCostPricing():chatDefaultCostPricing();
+  return {
+    currency:d.currency,
+    input:d.inputPerMTokens,
+    output:d.outputPerMTokens,
+    cache_create:d.cacheCreate5mPerMTokens,
+    cache_read:d.cacheReadPerMTokens,
+    multiplier:d.multiplier
+  };
+}
 // 聊天页要在 API 配置没加载时也能算价，所以把价格按"供应商 ID + 显示名"两种键
 // 镜像一份到 localStorage。网关每轮回的是 provider_name，靠名字这一路对上。
-function apiPollingPricingMirror(polling){
-  var byId=Object.create(null),out=Object.create(null);
-  try{
-    providerLibraryList().forEach(function(p){byId[String(p&&p.id)]=p});
-  }catch(e){}
-  (polling&&Array.isArray(polling.order)?polling.order:[]).forEach(function(item){
-    var pricing=apiPollingNormalizePricing(item&&item.pricing);
+// 镜像覆盖整个供应商库，不再只覆盖轮询队列里那几条——单链路那条也要能算价。
+function providerPricingMirror(){
+  var out=Object.create(null);
+  var list=[];
+  try{list=providerLibraryList()}catch(e){list=[]}
+  list.forEach(function(p){
+    var pricing=providerNormalizePricing(p&&p.pricing);
     if(!pricing)return;
-    var id=String((item&&item.provider_id)||'');
-    if(id)out[chatApiPricingKey(id)]=pricing;
-    var p=byId[id];
-    if(!p)return;
-    [p.name,(typeof providerDisplayName==='function'?providerDisplayName(p):'')].forEach(function(name){
-      var key=chatApiPricingKey(name);
+    [p.id,p.name,(typeof providerDisplayName==='function'?providerDisplayName(p):'')].forEach(function(value){
+      var key=chatApiPricingKey(value);
       if(key)out[key]=pricing;
     });
   });
   return out;
 }
+var PROVIDER_PRICE_FIELDS=[
+  ['input','输入 / 1M'],
+  ['output','输出 / 1M'],
+  ['cache_create','缓存创建 / 1M'],
+  ['cache_read','缓存命中 / 1M'],
+  ['multiplier','倍率']
+];
+// 价格块和缓存策略块都长在供应商卡片里。价格默认折叠（大部分时候不用看），
+// 输入框预填当前生效价，用户改哪个填哪个。
+function providerPriceHtml(p){
+  var price=providerEffectivePricing(p);
+  var kept=providerNormalizePricing(p&&p.pricing);
+  var summary=price.currency+' '+price.input+' / '+price.output+' · 倍率 '+price.multiplier+
+    (kept?'':'（默认价）');
+  var html='<details class="prov-price">'+
+    '<summary><span>费用（可选）</span><b>'+esc(summary)+'</b></summary>'+
+    '<div class="prov-price-grid">'+
+    '<label>币种<input class="prov-price-input" type="text" maxlength="4" data-price-field="currency" value="'+
+      escAttr(price.currency)+'"></label>';
+  PROVIDER_PRICE_FIELDS.forEach(function(field){
+    html+='<label>'+esc(field[1])+'<input class="prov-price-input" type="number" min="0" step="0.0001" data-price-field="'+
+      escAttr(field[0])+'" value="'+escAttr(String(price[field[0]]))+'"></label>';
+  });
+  html+='</div>'+
+    '<p class="prov-price-note">按每 100 万 token 填。最终价＝（输入＋输出＋缓存创建＋缓存命中）× 倍率。'+
+    '这一份只算这个供应商答的那几轮；没填过就按面板默认单价算。改完点下面的「保存供应商」。</p>'+
+    '</details>';
+  return html;
+}
+function providerCacheStrategyHtml(p){
+  var current=providerCacheStrategy(p);
+  var html='<div class="prov-row prov-row-wide"><label>缓存策略（可选）</label>'+
+    '<select class="prov-cache-strategy" aria-label="这个供应商的缓存策略">'+
+    '<option value=""'+(current?'':' selected')+'>不选：跟随聊天面板下面选的策略</option>';
+  API_POLLING_STRATEGY_VALUES.forEach(function(value){
+    var meta=chatCacheStrategyMeta(value);
+    html+='<option value="'+escAttr(value)+'"'+(value===current?' selected':'')+'>'+esc(meta.label)+'</option>';
+  });
+  html+='</select>'+
+    '<div class="prov-model-hint">选了就按这个走：用这个供应商发消息时，缓存断点换成它。不选留空也能保存，那就跟着聊天面板下面那一个全局策略。</div>'+
+    '</div>';
+  return html;
+}
+
+/* ---- 聊天 API 轮询配置 ---- */
+// 设计约束（上一版就是踩了这几条才把面板搞崩的）：
+// 1. apiPollingConfig() 是纯读取，绝不修改 apiProviders。渲染时顺手写全局配置，
+//    会让"只是看了一眼页面"也把轮询字段混进下一次保存。写入一律走 apiPollingWrite()。
+// 2. 只存供应商 ID 和模型，Key/URL 永远从供应商库实时解析，不复制。
+// 3. 显示开关不参与 config_revision，否则用户勾一下复选框就会把网关的粘性游标
+//    重置掉，白白丢失当前正在用的可用 API。价格同理，而且它已经不在这一页了。
+// 4. 缓存策略和单价 2026-08-23 起统一在供应商库里维护，这一页不再重复填一次。
+//    order 里仍然写一份 cache_strategy，但它是从供应商那边镜像下来的派生值——
+//    网关读的还是这个字段，所以网关一行都不用改。用户在供应商库里改了策略，
+//    saveProvider() 会顺手重刷这份镜像并重算 config_revision，否则别的热实例
+//    不会重新拉配置，改了策略却还在按旧策略打断点。
+var API_POLLING_KEY='chat_polling';
 function apiPollingConfig(){
   var raw=(apiProviders&&typeof apiProviders==='object'&&!Array.isArray(apiProviders))
     ?apiProviders[API_POLLING_KEY]:null;
@@ -9986,8 +10112,8 @@ function apiPollingConfig(){
     order.push({
       provider_id:id,
       model:String(item.model||'').trim(),
-      cache_strategy:apiPollingNormalizeStrategy(item.cache_strategy||item.cacheStrategy),
-      pricing:apiPollingNormalizePricing(item.pricing)
+      // 派生值：真正的来源是供应商库。这里读出来只为了知道镜像有没有过期。
+      cache_strategy:providerNormalizeCacheStrategy(item.cache_strategy||item.cacheStrategy)
     });
   });
   return {
@@ -10010,11 +10136,14 @@ function apiPollingWrite(next){
     show_message_status:next.show_message_status===true,
     show_billing_price:next.show_billing_price===true,
     order:(Array.isArray(next.order)?next.order:[]).map(function(x){
+      var id=String(x&&x.provider_id||'');
+      // 策略永远重新从供应商身上取一遍，别信调用方传进来的旧值。
+      var provider=(typeof findLibraryProvider==='function')?findLibraryProvider(id):null;
       return {
-        provider_id:String(x&&x.provider_id||''),
+        provider_id:id,
         model:String(x&&x.model||''),
-        cache_strategy:apiPollingNormalizeStrategy(x&&x.cache_strategy),
-        pricing:apiPollingNormalizePricing(x&&x.pricing)
+        cache_strategy:provider?providerCacheStrategy(provider)
+          :providerNormalizeCacheStrategy(x&&x.cache_strategy)
       };
     }),
     config_revision:String(next.config_revision||'')
@@ -10022,7 +10151,25 @@ function apiPollingWrite(next){
   chatPollingViewInvalidate();
   return apiProviders[API_POLLING_KEY];
 }
-function apiPollingItemFor(p,model,cacheStrategy,pricing){
+// 在供应商库里改完缓存策略后调一次：把 order 里那份镜像刷新，并重算 config_revision，
+// 让别的网关热实例知道要重新拉配置。轮询没配过就什么都不做。
+function apiPollingSyncFromProviders(){
+  if(!apiProviders||typeof apiProviders!=='object'||Array.isArray(apiProviders))return null;
+  if(!apiProviders[API_POLLING_KEY])return null;
+  var polling=apiPollingConfig();
+  var items=apiPollingItemsFromOrder(polling.order);
+  var next={
+    enabled:polling.enabled,
+    primary_retry_enabled:polling.primary_retry_enabled,
+    primary_retry_interval:polling.primary_retry_interval,
+    show_message_status:polling.show_message_status,
+    show_billing_price:polling.show_billing_price,
+    order:polling.order
+  };
+  next.config_revision=apiPollingRevision(next,items);
+  return apiPollingWrite(next);
+}
+function apiPollingItemFor(p,model){
   model=String(model||(p&&p.model)||'').trim();
   var url=String(p&&p.url||'').trim();
   var key=String(p&&p.key||'').trim();
@@ -10031,8 +10178,9 @@ function apiPollingItemFor(p,model,cacheStrategy,pricing){
     provider_id:String(p&&p.id||''),
     provider:p,
     model:model,
-    cache_strategy:apiPollingNormalizeStrategy(cacheStrategy),
-    pricing:apiPollingNormalizePricing(pricing),
+    // 策略和价格都直接取供应商身上那一份，这一页不再有自己的副本。
+    cache_strategy:providerCacheStrategy(p),
+    pricing:providerNormalizePricing(p&&p.pricing),
     available:!missing,
     missing:missing
   };
@@ -10051,7 +10199,7 @@ function apiPollingItemsFromOrder(order){
     // 供应商库里已经删掉的引用自然消失，不用额外清理
     if(!p||used[id])return;
     used[id]=1;
-    out.push(apiPollingItemFor(p,item.model,item.cache_strategy,item.pricing));
+    out.push(apiPollingItemFor(p,item.model));
   });
   return out;
 }
@@ -10087,7 +10235,7 @@ function chatPollingViewPersist(){
       revision:String(polling.config_revision||''),
       showMessageStatus:polling.show_message_status===true,
       showBillingPrice:polling.show_billing_price===true,
-      pricing:apiPollingPricingMirror(polling)
+      pricing:providerPricingMirror()
     }));
   }catch(e){}
   chatPollingViewInvalidate();
@@ -10103,7 +10251,7 @@ function chatPollingView(){
       revision:polling.config_revision||apiPollingRevision(polling),
       showMessageStatus:polling.show_message_status===true,
       showBillingPrice:polling.show_billing_price===true,
-      pricing:apiPollingPricingMirror(polling)
+      pricing:providerPricingMirror()
     };
   }else{
     try{
@@ -10163,6 +10311,8 @@ function addProviderToLibrary(raw){
       old.key=old.key||p.key;
       old.model=old.model||p.model;
       old.models=cleanModelList((old.models||[]).concat(p.models||[]),old.model||p.model);
+      old.cache_strategy=providerNormalizeCacheStrategy(old.cache_strategy||p.cache_strategy);
+      if(!providerNormalizePricing(old.pricing))old.pricing=providerNormalizePricing(p.pricing);
       return old.id;
     }
   }
@@ -10255,6 +10405,27 @@ function normalizeApiProviders(raw){
     }
     if(!speechSlot.model)speechSlot.model=speechModel;
   }
+  providerAdoptLegacyPollingFields();
+}
+// v208 把缓存策略和单价存在轮询 order 的每一条上；v209 起统一存在供应商身上。
+// 这里做一次搬家：供应商自己没维护过时，把老配置那份接过来，用户不用重新填一遍。
+// 只补不覆盖，所以每次加载都跑也是幂等的。
+function providerAdoptLegacyPollingFields(){
+  var raw=(apiProviders&&typeof apiProviders==='object'&&!Array.isArray(apiProviders))
+    ?apiProviders[API_POLLING_KEY]:null;
+  var order=(raw&&Array.isArray(raw.order))?raw.order:null;
+  if(!order||!order.length)return;
+  order.forEach(function(item){
+    if(!item||typeof item!=='object')return;
+    var p=findLibraryProvider(String(item.provider_id||item.providerId||''));
+    if(!p)return;
+    if(!providerNormalizeCacheStrategy(p.cache_strategy)){
+      p.cache_strategy=providerNormalizeCacheStrategy(item.cache_strategy||item.cacheStrategy);
+    }
+    if(!providerNormalizePricing(p.pricing)){
+      p.pricing=providerNormalizePricing(item.pricing);
+    }
+  });
 }
 function providerLibraryList(){return apiProviderLibrarySlot().providers}
 function findLibraryProvider(id){
@@ -10425,7 +10596,7 @@ function apiPollingDraftGet(){
       show_message_status:polling.show_message_status,
       show_billing_price:polling.show_billing_price,
       order:polling.order.map(function(x){
-        return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy,pricing:x.pricing};
+        return {provider_id:x.provider_id,model:x.model};
       })
     };
   }
@@ -10438,7 +10609,7 @@ function apiPollingDraftItems(){
 // 顺带清掉指向已删除供应商的死引用。
 function apiPollingDraftSync(items){
   apiPollingDraftGet().order=items.map(function(x){
-    return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy,pricing:x.pricing};
+    return {provider_id:x.provider_id,model:x.model};
   });
 }
 // 供应商库里还没加进轮询的那些，才是"可以添加"的
@@ -10465,67 +10636,21 @@ function apiPollingModelSelectHtml(item,index){
   html+='</select>';
   return html;
 }
-// 轮询里每条候选各自绑一个缓存策略。标签直接取聊天页那份 meta，避免两处文案走样。
+// 缓存策略和价格都在供应商库里维护，这一页只读地显示一眼，避免两处都能改、
+// 改完还要猜哪边生效。标签直接取聊天页那份 meta，避免两处文案走样。
 var API_POLLING_STRATEGY_VALUES=['single_5m','assistant_latest','native_stable','native_tiered','prefix_24h'];
-function apiPollingStrategySelectHtml(item,index){
-  var current=apiPollingNormalizeStrategy(item.cache_strategy);
-  var html='<select class="api-polling-strategy" aria-label="选择这个供应商的缓存策略" onchange="setApiPollingStrategy('+index+',this.value)">';
-  html+='<option value=""'+(current?'':' selected')+'>跟随聊天页设置</option>';
-  API_POLLING_STRATEGY_VALUES.forEach(function(value){
-    var meta=chatCacheStrategyMeta(value);
-    html+='<option value="'+escAttr(value)+'"'+(value===current?' selected':'')+'>缓存：'+
-      esc(meta.label)+'</option>';
-  });
-  html+='</select>';
-  return html;
-}
-// 每条 API 的价格编辑器。用户自己维护，面板不去猜、不去联网查。
-// 展开状态记在内存里：这一页任何操作都会整页重渲染，不记住的话每改一个数就合起来。
-var apiPollingPriceOpen=Object.create(null);
-function apiPollingPriceToggle(id,open){
-  if(open)apiPollingPriceOpen[String(id)]=1;
-  else delete apiPollingPriceOpen[String(id)];
-}
-function apiPollingEffectivePricing(entry){
-  var p=apiPollingNormalizePricing(entry&&entry.pricing);
-  if(p)return p;
-  var d=chatDefaultCostPricing();
-  return {
-    currency:d.currency,
-    input:d.inputPerMTokens,
-    output:d.outputPerMTokens,
-    cache_create:d.cacheCreate5mPerMTokens,
-    cache_read:d.cacheReadPerMTokens,
-    multiplier:d.multiplier
-  };
-}
-var API_POLLING_PRICE_FIELDS=[
-  ['input','输入 / 1M'],
-  ['output','输出 / 1M'],
-  ['cache_create','缓存创建 / 1M'],
-  ['cache_read','缓存命中 / 1M'],
-  ['multiplier','倍率']
-];
-function apiPollingPriceHtml(item,index){
-  var p=apiPollingEffectivePricing(item);
-  var id=String(item.provider_id||'');
-  var open=apiPollingPriceOpen[id]?' open':'';
-  var summary=p.currency+' '+p.input+' / '+p.output+' · 倍率 '+p.multiplier;
-  var html='<details class="api-polling-price"'+open+
-    ' ontoggle="apiPollingPriceToggle(\''+escAttr(id)+'\',this.open)">'+
-    '<summary><span>价格</span><b>'+esc(summary)+'</b></summary>'+
-    '<div class="api-polling-price-grid">'+
-    '<label>币种<input class="api-polling-price-input" type="text" maxlength="4" data-price-index="'+index+
-      '" data-price-field="currency" value="'+escAttr(p.currency)+'"></label>';
-  API_POLLING_PRICE_FIELDS.forEach(function(field){
-    html+='<label>'+esc(field[1])+'<input class="api-polling-price-input" type="number" min="0" step="0.0001" data-price-index="'+
-      index+'" data-price-field="'+escAttr(field[0])+'" value="'+escAttr(String(p[field[0]]))+'"></label>';
-  });
-  html+='</div>'+
-    '<p class="api-polling-price-note">按每 100 万 token 填。最终价＝（输入＋输出＋缓存创建＋缓存命中）× 倍率。'+
-    '改完记得点上面的「保存轮询配置」。</p>'+
-    '</details>';
-  return html;
+function apiPollingProviderSummaryHtml(item){
+  var strategy=providerCacheStrategy(item&&item.provider);
+  var strategyText=strategy?('缓存：'+chatCacheStrategyMeta(strategy).label):'缓存：跟随聊天面板';
+  var pricing=providerNormalizePricing(item&&item.provider&&item.provider.pricing);
+  var priceText=pricing
+    ?('价格：'+pricing.currency+' '+pricing.input+' / '+pricing.output+' · 倍率 '+pricing.multiplier)
+    :'价格：按面板默认单价';
+  return '<div class="api-polling-inherit">'+
+    '<span'+(strategy?' class="is-set"':'')+'>'+esc(strategyText)+'</span>'+
+    '<span'+(pricing?' class="is-set"':'')+'>'+esc(priceText)+'</span>'+
+    '<button type="button" onclick="switchApiTab(\'providers\')">去供应商库改</button>'+
+    '</div>';
 }
 function renderApiPolling(){
   var draft=apiPollingDraftGet();
@@ -10567,9 +10692,8 @@ function renderApiPolling(){
           '<span>'+esc(providerHost(p.url)||'未填写 URL')+'</span>'+
           '<div class="api-polling-selects">'+
             apiPollingModelSelectHtml(item,index)+
-            apiPollingStrategySelectHtml(item,index)+
           '</div>'+
-          apiPollingPriceHtml(item,index)+
+          apiPollingProviderSummaryHtml(item)+
         '</div>'+
         '<span class="api-polling-status" data-base-status="'+escAttr(status)+'">'+esc(status)+'</span>'+
         '<div class="api-polling-actions">'+
@@ -10597,8 +10721,8 @@ function renderApiPolling(){
       '<button class="btn btn-blue btn-sm" type="button" onclick="addApiPollingProvider()">加入轮询</button>';
   }
   html+='</div>';
-  html+='<p class="api-polling-note">顺序从上到下依次尝试，第一个能用的就用它。缺 URL / Key / 模型的会被跳过，不会发给网关。这一页只保存"用哪个供应商、哪个模型、配哪个缓存策略"，Key 和地址始终由网关自己去供应商库里取，不在这里显示也不重复填写。</p>';
-  html+='<p class="api-polling-note">缓存策略默认「跟随聊天页设置」，也就是和改造前一样用聊天页那一个全局策略。给某条单独选了策略后，网关切到它时会连缓存断点一起换成它的策略；换回没设策略的候选就自动回到聊天页设置。不同供应商对缓存的支持不一样，这里可以一家一家配。</p>';
+  html+='<p class="api-polling-note">顺序从上到下依次尝试，第一个能用的就用它。缺 URL / Key / 模型的会被跳过，不会发给网关。这一页只保存"用哪个供应商、哪个模型"，Key 和地址始终由网关自己去供应商库里取，不在这里显示也不重复填写。</p>';
+  html+='<p class="api-polling-note">价格和缓存策略不在这一页维护：加供应商的时候在「供应商库」里一次填好，谁答的就按谁的算。上面每条只把供应商身上那份读出来给你看一眼。没维护缓存策略的按聊天面板下面选的那一个走，没维护价格的按面板默认单价算。</p>';
   return html;
 }
 function apiPollingCollectSwitches(){
@@ -10613,37 +10737,6 @@ function apiPollingCollectSwitches(){
   if(interval)draft.primary_retry_interval=Math.max(5,Math.min(200,Number(interval.value)||20));
   if(showPrice)draft.show_billing_price=!!showPrice.checked;
   if(showStatus)draft.show_message_status=!!showStatus.checked;
-  apiPollingCollectPrices(draft);
-  return draft;
-}
-// 价格输入框故意不挂 onchange：这一页每次改动都整页重渲染，挂了就会边打字边重建
-// 输入框、光标乱跳。改成和"备用次数"一样，任何一次真正的操作再统一从 DOM 读回来。
-function apiPollingCollectPrices(draft){
-  draft=draft||apiPollingDraftGet();
-  if(!document.querySelectorAll)return draft;
-  var nodes=document.querySelectorAll('.api-polling-price-input');
-  if(!nodes||!nodes.length)return draft;
-  var touched=Object.create(null);
-  Array.prototype.forEach.call(nodes,function(node){
-    var index=parseInt(node.getAttribute('data-price-index'),10);
-    var field=String(node.getAttribute('data-price-field')||'');
-    var entry=draft.order[index];
-    if(!entry||!field)return;
-    if(!touched[index]){
-      // 先把这一条的当前生效价整份铺开，再用输入框覆盖，避免只填一个格子就把其余清成 0。
-      entry.pricing=apiPollingEffectivePricing(entry);
-      touched[index]=1;
-    }
-    if(field==='currency'){
-      entry.pricing.currency=String(node.value||'').trim().slice(0,4)||'¥';
-      return;
-    }
-    // 注意 Number('')===0：清空的输入框必须当成"没改"，不然一不小心就把单价变成 0。
-    var raw=String(node.value===undefined||node.value===null?'':node.value).trim();
-    if(!raw)return;
-    var n=Number(raw);
-    if(isFinite(n)&&n>=0)entry.pricing[field]=n;
-  });
   return draft;
 }
 function apiPollingToggleControls(){
@@ -10680,9 +10773,8 @@ function addApiPollingProvider(){
   if(!provider){toast('这个供应商已经不在供应商库里了');return}
   var draft=apiPollingDraftGet();
   if(draft.order.some(function(x){return String(x.provider_id)===id})){toast('这个供应商已经在队列里了');return}
-  // 模型默认跟随供应商的默认模型，缓存策略默认跟随聊天页，价格先给面板默认单价，
-  // 用户不用再从零填一遍；想换在行内改就行。
-  draft.order.push({provider_id:id,model:'',cache_strategy:'',pricing:apiPollingEffectivePricing(null)});
+  // 模型默认跟随供应商的默认模型；缓存策略和价格跟着供应商走，这一页不复制一份。
+  draft.order.push({provider_id:id,model:''});
   renderApiConfig();
   toast('已加入队列：'+providerDisplayName(provider)+'（记得点「保存轮询配置」）',4000);
 }
@@ -10711,13 +10803,6 @@ function setApiPollingModel(index,model){
   draft.order[index].model=String(model||'').trim();
   renderApiConfig();
 }
-function setApiPollingStrategy(index,strategy){
-  apiPollingCollectSwitches();
-  var draft=apiPollingDraftGet();
-  if(index<0||index>=draft.order.length)return;
-  draft.order[index].cache_strategy=apiPollingNormalizeStrategy(strategy);
-  renderApiConfig();
-}
 function saveApiPolling(){
   var draft=apiPollingCollectSwitches();
   var items=apiPollingDraftItems();
@@ -10733,8 +10818,9 @@ function saveApiPolling(){
     show_message_status:draft.show_message_status,
     show_billing_price:draft.show_billing_price,
     // 顺序保存用户自己排好的这几条（含暂时不可用的），保留他的优先级意图。
+    // cache_strategy 由 apiPollingWrite 现从供应商身上取，这里不用带。
     order:items.map(function(x){
-      return {provider_id:x.provider_id,model:x.model,cache_strategy:x.cache_strategy,pricing:x.pricing};
+      return {provider_id:x.provider_id,model:x.model};
     })
   };
   next.config_revision=apiPollingRevision(next,items);
@@ -10917,6 +11003,8 @@ function providerCardHtml(p){
       '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
+      providerCacheStrategyHtml(p)+
+      '<div class="prov-row prov-row-wide">'+providerPriceHtml(p)+'</div>'+
       '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveProvider(this)">保存供应商</button></div>'+
       '<button class="prov-del" type="button" onclick="deleteProvider(this)">删除此供应商</button>'+
     '</div></div>';
@@ -10952,12 +11040,34 @@ function readProvCard(card){
   function v(sel){var el=card.querySelector(sel);return el?el.value:''}
   var id=card.getAttribute('data-id');
   var old=findLibraryProvider(id);
-  return {id:id,name:v('.prov-name-input'),category:v('.prov-category-input'),note:v('.prov-note-input'),url:v('.prov-url'),key:v('.prov-key'),model:v('.prov-model'),models:old&&Array.isArray(old.models)?old.models:[]};
+  return {id:id,name:v('.prov-name-input'),category:v('.prov-category-input'),note:v('.prov-note-input'),url:v('.prov-url'),key:v('.prov-key'),model:v('.prov-model'),models:old&&Array.isArray(old.models)?old.models:[],
+    cache_strategy:providerNormalizeCacheStrategy(v('.prov-cache-strategy')),
+    pricing:readProvCardPricing(card,old)};
+}
+// 先把当前生效价整份铺开再用输入框覆盖，避免只改一个格子就把其余清成 0。
+// 注意 Number('')===0：清空的输入框必须当成"没改"。
+function readProvCardPricing(card,old){
+  var price=providerEffectivePricing(old);
+  var nodes=card.querySelectorAll?card.querySelectorAll('.prov-price-input'):null;
+  if(!nodes||!nodes.length)return providerNormalizePricing(old&&old.pricing);
+  Array.prototype.forEach.call(nodes,function(node){
+    var field=String(node.getAttribute('data-price-field')||'');
+    if(!field)return;
+    if(field==='currency'){
+      price.currency=String(node.value||'').trim().slice(0,4)||'¥';
+      return;
+    }
+    var raw=String(node.value===undefined||node.value===null?'':node.value).trim();
+    if(!raw)return;
+    var n=Number(raw);
+    if(isFinite(n)&&n>=0)price[field]=n;
+  });
+  return providerNormalizePricing(price);
 }
 function addProvider(){
   switchApiTab('providers');
   var id=newProvId();
-  apiProviderLibrarySlot().providers.push({id:id,name:'',category:'',note:'',url:'',key:'',model:'',models:[]});
+  apiProviderLibrarySlot().providers.push({id:id,name:'',category:'',note:'',url:'',key:'',model:'',models:[],cache_strategy:'',pricing:null});
   renderApiConfig();
   setTimeout(function(){
     var card=document.querySelector('.prov-card[data-id="'+id+'"]');
@@ -10981,6 +11091,7 @@ function fetchProviderModels(btn){
   if(!d.key.trim()){toast('先填写 API Key');return}
   var p=findLibraryProvider(d.id)||{};
   p.id=d.id;p.name=d.name.trim();p.category=d.category.trim();p.note=d.note.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
+  p.cache_strategy=d.cache_strategy;p.pricing=d.pricing;
   btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
   fetchModelsForProvider(p).then(function(models){
     p.models=cleanModelList(models,p.model);
@@ -11002,6 +11113,12 @@ function saveProvider(btn){
     if(!p){list.push(normalizeProvider(d));p=findLibraryProvider(d.id)}
   }
   p.name=d.name.trim();p.category=d.category.trim();p.note=d.note.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();p.models=cleanModelList(d.models,p.model);
+  p.cache_strategy=d.cache_strategy;
+  p.pricing=d.pricing;
+  // 缓存策略改了以后必须重刷轮询那份镜像并重算 config_revision，
+  // 否则网关的别的热实例不会重新拉配置，改了策略还在按旧策略打断点。
+  apiPollingSyncFromProviders();
+  chatPollingViewPersist();
   btn.disabled=true;var old=btn.textContent;btn.textContent='保存中...';
   persistAndReload('供应商已保存').then(function(ok){btn.disabled=false;btn.textContent=old;if(ok)renderApiConfig()});
 }

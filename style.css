@@ -1712,6 +1712,31 @@ body.dark .ds-fact-error{background:#30271c;color:#dfbd83;border-color:#c68b42}
 .prov-row textarea{display:block;min-height:96px;line-height:1.65;resize:vertical}
 .prov-row input:focus,
 .prov-row textarea:focus{border-color:var(--ck-accent)}
+/* 供应商自己的缓存策略（可选）。宽度和同卡片里的输入框对齐。 */
+.prov-cache-strategy{
+  width:100%;min-width:0;max-width:100%;padding:11px 12px;border:1.5px solid var(--ck-border);border-radius:8px;
+  font-size:13px;background:var(--ck-bg-soft);color:var(--ck-text);outline:none;font-family:inherit;
+}
+.prov-cache-strategy:focus{border-color:var(--ck-accent)}
+/* 供应商自己的单价（可选）：默认折起来，只在需要改的时候展开 */
+.prov-price{border:1px solid var(--ck-line-soft);border-radius:8px;background:var(--ck-bg-soft)}
+.prov-price>summary{
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+  padding:9px 11px;border-radius:8px;cursor:pointer;list-style:none;
+  color:var(--ck-text-soft);font-size:12.5px;font-weight:700;
+}
+.prov-price>summary::-webkit-details-marker{display:none}
+.prov-price>summary::after{content:"+";margin-left:auto;color:var(--ck-muted);font-size:13px}
+.prov-price[open]>summary::after{content:"–"}
+.prov-price>summary b{color:var(--ck-muted);font-size:11.5px;font-weight:500;font-variant-numeric:tabular-nums}
+.prov-price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:2px 11px 8px}
+.prov-price-grid label{display:grid;gap:4px;color:var(--ck-muted);font-size:11px;font-weight:500}
+.prov-price-grid input{
+  width:100%;min-width:0;height:34px;padding:5px 8px;
+  border:1.5px solid var(--ck-border);border-radius:6px;
+  background:var(--ck-surface);color:var(--ck-text);font:inherit;font-size:12.5px;
+}
+.prov-price-note{margin:0;padding:0 11px 10px;color:var(--ck-muted);font-size:11px;line-height:1.55}
 .prov-model-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px;margin-top:8px}
 .api-assign-card>.prov-model-tools{grid-template-columns:76px minmax(0,1fr) auto;gap:10px}
 .api-assign-card>.prov-model-tools::before{content:""}
@@ -4262,14 +4287,9 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
   border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
   background:var(--ck-surface);color:var(--ck-text);font-size:11.5px;
 }
-/* 模型和缓存策略两个下拉并排：窄屏自动换行，不挤压供应商名那一列 */
+/* 模型下拉单独一行；缓存策略和价格改成只读一行，真正的维护在供应商库里 */
 .api-polling-selects{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px}
 .api-polling-selects .api-polling-model{margin-top:0;max-width:220px;flex:1 1 160px}
-.api-polling-strategy{
-  height:30px;padding:3px 6px;flex:1 1 160px;min-width:0;max-width:220px;
-  border:1px solid var(--ck-line-soft);border-radius:var(--ck-radius-md,8px);
-  background:var(--ck-surface);color:var(--ck-text);font-size:11.5px;
-}
 .api-polling-model-empty{font-size:11px;color:var(--ck-muted)}
 .api-polling-model-empty button{
   border:0;background:transparent;padding:0;
@@ -4306,25 +4326,17 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
 .api-polling-display{display:grid;gap:8px;margin-top:10px;padding:12px;border:1px solid var(--ck-line);border-radius:8px;background:var(--ck-surface)}
 .api-polling-display.disabled{opacity:.52}
 .api-polling-display p{margin:0;color:var(--ck-muted);font-size:11.5px;line-height:1.55}
-/* 每条 API 自己的价格：默认折起来，只在需要改的时候展开 */
-.api-polling-price{margin-top:8px;border:1px solid var(--ck-line-soft);border-radius:8px;background:var(--ck-bg)}
-.api-polling-price>summary{
-  display:flex;align-items:center;flex-wrap:wrap;gap:8px;
-  padding:7px 10px;border-radius:8px;cursor:pointer;list-style:none;
-  color:var(--ck-text-soft);font-size:12px;
+/* 缓存策略和价格：这一页只读地显示一眼，维护入口在供应商库 */
+.api-polling-inherit{
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:6px;
+  color:var(--ck-muted);font-size:11px;line-height:1.5;
 }
-.api-polling-price>summary::-webkit-details-marker{display:none}
-.api-polling-price>summary::after{content:"+";margin-left:auto;color:var(--ck-muted);font-size:13px}
-.api-polling-price[open]>summary::after{content:"–"}
-.api-polling-price>summary b{color:var(--ck-muted);font-size:11.5px;font-weight:500;font-variant-numeric:tabular-nums}
-.api-polling-price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:2px 10px 8px}
-.api-polling-price-grid label{display:grid;gap:4px;color:var(--ck-muted);font-size:11px}
-.api-polling-price-grid input{
-  width:100%;min-width:0;height:32px;padding:4px 7px;
-  border:1px solid var(--ck-line);border-radius:6px;
-  background:var(--ck-surface);color:var(--ck-text);font:inherit;font-size:12px;
+.api-polling-inherit span{font-variant-numeric:tabular-nums}
+.api-polling-inherit span.is-set{color:var(--ck-text-soft);font-weight:600}
+.api-polling-inherit button{
+  border:0;background:transparent;padding:0;
+  color:var(--ck-accent);font:inherit;font-size:11px;text-decoration:underline;cursor:pointer;
 }
-.api-polling-price-note{margin:0;padding:0 10px 9px;color:var(--ck-muted);font-size:11px;line-height:1.55}
 @media (max-width:640px){
   .api-polling-overview{grid-template-columns:1fr}
   .api-polling-overview>div{border-right:0}
@@ -4333,7 +4345,7 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
   .api-polling-status{grid-column:2;justify-self:start;align-self:center}
   .api-polling-actions{grid-column:3;justify-self:end}
   .api-polling-model{max-width:none}
-  .api-polling-selects .api-polling-model,.api-polling-strategy{max-width:none;flex:1 1 100%}
+  .api-polling-selects .api-polling-model{max-width:none;flex:1 1 100%}
 }
 
 /* ---- 规则管理页 ---- */

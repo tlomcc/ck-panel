@@ -1091,14 +1091,14 @@ body.chat-active.chat-plus-open .chat-compose{
   overflow:visible!important;
 }
 
-/* 功能区默认只露 2 行 4 列，第三行往后要上滑才出来。
-   滑动交给浏览器原生滚动（跟手 1:1，滑多少显现多少），不做 JS 分页。
-   第三行故意露出半个图标高度当作"下面还有"的提示，露出来的那半个照样能点。 */
+/* 功能区展开后正好 2 行 4 列（2026-08-23 用户要求：原来还露半行，太高了）。
+   第三行往后完全靠原生上滑出来（跟手 1:1，滑多少显现多少），不做 JS 分页。
+   peek 留成 0 是有意的：以后想改回露一截只要把它调大，公式不用动。 */
 body.chat-active .chat-plus-panel{
   --ck-plus-row:68px;
   --ck-plus-gap:10px;
-  --ck-plus-peek:34px;
-  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap)*2 + var(--ck-plus-peek));
+  --ck-plus-peek:0px;
+  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap) + var(--ck-plus-peek));
   --ck-plus-chrome:14px;
 }
 body.chat-active .chat-plus-grid{
@@ -3877,6 +3877,30 @@ body.chat-active .chat-tick-legend-row{
   line-height:1.55!important;
 }
 body.chat-active .chat-tick-legend-row .chat-cache-tick{display:inline-flex!important;margin:2px 0 0!important}
+/* 用量符号说明：符号一列、名字一列、解释一行。符号取 CHAT_USAGE_SYMBOL_ROWS，
+   和消息上那一行同源，不会出现说明和实际不一致。 */
+body.chat-active .chat-usage-legend{display:grid!important;gap:8px!important;padding:2px 0 0!important}
+body.chat-active .chat-usage-legend-row{
+  display:grid!important;
+  grid-template-columns:22px minmax(0,auto) minmax(0,1fr)!important;
+  align-items:baseline!important;
+  gap:4px 8px!important;
+  font-size:12px!important;
+  line-height:1.55!important;
+}
+body.chat-active .chat-usage-legend-row i{
+  font-style:normal!important;
+  font-weight:700!important;
+  text-align:center!important;
+  color:#128c4c!important;
+}
+body.chat-active .chat-usage-legend-row b{font-weight:700!important;white-space:nowrap!important}
+body.chat-active .chat-usage-legend-row span{opacity:.8!important}
+body.dark.chat-active .chat-usage-legend-row i,body.theme-dark.chat-active .chat-usage-legend-row i{color:#5fe0a8!important}
+@media(max-width:520px){
+  body.chat-active .chat-usage-legend-row{grid-template-columns:22px minmax(0,1fr)!important}
+  body.chat-active .chat-usage-legend-row span{grid-column:2!important}
+}
 body.chat-active .chat-tick-legend-note{margin:4px 0 0!important;font-size:11.5px!important;line-height:1.6!important;opacity:.75!important}
 
 body.chat-active .chat-msg-row.user>.chat-msg-meta{
