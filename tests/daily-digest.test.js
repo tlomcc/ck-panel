@@ -191,13 +191,18 @@ function testRequestMessagesStripPseudoThinking(){
 }
 
 function testPanelWiring(){
-  // 面板位置：紧跟在「本轮召回内容」下面，并且和它一样是裸 label + readonly textarea。
+  // 面板位置：紧跟在「本轮召回内容」下面，和它一样是裸 label + textarea。
+  // 2026-08-24 起这一个不再 readonly：用户要能二次总结（见 testEditWiring）。
   const recall=html.indexOf('id="chat-memory-pack"');
   const digest=html.indexOf('id="chat-daily-digest-pack"');
   const actions=html.indexOf('onclick="chatClearLocalMessages()"');
   assert.ok(recall>=0&&digest>recall&&digest<actions,'当日截断总结必须排在本轮召回内容下面');
-  assert.ok(/<label>当日截断总结<textarea id="chat-daily-digest-pack"[^>]*readonly/.test(html),
-    '结构必须和本轮召回内容对齐：裸 label + readonly textarea');
+  assert.ok(/<label>当日截断总结<textarea id="chat-daily-digest-pack"[^>]*oninput="chatDailyDigestMarkEdited\(\)"/.test(html),
+    '结构必须和本轮召回内容对齐：裸 label + textarea，并且要接上编辑标记');
+  assert.ok(!/<textarea id="chat-daily-digest-pack"[^>]*readonly/.test(html),
+    '总结正文要可编辑，readonly 必须撤掉');
+  assert.ok(/<textarea id="chat-memory-pack"[^>]*readonly/.test(html),
+    '本轮召回内容仍然是只读的，别顺手一起改掉');
 
   // 注入位置不可选：位置固定在系统缓存断点之前，选择器必须已经撤掉。
   assert.ok(html.indexOf('id="chat-daily-digest-injection-position"')<0,
@@ -326,6 +331,94 @@ async function testWaitBehaviour(){
   assert.strictEqual(result.digestWaited,'stopped');
 }
 
+// ── 记忆块里的总结可编辑（2026-08-24 用户要求）───────────────────────────────
+// 两条不变量：
+// 1. 编辑期间自动渲染不许覆盖草稿，但新总结真的落地时要强制刷成存档。
+// 2. 回写只认两种写法：保留【时段】按条替换，或整段不带【】合并成一条。
+//    时段对不上就报错并原样保留，绝不猜。
+function testEditWiring(){
+  assert.ok(/onclick="chatSaveDailyDigestText\(\)">保存总结正文</.test(html),'要有保存正文的按钮');
+  assert.ok(/onclick="chatResetDailyDigestText\(\)">放弃修改</.test(html),'要有放弃修改的出口');
+
+  const render=extractFunction('chatRenderDailyDigest');
+  assert.ok(/keepDraft=chatDailyDigestEditDirty&&opts\.force!==true/.test(render),
+    '编辑期间不能覆盖草稿，除非调用方明确 force');
+  assert.ok(/if\(!keepDraft\)chatSetFieldValue\('chat-daily-digest-pack'/.test(render),
+    '只有非草稿状态才回写 textarea');
+  assert.ok(/chatDailyDigestEditSessionId!==sessionId\)chatDailyDigestEditDirty=false/.test(render),
+    '换会话时草稿要作废，不能把上一个会话的文字留在框里');
+  assert.ok(/chatDailyDigestLastError/.test(render),'空框要说得出是不是生成失败导致的');
+
+  const request=extractFunction('chatDailyDigestRequest');
+  assert.ok(/chatRenderDailyDigest\(cfg,\{force:true\}\)/.test(request),
+    '新总结落地以存档为准，必须强制刷掉草稿');
+  assert.ok(/chatDailyDigestLastError=errorText/.test(request),'失败原因要留下来给记忆块显示');
+
+  // 问题 1：刷新后那块是空的 —— 两个补渲染点。
+  assert.ok(/if\(tab==='memory'\)\{[\s\S]*?chatRenderDailyDigest\(memoryCfg\)/.test(source),
+    '切到「记忆与缓存」要现算一遍，不能只看上一次渲染的快照');
+  const idb=extractFunction('chatStartIndexedDbSessionLoad');
+  assert.ok(/chatRenderDailyDigest\(cfg\)/.test(idb),
+    'IndexedDB 权威全量回填后必须重画总结，否则刷新页面那块一直是空的');
+}
+
+function editContext(){
+  const context=Object.assign({console},{});
+  return load(context,[
+    'chatDailyDigestPad2','chatDailyDigestDayKey','chatDailyDigestClock','chatDailyDigestRangeLabel',
+    'var:CHAT_DAILY_DIGEST_HEADER_RE',
+    'chatDailyDigestEditedCopy','chatDailyDigestMergeEdit','chatDailyDigestParseEdit',
+  ]);
+}
+
+function testEditParsing(){
+  const ctx=editContext();
+  const a={id:'a',startTs:at(2026,8,24,9,0),endTs:at(2026,8,24,9,30),dayKey:'2026-08-24',text:'甲原文',rounds:4};
+  const b={id:'b',startTs:at(2026,8,24,11,0),endTs:at(2026,8,24,12,0),dayKey:'2026-08-24',text:'乙原文',rounds:6};
+
+  // 1. 保留表头逐条替换：只有改过的那条打 edited 标记。
+  // （断言一律用 join 比字符串：条目数组是在 vm realm 里造的，deepStrictEqual 过不了跨 realm 检查。）
+  let parsed=ctx.chatDailyDigestParseEdit('【09:00–09:30】\n甲改写\n\n【11:00–12:00】\n乙原文',[a,b]);
+  assert.strictEqual(parsed.mode,'blocks');
+  assert.strictEqual(parsed.entries.map(r=>r.text).join('|'),'甲改写|乙原文');
+  assert.strictEqual(parsed.entries[0].edited,true,'改过的要标记');
+  assert.strictEqual(parsed.entries[1].edited,undefined,'没改的不要凭空打标记');
+  assert.strictEqual(parsed.entries[0].id,'a','按条替换必须保住条目身份');
+  assert.strictEqual(parsed.entries[0].rounds,4,'轮数等元数据不能被编辑抹掉');
+
+  // 2. 正文清空 = 删掉这一条；整块删掉也一样。
+  parsed=ctx.chatDailyDigestParseEdit('【09:00–09:30】\n\n【11:00–12:00】\n乙原文',[a,b]);
+  assert.strictEqual(parsed.entries.map(r=>r.id).join('|'),'b','正文清空就是删这一条');
+  parsed=ctx.chatDailyDigestParseEdit('【11:00–12:00】\n乙原文',[a,b]);
+  assert.strictEqual(parsed.entries.map(r=>r.id).join('|'),'b','整块删掉的条目不再保留');
+
+  // 3. 整段不带【】：合并成一条，时间范围取并集、轮数累加。
+  parsed=ctx.chatDailyDigestParseEdit('我自己重写一遍：今天就干了两件事。',[a,b]);
+  assert.strictEqual(parsed.mode,'merge');
+  assert.strictEqual(parsed.entries.length,1);
+  assert.strictEqual(parsed.entries[0].startTs,a.startTs,'起点取最早');
+  assert.strictEqual(parsed.entries[0].endTs,b.endTs,'终点取最晚');
+  assert.strictEqual(parsed.entries[0].rounds,10,'轮数累加，否则合并后网关会把它当短总结重写');
+  assert.strictEqual(parsed.entries[0].mergedCount,1);
+  assert.strictEqual(parsed.entries[0].edited,true);
+  assert.strictEqual(parsed.entries[0].dayKey,'2026-08-24','归属日跟着最后一条，不能漂到别的自然日');
+
+  // 4. 清空 = 今天不注入。
+  assert.strictEqual(ctx.chatDailyDigestParseEdit('   \n\n  ',[a,b]).entries.length,0);
+
+  // 5. 今天本来没有条目也能手写一条。
+  parsed=ctx.chatDailyDigestParseEdit('手写的今日总结',[]);
+  assert.strictEqual(parsed.entries.length,1);
+  assert.strictEqual(parsed.entries[0].text,'手写的今日总结');
+  assert.strictEqual(parsed.entries[0].trigger,'manual_edit');
+
+  // 6. 表头对不上就报错，不猜、不丢数据。
+  assert.ok(ctx.chatDailyDigestParseEdit('【08:00–08:30】\n乱写',[a,b]).error,'时段对不上必须报错');
+  assert.ok(!ctx.chatDailyDigestParseEdit('【08:00–08:30】\n乱写',[a,b]).entries,'报错时不返回任何条目');
+  assert.ok(ctx.chatDailyDigestParseEdit('先写一句\n【09:00–09:30】\n甲',[a,b]).error,
+    '第一个表头上面还有内容时无法判断归属，要报错');
+}
+
 testDayKeyAndClock();
 testRangeLabelMarksTheMidnightCrossing();
 testNormalizeSortsCapsAndDerivesDayKey();
@@ -334,6 +427,8 @@ testPackFormatAndBudget();
 testRequestMessagesStripPseudoThinking();
 testPanelWiring();
 testWaitWiring();
+testEditWiring();
+testEditParsing();
 testWaitBehaviour().then(()=>{
   console.log('daily digest tests: OK');
 },error=>{

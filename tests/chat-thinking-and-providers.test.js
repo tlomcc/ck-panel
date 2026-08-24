@@ -23,7 +23,7 @@ const parts=functionSource('chatRenderAssistantParts');
 const provider=functionSource('providerCardHtml');
 const normalize=functionSource('normalizeProvider');
 const readCard=functionSource('readProvCard');
-const options=functionSource('providerOptionsHtml');
+const options=functionSource('providerPickerHtml');
 const library=functionSource('renderProviderLibrary');
 
 assert(!/<button[^>]+data-subtab="rolling"/.test(html),'rolling API tab must be removed');
@@ -53,12 +53,16 @@ assert(library.includes('prov-category'),'categorized providers need a folder se
 assert(library.includes('prov-loose'),'uncategorized providers must render outside every folder');
 assert(!library.includes('未归类'),'uncategorized providers must not get a fake folder section');
 assert(library.includes('renameProviderCategory'),'provider folders need a rename entry');
-assert(!options.includes('未归类'),'provider selects must not group uncategorized providers under a fake label');
 const renameCategory=functionSource('renameProviderCategory');
 assert(renameCategory.includes('ckPromptDialog'),'folder rename must ask for the new name');
 assert(renameCategory.includes('persistAndReload'),'folder rename must be saved to the gateway');
 assert(renameCategory.includes("p.category=next"),'folder rename must move every provider in that folder');
-assert(options.includes('<optgroup'),'provider selects must use native category groups');
+// 2026-08-24 起选择供应商不再用原生 <select>+<optgroup>（optgroup 不能折叠，25 个照样一次铺完），
+// 换成先点文件夹再点供应商的两级选择器；详见 tests/provider-picker.test.js。
+assert(options.includes('provider-pick-value'),'选择器的值要放在隐藏 input 上，读值的老代码才不用改');
+assert(options.includes('openProviderPicker(this)'),'按钮要能打开两级选择器');
+assert(!source.includes('providerOptionsHtml'),'原生 optgroup 版本已经被两级选择器取代，别留着两套');
+assert(!source.includes('api-polling-add-select'),'轮询那个平铺下拉也要一起换掉，它是唯一没分组的一个');
 assert(!source.includes('toggleCategorizedProviderOptions'),'obsolete category expansion button must be removed');
 
 // ── 加供应商时顺手维护费用和缓存策略（2026-08-23 用户要求）─────────────────

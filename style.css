@@ -1666,6 +1666,25 @@ body.dark .ds-fact-error{background:#30271c;color:#dfbd83;border-color:#c68b42}
 .api-assign-grid select:disabled{opacity:.62;cursor:default}
 .api-assign-grid input[readonly]{cursor:default}
 
+/* 供应商两级选择器（2026-08-24）。外形贴着它替掉的那个 <select>，点开是文件夹弹层。
+   值放在同一个 label 里的隐藏 input 上，读值的老代码不用改。 */
+.provider-pick-value{display:none!important}
+.provider-pick-btn{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  width:100%;min-width:0;max-width:100%;padding:8px 12px;
+  border:1.5px solid var(--ck-border);border-radius:8px;
+  background:var(--ck-bg-soft);color:var(--ck-text);
+  font-size:13px;font-family:inherit;text-align:left;cursor:pointer;
+}
+.provider-pick-btn:hover{border-color:var(--ck-accent)}
+.provider-pick-btn:focus-visible{outline:2px solid var(--ck-accent);outline-offset:1px}
+.provider-pick-name,
+.provider-pick-meta{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.provider-pick-name{font-weight:600;line-height:1.35}
+.provider-pick-meta{font-size:11.5px;line-height:1.3;color:var(--ck-muted)}
+.provider-pick-btn.empty .provider-pick-name{font-weight:500;color:var(--ck-muted)}
+.api-polling-add .provider-pick-btn{flex:1 1 220px;width:auto}
+
 .prov-card{
   position:relative;
   background:var(--ck-surface);border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);

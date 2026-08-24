@@ -55,7 +55,12 @@ function pollingContext(apiProviders,extra){
     providerDisplayName:p=>(p&&p.name)||'未命名供应商',
     renderApiConfig:()=>{},
     toast:msg=>{toasts.push(String(msg))},
-    document:{getElementById:id=>(context.__dom&&context.__dom[id])||null},
+    document:{
+      getElementById:id=>(context.__dom&&context.__dom[id])||null,
+      // 2026-08-24：「加入轮询」从原生 <select id=api-polling-add-select> 换成了两级选择器，
+      // 值挂在 .api-polling-add 里的隐藏 input 上，所以这个桩要支持 querySelector。
+      querySelector:sel=>(context.__dom&&context.__dom[sel])||null
+    },
     localStorage:{
       getItem:k=>(k in store?store[k]:null),
       setItem:(k,v)=>{store[k]=String(v)},
@@ -67,6 +72,8 @@ function pollingContext(apiProviders,extra){
   context.__store=store;
   context.__toasts=toasts;
   context.__dom=context.__dom||{};
+  // 模拟两级选择器选中了某个供应商：值就在 .api-polling-add 里那个隐藏 input 上。
+  context.__pick=id=>{context.__dom['.api-polling-add']={querySelector:()=>({value:id})}};
   return context;
 }
 
@@ -165,7 +172,7 @@ function testAddRemoveAndReorderStayInDraft(){
 
   assert.strictEqual(context.apiPollingAddable().map(p=>p.id).join(','),'B,C','已在队列里的不能再次出现在待添加里');
 
-  context.__dom['api-polling-add-select']={value:'B'};
+  context.__pick('B');
   context.addApiPollingProvider();
   assert.strictEqual(context.apiPollingDraftItems().map(x=>x.provider_id).join(','),'A,B','新加的排在队尾');
   assert.strictEqual(context.apiPollingDraftItems()[1].model,'m-b','新加的默认跟随供应商默认模型，不用再填一遍');
@@ -199,7 +206,7 @@ function testAddRejectsUnknownProvider(){
   const providers=library();
   providers.chat_polling={order:[]};
   const context=pollingContext(providers);
-  context.__dom['api-polling-add-select']={value:'不存在'};
+  context.__pick('不存在');
   context.addApiPollingProvider();
   assert.strictEqual(context.apiPollingDraftGet().order.length,0,'库里没有的供应商不能加进队列');
   assert.ok(context.__toasts.some(x=>x.indexOf('不在供应商库')>=0));

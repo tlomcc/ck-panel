@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v209-provider-price-and-strategy';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v210-digest-editable-auto-clean-provider-picker';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1399,6 +1399,12 @@ var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT=1000;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
+// 按轮数自动清理召回与图片（2026-08-24 用户要求，轮数自己维护、可开关）。
+// 和自动截断是两件事：截断丢掉整轮历史，这个只把历史里的图片和召回块摘掉，
+// 轮次本身留着。默认关，开了以后每满 N 个真实轮次执行一次。
+var CHAT_AUTO_CLEAN_DEFAULT_ROUNDS=100;
+var CHAT_AUTO_CLEAN_MIN_ROUNDS=5;
+var CHAT_AUTO_CLEAN_MAX_ROUNDS=5000;
 // 当日截断总结。每次真正丢掉历史的自动截断都会静默生成一条，成功不通知、失败才提示。
 // 条目归属的自然日按"被总结内容里最后一条消息"落在哪一天算：
 // 跨零点那一次截断（例如 23:50–00:20）因此算新一天的第一条，并作废前一天全部条目。
@@ -1539,32 +1545,26 @@ function chatStripLocalHistoryMediaAndRecall(targetMessages){
   });
   return stats;
 }
-async function chatCleanHistory(){
-  if(chatSending){
-    toast('正在请求中，先停止或等完成');
-    return;
-  }
-  if(!await chatShowCleanHistoryConfirm())return;
-  var cfg=chatLoadConfig();
-  var sessionId=cfg.sessionId||chatSessionId();
-  var panelKey=cfg.panelKey||'';
-  if(!panelKey){
-    toast('未配置面板 Key');
-    return;
-  }
+// 清理历史里的图片和召回块。手动清理（➕ 里那个按钮）和按轮自动清理共用这一份：
+// 网关侧是同一个幂等接口，本地剥离也必须走同一套规则，否则两条路会各清一半。
+// 返回 {ok, images, recalls, error}，通知与确认交给调用方，核心只管清。
+async function chatCleanHistoryCore(cfg){
+  cfg=cfg||chatLoadConfig();
+  var panelKey=String(cfg.panelKey||'').trim();
+  if(!panelKey)return {ok:false,error:'未配置面板 Key'};
   var currentSession=chatCurrentSession();
+  if(!currentSession)return {ok:false,error:'没有可清理的会话'};
   var cleanSessionId=currentSession.id;
   var transport=chatLimitArray(currentSession.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES);
   var windowMessages=chatWindowContextMessages();
   var visibleCounts=chatCleanHistoryVisibleCounts();
-  var url=chatCleanEndpoint(cfg);
   try{
-    var resp=await fetch(url,{
+    var resp=await fetch(chatCleanEndpoint(cfg),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         key:panelKey,
-        session_id:sessionId,
+        session_id:cfg.sessionId||chatSessionId(),
         model:cfg.model,
         api_base:cfg.apiBase,
         upstream_key:cfg.upstreamKey,
@@ -1580,10 +1580,7 @@ async function chatCleanHistory(){
         visible_counts:visibleCounts
       })
     });
-    if(!resp.ok){
-      toast('清理失败：'+resp.status);
-      return;
-    }
+    if(!resp.ok)return {ok:false,error:'HTTP '+resp.status};
     var data=await resp.json();
     var targetSession=chatSessions.find(function(x){return x.id===cleanSessionId})||currentSession;
     var stillActive=(chatActiveSessionId===cleanSessionId);
@@ -1601,17 +1598,37 @@ async function chatCleanHistory(){
     chatSaveSessions();
     chatRenderSessions();
     if(stillActive)chatRenderMessages();
-    var imgCount=Math.max(Number(data.images_removed||0)||0,localStats.images||0,visibleCounts.images||0);
-    var recallCount=Math.max(Number(data.recalls_removed||0)||0,localStats.recalls||0,visibleCounts.recalls||0);
-    if(imgCount===0&&recallCount===0){
-      toast('没有可清理的内容',3000);
-    }else{
-      toast('已清理 '+imgCount+' 张图片 / '+recallCount+' 条召回',3000);
-    }
-    chatTogglePlus(false);
+    return {
+      ok:true,
+      sessionId:cleanSessionId,
+      images:Math.max(Number(data.images_removed||0)||0,localStats.images||0,visibleCounts.images||0),
+      recalls:Math.max(Number(data.recalls_removed||0)||0,localStats.recalls||0,visibleCounts.recalls||0)
+    };
   }catch(err){
-    toast('清理失败：'+err.message);
+    return {ok:false,error:String((err&&err.message)||err)};
   }
+}
+async function chatCleanHistory(){
+  if(chatSending){
+    toast('正在请求中，先停止或等完成');
+    return;
+  }
+  if(!await chatShowCleanHistoryConfirm())return;
+  var cfg=chatLoadConfig();
+  var result=await chatCleanHistoryCore(cfg);
+  if(!result.ok){
+    toast('清理失败：'+result.error);
+    return;
+  }
+  // 手动清理也把按轮计数对齐到当前轮：刚清完不该再马上被自动清一次。
+  chatAutoCleanMarkDone(result.sessionId);
+  if(result.images===0&&result.recalls===0){
+    toast('没有可清理的内容',3000);
+  }else{
+    toast('已清理 '+result.images+' 张图片 / '+result.recalls+' 条召回',3000);
+  }
+  chatRenderAutoCleanState(cfg);
+  chatTogglePlus(false);
 }
 function chatWorldbookId(){
   return 'wb-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
@@ -1759,6 +1776,26 @@ function chatAutoTrimConfigFrom(cfg){
     keep:cfg.autoTrimKeepRounds,
     roundLimitEnabled:cfg.autoTrimRoundLimitEnabled===true,
     roundLimit:cfg.autoTrimRoundLimit
+  });
+}
+// 按轮数自动清理召回与图片。轮数只做上下限约束，不跟保留轮数联动——它不删轮次，
+// 和截断的"保留 N 轮"没有互相依赖的关系。
+function chatNormalizeAutoCleanConfig(raw){
+  raw=(raw&&typeof raw==='object')?raw:{};
+  var rounds=chatPositiveIntOrDefault(
+    raw.rounds!==undefined?raw.rounds:(raw.everyRounds!==undefined?raw.everyRounds:raw.every_rounds),
+    CHAT_AUTO_CLEAN_DEFAULT_ROUNDS
+  );
+  return {
+    enabled:raw.enabled===true||raw.enabled==='true',
+    rounds:Math.max(CHAT_AUTO_CLEAN_MIN_ROUNDS,Math.min(CHAT_AUTO_CLEAN_MAX_ROUNDS,rounds))
+  };
+}
+function chatAutoCleanConfigFrom(cfg){
+  cfg=cfg||{};
+  return chatNormalizeAutoCleanConfig({
+    enabled:cfg.autoCleanEnabled===true,
+    rounds:cfg.autoCleanRounds
   });
 }
 function chatCurrentCostPricing(){
@@ -2185,6 +2222,8 @@ function chatDefaultConfig(){
     autoTrimPrefixSilent:false,
     autoTrimRoundLimitEnabled:false,
     autoTrimRoundLimit:CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT,
+    autoCleanEnabled:false,
+    autoCleanRounds:CHAT_AUTO_CLEAN_DEFAULT_ROUNDS,
     settingsOpen:false,
     chatSideTab:'model',
     memoryPreview:'',
@@ -2607,6 +2646,9 @@ function chatLoadConfig(){
   cfg.autoTrimPrefixSilent=trim.prefixSilent;
   cfg.autoTrimRoundLimitEnabled=trim.roundLimitEnabled;
   cfg.autoTrimRoundLimit=trim.roundLimit;
+  var autoClean=chatAutoCleanConfigFrom(cfg);
+  cfg.autoCleanEnabled=autoClean.enabled;
+  cfg.autoCleanRounds=autoClean.rounds;
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   return cfg;
 }
@@ -2638,6 +2680,9 @@ function chatSaveConfigObject(cfg){
   cfg.autoTrimRoundLimit=trim.roundLimit;
   delete cfg.autoTrimThreshold;
   delete cfg.autoTrimDrop;
+  var autoCleanSave=chatAutoCleanConfigFrom(cfg);
+  cfg.autoCleanEnabled=autoCleanSave.enabled;
+  cfg.autoCleanRounds=autoCleanSave.rounds;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
@@ -3369,6 +3414,8 @@ function chatNormalizeSession(s){
     cacheLastReadAt:Number(s.cacheLastReadAt||0)||0,
     cacheLastReadTokens:Number(s.cacheLastReadTokens||0)||0,
     cacheGeneration:Number(s.cacheGeneration||0)||0,
+    // 上一次（手动或自动）清理召回与图片时的真实轮号，按轮自动清理的基线。
+    autoCleanLastRound:Number(s.autoCleanLastRound||0)||0,
     firstUserText:String(s.firstUserText||'').slice(0,3000),
     firstUserTs:Number(s.firstUserTs||0)||0
   };
@@ -3496,6 +3543,10 @@ function chatReadForm(){
     roundLimitEnabled:chatFieldChecked('chat-auto-trim-round-limit-enabled',saved.autoTrimRoundLimitEnabled===true),
     roundLimit:chatFieldValue('chat-auto-trim-round-limit',saved.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT)
   });
+  var cleanCfg=chatNormalizeAutoCleanConfig({
+    enabled:chatFieldChecked('chat-auto-clean-enabled',saved.autoCleanEnabled===true),
+    rounds:chatFieldValue('chat-auto-clean-rounds',saved.autoCleanRounds||CHAT_AUTO_CLEAN_DEFAULT_ROUNDS)
+  });
   var cfg={
     gatewayUrl:GRAPH_API_BASE,
     panelKey:String(chatFieldValue('chat-panel-key',saved.panelKey||'')||'').trim(),
@@ -3525,6 +3576,8 @@ function chatReadForm(){
     autoTrimPrefixSilent:trimCfg.prefixSilent,
     autoTrimRoundLimitEnabled:trimCfg.roundLimitEnabled,
     autoTrimRoundLimit:trimCfg.roundLimit,
+    autoCleanEnabled:cleanCfg.enabled,
+    autoCleanRounds:cleanCfg.rounds,
     settingsOpen:settings?settings.classList.contains('open'):false,
     chatSideTab:activePanelTab||saved.chatSideTab||'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
@@ -3565,6 +3618,9 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-auto-trim-keep',trimCfg.keep);
   chatSetFieldChecked('chat-auto-trim-round-limit-enabled',trimCfg.roundLimitEnabled);
   chatSetFieldValue('chat-auto-trim-round-limit',trimCfg.roundLimit);
+  var cleanCfg=chatAutoCleanConfigFrom(cfg);
+  chatSetFieldChecked('chat-auto-clean-enabled',cleanCfg.enabled);
+  chatSetFieldValue('chat-auto-clean-rounds',cleanCfg.rounds);
   var costPricing=chatNormalizeCostPricing(cfg.costPricing);
   chatSetFieldValue('chat-cost-mode',costPricing.mode);
   chatSetFieldValue('chat-cost-currency',costPricing.currency);
@@ -3584,6 +3640,7 @@ function chatWriteForm(cfg){
   chatUpdateSplitReplyButton(cfg);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatRenderDailyDigest(cfg);
+  chatRenderAutoCleanState(cfg);
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
   chatRenderWorldbooks(cfg);
@@ -3673,6 +3730,7 @@ function chatSaveConfig(silent){
   chatRenderBackendSwitchNotificationState();
   chatRenderCostPricingModeHint(cfg.costPricing&&cfg.costPricing.mode);
   chatRenderDailyDigest(cfg);
+  chatRenderAutoCleanState(cfg);
   chatRenderDebugRecords();
   if(!silent)toast('聊天配置已保存');
   return cfg;
@@ -4745,7 +4803,8 @@ function chatDebugRecordTopic(record,text){
   if(ev==='usage'||ev==='done')return 'usage';
   if(ev==='latency')return 'timing';
   if(ev==='intent_rewrite'||ev==='memory')return 'recall';
-  if(ev==='daily_digest'||ev==='daily_digest_wait')return 'trim';
+  if(ev==='daily_digest'||ev==='daily_digest_wait'||ev==='daily_digest_edit')return 'trim';
+  if(ev==='auto_clean')return 'recall';
   if(ev==='gateway')return 'other';
   if(ev==='debug'){
     if(data.mode==='new_session')return 'request';
@@ -5058,6 +5117,14 @@ function chatFormatDebug(ev,data){
       stopped:'已被停止，不再等待'
     }[String(data.outcome||'')]||String(data.outcome||'-');
     return '⏳ 截断总结等待｜'+waitLabel+'｜等了 '+(data.wait_ms||0)+'ms／上限 '+(data.limit_ms||0)+'ms｜触发：'+(data.trigger||'-')+'｜丢弃 '+(data.dropped||0)+' 轮';
+  }
+  if(ev==='daily_digest_edit'){
+    return '✍️ 当日截断总结｜手工编辑已保存｜'+(data.mode==='merge'?'合并成一条':'按时段替换')+
+      '｜'+(data.before||0)+' 条 → '+(data.after||0)+' 条｜下一轮注入 '+(data.chars||0)+' 字';
+  }
+  if(ev==='auto_clean'){
+    if(data.ok===false)return '⚠️ 按轮自动清理失败｜第 '+(data.rounds||0)+' 轮（每 '+(data.every||0)+' 轮一次）｜'+(data.error||'未知原因');
+    return '🧽 按轮自动清理｜第 '+(data.rounds||0)+' 轮（每 '+(data.every||0)+' 轮一次）｜清掉 '+(data.images||0)+' 张图片 / '+(data.recalls||0)+' 条召回';
   }
   if(ev==='speech_preference_prepare'){
     if(data.skipped)return '🗣 措辞偏好提取｜跳过：'+data.skipped;
@@ -5526,6 +5593,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       cacheLastReadAt:s.cacheLastReadAt||0,
       cacheLastReadTokens:s.cacheLastReadTokens||0,
       cacheGeneration:s.cacheGeneration||0,
+      autoCleanLastRound:s.autoCleanLastRound||0,
       firstUserText:String(s.firstUserText||'').slice(0,3000),
       firstUserTs:s.firstUserTs||0
     };
@@ -5589,6 +5657,9 @@ function chatStartIndexedDbSessionLoad(){
       if(chatInitialized){
         chatRenderSessions();
         chatRenderMessages();
+        // 记忆块里的当日截断总结也要重画：init 时那次渲染读的是 localStorage 摘要，
+        // 权威全量刚在这里回填，不补这一下刷新页面后那块就一直是空的。
+        chatRenderDailyDigest(cfg);
         chatUpdateRuntime(cfg);
       }
       return chatSessions;
@@ -6412,6 +6483,8 @@ function chatDailyDigestNormalize(list){
       rounds:Number(row.rounds||0)||0,
       mergedCount:Number(row.mergedCount||row.merged_count||0)||0,
       trigger:String(row.trigger||''),
+      // 用户在记忆块里手改过的条目要留标记：注入的是他改后的版本，界面上也得说清楚。
+      edited:row.edited===true||row.edited==='true',
       createdAt:Number(row.createdAt||row.created_at||0)||0
     });
   });
@@ -6498,25 +6571,155 @@ function chatDailyDigestSetStatus(text,kind){
 function chatDailyDigestDisplayText(entries){
   return (entries||[]).map(chatDailyDigestBlockText).join('\n\n');
 }
-function chatRenderDailyDigest(cfg){
+/* ---- 记忆块里的当日截断总结：可编辑 ---- */
+// 用户要求（2026-08-24）：模型写太长或写偏时，他要能在记忆块里直接二次总结再保存。
+// 编辑期间绝不能被自动渲染覆盖：后台落地一条新总结、切个 tab、保存一次别的设置都会
+// 走到 chatRenderDailyDigest，直接写 value 就会把用户打了一半的字抹掉。
+var chatDailyDigestEditDirty=false;
+var chatDailyDigestEditSessionId='';
+// 最近一次生成失败的原因。空着的记忆块必须说得出是"今天没截断"还是"生成失败了"，
+// 否则用户只能看到一个空框，没法判断要不要重试。
+var chatDailyDigestLastError='';
+function chatDailyDigestMarkEdited(){
+  chatDailyDigestEditDirty=true;
+  chatDailyDigestEditSessionId=String((chatCurrentSession()||{}).id||'');
+  chatDailyDigestSetStatus('有未保存的修改，点「保存总结正文」才会生效。');
+}
+function chatRenderDailyDigest(cfg,opts){
   cfg=cfg||chatLoadConfig();
+  opts=opts||{};
   var session=chatCurrentSession();
   var pruned=chatDailyDigestPrune(session);
   if(pruned.changed)chatSaveSessions();
   var entries=pruned.entries;
-  chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestDisplayText(entries));
+  var sessionId=String((session||{}).id||'');
+  // 换了会话就别再护着上一个会话的草稿，那份文字对当前会话没有意义。
+  if(chatDailyDigestEditDirty&&chatDailyDigestEditSessionId!==sessionId)chatDailyDigestEditDirty=false;
+  var keepDraft=chatDailyDigestEditDirty&&opts.force!==true;
+  if(!keepDraft)chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestDisplayText(entries));
   chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
   var hint=document.getElementById('chat-daily-digest-hint');
   if(hint){
+    var edited=entries.filter(function(row){return row.edited===true}).length;
     if(cfg.dailyDigestEnabled===false){
       hint.textContent='已关闭：截断时不再生成总结，已有条目也不会注入。';
+    }else if(!entries.length&&chatDailyDigestLastError){
+      hint.textContent='空的原因是最近一次生成失败："'+chatDailyDigestLastError+'"。可以直接在这里手写今天的总结再保存。';
     }else if(!entries.length){
-      hint.textContent='今天还没有发生过截断。截断成功时静默生成，不会打扰你。';
+      hint.textContent='今天还没有发生过截断。截断成功时静默生成，不会打扰你；也可以直接在这里手写一段再保存。';
     }else{
       var chars=chatDailyDigestPack(cfg,session).length;
-      hint.textContent='今天 '+entries.length+' 条 · 注入 '+chars+' 字 · 位置：系统缓存断点之前（和系统提示词一起进缓存）。明天零点自动作废。';
+      hint.textContent='今天 '+entries.length+' 条'+(edited?('（'+edited+' 条已手工编辑）'):'')+
+        ' · 注入 '+chars+' 字 · 位置：系统缓存断点之前（和系统提示词一起进缓存）。明天零点自动作废。'+
+        '正文可以直接改：保留【时段】那一行就按条替换，整段删成一段没有【】的文字就合并成一条。';
     }
   }
+  if(keepDraft)chatDailyDigestSetStatus('有未保存的修改，点「保存总结正文」才会生效。');
+  return entries;
+}
+// 编辑回写。两种写法都接受，谁都不用记规则：
+//   1. 保留【时段】那些行 —— 按时段逐条替换正文；正文清空或整块删掉就是删这一条。
+//   2. 整段不带【】 —— 把今天所有条目合并成一条，时间范围取并集，正文用用户写的。
+// 今天本来没有条目时直接写字也算数：等于手写一条今天的总结。
+var CHAT_DAILY_DIGEST_HEADER_RE=/^【([^】]*)】\s*$/;
+function chatDailyDigestEditedCopy(entry,text){
+  var next={};
+  Object.keys(entry||{}).forEach(function(key){next[key]=entry[key]});
+  if(String(text||'')!==String((entry&&entry.text)||''))next.edited=true;
+  next.text=String(text||'');
+  return next;
+}
+function chatDailyDigestMergeEdit(text,entries){
+  text=String(text||'').trim();
+  if(!text)return [];
+  entries=entries||[];
+  var startTs=0,endTs=0,rounds=0,mergedCount=0;
+  entries.forEach(function(row){
+    var s=Number(row.startTs||0)||0,e=Number(row.endTs||0)||0;
+    if(s)startTs=startTs?Math.min(startTs,s):s;
+    if(e>endTs)endTs=e;
+    rounds+=Number(row.rounds||0)||0;
+    mergedCount+=Number(row.mergedCount||0)||0;
+  });
+  if(!endTs)endTs=Date.now();
+  if(!startTs)startTs=endTs;
+  var last=entries.length?entries[entries.length-1]:null;
+  return [{
+    id:String((last&&last.id)||('dg-'+endTs+'-'+Math.random().toString(36).slice(2,7))),
+    startTs:startTs,
+    endTs:endTs,
+    dayKey:String((last&&last.dayKey)||chatDailyDigestDayKey(endTs)),
+    text:text,
+    rounds:rounds,
+    mergedCount:mergedCount+Math.max(0,entries.length-1),
+    trigger:String((last&&last.trigger)||'manual_edit'),
+    edited:true,
+    createdAt:Number((last&&last.createdAt)||0)||Date.now()
+  }];
+}
+function chatDailyDigestParseEdit(raw,entries){
+  entries=(entries||[]).slice();
+  var lines=String(raw==null?'':raw).replace(/\r\n/g,'\n').split('\n');
+  var sections=[],lead=[];
+  lines.forEach(function(line){
+    var m=line.match(CHAT_DAILY_DIGEST_HEADER_RE);
+    if(m){sections.push({label:String(m[1]||'').trim(),lines:[]});return}
+    (sections.length?sections[sections.length-1].lines:lead).push(line);
+  });
+  function body(rows){return rows.join('\n').trim()}
+  if(!sections.length)return {mode:'merge',entries:chatDailyDigestMergeEdit(body(lead),entries)};
+  if(body(lead))return {error:'第一个【时段】上面不能再写内容：要么每段都跟在自己的【时段】下面，要么整段都不写【】（那样会合并成一条）。'};
+  var out=[];
+  for(var i=0;i<sections.length;i++){
+    var label=sections[i].label,hit=-1;
+    for(var j=0;j<entries.length;j++){
+      if(chatDailyDigestRangeLabel(entries[j])===label){hit=j;break}
+    }
+    if(hit<0)return {error:'找不到时段「'+label+'」对应的条目。别改【】里的时间，只改下面的正文；想合成一条就把所有【】都删掉。'};
+    var entry=entries.splice(hit,1)[0];
+    var text=body(sections[i].lines);
+    if(!text)continue;
+    out.push(chatDailyDigestEditedCopy(entry,text));
+  }
+  return {mode:'blocks',entries:out};
+}
+function chatSaveDailyDigestText(){
+  var el=document.getElementById('chat-daily-digest-pack');
+  if(!el)return null;
+  var cfg=chatLoadConfig();
+  var session=chatCurrentSession();
+  if(!session){toast('没有可保存的会话');return null}
+  var before=chatDailyDigestEntries(session);
+  var parsed=chatDailyDigestParseEdit(el.value,before);
+  if(parsed.error){
+    chatDailyDigestSetStatus(parsed.error,'error');
+    toast(parsed.error,6000,{type:'error',closable:true,pauseOnHover:true});
+    return null;
+  }
+  var next=chatDailyDigestNormalize(parsed.entries);
+  session.dailyDigests=next;
+  session.updated=Date.now();
+  chatSaveSessions();
+  chatDailyDigestEditDirty=false;
+  chatDailyDigestLastError='';
+  chatRenderDailyDigest(cfg,{force:true});
+  var chars=chatDailyDigestPack(cfg,session).length;
+  chatDebug('daily_digest_edit',{
+    ok:true,mode:parsed.mode,before:before.length,after:next.length,chars:chars
+  });
+  chatDailyDigestSetStatus(
+    next.length
+      ?'已保存：'+next.length+' 条 · 下一轮注入 '+chars+' 字'
+      :'已保存：今天的总结已清空，不再注入。',
+    'ok'
+  );
+  toast(next.length?'当日截断总结已保存':'当日截断总结已清空');
+  return next;
+}
+function chatResetDailyDigestText(){
+  chatDailyDigestEditDirty=false;
+  var entries=chatRenderDailyDigest(chatLoadConfig(),{force:true});
+  chatDailyDigestSetStatus('已恢复为当前存档'+(entries.length?('（'+entries.length+' 条）'):'（今天还没有条目）'),'ok');
   return entries;
 }
 function chatSaveDailyDigestSetting(auto){
@@ -6691,7 +6894,9 @@ async function chatDailyDigestRequest(cfg,job){
     session.dailyDigests=chatDailyDigestNormalize(kept);
     session.updated=Date.now();
     chatSaveSessions();
-    chatRenderDailyDigest(cfg);
+    chatDailyDigestLastError='';
+    // 新总结落地时以存档为准：用户手上那份草稿已经作废了，强制刷成最新内容。
+    chatRenderDailyDigest(cfg,{force:true});
     chatDebug('daily_digest',{
       ok:true,merged:merged,chars:text.length,rounds:entry.rounds,day_key:dayKey,
       range:chatDailyDigestRangeLabel(entry),entries:session.dailyDigests.length,
@@ -6705,11 +6910,13 @@ async function chatDailyDigestRequest(cfg,job){
   }catch(error){
     if(timedOut)error=new Error('总结超时（'+Math.round(CHAT_DAILY_DIGEST_TIMEOUT_MS/1000)+' 秒）');
     var errorText=String((error&&error.message)||error).slice(0,300);
+    chatDailyDigestLastError=errorText;
     chatDebug('daily_digest',{ok:false,messages:messages.length,duration_ms:Date.now()-started,error:errorText});
     // 成功静默、失败才出声：这批对话已经被截断掉了，用户需要知道这段记忆没接上。
     chatDailyDigestSetStatus('最近一次截断总结失败：'+errorText,'error');
     toast('当日截断总结失败，这段被截断的对话没能接上：'+errorText,6000,{type:'error',closable:true,pauseOnHover:true});
     if(pruned.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
+    else chatRenderDailyDigest(cfg);
     return null;
   }finally{
     if(timer)clearTimeout(timer);
@@ -7017,6 +7224,102 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
     chatDebug('auto_trim_idle_error',{error:String((error&&error.message)||error).slice(0,200)});
   }finally{
     chatIdleTrimBusy=false;
+  }
+}
+/* ---- 每 N 轮自动清理召回与图片（2026-08-24 用户要求）---- */
+// 和自动截断刻意分开：截断丢轮次、这个只摘掉历史里的图片和召回块，轮次留着。
+// 判定基线存在会话上（autoCleanLastRound），不是全局计数器——换会话、开新窗口都该重新起算。
+var chatAutoCleanBusy=false;
+var chatAutoCleanLastCheckAt=0;
+function chatAutoCleanSessionById(sessionId){
+  sessionId=String(sessionId||'');
+  if(!sessionId)return chatCurrentSession();
+  for(var i=0;i<chatSessions.length;i++){
+    if(String(chatSessions[i]&&chatSessions[i].id||'')===sessionId)return chatSessions[i];
+  }
+  return chatCurrentSession();
+}
+function chatAutoCleanLastRound(session){
+  return Number((session||{}).autoCleanLastRound||0)||0;
+}
+// 清完（手动也算）把基线对齐到当前轮：否则刚手动清过，下一次检查还会立刻自动再清一遍。
+function chatAutoCleanMarkDone(sessionId,round){
+  var session=chatAutoCleanSessionById(sessionId);
+  if(!session)return 0;
+  var count=Number(round);
+  if(!isFinite(count)||count<=0)count=chatCurrentConversationRoundCount();
+  session.autoCleanLastRound=Math.max(0,Math.floor(count)||0);
+  session.updated=Date.now();
+  chatSaveSessions();
+  return session.autoCleanLastRound;
+}
+function chatRenderAutoCleanState(cfg){
+  var el=document.getElementById('chat-auto-clean-state');
+  if(!el)return;
+  cfg=cfg||chatLoadConfig();
+  var clean=chatAutoCleanConfigFrom(cfg);
+  var session=chatCurrentSession();
+  var count=chatCurrentConversationRoundCount();
+  var last=chatAutoCleanLastRound(session);
+  if(last>count)last=0;
+  if(!clean.enabled){
+    el.textContent='已关闭：只有点 ➕ 里的「清理」才会清。当前 '+count+' 轮。';
+    return;
+  }
+  var remain=Math.max(0,clean.rounds-(count-last));
+  el.textContent='已开启：每 '+clean.rounds+' 轮清一次。当前 '+count+' 轮，上次清理在第 '+last+
+    ' 轮，还差 '+remain+' 轮（下一次在第 '+(last+clean.rounds)+' 轮）。';
+}
+function chatSaveAutoCleanSetting(auto){
+  var cfg=chatSaveConfig(true);
+  var clean=chatAutoCleanConfigFrom(cfg);
+  chatRenderAutoCleanState(cfg);
+  if(!auto){
+    toast(clean.enabled?('已保存：每 '+clean.rounds+' 轮自动清理一次召回与图片'):'已保存：自动清理已关闭');
+  }
+  return cfg;
+}
+// 页面在线时的执行路径，挂在既有的 15 秒定时器和"回复落定"那一下上，不新开定时器。
+async function chatMaybeAutoCleanByRounds(opts){
+  opts=opts||{};
+  if(chatAutoCleanBusy||chatSending||chatIdleTrimBusy||chatSpeechPreferenceManualBusy)return;
+  if(currentPanelTab!=='chat')return;
+  if(chatEditingIndex>=0)return;
+  var now=Date.now();
+  if(opts.forceCheck!==true&&now-chatAutoCleanLastCheckAt<30000)return;
+  chatAutoCleanLastCheckAt=now;
+  var cfg=chatLoadConfig();
+  var clean=chatAutoCleanConfigFrom(cfg);
+  if(!clean.enabled)return;
+  if(!String(cfg.panelKey||'').trim())return;
+  var session=chatCurrentSession();
+  if(!session)return;
+  if(chatPendingMessages().length)return;
+  var count=chatCurrentConversationRoundCount();
+  if(count<=0)return;
+  var last=chatAutoCleanLastRound(session);
+  // 截断会把轮数拉回去，基线比当前轮还大时必须跟着回退，否则清理被永远推迟。
+  if(last>count)last=0;
+  if(count-last<clean.rounds)return;
+  chatAutoCleanBusy=true;
+  try{
+    var result=await chatCleanHistoryCore(cfg);
+    if(!result||!result.ok){
+      chatDebug('auto_clean',{ok:false,rounds:count,every:clean.rounds,
+        error:String((result&&result.error)||'unknown').slice(0,200)});
+      return;
+    }
+    chatAutoCleanMarkDone(result.sessionId,count);
+    chatRenderAutoCleanState(cfg);
+    chatDebug('auto_clean',{ok:true,rounds:count,every:clean.rounds,
+      images:result.images,recalls:result.recalls});
+    // 必须出声：图片会当场从消息里消失，静默处理会让人以为面板出错了。
+    toast('已到 '+count+' 轮：自动清理了 '+result.images+' 张图片 / '+result.recalls+' 条召回',4000);
+  }catch(error){
+    chatDebug('auto_clean',{ok:false,rounds:count,every:clean.rounds,
+      error:String((error&&error.message)||error).slice(0,200)});
+  }finally{
+    chatAutoCleanBusy=false;
   }
 }
 function chatWindowContextMessages(){
@@ -7389,9 +7692,24 @@ function chatRenderMarkdown(src){
       out.push(th+'</tbody></table>');i=j;continue;
     }
     if(/^\s*([-*+]|\d+\.)\s+/.test(line)){
-      var ordered=/^\s*\d+\.\s+/.test(line);var re=ordered?/^\s*\d+\.\s+(.*)$/:/^\s*[-*+]\s+(.*)$/;var items=[];
-      while(i<lines.length&&re.test(lines[i])){items.push(lines[i].match(re)[1]);i++}
-      var tag=ordered?'ol':'ul';out.push('<'+tag+'>'+items.map(function(it){return '<li>'+chatMdInline(it)+'</li>'}).join('')+'</'+tag+'>');continue;
+      // 有序列表必须保留作者写的起始序号并输出 start=。分条模式下"2. 第二步"会单独成一条消息、
+      // 单独渲染一次，丢掉这个数字就会让每条都从 1 开始，用户看到的就是 1. 1. 1.。
+      var ordered=/^\s*\d+\.\s+/.test(line);
+      var re=ordered?/^\s*(\d+)\.\s+(.*)$/:/^\s*[-*+]\s+(.*)$/;
+      var items=[],startNo=0;
+      while(i<lines.length&&re.test(lines[i])){
+        var im=lines[i].match(re);
+        if(ordered){
+          if(!items.length)startNo=parseInt(im[1],10);
+          items.push(im[2]);
+        }else{
+          items.push(im[1]);
+        }
+        i++;
+      }
+      var tag=ordered?'ol':'ul';
+      var startAttr=(ordered&&startNo>1)?' start="'+startNo+'"':'';
+      out.push('<'+tag+startAttr+'>'+items.map(function(it){return '<li>'+chatMdInline(it)+'</li>'}).join('')+'</'+tag+'>');continue;
     }
     if(/^\s*$/.test(line)){i++;continue}
     var p=[];while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^(#{1,6})\s/.test(lines[i])&&!/^```/.test(lines[i])&&!/^\s*>/.test(lines[i])&&!/^\s*([-*+]|\d+\.)\s+/.test(lines[i])){p.push(lines[i]);i++}
@@ -8131,6 +8449,12 @@ function chatSwitchSideTab(tab,silent){
     chatScrollDebugBottom();
   }
   if(tab==='trim')chatRenderTrimState();
+  // 打开「记忆与缓存」时现算一遍：总结是异步落地的，光靠上一次渲染的快照会看到空框。
+  if(tab==='memory'){
+    var memoryCfg=chatLoadConfig();
+    chatRenderDailyDigest(memoryCfg);
+    chatRenderAutoCleanState(memoryCfg);
+  }
 }
 document.addEventListener('click',function(e){
   if(!e.target||!e.target.closest)return;
@@ -9055,6 +9379,8 @@ function chatInit(){
     // 1h 空闲自动截断的在线路径。函数内部自带 30s 节流和多重前置判断，
     // 不满足条件时立即返回，不会每 15 秒做重活。
     chatMaybeAutoTrimAtIdleBoundary();
+    // 按轮自动清理走同一个定时器，也自带 30s 节流和前置判断。
+    chatMaybeAutoCleanByRounds();
   },15000);
   if(input){
     chatAutosizeInput(input);
@@ -9666,6 +9992,8 @@ async function chatSubmitPendingMessages(options){
       // 第 y 轮回复刚落定时立刻复核轮数上限，不必等待 15 秒定时器。
       // forceCheck 只跳过 30 秒节流，函数内部仍会检查是否真的达到上限。
       setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
+      // 清理排在截断之后：先让截断决定这一轮还剩多少历史，再按最终轮数判断要不要清。
+      setTimeout(function(){chatMaybeAutoCleanByRounds({forceCheck:true})},0);
     }
   }
 }
@@ -10491,28 +10819,138 @@ function setModelSearchState(scope,models){
   input.placeholder=has?'搜索模型':'拉取模型后可搜索';
   filterModelOptions(input);
 }
-function providerOptionHtml(p,selected){
-  return '<option value="'+escAttr(p.id)+'"'+(p.id===selected?' selected':'')+'>'+esc(providerDisplayName(p))+'</option>';
+/* ---- 选供应商：按文件夹分层的两级选择器（2026-08-24 用户要求）---- */
+// 为什么不再用原生 <select> + <optgroup>：optgroup 不能折叠，25 个供应商照样一次全铺出来，
+// 用户明确说过"还是会出来一串，翻找很麻烦"。这里改成先点文件夹、再点里面的供应商，
+// 复用面板既有的 ckChooseDialog（自带 Esc、焦点陷阱、移动端可点）。
+// 「未分类」是只在选择时出现的虚拟文件夹：供应商页刻意不显示它（用户要求），
+// 但选的时候必须有个地方装那些没归类的，否则它们就没处可去。恒定排在最后。
+var PROVIDER_PICKER_LOOSE_LABEL='未分类';
+function providerCategoryLabel(p){
+  return String((p&&p.category)||'').trim()||PROVIDER_PICKER_LOOSE_LABEL;
 }
-function providerOptionsHtml(selected,showCategorized){
-  var html='<option value="">不选择</option>';
-  var categorized={},loose=[];
-  providerLibraryList().forEach(function(p){
-    var category=String(p.category||'').trim();
+function providerPickerGroups(list){
+  var named={},order=[],loose=[];
+  (list||[]).forEach(function(p){
+    var category=String((p&&p.category)||'').trim();
     if(!category){loose.push(p);return}
-    (categorized[category]||(categorized[category]=[])).push(p);
+    if(!named[category]){named[category]=[];order.push(category)}
+    named[category].push(p);
   });
-  Object.keys(categorized).sort(function(a,b){
-    return a.localeCompare(b,'zh-CN');
-  }).forEach(function(category){
-    html+='<optgroup label="'+escAttr(category)+'">';
-    categorized[category].forEach(function(p){
-      html+=providerOptionHtml(p,selected);
+  order.sort(function(a,b){return a.localeCompare(b,'zh-CN')});
+  var groups=order.map(function(name){return {name:name,providers:named[name]}});
+  if(loose.length)groups.push({name:PROVIDER_PICKER_LOOSE_LABEL,providers:loose});
+  return groups;
+}
+function providerPickerFolder(groups,name){
+  for(var i=0;i<groups.length;i++){if(groups[i].name===name)return groups[i].providers.slice()}
+  return [];
+}
+function providerPickerButtonInner(p,emptyLabel){
+  return '<span class="provider-pick-name">'+esc(p?providerDisplayName(p):(emptyLabel||'点这里选供应商'))+'</span>'+
+    '<span class="provider-pick-meta">'+esc(p
+      ?(providerCategoryLabel(p)+(providerHost(p.url)?(' · '+providerHost(p.url)):''))
+      :'按文件夹分层，不用在一长串里翻')+'</span>';
+}
+// 值放在隐藏 input 上，class 保持 .assign-provider：readAssignmentRow / onAssignProviderChange
+// 都是按 class 取 .value 的，换成隐藏 input 后它们一行都不用改。
+function providerPickerHtml(selected,opts){
+  opts=opts||{};
+  var p=findLibraryProvider(selected);
+  var valueClass='provider-pick-value'+(opts.valueClass?(' '+opts.valueClass):'');
+  var attrs=' data-empty-label="'+escAttr(opts.emptyLabel||'点这里选供应商')+'"';
+  if(opts.scope)attrs+=' data-pick-scope="'+escAttr(opts.scope)+'"';
+  if(opts.allowEmpty)attrs+=' data-allow-empty="1"';
+  if(opts.title)attrs+=' data-pick-title="'+escAttr(opts.title)+'"';
+  return '<input class="'+escAttr(valueClass)+'" type="hidden" value="'+escAttr(selected||'')+'">'+
+    '<button class="provider-pick-btn'+(p?'':' empty')+'" type="button"'+attrs+
+      ' onclick="openProviderPicker(this)" aria-label="选择供应商">'+
+      providerPickerButtonInner(p,opts.emptyLabel)+
+    '</button>';
+}
+function providerPickerValueEl(button){
+  if(!button||!button.closest)return null;
+  var scope=button.closest('label')||button.closest('.api-polling-add')||button.parentNode;
+  return scope&&scope.querySelector?scope.querySelector('.provider-pick-value'):null;
+}
+function providerPickerRefresh(button){
+  var valueEl=providerPickerValueEl(button);
+  var p=findLibraryProvider(valueEl?valueEl.value:'');
+  button.classList.toggle('empty',!p);
+  button.innerHTML=providerPickerButtonInner(p,button.getAttribute('data-empty-label')||'');
+}
+// 两级选择：先文件夹、再供应商。只有一个文件夹时直接跳到第二级，不让用户白点一下。
+async function providerPickerChoose(list,current,opts){
+  opts=opts||{};
+  var groups=providerPickerGroups(list);
+  if(!groups.length)return null;
+  var multi=groups.length>1;
+  var currentProvider=findLibraryProvider(current);
+  var inList=currentProvider&&list.some(function(p){return p.id===currentProvider.id});
+  // 已经选过的，直接打开它所在的文件夹：一进来就能看到当前选择。
+  var open=multi?(inList?providerCategoryLabel(currentProvider):null):groups[0].name;
+  // 「全部」用独立布尔量表示，不拿魔法字符串当哨兵：真有一个文件夹叫那个名字就会撞车。
+  var flat=false;
+  while(true){
+    if(!flat&&open===null){
+      var folders=groups.map(function(group){
+        var mine=group.providers.some(function(p){return p.id===current});
+        return {
+          value:'folder:'+group.name,
+          label:'📁 '+group.name,
+          hint:group.providers.length+' 个'+(mine?' · 当前选择在这里':''),
+          active:mine
+        };
+      });
+      folders.push({value:'all',label:'📋 全部（'+list.length+' 个）',hint:'不分文件夹，平铺列出'});
+      if(opts.allowEmpty)folders.push({value:'none',label:'不选择',hint:'清空这一项',danger:true});
+      var folderAnswer=await ckChooseDialog(opts.title||'选择供应商',folders,{
+        message:'先点文件夹，再点里面的供应商。文件夹在「供应商」页每张卡片的「归类」里维护。'
+      });
+      if(folderAnswer===null||folderAnswer===undefined||folderAnswer==='')return null;
+      if(folderAnswer==='none')return '';
+      if(folderAnswer==='all')flat=true;
+      else if(folderAnswer.indexOf('folder:')===0)open=folderAnswer.slice(7);
+      // 认不出的值不当成选择：重画这一层，绝不拿它去 slice 出一个不存在的 id。
+      continue;
+    }
+    var inFolder=flat?list.slice():providerPickerFolder(groups,open);
+    var choices=inFolder.map(function(p){
+      var bits=[];
+      if(flat)bits.push(providerCategoryLabel(p));
+      var host=providerHost(p.url);
+      if(host)bits.push(host);
+      if(p.model)bits.push(p.model);
+      return {value:'id:'+p.id,label:providerDisplayName(p),hint:bits.join(' · '),active:p.id===current};
     });
-    html+='</optgroup>';
+    if(multi)choices.unshift({value:'back',label:'⬅ 返回文件夹',hint:'重新选一个文件夹'});
+    if(opts.allowEmpty)choices.push({value:'none',label:'不选择',hint:'清空这一项',danger:true});
+    var pick=await ckChooseDialog(flat?'全部供应商':('📁 '+open),choices,{message:'点一下就选中。'});
+    if(pick===null||pick===undefined||pick==='')return null;
+    if(pick==='back'){open=null;flat=false;continue}
+    if(pick==='none')return '';
+    if(pick.indexOf('id:')!==0)continue;
+    return pick.slice(3);
+  }
+}
+async function openProviderPicker(button){
+  var valueEl=providerPickerValueEl(button);
+  if(!valueEl)return;
+  var scope=String(button.getAttribute('data-pick-scope')||'');
+  // 轮询的「加入轮询」只列还没进队列的：把已经在队列里的也列出来，点了只会弹"已经在队列里了"。
+  var list=scope==='polling_add'?apiPollingAddable():providerLibraryList();
+  if(!list.length){
+    toast(scope==='polling_add'?'供应商库里的 API 已经全部加进队列了':'供应商库还是空的，先去「供应商」页添一个');
+    return;
+  }
+  var picked=await providerPickerChoose(list,String(valueEl.value||''),{
+    allowEmpty:button.getAttribute('data-allow-empty')==='1',
+    title:button.getAttribute('data-pick-title')||'选择供应商'
   });
-  loose.forEach(function(p){html+=providerOptionHtml(p,selected)});
-  return html;
+  if(picked===null||picked===undefined)return;
+  valueEl.value=picked;
+  providerPickerRefresh(button);
+  if(scope==='assign')onAssignProviderChange(valueEl);
 }
 function providerCategories(){
   var seen={};
@@ -10713,11 +11151,7 @@ function renderApiPolling(){
     html+='<span class="api-polling-add-note">供应商库里的 API 已经全部加进队列了。</span>'+
       '<button class="btn btn-outline btn-sm" type="button" onclick="switchApiTab(\'providers\')">再添一个供应商</button>';
   }else{
-    html+='<select id="api-polling-add-select" aria-label="选择要加入轮询的供应商">'+
-      addable.map(function(p){
-        var host=providerHost(p.url);
-        return '<option value="'+escAttr(p.id)+'">'+esc(providerDisplayName(p))+(host?('（'+esc(host)+'）'):'')+'</option>';
-      }).join('')+'</select>'+
+    html+=providerPickerHtml('',{scope:'polling_add',emptyLabel:'点这里挑一个供应商',title:'加入轮询 · 选择供应商'})+
       '<button class="btn btn-blue btn-sm" type="button" onclick="addApiPollingProvider()">加入轮询</button>';
   }
   html+='</div>';
@@ -10766,8 +11200,9 @@ function moveApiPolling(index,delta){
 }
 function addApiPollingProvider(){
   apiPollingCollectSwitches();
-  var select=document.getElementById('api-polling-add-select');
-  var id=String((select&&select.value)||'').trim();
+  var wrap=document.querySelector?document.querySelector('.api-polling-add'):null;
+  var valueEl=wrap?wrap.querySelector('.provider-pick-value'):null;
+  var id=String((valueEl&&valueEl.value)||'').trim();
   if(!id){toast('先选一个供应商');return}
   var provider=findLibraryProvider(id);
   if(!provider){toast('这个供应商已经不在供应商库里了');return}
@@ -11030,7 +11465,7 @@ function assignmentCardHtml(g){
     '<div class="api-group-head"><span class="api-group-title">'+esc(g.label)+'</span><button class="api-info-btn small" type="button" onclick="toggleInfo(this)" aria-label="查看说明">说明</button></div>'+
     '<div class="api-info-wrap"><div class="api-info-text">'+esc(g.info)+'</div></div>'+
     '<div class="api-assign-summary'+(p?'':' empty')+'">'+esc(providerText)+'</div>'+
-    '<div class="api-assign-grid"><label><span>供应商</span><select class="assign-provider" onchange="onAssignProviderChange(this)">'+providerOptionsHtml(slot.current,true)+'</select></label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
+    '<div class="api-assign-grid"><label><span>供应商</span>'+providerPickerHtml(slot.current,{scope:'assign',valueClass:'assign-provider',allowEmpty:true,title:'选择供应商 · '+g.label})+'</label><label><span>模型名</span><input class="assign-model" type="text" value="'+escAttr(selectedModel)+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"></label></div>'+
     '<div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="assign-model-select" onchange="pickAssignModel(this)">'+modelOptionsHtml(models,selectedModel)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchAssignmentModels(this)">拉取模型</button></div>'+
     '<div class="prov-model-hint">'+(models.length?'已缓存 '+models.length+' 个模型，可直接选择。Key 和站点地址在「供应商库」里管理。':'选择供应商后可拉取模型，也可以直接填写模型名。Key 和站点地址在「供应商库」里管理。')+'</div>'+
     '<div class="prov-actions"><button class="btn btn-blue prov-save" type="button" onclick="saveAssignment(this)">保存配置</button></div>'+
