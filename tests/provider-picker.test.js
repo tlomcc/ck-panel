@@ -185,6 +185,25 @@ function testWiring(){
 
   assert.ok(/\.provider-pick-value\{display:none!important\}/.test(css),'隐藏 input 必须真的不占位');
   assert.ok(/\.provider-pick-btn\{/.test(css),'选择器按钮要有样式，不能是裸 button');
+
+  // 点进文件夹后那一层：名称和 host·model 原来挤在同一行，长名字被挤成 clientWidth=0
+  // （headless 探针量到的原话「名称被挡住了」）。现在必须是上下两行、名称更大。
+  const wechat=fs.readFileSync(require('path').join(root,'wechat.css'),'utf8');
+  const rowRule=/\.ck-action-dialog \.ck-action-choice\{([^}]*)\}/.exec(wechat);
+  assert.ok(rowRule,'选择弹层每一行的规则必须还在');
+  assert.ok(/flex-direction:column!important/.test(rowRule[1]),
+    '每一行必须竖排：横排时长名字会被 host·model 挤没');
+  const labelRule=/\.ck-action-dialog \.ck-action-choice-label\{([^}]*)\}/.exec(wechat);
+  assert.ok(labelRule,'名称那一行的规则必须还在');
+  const labelSize=/font-size:([\d.]+)px/.exec(labelRule[1]);
+  assert.ok(labelSize&&parseFloat(labelSize[1])>=15,'名称字号要比正文大（用户要求「字大一点显眼一点」）');
+  assert.ok(/white-space:normal!important/.test(labelRule[1]),'名称允许折行，绝不能再被截断');
+  const hintRule=/\.ck-action-dialog \.ck-action-choice small\{([^}]*)\}/.exec(wechat);
+  assert.ok(hintRule,'副信息那一小行的规则必须还在');
+  const hintSize=/font-size:([\d.]+)px/.exec(hintRule[1]);
+  assert.ok(hintSize&&parseFloat(hintSize[1])<parseFloat(labelSize[1]),'副信息要比名称小');
+  assert.ok(/font-weight:400!important/.test(hintRule[1]),
+    '副信息不跟着 .active 变粗，否则「不用那么显眼」就落空了');
 }
 
 testGrouping();
