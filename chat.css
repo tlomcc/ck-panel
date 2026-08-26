@@ -4148,6 +4148,10 @@ body.chat-active .chat-recall,body.chat-active .chat-thinking{width:auto!importa
 body.chat-active .chat-recall-head,body.chat-active .chat-thinking-head{min-height:var(--ck-aux-head-height)!important;padding:var(--ck-aux-block-pad-y) var(--ck-aux-block-pad-x)!important;box-sizing:border-box!important;font-size:var(--ck-aux-block-font-size)!important;line-height:1.35!important}
 body.chat-active .chat-recall-body,body.chat-active .chat-thinking-body{padding:0 var(--ck-aux-block-pad-x) var(--ck-aux-block-pad-y)!important;font-size:var(--ck-aux-block-font-size)!important;line-height:var(--ck-aux-block-line-height)!important}
 body.chat-active .chat-recall.open,body.chat-active .chat-thinking.open{border-radius:var(--ck-aux-block-radius)!important}
+/* 思考链是独立的块：自己带一个复制按钮，跟正文那颗「复制」互不干扰。 */
+body.chat-active .chat-thinking-actions{margin-top:6px!important;display:flex!important;justify-content:flex-end!important}
+body.chat-active .chat-thinking-copy{border:1px solid rgba(0,0,0,.14)!important;border-radius:6px!important;background:rgba(255,255,255,.72)!important;color:inherit!important;font-size:11px!important;line-height:1.2!important;padding:4px 8px!important;cursor:pointer!important}
+body.dark.chat-active .chat-thinking-copy{border-color:rgba(255,255,255,.18)!important;background:rgba(255,255,255,.08)!important}
 
 /* √ 和价格的隐藏兜底。渲染路径已经按 chatShouldShowMessageStatus /
    chatShouldShowBillingPrice 决定要不要输出节点，这里只防增量刷新留下的旧节点。

@@ -28,7 +28,8 @@ const library=functionSource('renderProviderLibrary');
 
 assert(!/<button[^>]+data-subtab="rolling"/.test(html),'rolling API tab must be removed');
 assert(/chat-scroll-jumps/.test(html),'quick scroll controls must remain available');
-assert(parts.includes("class=\"chat-thinking\""),'assistant thinking block must render independently');
+// 2026-08-26 起思考链块可能带 open（未闭合又没正文时默认展开），class 不再是死字符串。
+assert(/class="chat-thinking/.test(parts)||parts.includes("'chat-thinking'"),'assistant thinking block must render independently');
 assert(!parts.includes('chat-bubble'),'assistant parts must not create a nested chat bubble');
 assert(row.includes("var inner=assistantParts?(assistantParts.toolTrace+assistantParts.body):esc(m.text||'');"),
   'assistant bubble content must exclude thinking');

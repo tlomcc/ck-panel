@@ -171,7 +171,8 @@ function testPackFormatAndBudget(){
 function testRequestMessagesStripPseudoThinking(){
   const context={console};
   load(context,[
-    'var:CHAT_THINKING_TAG_NAME','var:CHAT_THINKING_TAG_RE','var:CHAT_THINKING_OPEN_RE',
+    'var:CHAT_THINKING_TAG_NAME','var:CHAT_THINKING_OPEN_SRC','var:CHAT_THINKING_CLOSE_SRC',
+    'var:CHAT_THINKING_TAG_RE','var:CHAT_THINKING_OPEN_RE',
     'var:CHAT_THINKING_OPEN_TO_END_RE','var:CHAT_THINKING_CLOSE_RE','var:CHAT_THINKING_CLOSE_SPLIT_RE',
     'var:CHAT_THINKING_TAG_CLEAN_RE',
     'chatLooksLikePartialThinkingTag','chatSplitThinkingText','chatDailyDigestRequestMessages',

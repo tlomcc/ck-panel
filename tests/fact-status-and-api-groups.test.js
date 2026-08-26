@@ -52,8 +52,10 @@ function dailyStatusContext(){
   const context={console,Date,Number,Math,String,esc,escAttr,
     document:{getElementById:dom.getElementById}};
   vm.createContext(context);
-  ['dailyFactStatusLabel','dsText','dsDuration','renderDailyFactStatus','renderDailyStatus']
+  ['dailyFactStatusLabel','dailyFactStageLabel','dsText','dsDuration','dsNum','dsSeconds',
+   'dailyFactApiStatsHtml','renderDailyFactStatus','renderDailyStatus']
     .forEach(name=>vm.runInContext(extractFunction(name),context));
+  vm.runInContext(extractArray('DAILY_FACT_STAT_LABELS'),context);
   return {context,dom};
 }
 
@@ -79,7 +81,10 @@ function dailyStatusContext(){
   assert(html.includes('width:43%'),'进度条比例算错：3/7 应为 43%');
   assert(html.includes('3 / 7 阶段')&&html.includes('audit'),'阶段行不完整');
   ['31','20','14','9'].forEach(n=>assert(html.includes('<b>'+n+'</b>'),'指标 '+n+' 没渲染'));
-  assert(html.includes('第 2 次 · 1 小时 2 分'),'尝试/用时格式不对');
+  // 2026-08-26：「尝试 N 次」改写成「调度切片」——它数的是租约切片（每片最多 5 分钟），
+  // 跟 API 调用次数不是一回事，旧文案让用户以为只调了 12 次 API（实际 48 次）。
+  assert(html.includes('第 2 片（每片最多 5 分钟） · 1 小时 2 分'),'调度切片/用时格式不对');
+  assert(html.includes('调度切片 / 用时'),'这一行的标题要写清楚数的是什么');
   assert(html.includes('abc123def456 · stable'),'来源快照缺失');
   assert(html.includes('NC · api.example.com · gemini-3.1-pro'),'当前 API 缺失');
   assert(html.includes('gen-aaa → gen-bbb')&&html.includes('ffee11'),'generation / commit 缺失');

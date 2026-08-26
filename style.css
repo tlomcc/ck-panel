@@ -1528,10 +1528,30 @@ body.dark .eg-detail-panel::before{background:var(--ck-line-strong)}
 .ds-fact-meta b{min-width:0;color:#343a42;font-weight:650;text-align:right;overflow-wrap:anywhere}
 .ds-fact-error{display:grid;gap:3px;margin-top:10px;padding:9px 10px;border-left:3px solid #c88632;border-radius:0 8px 8px 0;background:#fff8ed;color:#74501f;font-size:11px;line-height:1.55;overflow-wrap:anywhere}
 .ds-fact-error span{font-weight:700}
+/* Fact 进程卡片的详细块：横幅、分组小标题、标签云、调用流水。 */
+.ds-fact-banner{display:grid;gap:3px;margin-top:10px;padding:9px 10px;border-left:3px solid #4f8062;border-radius:0 8px 8px 0;background:#f2f8f4;color:#2c4a37;font-size:11.5px;line-height:1.55}
+.ds-fact-banner b{font-size:12px}
+.ds-fact-banner-bad{border-left-color:#c05a4a;background:#fdf1ef;color:#7d3a2f}
+.ds-fact-sub{display:grid;gap:3px;margin-top:12px;font-size:11.5px;color:#7b838d;line-height:1.5}
+.ds-fact-sub span{font-weight:700;color:#5c646d}
+.ds-fact-sub b{color:#343a42;font-weight:650;overflow-wrap:anywhere}
+.ds-fact-tags{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px;margin-top:8px;font-size:11px;color:#7b838d}
+.ds-fact-tags>span{flex:0 0 auto;font-weight:700;color:#5c646d}
+.ds-fact-tags>i{padding:3px 7px;border:1px solid #eaeeec;border-radius:8px;background:#f6f8f7;color:#454c54;font-style:normal;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ds-fact-tags-bad>i{border-color:#f0dcd8;background:#fdf3f1;color:#8a4436}
+.ds-fact-log{display:grid;gap:3px;margin-top:8px;padding:8px 10px;border:1px solid #eceff0;border-radius:10px;background:#fafbfa;font-size:11px;line-height:1.5;color:#5f676f}
+.ds-fact-log>span{font-weight:700;color:#5c646d}
+.ds-fact-log>i{font-style:normal;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 @media(min-width:620px){.ds-fact-meta{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:390px){.ds-fact-head{align-items:flex-start}
 .ds-fact-head>div{align-items:flex-start;flex-direction:column;gap:4px}
 .ds-fact-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+body.dark .ds-fact-banner{background:#1c2620;color:#a9cdb6;border-left-color:#4f8062}
+body.dark .ds-fact-banner-bad{background:#2b1d1a;color:#e0a99c;border-left-color:#a8503f}
+body.dark .ds-fact-sub b,body.dark .ds-fact-tags>i{color:#dfe4ea}
+body.dark .ds-fact-tags>i{background:#232833;border-color:#333a45}
+body.dark .ds-fact-tags-bad>i{background:#2b1f1d;border-color:#4a332e;color:#e2ab9f}
+body.dark .ds-fact-log{background:#1d222b;border-color:#303641;color:#b7bec7}
 body.dark .ds-note{background:#1d202b;border-color:#343846}
 body.dark .ds-stale-alert{border-color:#6d3434;background:#2d1d1d;color:#efaaaa}
 body.dark .ds-fact{background:#1b1f28;border-color:#303641}

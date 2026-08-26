@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v211-picker-name-first';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v212-thinking-wrap-copy-resume-timing-fact-detail';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1189,6 +1189,135 @@ function loadDailyStatus(force){
 function dailyFactStatusLabel(status){
   return ({not_created:'未触发',queued:'已排队',running:'运行中',retry_wait:'等待重试',blocked:'已阻止',published:'已发布',no_content:'无有效内容',superseded:'来源已变化',unavailable:'状态不可用'})[status]||status||'未知';
 }
+// 阶段中文名网关也给一份（stage_label），这里留一份兜底，两边都没有就显示原始键名。
+function dailyFactStageLabel(f){
+  var stage=String((f&&f.stage)||'');
+  if(f&&f.stage_label)return String(f.stage_label)+(stage?('（'+stage+'）'):'');
+  var map={source:'读取来源',segment:'语义分段',extract:'提取候选',audit:'质量审核',repair:'修补候选',
+    verify:'证据校验',completeness:'完整性巡查',missing_repair:'补漏修补',missing_verify:'补漏校验',
+    merge:'合并入库',published:'已发布',no_content:'无有效内容'};
+  if(map[stage])return map[stage]+'（'+stage+'）';
+  return stage||'尚未进入任何阶段';
+}
+// 全部 18 个 stats 都要能看到：以前只显示 4 个，用户看不出卡在哪一步。
+var DAILY_FACT_STAT_LABELS=[
+  ['segments','分段'],['extracted_segments','已提取段'],['candidates','候选'],
+  ['audited','审计'],['repaired','修补'],['verified','复核'],
+  ['completeness_windows','完整性窗口'],['missing_found','发现遗漏'],['missing_added','补入遗漏'],
+  ['final_facts','最终入库'],['final_new','新增'],['final_repeat','重复'],
+  ['final_update','更新'],['final_expired','过期'],['assistant_echo_noop','助手回声跳过'],
+  ['stage_work_units','阶段工作量'],['merge_decisions','合并判定'],['self_heal_runs','断点自愈']
+];
+function dsNum(value){
+  var n=Number(value||0);
+  return isFinite(n)?String(n):'0';
+}
+function dsSeconds(value){
+  var n=Number(value||0);
+  if(!isFinite(n)||n<=0)return '0s';
+  if(n<10)return n.toFixed(2)+'s';
+  if(n<600)return n.toFixed(1)+'s';
+  return Math.round(n/60)+'min';
+}
+function dailyFactApiStatsHtml(f){
+  var api=(f&&f.api_stats&&typeof f.api_stats==='object')?f.api_stats:{};
+  var calls=Number(api.http_calls||0)||0;
+  var ok=Number(api.http_ok||0)||0;
+  var failed=Number(api.http_failed||0)||0;
+  var html='<div class="ds-fact-sub"><span>API 调用（真实 HTTP 次数，含单次调用内部重试）</span>';
+  if(!calls){
+    html+='<b>还没有调用过 API</b></div>';
+    return html;
+  }
+  html+='<b>共 '+dsNum(calls)+' 次 · 成功 '+dsNum(ok)+' · 失败 '+dsNum(failed)+
+    ' · 累计 '+dsSeconds(api.seconds_total)+
+    ' · 令牌 入'+dsNum(api.input_tokens)+'/出'+dsNum(api.output_tokens)+'</b></div>';
+  var purposes=(api.by_purpose&&typeof api.by_purpose==='object')?api.by_purpose:{};
+  var purposeKeys=Object.keys(purposes);
+  if(purposeKeys.length){
+    purposeKeys.sort(function(a,b){return (Number(purposes[b].calls||0)||0)-(Number(purposes[a].calls||0)||0)});
+    html+='<div class="ds-fact-tags"><span>按用途</span>'+purposeKeys.map(function(key){
+      var slot=purposes[key]||{};
+      return '<i>'+esc(key)+' '+dsNum(slot.calls)+' 次（成功 '+dsNum(slot.ok)+'/失败 '+dsNum(slot.failed)+'，'+dsSeconds(slot.seconds)+'）</i>';
+    }).join('')+'</div>';
+  }
+  var errors=(api.by_error&&typeof api.by_error==='object')?api.by_error:{};
+  var errorKeys=Object.keys(errors);
+  if(errorKeys.length){
+    errorKeys.sort(function(a,b){return (Number(errors[b])||0)-(Number(errors[a])||0)});
+    html+='<div class="ds-fact-tags ds-fact-tags-bad"><span>按错误</span>'+errorKeys.map(function(key){
+      return '<i>'+esc(key)+' × '+dsNum(errors[key])+'</i>';
+    }).join('')+'</div>';
+  }
+  var recent=Array.isArray(api.recent)?api.recent.slice(-10).reverse():[];
+  if(recent.length){
+    html+='<div class="ds-fact-log"><span>最近 '+recent.length+' 次调用（新→旧）</span>'+recent.map(function(row){
+      row=row||{};
+      var mark=row.ok?'✅':'❌';
+      var tail=row.ok?'':('｜'+esc(row.error_type||('HTTP '+dsNum(row.http_status))));
+      return '<i>'+mark+' '+esc(String(row.at||'').replace('T',' ').slice(0,19))+'｜'+esc(row.purpose||'-')+'｜'+dsSeconds(row.seconds)+tail+'</i>';
+    }).join('')+'</div>';
+  }
+  return html;
+}
+function renderDailyFactStatus(f){
+  f=f||{};
+  var status=String(f.status||'not_created');
+  var position=Math.max(0,Number(f.stage_position||0));
+  var total=Math.max(0,Number(f.stage_total||0));
+  var progress=total?Math.min(100,Math.round(position*100/total)):0;
+  var retryable=['blocked','retry_wait','superseded','not_created','unavailable'].indexOf(status)>=0;
+  var stats=f.stats||{};
+  var provider=[f.provider_name||f.provider_id||'',f.provider_host||'',f.model||''].filter(Boolean).join(' · ');
+  var attempt=Math.max(0,Number(f.attempt||0));
+  var html='<section class="ds-fact ds-fact-'+escAttr(status)+'">';
+  html+='<div class="ds-fact-head"><div><span>Fact 提取 · '+esc(f.target_date||'昨日')+'</span><b>'+esc(dailyFactStatusLabel(status))+'</b></div>';
+  if(retryable)html+='<button class="btn btn-outline btn-sm" id="daily-fact-retry" type="button" onclick="retryDailyFact(\''+escAttr(f.target_date||'')+'\')">补跑 '+esc(f.target_date||'昨日')+'</button>';
+  html+='</div>';
+  // 欠费和重试耗尽单独给横幅：这两种情况点补跑之前得先把根因解决掉。
+  if(f.billing_blocked){
+    html+='<div class="ds-fact-banner ds-fact-banner-bad"><b>上游 API 余额不足 / 欠费，任务已停下</b>'+
+      '<span>充值之后点上面的「补跑」继续。已经不会再无限重试了（以前会从凌晨一直刷到早上）。</span></div>';
+  }else if(f.retry_exhausted){
+    html+='<div class="ds-fact-banner ds-fact-banner-bad"><b>连续重试都失败，任务已停下</b>'+
+      '<span>看下面的「最近错误」和 API 错误统计，解决后点「补跑」。</span></div>';
+  }else if(f.is_stalled){
+    html+='<div class="ds-fact-banner ds-fact-banner-bad"><b>连续多个切片没有任何进展，任务已停下</b>'+
+      '<span>说明流水线在原地打转，不是慢。看下面的阶段和自愈次数。</span></div>';
+  }
+  html+='<div class="ds-fact-progress"><i style="width:'+progress+'%"></i></div>';
+  html+='<div class="ds-fact-stage"><b>'+esc(dailyFactStageLabel(f))+'</b><span>'+(total?(position+' / '+total+' 阶段'):'等待阶段进度')+'</span></div>';
+  html+='<div class="ds-fact-metrics">'+
+    '<span><b>'+Number(stats.candidates||0)+'</b>候选</span>'+
+    '<span><b>'+Number(stats.audited||0)+'</b>审计</span>'+
+    '<span><b>'+Number(stats.verified||0)+'</b>复核</span>'+
+    '<span><b>'+Number(stats.final_facts||0)+'</b>最终入库</span>'+
+    '</div>';
+  var extra=DAILY_FACT_STAT_LABELS.filter(function(pair){return Number(stats[pair[0]]||0)>0||pair[0]==='segments'});
+  if(extra.length){
+    html+='<div class="ds-fact-tags"><span>全部计数</span>'+extra.map(function(pair){
+      return '<i>'+esc(pair[1])+' '+dsNum(stats[pair[0]])+'</i>';
+    }).join('')+'</div>';
+  }
+  html+=dailyFactApiStatsHtml(f);
+  html+='<div class="ds-fact-meta">';
+  html+='<div><span>来源快照</span><b>'+esc(dsText(f.source_sha_short))+(f.source_state?' · '+esc(f.source_state):'')+'</b></div>';
+  html+='<div><span>当前 API</span><b>'+esc(provider||'尚未调用')+'</b></div>';
+  // 「尝试 N 次」以前含义很模糊：它数的是租约切片（每片最多跑 5 分钟），
+  // 跟 API 调用次数完全是两回事，所以这里写清楚，并把两个上限一起摊开。
+  html+='<div><span>调度切片 / 用时</span><b>'+(attempt?('第 '+attempt+' 片（每片最多 5 分钟）'):'未开始')+' · '+esc(dsDuration(f.running_seconds))+'</b></div>';
+  html+='<div><span>连续无进展</span><b>'+dsNum(f.stalled_slices)+' / '+dsNum(f.stalled_limit||12)+' 片</b></div>';
+  html+='<div><span>连续重试</span><b>'+dsNum(f.retry_rounds)+' / '+dsNum(f.retry_limit||8)+' 次'+(f.next_retry_at?(' · 下次 '+esc(f.next_retry_at)):'')+'</b></div>';
+  html+='<div><span>最近断点</span><b>'+esc(dsText(f.last_checkpoint_at||f.updated_at))+' · 第 '+dsNum(f.checkpoint_revision)+' 版</b></div>';
+  html+='<div><span>创建于</span><b>'+esc(dsText(f.created_at))+'</b></div>';
+  html+='<div><span>Generation</span><b>'+esc(dsText(f.base_generation_short))+' → '+esc(dsText(f.published_generation_short))+'</b></div>';
+  html+='<div><span>Commit</span><b>'+esc(dsText(f.commit_sha_short))+'</b></div>';
+  html+='<div><span>流水线</span><b>'+esc(dsText(f.pipeline_version))+' · '+esc(String(f.pipeline_fingerprint||'').slice(0,12)||'-')+'</b></div>';
+  html+='</div>';
+  if(f.last_error)html+='<div class="ds-fact-error"><span>最近错误'+(f.last_error_code?'（'+esc(f.last_error_code)+'）':'')+'</span><b>'+esc(f.last_error)+(f.next_retry_at?' · 下次重试 '+esc(f.next_retry_at):'')+'</b></div>';
+  html+='</section>';
+  return html;
+}
 function dsText(value){var text=String(value===0?'0':(value||'')).trim();return text||'-'}
 function dsDuration(seconds){
   var total=Math.max(0,Math.floor(Number(seconds||0)));
@@ -1205,40 +1334,6 @@ function retryDailyFact(targetDate){
     .then(function(){loadDailyStatus(true);})
     .catch(function(e){if(button){button.disabled=false;button.textContent='重试';}alert('恢复失败：'+String(e&&e.message||e));});
 }
-function renderDailyFactStatus(f){
-  f=f||{};
-  var status=String(f.status||'not_created');
-  var position=Math.max(0,Number(f.stage_position||0));
-  var total=Math.max(0,Number(f.stage_total||0));
-  var progress=total?Math.min(100,Math.round(position*100/total)):0;
-  var retryable=['blocked','retry_wait','superseded','not_created','unavailable'].indexOf(status)>=0;
-  var stats=f.stats||{};
-  var provider=[f.provider_name||f.provider_id||'',f.provider_host||'',f.model||''].filter(Boolean).join(' · ');
-  var attempt=Math.max(0,Number(f.attempt||0));
-  var html='<section class="ds-fact ds-fact-'+escAttr(status)+'">';
-  html+='<div class="ds-fact-head"><div><span>Fact 提取 · '+esc(f.target_date||'昨日')+'</span><b>'+esc(dailyFactStatusLabel(status))+'</b></div>';
-  if(retryable)html+='<button class="btn btn-outline btn-sm" id="daily-fact-retry" type="button" onclick="retryDailyFact(\''+escAttr(f.target_date||'')+'\')">补跑 '+esc(f.target_date||'昨日')+'</button>';
-  html+='</div>';
-  html+='<div class="ds-fact-progress"><i style="width:'+progress+'%"></i></div>';
-  html+='<div class="ds-fact-stage"><b>'+esc(f.stage||'尚未进入任何阶段')+'</b><span>'+(total?(position+' / '+total+' 阶段'):'等待阶段进度')+'</span></div>';
-  html+='<div class="ds-fact-metrics">'+
-    '<span><b>'+Number(stats.candidates||0)+'</b>候选</span>'+
-    '<span><b>'+Number(stats.audited||0)+'</b>审计</span>'+
-    '<span><b>'+Number(stats.verified||0)+'</b>复核</span>'+
-    '<span><b>'+Number(stats.final_facts||0)+'</b>最终入库</span>'+
-    '</div>';
-  html+='<div class="ds-fact-meta">';
-  html+='<div><span>来源快照</span><b>'+esc(dsText(f.source_sha_short))+(f.source_state?' · '+esc(f.source_state):'')+'</b></div>';
-  html+='<div><span>当前 API</span><b>'+esc(provider||'尚未调用')+'</b></div>';
-  html+='<div><span>尝试 / 用时</span><b>'+(attempt?('第 '+attempt+' 次'):'未开始')+' · '+esc(dsDuration(f.running_seconds))+'</b></div>';
-  html+='<div><span>最近断点</span><b>'+esc(dsText(f.last_checkpoint_at||f.updated_at))+'</b></div>';
-  html+='<div><span>Generation</span><b>'+esc(dsText(f.base_generation_short))+' → '+esc(dsText(f.published_generation_short))+'</b></div>';
-  html+='<div><span>Commit</span><b>'+esc(dsText(f.commit_sha_short))+'</b></div>';
-  html+='</div>';
-  if(f.last_error)html+='<div class="ds-fact-error"><span>最近错误'+(f.last_error_code?'（'+esc(f.last_error_code)+'）':'')+'</span><b>'+esc(f.last_error)+(f.next_retry_at?' · 下次重试 '+esc(f.next_retry_at):'')+'</b></div>';
-  html+='</section>';
-  return html;
-}
 function renderDailyStatus(d){
   var body=document.getElementById('daily-status-body');
   var sub=document.getElementById('status-sub');
@@ -1252,10 +1347,13 @@ function renderDailyStatus(d){
   var html=staleDays>2?'<div class="ds-stale-alert"><b>Fact 已 '+staleDays+' 天没有成功提取</b><span>最近成功：'+esc(f.last_success_date||'-')+'。可用下面的补跑按钮拉起断掉的那天。</span></div>':'';
   if(f.enabled===false)html+='<div class="ds-stale-alert"><b>每日 Fact 任务当前是关闭状态</b><span>网关侧没有启用自动提取，下面显示的是最后一次留下的记录。</span></div>';
   html+=renderDailyFactStatus(f);
-  html+='<div class="ds-note">每日 Fact 任务读取前一天的原始聊天记录，在第二天首次聊天时触发。'+
+  html+='<div class="ds-note">每日 Fact 任务读取前一天的原始聊天记录。'+
+    '<b>2026-08-26 起由定时器自己触发：过 00:00 之后第一个定时器 tick（最多 5 分钟内）就会把任务建出来，不再需要先发一条消息。</b><br>'+
     '今天是 '+esc(d.today||'-')+'，上面显示的是 '+esc(f.target_date||d.yesterday||'-')+' 的处理结果；'+
     '最近一次成功提取：'+esc(f.last_success_date||'尚无记录')+'。<br>'+
-    '状态停在“未触发”多半只是当天还没开始聊，用补跑按钮可以手动拉起。</div>';
+    '「调度切片」数的是任务被定时器捡起来跑了几片（每片最多 5 分钟），和 API 调用次数不是一回事——'+
+    'API 的真实次数、成功/失败、按用途和按错误的分布都在上面「API 调用」那一块。<br>'+
+    '如果状态停在「未触发」而且今天已经过了 00:05，那就不是没聊天的问题，去看网关日志里的 <code>[FACT-DAILY] timer ensure</code>。</div>';
   body.innerHTML=html;
 }
 function startDailyStatusRealtime(){
@@ -1442,6 +1540,7 @@ var chatMessages=[];
 var chatAbort=null;
 var chatActiveRequest=null;
 var chatRequestSeq=0;
+var chatRecoverInFlightBusy=false;
 var chatDeferredSaveHandle=0;
 var chatSessions=[];
 var chatFolders=[];
@@ -4808,6 +4907,7 @@ function chatDebugRecordTopic(record,text){
   if(ev==='gateway')return 'other';
   if(ev==='debug'){
     if(data.mode==='new_session')return 'request';
+    if(data.timing_summary||data.timing_stages)return 'timing';
     if(data.latency_probe)return 'timing';
     if(data.mcp_error)return 'request';
     if(data.cache_anchors||data.canonical_changes)return 'cache';
@@ -5090,7 +5190,7 @@ function chatFormatDebug(ev,data){
     var u=data.usage||{};
     var doneRounds=data.upstream_rounds?('｜上游轮次：'+data.upstream_rounds+'｜命中轮次：'+(data.cache_hit_rounds||0)):'';
     var doneCostText=chatFormatUsageCost(u);
-    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字'+(doneCostText?'｜'+doneCostText:'')+'｜缓存命中：'+chatUsageCacheRead(u)+'｜缓存创建：'+chatUsageCacheCreate(u)+'｜输入（未命中）：'+chatUsageInputBillable(u)+'｜输入总量：'+chatUsageInputTotal(u)+'｜输出：'+chatUsageNumber(u,'output_tokens','completion_tokens')+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B';
+    return '✅ 请求完成｜会话：'+(data.session_id||'-')+'｜助手回复 '+(data.assistant_chars||0)+' 字'+(doneCostText?'｜'+doneCostText:'')+'｜缓存命中：'+chatUsageCacheRead(u)+'｜缓存创建：'+chatUsageCacheCreate(u)+'｜输入（未命中）：'+chatUsageInputBillable(u)+'｜输入总量：'+chatUsageInputTotal(u)+'｜输出：'+chatUsageNumber(u,'output_tokens','completion_tokens')+doneRounds+'｜隐藏历史：'+(data.transport_messages_count||0)+' 条/'+(data.transport_messages_bytes||0)+' B'+(data.timing_summary?('\n　'+String(data.timing_summary)):'');
   }
   if(ev==='error'){
     return '❌ 请求错误｜'+(data.error||data.message||JSON.stringify(data));
@@ -5142,6 +5242,9 @@ function chatFormatDebug(ev,data){
     return '⚠️ 空闲自动截断失败｜'+(data.error||'未知原因');
   }
   if(ev==='debug'){
+    if(data.timing_summary||data.timing_stages){
+      return chatFormatTimingSummary(data);
+    }
     if(data.latency_probe&&typeof data.latency_probe==='object'){
       var lp=data.latency_probe;
       return '⏱ 网关首字链路｜请求编号 '+(lp.debug_id||'-')+'｜收到请求→发起上游请求 '+(lp.t1_to_t2_ms!==undefined?lp.t1_to_t2_ms:'-')+'ms｜发起上游请求→收到上游首个网络数据块 '+(lp.t2_to_t3_first_chunk_ms!==undefined?lp.t2_to_t3_first_chunk_ms:'-')+'ms｜收到上游首个网络数据块→发出首个面板增量 '+(lp.t3_first_chunk_to_t4_ms!==undefined?lp.t3_first_chunk_to_t4_ms:'-')+'ms｜收到上游首个可显示文本→发出首个面板增量 '+(lp.t3_first_text_to_t4_ms!==undefined?lp.t3_first_text_to_t4_ms:'-')+'ms｜发出首个面板增量→收到上游完整响应 '+(lp.t4_to_upstream_full_ms!==undefined?lp.t4_to_upstream_full_ms:'-')+'ms';
@@ -5182,6 +5285,63 @@ function chatFormatDebug(ev,data){
   }
   return '🔎 调试信息｜'+(typeof data==='string'?data:JSON.stringify(data));
 }
+// 网关主流程逐步耗时。键名和顺序跟网关 handler.py 的 _CK_TIMING_STAGE_ORDER 一一对应，
+// 网关那边多加一步、这里没跟上，界面上会退化成显示原始键名（不会报错，但要记得补）。
+var CHAT_TIMING_STAGE_LABELS={
+  request_received_to_start_processing_ms:'收到请求→开始处理',
+  chat_state_load_ms:'读取会话状态',
+  config_resolve_ms:'解析配置与缓存策略',
+  mcp_tools_load_ms:'加载 MCP 工具',
+  history_prepare_ms:'整理历史',
+  speech_preferences_ms:'措辞偏好',
+  intent_rewrite_ms:'意图改写',
+  query_embedding_network_ms:'问题向量',
+  embeddings_load_cache_ms:'读取 Fact 索引',
+  fact_index_network_ms:'索引网络往返',
+  vector_search_ms:'向量检索',
+  recall_refine_ms:'过滤/排序/精筛',
+  github_pull_ms:'GitHub 读取',
+  memory_recall_total_ms:'召回合计',
+  context_text_ms:'拼装召回块',
+  canonical_injection_ms:'冻结/注入历史',
+  message_assembly_ms:'拼接 prompt',
+  prepare_before_upstream_ms:'发上游之前合计',
+  upstream_discarded_attempts_ms:'被丢弃的轮询候选',
+  upstream_ttft_ms:'上游首个数据块',
+  upstream_full_response_ms:'上游完整响应',
+  tool_execution_ms:'工具执行',
+  post_response_persist_ms:'回复落盘',
+  end_to_end_total_ms:'总耗时'
+};
+var CHAT_TIMING_STAGE_ORDER=Object.keys(CHAT_TIMING_STAGE_LABELS);
+function chatFormatTimingSummary(data){
+  data=data&&typeof data==='object'?data:{};
+  var stages=data.timing_stages&&typeof data.timing_stages==='object'?data.timing_stages:{};
+  var total=Number(stages.end_to_end_total_ms||0)||0;
+  var head='⏱ 网关分步耗时｜请求编号 '+(data.debug_id||'-')+'｜总耗时 '+total+'ms';
+  if(data.timing_status&&data.timing_status!=='ok')head+='｜状态 '+data.timing_status;
+  if(data.timing_error)head+='｜'+String(data.timing_error).slice(0,120);
+  var seen={};
+  var rows=[];
+  CHAT_TIMING_STAGE_ORDER.forEach(function(key){
+    seen[key]=true;
+    if(key==='end_to_end_total_ms')return;
+    var value=Number(stages[key]||0)||0;
+    if(value<=0)return;
+    rows.push('　· '+CHAT_TIMING_STAGE_LABELS[key]+'：'+value+'ms');
+  });
+  Object.keys(stages).forEach(function(key){
+    if(seen[key])return;
+    var value=Number(stages[key]||0)||0;
+    if(value<=0)return;
+    rows.push('　· '+key+'：'+value+'ms');
+  });
+  var lines=[head];
+  if(rows.length)lines=lines.concat(rows);
+  // 原样保留网关那条汇总串：用户要的就是这个格式，方便直接贴出来对照
+  if(data.timing_summary)lines.push('　'+String(data.timing_summary));
+  return lines.join('\n');
+}
 function chatDebugSafeData(ev,data){
   if(!data||typeof data!=='object')return data||{};
   if(ev==='intent_rewrite'){
@@ -5195,7 +5355,8 @@ function chatDebugSafeData(ev,data){
       assistant_chars:data.assistant_chars||0,
       usage:data.usage||{},
       transport_messages_count:data.transport_messages_count||0,
-      transport_messages_bytes:data.transport_messages_bytes||0
+      transport_messages_bytes:data.transport_messages_bytes||0,
+      timing_summary:data.timing_summary||''
     };
   }
   if(ev==='memory'){
@@ -5661,6 +5822,8 @@ function chatStartIndexedDbSessionLoad(){
         // 权威全量刚在这里回填，不补这一下刷新页面后那块就一直是空的。
         chatRenderDailyDigest(cfg);
         chatUpdateRuntime(cfg);
+        // 权威全量到位之后才有资格判断"哪一轮被打断了"：摘要那一刻可能还没写进标记。
+        chatRecoverInterruptedTurns({silent:false});
       }
       return chatSessions;
     }
@@ -5892,6 +6055,9 @@ function chatFinalizeStoppedRequest(request){
     delete message.regenerateCutoff;
     delete message.sendFailed;
     delete message.failedAt;
+    delete message.inFlight;
+    delete message.inFlightAt;
+    delete message.inFlightTurnId;
     delete message.cacheRead;
     delete message.cacheCreate;
     delete message.cacheState;
@@ -7392,6 +7558,111 @@ function chatQueueFailedUserMessagesForRetry(){
   failed.forEach(function(m){m.role='pending_user'});
   return failed;
 }
+// ── 断线补收：中途退出 CK 也不能丢回复 ───────────────────────────────────────
+// 手机上退回桌面时页面会被系统冻结甚至直接杀掉，fetch 的 socket 跟着断，
+// catch/finally 一行都跑不到：既不会标 sendFailed，也不会写任何本地状态。
+// 于是回来时看到的是"消息已经变成 user、没有回复、发送键是正常的绿色"，
+// 点发送却什么都不发生——因为待发队列和失败队列都是空的（chatSendMessage 那个
+// if 的每一项都为假，直接落到函数尾部）。
+// 解法：发出去的那一刻就把 in_flight 标记同步落盘，回来时先去网关补收，
+// 补不到再标成发送失败，让既有的「发送失败 · 点击重试」按钮亮起来。
+function chatClearInFlightMarks(indexes){
+  var list=Array.isArray(indexes)?indexes:[];
+  var touched=false;
+  list.forEach(function(idx){
+    var m=chatMessages[idx];
+    if(!m||m.inFlight===undefined)return;
+    delete m.inFlight;
+    delete m.inFlightAt;
+    delete m.inFlightTurnId;
+    touched=true;
+  });
+  return touched;
+}
+function chatInterruptedInFlightMessages(){
+  return chatMessages.filter(function(m,i){
+    if(!m||m.role!=='user'||m.inFlight!==true)return false;
+    if(!chatMessageHasContent(m))return false;
+    // 后面已经跟着回复了就不算被打断（极少见：标记没清干净）
+    var next=chatMessages[i+1];
+    return !(next&&next.role==='assistant');
+  });
+}
+function chatMarkInterruptedAsFailed(list){
+  var changed=false;
+  (list||[]).forEach(function(m){
+    if(!m)return;
+    delete m.inFlight;
+    delete m.inFlightAt;
+    delete m.inFlightTurnId;
+    m.sendFailed=true;
+    m.failedAt=Date.now();
+    changed=true;
+  });
+  return changed;
+}
+async function chatRecoverInterruptedTurns(opts){
+  opts=opts||{};
+  if(chatSending)return {checked:false,reason:'sending'};
+  if(chatRecoverInFlightBusy)return {checked:false,reason:'busy'};
+  var interrupted=chatInterruptedInFlightMessages();
+  if(!interrupted.length)return {checked:false,reason:'nothing'};
+  chatRecoverInFlightBusy=true;
+  var recovered=0;
+  try{
+    var cfg=chatLoadConfig();
+    var turnId=String(interrupted[interrupted.length-1].inFlightTurnId||'');
+    var reply=null;
+    if(cfg&&cfg.panelKey&&cfg.sessionId){
+      try{
+        var url=GRAPH_API_BASE+'/ck/chat/last?key='+encodeURIComponent(cfg.panelKey)
+          +'&session_id='+encodeURIComponent(cfg.sessionId)
+          +(turnId?('&turn_id='+encodeURIComponent(turnId)):'');
+        var resp=await fetch(url,{cache:'no-store'});
+        if(resp.ok){
+          var data=await resp.json();
+          if(data&&data.found&&String(data.assistant_text||'').trim())reply=data;
+        }
+      }catch(e){
+        reply=null;
+      }
+    }
+    if(reply){
+      chatClearInFlightMarks(interrupted.map(function(m){return chatMessages.indexOf(m)}));
+      var session=chatCurrentSession();
+      if(session&&Array.isArray(reply.transport_messages)&&reply.transport_messages.length){
+        session.transportMessages=chatLimitArray(reply.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
+        session.transportUpdated=Date.now();
+      }
+      await chatAppendAssistantReplies(String(reply.assistant_text||''),null,[],{
+        splitAssistantReplies:cfg.splitAssistantReplies!==false,
+        userSentTs:Number(interrupted[0].ts)||0,
+        usage:reply.usage||null,
+        turnId:String(reply.turn_id||turnId||''),
+      });
+      recovered=1;
+      chatDebug('resume_recovered',{
+        session_id:reply.session_id||'',
+        turn_id:reply.turn_id||'',
+        turn_matched:!!reply.turn_matched,
+        assistant_chars:reply.assistant_chars||0,
+        age_seconds:reply.age_seconds||0,
+      });
+      toast('刚才那条回复已经补回来了',4000);
+      chatSetStatus('已补收上一轮回复');
+    }else{
+      chatMarkInterruptedAsFailed(interrupted);
+      chatSaveLocalMessages();
+      chatRenderMessages({respectUserScroll:true});
+      chatDebug('resume_failed',{count:interrupted.length,turn_id:turnId});
+      if(opts.silent!==true)toast('上一条没收到回复，点消息下面的「重试」或直接再点发送',6000);
+      chatSetStatus('上一条未收到回复，可重发');
+    }
+  }finally{
+    chatRecoverInFlightBusy=false;
+  }
+  return {checked:true,recovered:recovered};
+}
 function chatRenderPendingBar(){
   var bar=document.getElementById('chat-pending-bar');
   if(!bar)return;
@@ -7717,57 +7988,77 @@ function chatRenderMarkdown(src){
   }
   return out.join('\n');
 }
-var CHAT_THINKING_TAG_NAME='(?:ck_thinking|ck:thinking|thinking|think)';
-var CHAT_THINKING_TAG_RE=new RegExp('<'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>([\\s\\S]*?)<\\/(?:ck_thinking|ck:thinking|thinking|think)>','gi');
-var CHAT_THINKING_OPEN_RE=new RegExp('<'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>','i');
-var CHAT_THINKING_OPEN_TO_END_RE=new RegExp('<'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>[\\s\\S]*$','i');
-var CHAT_THINKING_CLOSE_RE=new RegExp('<\\/(?:ck_thinking|ck:thinking|thinking|think)>','i');
-var CHAT_THINKING_CLOSE_SPLIT_RE=new RegExp('<\\/(?:ck_thinking|ck:thinking|thinking|think)>','i');
-var CHAT_THINKING_TAG_CLEAN_RE=new RegExp('<\\/?'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>','gi');
+// 标签名和容错写法要和网关 handler.py::_ck_strip_pseudo_thinking_text 保持一致：
+// 网关按同一套规则把思考链从历史里剥掉，面板这边认得少一种，界面上就会漏出独白。
+var CHAT_THINKING_TAG_NAME='(?:ck_thinking|ck:thinking|thinking|think|reasoning|thought)';
+var CHAT_THINKING_OPEN_SRC='<\\s*'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>';
+var CHAT_THINKING_CLOSE_SRC='<\\s*\\/\\s*'+CHAT_THINKING_TAG_NAME+'\\s*>';
+var CHAT_THINKING_TAG_RE=new RegExp(CHAT_THINKING_OPEN_SRC+'([\\s\\S]*?)'+CHAT_THINKING_CLOSE_SRC,'gi');
+var CHAT_THINKING_OPEN_RE=new RegExp(CHAT_THINKING_OPEN_SRC,'i');
+var CHAT_THINKING_OPEN_TO_END_RE=new RegExp(CHAT_THINKING_OPEN_SRC+'[\\s\\S]*$','i');
+var CHAT_THINKING_CLOSE_RE=new RegExp(CHAT_THINKING_CLOSE_SRC,'i');
+var CHAT_THINKING_CLOSE_SPLIT_RE=new RegExp(CHAT_THINKING_CLOSE_SRC,'i');
+var CHAT_THINKING_TAG_CLEAN_RE=new RegExp('<\\s*\\/?\\s*'+CHAT_THINKING_TAG_NAME+'\\b[^>]*>','gi');
 function chatSplitThinkingText(src,opts){
   opts=opts||{};
   var text=String(src||'');
   var thoughts=[];
   var suppressThinking=opts.suppressThinking===true;
+  var unclosed=false;
   if(opts.hideUnclosedThinking===true&&chatLooksLikePartialThinkingTag(text)){
-    return {text:'',thinking:''};
+    return {text:'',thinking:'',unclosed:true};
   }
+  // 1) 成对标签：正常情况，可以有多段。
   text=text.replace(CHAT_THINKING_TAG_RE,function(_all,body){
     var clean=String(body||'').trim();
     if(clean&&!suppressThinking)thoughts.push(clean);
     return '\n';
   });
-  if(opts.hideUnclosedThinking===true){
-    text=text.replace(CHAT_THINKING_OPEN_TO_END_RE,'\n');
-  }
+  // 2) 只剩闭合标签、开标签丢了（模型直接开写、忘了起标签）：闭合标签之前整段都是思考链。
+  //    旧实现卡了「<=200 字符且不足全文一半」两道阈值，思考链一长就整段漏进正文，
+  //    这就是用户看到的「思考链没被包裹」。网关那边本来就是无条件按这个规则剥的，这里跟它对齐。
   if(CHAT_THINKING_CLOSE_RE.test(text)&&!CHAT_THINKING_OPEN_RE.test(text)){
-    var closeAt=text.search(CHAT_THINKING_CLOSE_SPLIT_RE);
-    var parts=text.split(CHAT_THINKING_CLOSE_SPLIT_RE);
-    var before=(parts.shift()||'').trim();
-    var after=parts.join('\n').trim();
-    // 仅在 before 段确像"靠前的推理引子"时才归类为 thinking：
-    // 闭合标签出现在整体靠前处(<=200 字符且不足全文一半)才折叠，
-    // 否则视为正文里混入的裸 </think>，清掉标签保留正文，避免误折叠。
-    var looksLeadingThinking=before&&closeAt>=0&&closeAt<=200&&closeAt*2<=text.length;
-    if(looksLeadingThinking){
-      if(!suppressThinking)thoughts.push(before);
-      text=after||'';
-    }else{
-      text=(before?before+'\n':'')+after;
-    }
+    var closeParts=text.split(CHAT_THINKING_CLOSE_SPLIT_RE);
+    var before=(closeParts.shift()||'').trim();
+    var after=closeParts.join('\n').trim();
+    if(before&&!suppressThinking)thoughts.push(before);
+    text=after;
+  }
+  // 3) 只剩开标签、闭合标签丢了（被 max_tokens 截断、或模型没收尾）：开标签之后整段都是思考链，
+  //    正文只保留开标签之前那部分。以前这里只是把标记删掉、独白原样留在气泡里，同样是「没被包裹」。
+  if(CHAT_THINKING_OPEN_RE.test(text)){
+    var openAt=text.search(CHAT_THINKING_OPEN_RE);
+    var head=openAt>0?text.slice(0,openAt):'';
+    var tail=text.slice(openAt).replace(CHAT_THINKING_TAG_CLEAN_RE,'').trim();
+    unclosed=true;
+    if(tail&&!suppressThinking)thoughts.push(tail);
+    text=head;
   }
   text=text
     .replace(CHAT_THINKING_TAG_CLEAN_RE,'\n')
     .replace(/\n{3,}/g,'\n\n')
     .trim();
-  return {text:text,thinking:thoughts.join('\n\n')};
+  return {text:text,thinking:thoughts.join('\n\n'),unclosed:unclosed};
+}
+// 复制这一条就只给这一条：思考链是独立的块，不能跟着正文一起被复制走。
+function chatMessageCopyText(m){
+  if(!m)return '';
+  var raw=String(m.text||'');
+  if(!raw)return '';
+  var parsed=chatSplitThinkingText(raw);
+  if(parsed.thinking)return parsed.text;
+  return raw;
+}
+function chatMessageThinkingText(m){
+  if(!m)return '';
+  return String(chatSplitThinkingText(String(m.text||'')).thinking||'');
 }
 function chatLooksLikePartialThinkingTag(text){
   var t=String(text||'').trim().toLowerCase();
   if(!t||t.charAt(0)!=='<'||t.indexOf('>')>=0)return false;
   var compact=t.replace(/\s+/g,'');
   if(compact==='<')return true;
-  var targets=['<ck_thinking','<ck:thinking','<thinking','<think'];
+  var targets=['<ck_thinking','<ck:thinking','<thinking','<think','<reasoning','<thought'];
   for(var i=0;i<targets.length;i++){
     if(targets[i].indexOf(compact)===0||compact.indexOf(targets[i])===0)return true;
   }
@@ -7846,12 +8137,19 @@ function chatRenderToolTrace(tools){
 }
 function chatRenderAssistantParts(rawText,streaming,tools,messageIndex){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
-  var thinking=split.thinking?(
-    '<div class="chat-thinking"><button class="chat-thinking-head" type="button"><span>思考</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+'</div></div>'
-  ):'';
   var toolTrace=chatRenderToolTrace(tools);
   var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
   var body=split.text?(tagged!==null?tagged:'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
+  var thinking='';
+  if(split.thinking){
+    // 闭合标签丢了又没剩正文时默认展开：否则用户只看到一个空气泡，会以为回复整条丢了。
+    var thinkingCls=(split.unclosed&&!split.text)?'chat-thinking open':'chat-thinking';
+    var thinkingLabel=split.unclosed?'思考（未闭合）':'思考';
+    var thinkingActions=(typeof messageIndex==='number'&&messageIndex>=0)
+      ?('<div class="chat-thinking-actions"><button class="chat-thinking-copy" type="button" data-i="'+messageIndex+'">复制思考链</button></div>')
+      :'';
+    thinking='<div class="'+thinkingCls+'"><button class="chat-thinking-head" type="button"><span>'+esc(thinkingLabel)+'</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+thinkingActions+'</div></div>';
+  }
   return {thinking:thinking,toolTrace:toolTrace,body:body};
 }
 function chatRenderAssistantContent(rawText,streaming,tools,messageIndex){
@@ -8543,11 +8841,19 @@ document.addEventListener('click',function(e){
     chatStartEditMessage(parseInt(pendingBubble.getAttribute('data-i'),10));
     return;
   }
+  var thinkingCopy=e.target.closest('.chat-thinking-copy');
+  if(thinkingCopy){
+    var ti=parseInt(thinkingCopy.getAttribute('data-i'),10);
+    var tText=chatMessageThinkingText(chatMessages[ti]);
+    if(tText)chatCopyText(tText);
+    else toast('这条没有思考链');
+    return;
+  }
   var act=e.target.closest('.chat-msg-act,.chat-user-regen,.chat-user-retry');
   if(act){
     var i=parseInt(act.getAttribute('data-i'),10);
     var a=act.getAttribute('data-act');
-    if(a==='copy'&&chatMessages[i])chatCopyText(chatMessages[i].text||'');
+    if(a==='copy'&&chatMessages[i])chatCopyText(chatMessageCopyText(chatMessages[i]));
     if(a==='regen')chatRegenerateFromUser(i);
     if(a==='retry')chatRetryFailedUser(i);
     return;
@@ -8609,7 +8915,15 @@ document.addEventListener('keydown',function(e){
   chatTogglePlus(false);
 });
 document.addEventListener('visibilitychange',function(){
-  if(!document.hidden&&currentPanelTab==='chat')chatUpdateCacheExpiryHint(true);
+  if(!document.hidden&&currentPanelTab==='chat'){
+    chatUpdateCacheExpiryHint(true);
+    // 回到前台就检查有没有"发出去了却没收到回复"的那一轮：
+    // 这正是用户中途退出 CK 的那个场景，页面没被杀只是被冻结时也走这条。
+    chatRecoverInterruptedTurns({silent:false});
+  }
+});
+window.addEventListener('pageshow',function(){
+  if(currentPanelTab==='chat')chatRecoverInterruptedTurns({silent:false});
 });
 function chatMessagesBox(){
   return document.getElementById('chat-messages');
@@ -9479,6 +9793,16 @@ async function chatSendMessage(){
       draftImages:[],
       draftFiles:[]
     });
+  }else{
+    // 以前这里没有 else：一点反应都没有，而发送键看着还是正常的绿色，
+    // 用户根本判断不出是"没东西可发"还是"面板坏了"。用户报的「点发送没有任何反应」
+    // 就是这一段。真有被打断的那一轮时先去补收/标失败，让它变成可重发。
+    var interrupted=chatInterruptedInFlightMessages();
+    if(interrupted.length){
+      chatRecoverInterruptedTurns({silent:false});
+      return;
+    }
+    toast('没有要发送的内容');
   }
 }
 function chatRegenerateFromUser(i){
@@ -9611,7 +9935,7 @@ async function chatSubmitPendingMessages(options){
   if(requestState&&requestState.stopped)return;
   if(!route||!route.ok){
     chatHandleMainRouteNotReady(route);
-    pending.forEach(function(m){m.role='user';m.sendFailed=true;m.failedAt=Date.now()});
+    pending.forEach(function(m){m.role='user';m.sendFailed=true;m.failedAt=Date.now();delete m.inFlight;delete m.inFlightAt;delete m.inFlightTurnId});
     pending.forEach(function(m){chatUpdateMessageRowOnly(chatMessages.indexOf(m))});
     chatSaveLocalMessagesDeferred();
     chatReleaseSendingUi(requestState);
@@ -9655,6 +9979,12 @@ async function chatSubmitPendingMessages(options){
       delete m.pendingId;
       delete m.regenerateRequest;
       delete m.regenerateCutoff;
+      // 这一轮"已经发出去、还没拿到回复"。用户中途退出 CK 时进程会被系统直接收掉，
+      // catch/finally 一行都跑不到，所以标记必须落盘：回来时靠它把这一轮认出来，
+      // 先去网关补收回复，补不到就标成发送失败让它能重发。
+      m.inFlight=true;
+      m.inFlightAt=submitTs;
+      m.inFlightTurnId=requestTurnId;
       chatMarkMessageFresh(m);
       userMessageIndexes.push(i);
     }
@@ -9666,7 +9996,9 @@ async function chatSubmitPendingMessages(options){
     out=chatAddBubble('assistant','',false);
   }else{
     userMessageIndexes.forEach(chatUpdateMessageRowOnly);
-    chatSaveLocalMessagesDeferred();
+    // 这里刻意用同步保存：in_flight 标记必须先落盘。用 deferred 的话
+    // requestIdleCallback 还没跑，进程被系统收掉，标记就跟着没了。
+    chatSaveLocalMessages();
   }
   chatPlaceAssistantBubbleBeforePending(out);
   if(btn){btn.disabled=false;btn.textContent='停止';btn.title='停止请求';btn.classList.add('chat-stop-btn')}
@@ -9683,6 +10015,8 @@ async function chatSubmitPendingMessages(options){
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
+    // 轮次 id 一起发给网关：断线补收时用它对账，避免把上一轮的旧回复当成这一轮的答案。
+    turn_id:requestTurnId,
     text:text,
     model:cfg.model,
     provider_name:cfg.mainRouteProvider||'',
@@ -9971,6 +10305,7 @@ async function chatSubmitPendingMessages(options){
     await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants});
     // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
     carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
+    chatClearInFlightMarks(userMessageIndexes);
     requestCompleted=true;
     chatSetStatus('完成');
   }catch(e){
@@ -9979,7 +10314,13 @@ async function chatSubmitPendingMessages(options){
       chatFinalizeStoppedRequest(requestState);
     }else{
       userMessageIndexes.forEach(function(idx){
-        if(chatMessages[idx]){chatMessages[idx].sendFailed=true;chatMessages[idx].failedAt=Date.now()}
+        if(chatMessages[idx]){
+          chatMessages[idx].sendFailed=true;
+          chatMessages[idx].failedAt=Date.now();
+          delete chatMessages[idx].inFlight;
+          delete chatMessages[idx].inFlightAt;
+          delete chatMessages[idx].inFlightTurnId;
+        }
       });
       chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('请求失败');
       toast(chatFriendlyError(e),5000,{type:'error',closable:true,pauseOnHover:true});

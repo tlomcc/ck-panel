@@ -25,7 +25,8 @@ function extractVar(name){
 
 const context={console};
 vm.createContext(context);
-['CHAT_THINKING_TAG_NAME','CHAT_THINKING_TAG_RE','CHAT_THINKING_OPEN_RE','CHAT_THINKING_CLOSE_RE',
+['CHAT_THINKING_TAG_NAME','CHAT_THINKING_OPEN_SRC','CHAT_THINKING_CLOSE_SRC',
+ 'CHAT_THINKING_TAG_RE','CHAT_THINKING_OPEN_RE','CHAT_THINKING_CLOSE_RE',
  'CHAT_THINKING_CLOSE_SPLIT_RE','CHAT_THINKING_OPEN_TO_END_RE','CHAT_THINKING_TAG_CLEAN_RE']
   .forEach(name=>vm.runInContext(extractVar(name),context));
 ['chatSplitThinkingText','chatLooksLikePartialThinkingTag','chatSplitOutsideCodeBlocks',
