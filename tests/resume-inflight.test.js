@@ -108,6 +108,11 @@ function testWiring(){
   assert(tail.indexOf('chatSaveLocalMessages()')>=0,'in_flight 标记必须同步保存');
   assert(tail.slice(0,400).indexOf('chatSaveLocalMessagesDeferred')<0,
     '这里不能再用 deferred 保存，否则标记会跟着进程一起没');
+  assert(submit.indexOf('var sessionsReadyPromise=chatEnsureSessionsReady()')<submit.indexOf('await sessionsReadyPromise'),
+    '会话加载要先启动 promise，再在真正读取会话前等待');
+  assert(submit.indexOf('var mainRouteReadyPromise=chatEnsureMainRouteReady()')<submit.indexOf('await sessionsReadyPromise'),
+    '主链路读取要和会话加载同时启动，不能继续串行等待');
+  assert(submit.includes('var route=await mainRouteReadyPromise'),'后面必须复用并行启动的主链路结果');
 
   const stopped=extractFunction('chatFinalizeStoppedRequest');
   assert(stopped.includes('delete message.inFlight'),'手动停止也要清标记');

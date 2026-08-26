@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v212-thinking-wrap-copy-resume-timing-fact-detail';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v213-total-wait-fast-path';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5488,10 +5488,12 @@ function chatUpdateStreamingTiming(anchorEl,userSentTs,replyTs){
 }
 function chatAssistantWaitLabel(m){
   if(!m||m.role!=='assistant')return '';
+  // 新回复要等最后一个分条气泡真正插入页面后才定格；等待期间不能回退成首字耗时。
+  if(m.waitPending===true)return '';
   var waitMs=Number(m.waitMs);
   if(!isFinite(waitMs)||waitMs<0){
     var userTs=Number(m.userSentTs||0)||0;
-    var replyTs=Number(m.firstReplyTs||m.ts||0)||0;
+    var replyTs=Number(m.renderCompletedTs||m.firstReplyTs||m.ts||0)||0;
     if(!userTs||!replyTs||replyTs<userTs)return '';
     waitMs=replyTs-userTs;
   }
@@ -8412,7 +8414,7 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
     if(i===parts.length-1&&userSentTs){
       msg.userSentTs=userSentTs;
       msg.firstReplyTs=firstReplyTs;
-      msg.waitMs=Math.max(0,firstReplyTs-userSentTs);
+      msg.waitPending=true;
     }
     if(i===parts.length-1)chatAttachAssistantCost(msg,opts.usage);
     chatInsertMessagesBeforePending([msg]);
@@ -9025,6 +9027,7 @@ function chatRenderMessages(opts){
       if(row.getAttribute('data-chat-key')!==key||row.getAttribute('data-chat-index')!==String(i))row.outerHTML=chatRenderMessageRow(m,i);
     }
   }
+  chatFinalizeRenderedAssistantWaits(box);
   chatRenderPendingBar();
   if(shouldStick){
     chatScrollMessagesBottom(opts.smooth!==true);
@@ -9032,6 +9035,40 @@ function chatRenderMessages(opts){
     box.scrollTop=previousScrollTop;
     if(opts.newMessage)chatSetNewMessageHint(true);
   }
+}
+function chatFinalizeRenderedAssistantWaits(box){
+  if(!box)return false;
+  var completedAt=Date.now(),changed=[];
+  chatMessages.forEach(function(message,index){
+    if(!message||message.role!=='assistant'||message.waitPending!==true)return;
+    // 分条模式下最后一句还藏在 reveal queue 里时继续等；直到它真的进入 DOM 才收口。
+    if(chatIsAssistantRevealPending(message))return;
+    var userSentTs=Number(message.userSentTs||0)||0;
+    if(!userSentTs)return;
+    message.renderCompletedTs=completedAt;
+    message.waitMs=Math.max(0,completedAt-userSentTs);
+    delete message.waitPending;
+    changed.push(index);
+  });
+  changed.forEach(function(index){
+    var row=box.querySelector('.chat-msg-row[data-chat-index="'+String(index)+'"]');
+    if(!row)return;
+    var timing=chatMessageTimingHtml(
+      chatMessages[index],
+      'assistant',
+      chatIsMessageGroupLast(index,'assistant')
+    );
+    var timeEl=row.querySelector('.chat-msg-time');
+    if(timeEl&&timing){
+      // 只更新等待文字，保留已完成气泡的 DOM、动画状态和滚动位置。
+      timeEl.outerHTML=timing;
+    }else if(timing){
+      // 正常新回复一定已有时间节点；异常旧 DOM 才走完整行兜底。
+      row.outerHTML=chatRenderMessageRow(chatMessages[index],index);
+    }
+  });
+  if(changed.length)chatSaveLocalMessagesDeferred();
+  return changed.length>0;
 }
 function chatMessageAnimKey(m){
   if(!m)return '';
@@ -9911,7 +9948,10 @@ async function chatSubmitPendingMessages(options){
     requestState.pendingMessages=pendingBatchMessages.slice();
     requestState.out=out;
   }
-  await chatEnsureSessionsReady();
+  // 两项互不依赖：首次打开页面时并行准备，避免先等 IndexedDB、再等主链路配置。
+  var sessionsReadyPromise=chatEnsureSessionsReady();
+  var mainRouteReadyPromise=chatEnsureMainRouteReady();
+  await sessionsReadyPromise;
   if(requestState&&requestState.stopped)return;
   if(requestState){
     var requestSession=chatCurrentSession();
@@ -9931,7 +9971,7 @@ async function chatSubmitPendingMessages(options){
   chatScrollMessagesBottom(true);
   if(!out||!out.parentNode)out=chatAddBubble('assistant','',false);
   if(requestState)requestState.out=out;
-  var route=await chatEnsureMainRouteReady();
+  var route=await mainRouteReadyPromise;
   if(requestState&&requestState.stopped)return;
   if(!route||!route.ok){
     chatHandleMainRouteNotReady(route);
@@ -10129,7 +10169,6 @@ async function chatSubmitPendingMessages(options){
   function markFirstReplyTs(){
     if(!firstReplyTs){
       firstReplyTs=Date.now();
-      chatUpdateStreamingTiming(out,responseUserTs,firstReplyTs);
     }
     return firstReplyTs;
   }
