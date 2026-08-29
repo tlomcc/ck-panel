@@ -168,14 +168,31 @@ body.chat-active .chat-title-meta{
   min-width:0!important;
 }
 body.chat-active .chat-title-meta #chat-status{margin:3px 0 0!important}
-/* 等待期间接在「对方正在输入...」后面的真实进度（阶段 + 已等秒数）。
-   不是新组件，就是同一行里更淡的一小段；秒数每秒在动，长等待才看得出还在跑。 */
-#chat-status .chat-status-detail{
-  margin-left:5px!important;
-  opacity:.62!important;
-  font-variant-numeric:tabular-nums!important;
+/* 等待期间的真实进度（阶段 + 已等秒数），挂在右上角两颗图标按钮的正下方。
+   标题栏中间那句「对方正在输入...」保持原样，一个字不加。
+   必须绝对定位：.chat-head-actions 在聊天页是两列网格，直接塞第三个子元素
+   会被挤到第二行去。父容器本身就是 absolute，所以这里的定位基准已经有了。 */
+#chat-head-progress{
+  position:absolute!important;
+  top:100%!important;
+  right:0!important;
+  margin-top:5px!important;
+  max-width:56vw!important;
+  padding:2px 7px!important;
+  border-radius:9px!important;
+  font-size:11px!important;
+  line-height:1.45!important;
   white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  font-variant-numeric:tabular-nums!important;
+  color:var(--ck-muted,#66756d)!important;
+  background:var(--ck-surface,#fff)!important;
+  border:1px solid var(--ck-line-soft,#e8eee9)!important;
+  pointer-events:none!important;
+  z-index:6!important;
 }
+#chat-head-progress[hidden]{display:none!important}
 body.chat-active .chat-version-badge{
   height:17px!important;
   margin-top:3px!important;
