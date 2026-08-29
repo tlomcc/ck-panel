@@ -168,6 +168,14 @@ body.chat-active .chat-title-meta{
   min-width:0!important;
 }
 body.chat-active .chat-title-meta #chat-status{margin:3px 0 0!important}
+/* 等待期间接在「对方正在输入...」后面的真实进度（阶段 + 已等秒数）。
+   不是新组件，就是同一行里更淡的一小段；秒数每秒在动，长等待才看得出还在跑。 */
+#chat-status .chat-status-detail{
+  margin-left:5px!important;
+  opacity:.62!important;
+  font-variant-numeric:tabular-nums!important;
+  white-space:nowrap!important;
+}
 body.chat-active .chat-version-badge{
   height:17px!important;
   margin-top:3px!important;

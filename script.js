@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v213-total-wait-fast-path';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v214-wait-progress';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4498,11 +4498,48 @@ function chatPublishSpeechPreferences(){
     if(button)button.disabled=false;
   });
 }
+// 等待期间的真实进度。网关本来就在发 meta/memory/delta 事件，以前只记进调试日志，
+// 界面上从「正在请求网关」到「正在渲染回复」之间十几二十秒一个字都不变，看着像卡死。
+// 这里不新增任何视觉元素，只把阶段和已等秒数接在标题栏那行「对方正在输入...」后面。
+var chatStreamProgress=null;
+var chatStreamProgressTimer=0;
+function chatStreamProgressStart(){
+  chatStreamProgress={stage:'连接网关',startTs:Date.now()};
+  if(chatStreamProgressTimer)clearInterval(chatStreamProgressTimer);
+  // 每秒重画一次：就算网关半天不发事件，秒数也在动，用户能看出还在跑。
+  chatStreamProgressTimer=setInterval(chatStreamProgressRender,1000);
+  chatStreamProgressRender();
+}
+function chatStreamProgressSet(stage){
+  if(!chatStreamProgress)return;
+  var next=String(stage||'');
+  if(!next||next===chatStreamProgress.stage)return;
+  chatStreamProgress.stage=next;
+  chatStreamProgressRender();
+}
+function chatStreamProgressStop(){
+  chatStreamProgress=null;
+  if(chatStreamProgressTimer){clearInterval(chatStreamProgressTimer);chatStreamProgressTimer=0;}
+}
+function chatStreamProgressText(){
+  if(!chatStreamProgress)return '';
+  var seconds=Math.max(0,Math.round((Date.now()-chatStreamProgress.startTs)/1000));
+  return chatStreamProgress.stage+' '+seconds+'s';
+}
+function chatStreamProgressRender(){
+  if(!chatStreamProgress)return;
+  chatSetStatus('正在请求网关...');
+}
 function chatSetStatus(text){
   var el=document.getElementById('chat-status');
   if(!el)return;
   var waiting=/请求网关|正在请求|对方正在输入|等待回复|发送中/.test(String(text||''));
-  el.innerHTML=waiting?'对方正在输入...':'<span class="chat-online-dot"></span>在线';
+  if(!waiting){
+    el.innerHTML='<span class="chat-online-dot"></span>在线';
+    return;
+  }
+  var detail=chatStreamProgressText();
+  el.innerHTML='对方正在输入...'+(detail?'<span class="chat-status-detail">'+chatEsc(detail)+'</span>':'');
 }
 function chatWorldbookPack(cfg){
   cfg=cfg||chatLoadConfig();
@@ -10042,6 +10079,7 @@ async function chatSubmitPendingMessages(options){
   }
   chatPlaceAssistantBubbleBeforePending(out);
   if(btn){btn.disabled=false;btn.textContent='停止';btn.title='停止请求';btn.classList.add('chat-stop-btn')}
+  chatStreamProgressStart();
   chatSetStatus('正在请求网关...');
   chatUpdateRuntime(cfg);
   var currentSession=chatCurrentSession();
@@ -10245,12 +10283,14 @@ async function chatSubmitPendingMessages(options){
           var deltaText=typeof data==='string'?data:String((data&&data.text)||'');
           recordFirstDeltaLatency(data&&typeof data==='object'?data:null);
           if(deltaText)markFirstReplyTs();
+          if(deltaText)chatStreamProgressSet('小克正在写');
           assistantText+=deltaText;
         }else if(ev==='memory'){
           recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
           var memoryPackEl=document.getElementById('chat-memory-pack');
           if(memoryPackEl)memoryPackEl.value=recallInfo.preview||'';
           var savedCfg=chatLoadConfig();savedCfg.memoryPreview=recallInfo.preview||'';chatSaveConfigObject(savedCfg);
+          chatStreamProgressSet(recallInfo.chars?('已翻到记忆 '+recallInfo.chars+' 字，小克在想'):'没有相关记忆，小克在想');
           chatDebug(ev,{memory_chars:recallInfo.chars,has_memory:!!recallInfo.preview,recall_query:data.recall_query||'',debug_id:data.debug_id||'',recall_diag:data.recall_diag||{}});
         }else if(ev==='transport'){
           if(data&&Array.isArray(data.messages)){
@@ -10261,6 +10301,7 @@ async function chatSubmitPendingMessages(options){
             chatSaveSessions();
           }
         }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
+          if(ev==='meta')chatStreamProgressSet('网关已接收，正在翻记忆');
           if(ev==='meta'&&data&&data.debug_id)latencyTrace.debug_id=String(data.debug_id||'');
           if(data&&data.latency_probe&&typeof data.latency_probe==='object')latencyTrace.gateway_latency=data.latency_probe;
           if(ev==='usage')data=chatEnrichUsageRoute(data||{},cfg);
@@ -10268,6 +10309,7 @@ async function chatSubmitPendingMessages(options){
           if(ev==='meta'||ev==='done')chatCaptureSpeechPreferenceRevisions(data,cfg.sessionId,{allowClear:true});
           chatDebug(ev,data);
           if(ev==='tool'){
+            chatStreamProgressSet('正在调用工具'+(data&&data.name?('：'+data.name):''));
             markFirstReplyTs();
             toolEvents=chatUpsertToolEvent(toolEvents,data);
             scheduleStreamRender();
@@ -10339,6 +10381,7 @@ async function chatSubmitPendingMessages(options){
     });
     if(requestState&&requestState.stopped)return;
     stopStreamRender();
+    chatStreamProgressStop();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
     await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants});
@@ -10366,6 +10409,7 @@ async function chatSubmitPendingMessages(options){
     }
   }finally{
     stopStreamRender();
+    chatStreamProgressStop();
     if(out&&out.parentNode)out.parentNode.remove();
     chatReleaseSendingUi(requestState);
     if(requestCompleted){
