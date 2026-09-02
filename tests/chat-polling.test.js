@@ -4,6 +4,7 @@ const vm=require('vm');
 
 const source=fs.readFileSync(require.resolve('../script.js'),'utf8');
 const css=fs.readFileSync(require.resolve('../chat.css'),'utf8');
+const styleCss=fs.readFileSync(require.resolve('../style.css'),'utf8');
 
 function extractFunction(name){
   const start=source.indexOf(`function ${name}(`);
@@ -519,7 +520,7 @@ function testSyncFromProvidersRefreshesMirrorAndRevision(){
 }
 
 // 供应商表单里的策略下拉清单是手写常量，必须和 chatNormalizeCacheStrategy 的
-// 正式输出集合一致。以后新增第 6 个策略时这条会立刻失败，
+// 正式输出集合一致。以后再新增策略时这条会立刻失败，
 // 提醒把它补进下拉——否则新策略在供应商库里永远选不到。
 function testStrategyListCoversEveryCanonicalStrategy(){
   const listed=/var API_POLLING_STRATEGY_VALUES=\[([^\]]*)\]/.exec(source);
@@ -538,7 +539,7 @@ function testStrategyListCoversEveryCanonicalStrategy(){
     '供应商表单必须用这份常量生成下拉');
   assert.ok(/option value=""/.test(extractFunction('providerCacheStrategyHtml')),
     '必须有"不选"这一项：缓存策略是可选的，不选也能保存');
-  // 真跑一遍下拉渲染：5 个策略 + 一个"不选"，选中项跟着供应商那份走。
+  // 真跑一遍下拉渲染：全部策略 + 一个"不选"，选中项跟着供应商那份走。
   const context=pollingContext(library(),{esc:v=>String(v),escAttr:v=>String(v)});
   vm.runInContext('var API_POLLING_STRATEGY_VALUES='+listed[0].replace('var API_POLLING_STRATEGY_VALUES=','')+';',context);
   vm.runInContext(extractFunction('providerCacheStrategyHtml'),context);
@@ -578,6 +579,98 @@ function testPollingLiveStatusText(){
   assert.ok(trying.includes('缓存 前缀'),'实时状态要显示候选缓存策略');
   assert.ok(trying.includes('单次上限 60s'),'实时状态要显示一分钟上限');
   assert.strictEqual(context.apiPollingStatusText({state:'exhausted'}),'全部失败');
+  // 随机模式下"距下次回主"其实是"距下次重摇"，文案必须跟着换
+  const rolling=context.apiPollingStatusText({
+    state:'success',active_provider_name:'丙',active_provider_index:2,
+    primary_retry_enabled:true,remaining_to_primary:59,
+    random_mode:true,select_reason:'random_reroll'
+  });
+  assert.ok(rolling.includes('距下次重摇 59 轮'),'随机模式要显示重摇倒计时');
+  assert.ok(rolling.includes('本轮重摇'),'重摇的那一轮要说出来');
+  assert.ok(!rolling.includes('距下次回主'),'随机模式下不能再说"回主"');
+  const expired=context.apiPollingStatusText({
+    state:'success',active_provider_name:'甲',active_provider_index:0,
+    select_reason:'cache_expired'
+  });
+  assert.ok(expired.includes('缓存过期已回主'),'过期回主要有明确说明');
+}
+
+// ---------------------------------------------------------------------------
+// 随机模式 + 缓存过期回主：两个开关都直接决定网关挑谁，必须能存下来、
+// 必须进 config_revision（否则别的热实例不会重新拉配置，勾了也不生效）。
+// ---------------------------------------------------------------------------
+function testRandomAndExpiredSwitchesRoundTrip(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  // 老配置没这两个字段，必须都读成 false
+  assert.strictEqual(context.apiPollingConfig().random_mode,false,'随机模式默认关');
+  assert.strictEqual(context.apiPollingConfig().expired_return_primary,false,'过期回主默认关');
+
+  const base=context.apiPollingRevision();
+  providers.chat_polling.random_mode=true;
+  context.chatPollingViewInvalidate();
+  assert.strictEqual(context.apiPollingConfig().random_mode,true);
+  assert.notStrictEqual(context.apiPollingRevision(),base,'随机模式必须改变 config_revision');
+  const randomRevision=context.apiPollingRevision();
+  providers.chat_polling.expired_return_primary=true;
+  assert.notStrictEqual(context.apiPollingRevision(),randomRevision,'过期回主必须改变 config_revision');
+
+  // 写入口要原样保留这两个开关
+  const written=context.apiPollingWrite({
+    enabled:true,random_mode:true,expired_return_primary:true,
+    order:[{provider_id:'A',model:'m-a'}],config_revision:'r-new'
+  });
+  assert.strictEqual(written.random_mode,true);
+  assert.strictEqual(written.expired_return_primary,true);
+  // 供应商库改完策略后的同步不能把这两个开关丢掉
+  const synced=context.apiPollingSyncFromProviders();
+  assert.strictEqual(synced.random_mode,true,'同步镜像时不能丢掉随机模式');
+  assert.strictEqual(synced.expired_return_primary,true,'同步镜像时不能丢掉过期回主');
+}
+
+function testRandomAndExpiredSwitchesCollectFromDom(){
+  const providers=library();
+  providers.chat_polling={enabled:true,order:[{provider_id:'A',model:'m-a'}]};
+  const context=pollingContext(providers);
+  context.__dom={
+    'api-polling-enabled':{checked:true},
+    'api-polling-primary-retry':{checked:true},
+    'api-polling-primary-interval':{value:'60'},
+    'api-polling-random':{checked:true},
+    'api-polling-expired-primary':{checked:true}
+  };
+  const draft=context.apiPollingCollectSwitches();
+  assert.strictEqual(draft.random_mode,true,'随机模式勾选要收进草稿');
+  assert.strictEqual(draft.expired_return_primary,true,'过期回主勾选要收进草稿');
+  assert.strictEqual(draft.primary_retry_interval,60,'随机模式下这个数字就是"用满多少轮重摇"');
+}
+
+// 过期回主是顺序模式专用：随机模式下没有"主"，勾了也不生效，
+// 因此保存时必须落成 false，别在配置里留一个骗人的 true。
+function testExpiredPrimaryIsSequentialOnly(){
+  const save=extractFunction('saveApiPolling');
+  assert.ok(/expired_return_primary:draft\.random_mode\?false:draft\.expired_return_primary/.test(save),
+    '随机模式保存时必须把过期回主写成 false');
+  const toggle=extractFunction('apiPollingToggleControls');
+  assert.ok(toggle.includes("expired.disabled=!draft.enabled||!!draft.random_mode"),
+    '随机模式下过期回主勾选框必须禁用');
+  const render=extractFunction('renderApiPolling');
+  assert.ok(render.includes('api-polling-random'),'轮询页必须有随机模式勾选框');
+  assert.ok(render.includes('api-polling-expired-primary'),'轮询页必须有过期回主勾选框');
+  // 随机模式下「回主重试」整块要改口径：文案是重摇，不是回主
+  assert.ok(render.includes('定期重摇')&&render.includes('次后重新摇一个'),
+    '随机模式下回主重试要显示成"定期重摇 / 用满 N 轮重新摇"');
+  assert.ok(/\.api-primary-retry\.random\.off::after/.test(styleCss),
+    '随机模式下「未启用」那句提示语也要换成重摇口径');
+  assert.ok(/\.api-polling-random/.test(styleCss),'随机模式那一块要有样式');
+  assert.ok(/\.api-polling-expired/.test(styleCss),'过期回主那一块要有样式');
+  // .na 必须排在 .off 之后，否则同特异度下"未启用"会压过"随机模式下不适用"
+  assert.ok(styleCss.indexOf('.api-polling-expired.na::after')>styleCss.indexOf('.api-polling-expired.off::after'),
+    '.na 的提示语必须写在 .off 后面才能生效');
+  // 随机模式一改要整页重渲染：文案和禁用状态都要跟着变
+  assert.ok(render.includes('apiPollingToggleRandom()'),'随机模式勾选要走重渲染');
+  assert.ok(extractFunction('apiPollingToggleRandom').includes('renderApiConfig()'));
 }
 
 function testPollingRuntimeWiring(){
@@ -615,6 +708,9 @@ testDisplaySwitchesRoundTrip();
 testChatDisplayFallsBackToLocalMirror();
 testPollingHasHardDomFallback();
 testPollingLiveStatusText();
+testRandomAndExpiredSwitchesRoundTrip();
+testRandomAndExpiredSwitchesCollectFromDom();
+testExpiredPrimaryIsSequentialOnly();
 testPollingRuntimeWiring();
 
 console.log('chat polling config tests: OK');

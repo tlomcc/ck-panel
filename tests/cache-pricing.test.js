@@ -152,6 +152,21 @@ assert.strictEqual(context.chatNormalizeCacheStrategy('cost_optimized'),'native_
 assert.strictEqual(tiered.ttl,'mixed');
 assert.strictEqual(tiered.requestTtl,'1h');
 assert.strictEqual(tiered.retentionSeconds,3600);
-assert(/if\(cacheStrategy==='native_stable'\|\|cacheStrategy==='native_tiered'\)body\.upstream_format='anthropic';/.test(source));
+// 三个原生档都必须显式发 anthropic：/messages 形状是它们的定义前提
+assert(/if\(cacheStrategy==='native_stable'\|\|cacheStrategy==='native_tiered'\|\|cacheStrategy==='native_5m'\)body\.upstream_format='anthropic';/.test(source));
+
+// —— 原生5min：断点照 Claude Code 的尾部方案，TTL 全 5m ——
+// 'native_5m' 以前是 native_stable 的别名，改造后必须归它自己。
+['native_5m','native5m','NATIVE-5MIN','native_short','claude_code'].forEach(function(raw){
+  assert.strictEqual(context.chatNormalizeCacheStrategy(raw),'native_5m',raw+' 应归一到 native_5m');
+});
+assert.strictEqual(context.chatNormalizeCacheStrategy('native'),'native_stable');
+const native5m=context.chatCacheStrategyMeta('native_5m');
+assert.strictEqual(native5m.ttl,'5m');
+assert.strictEqual(native5m.ttlLabel,'5m');
+assert.strictEqual(native5m.retentionSeconds,300,'5min 档的旧召回保留必须是 300s，不能跟着原生1h 用 3600');
+assert.strictEqual(native5m.shortLabel,'原生5min');
+// 缓存到期提示：原生5min 必须走 5 分钟那条，不能被 ttl==='1h' 的分支吃掉
+assert(/if\(meta&&meta\.ttl==='1h'\)/.test(source));
 
 console.log('cache pricing tests: OK');

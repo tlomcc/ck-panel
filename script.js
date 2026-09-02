@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v215-wait-progress-corner';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v216-native-5min-random-polling';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2337,7 +2337,10 @@ function chatNormalizeCacheStrategy(value){
   if(raw==='prefix_24h'||raw==='prefix24h'||raw==='partial_24h'||raw==='24h'||raw==='prefix')return 'prefix_24h';
   if(raw==='assistant_latest'||raw==='latest_assistant'||raw==='assistant'||raw==='assistant_breakpoint'||raw==='assistant_5m')return 'assistant_latest';
   if(raw==='native_tiered'||raw==='tiered_native'||raw==='native_mixed'||raw==='native_1h_5m'||raw==='cost_optimized')return 'native_tiered';
-  if(raw==='native_stable'||raw==='native'||raw==='native_cache'||raw==='stable_native'||raw==='anthropic_native'||raw==='anthropic_stable'||raw==='uocode_stable'||raw==='uocode_native'||raw==='native_5m')return 'native_stable';
+  // 原生5min 是独立策略（断点照 Claude Code 的尾部方案，TTL 全 5m）。
+  // 'native_5m' 以前是 native_stable 的别名，现在归它，别再改回去。
+  if(raw==='native_5m'||raw==='native5m'||raw==='native_5min'||raw==='native_short'||raw==='native_stable_5m'||raw==='native_code'||raw==='claude_code')return 'native_5m';
+  if(raw==='native_stable'||raw==='native'||raw==='native_cache'||raw==='stable_native'||raw==='anthropic_native'||raw==='anthropic_stable'||raw==='uocode_stable'||raw==='uocode_native')return 'native_stable';
   return 'single_5m';
 }
 // 这一轮真正生效的缓存策略：轮询关着时，主链路供应商自己维护的策略优先；
@@ -2378,6 +2381,18 @@ function chatCacheStrategyMeta(value){
       retentionSeconds:3600,
       sendText:'Claude /messages：固定 system 与最近两个完成助手使用 1h，当前真实用户文本使用 5m 尾部断点',
       debugText:'1h system/最近助手 + 5m 当前用户尾部'
+    };
+  }
+  if(strategy==='native_5m'){
+    return {
+      value:'native_5m',
+      label:'原生稳定缓存 5min',
+      shortLabel:'原生5min',
+      ttl:'5m',
+      ttlLabel:'5m',
+      retentionSeconds:300,
+      sendText:'Claude /messages：断点跟着对话尾部走——固定 system + 工具尾 + 上一个真实用户读锚点 + 当前真实用户创建锚点，全部 5m；本轮提问自己也进缓存，停顿超过 5 分钟会重建',
+      debugText:'5m system/工具 + 上一个与当前用户断点'
     };
   }
   if(strategy==='native_stable'){
@@ -10151,9 +10166,9 @@ async function chatSubmitPendingMessages(options){
     body.speech_preference_applied_revision=currentSession.speechPreferenceAppliedRevision;
   }
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
-  // 原生稳定策略必须走 Anthropic 原生 /messages 形状；其它策略继续
+  // 三个原生策略都必须走 Anthropic 原生 /messages 形状；其它策略继续
   // 由网关按供应商地址自动判断 OpenAI/Anthropic 协议。
-  if(cacheStrategy==='native_stable'||cacheStrategy==='native_tiered')body.upstream_format='anthropic';
+  if(cacheStrategy==='native_stable'||cacheStrategy==='native_tiered'||cacheStrategy==='native_5m')body.upstream_format='anthropic';
   if(regenerateRequest){
     currentSession.transportMessages=[];
     currentSession.transportUpdated=0;
@@ -10666,7 +10681,7 @@ var API_TABS=[
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
-  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。只影响聊天、Fact 和召回配置。'},
+  {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。也可以勾「随机模式」不按顺序、每次在队列里摇一个用。只影响聊天、Fact 和召回配置。'},
   {key:'memory',label:'记忆',info:'这一栏管 Fact 提取、言语要求提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'},
@@ -10873,6 +10888,10 @@ function apiPollingConfig(){
     enabled:raw.enabled===true,
     primary_retry_enabled:raw.primary_retry_enabled===true,
     primary_retry_interval:Math.max(5,Math.min(200,Number(raw.primary_retry_interval)||20)),
+    // 随机模式：不按队列顺序，摇一个用一个。勾了回主重试就变成"用满 N 轮后重新摇"。
+    random_mode:raw.random_mode===true,
+    // 过期回主：只在顺序模式生效，间隔超过当前策略的缓存有效期就回队列第 1 个。
+    expired_return_primary:raw.expired_return_primary===true,
     show_message_status:raw.show_message_status===true,
     show_billing_price:raw.show_billing_price===true,
     order:order,
@@ -10886,6 +10905,8 @@ function apiPollingWrite(next){
     enabled:next.enabled===true,
     primary_retry_enabled:next.primary_retry_enabled===true,
     primary_retry_interval:Math.max(5,Math.min(200,Number(next.primary_retry_interval)||20)),
+    random_mode:next.random_mode===true,
+    expired_return_primary:next.expired_return_primary===true,
     show_message_status:next.show_message_status===true,
     show_billing_price:next.show_billing_price===true,
     order:(Array.isArray(next.order)?next.order:[]).map(function(x){
@@ -10915,6 +10936,8 @@ function apiPollingSyncFromProviders(){
     enabled:polling.enabled,
     primary_retry_enabled:polling.primary_retry_enabled,
     primary_retry_interval:polling.primary_retry_interval,
+    random_mode:polling.random_mode,
+    expired_return_primary:polling.expired_return_primary,
     show_message_status:polling.show_message_status,
     show_billing_price:polling.show_billing_price,
     order:polling.order
@@ -10966,6 +10989,10 @@ function apiPollingRevision(polling,items){
     enabled:polling.enabled===true,
     primary_retry_enabled:polling.primary_retry_enabled===true,
     primary_retry_interval:polling.primary_retry_interval,
+    // 这两个开关直接决定网关这一轮挑哪个候选，必须参与修订：
+    // 修订不变的话别的热实例不会重新拉配置，勾了也还按旧规则挑。
+    random_mode:polling.random_mode===true,
+    expired_return_primary:polling.expired_return_primary===true,
     order:items.filter(function(x){return x.available}).map(function(x){
       return [x.provider_id,x.model,x.cache_strategy,providerFingerprint(x.provider)];
     })
@@ -11456,6 +11483,8 @@ function apiPollingDraftGet(){
       enabled:polling.enabled,
       primary_retry_enabled:polling.primary_retry_enabled,
       primary_retry_interval:polling.primary_retry_interval,
+      random_mode:polling.random_mode,
+      expired_return_primary:polling.expired_return_primary,
       show_message_status:polling.show_message_status,
       show_billing_price:polling.show_billing_price,
       order:polling.order.map(function(x){
@@ -11501,7 +11530,7 @@ function apiPollingModelSelectHtml(item,index){
 }
 // 缓存策略和价格都在供应商库里维护，这一页只读地显示一眼，避免两处都能改、
 // 改完还要猜哪边生效。标签直接取聊天页那份 meta，避免两处文案走样。
-var API_POLLING_STRATEGY_VALUES=['single_5m','assistant_latest','native_stable','native_tiered','prefix_24h'];
+var API_POLLING_STRATEGY_VALUES=['single_5m','assistant_latest','native_5m','native_stable','native_tiered','prefix_24h'];
 function apiPollingProviderSummaryHtml(item){
   var strategy=providerCacheStrategy(item&&item.provider);
   var strategyText=strategy?('缓存：'+chatCacheStrategyMeta(strategy).label):'缓存：跟随聊天面板';
@@ -11527,14 +11556,30 @@ function renderApiPolling(){
     (items.length?'<button class="btn btn-outline btn-sm" type="button" onclick="clearApiPolling()">清空队列</button>':''));
   html+=renderApiIntro(findApiTab('polling'));
   html+='<section class="api-polling-overview">'+
-    '<div><b>当前模式</b><span>'+(saved.enabled?'聊天 API 轮询':'单链路')+'</span></div>'+
+    '<div><b>当前模式</b><span>'+(saved.enabled?('聊天 API 轮询 · '+(saved.random_mode?'随机':'顺序')):'单链路')+'</span></div>'+
     '<div><b>队列</b><span>'+items.length+' 个（'+available.length+' 个可用）</span></div>'+
     '<div class="api-polling-current"><b>正在使用</b><span id="api-polling-current-text">'+
       (saved.enabled?'读取中…':'单链路（轮询未开启）')+'</span></div>'+
     '</section>';
   html+='<div class="api-polling-options">'+
     '<label class="api-toggle"><input id="api-polling-enabled" type="checkbox"'+(draft.enabled?' checked':'')+' onchange="apiPollingToggleControls()"><span>启用聊天 API 轮询</span></label>'+
-    '<div class="api-primary-retry '+(draft.enabled?'':'disabled')+(draft.primary_retry_enabled?'':' off')+'"><label class="api-toggle"><input id="api-polling-primary-retry" type="checkbox"'+(draft.primary_retry_enabled?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>回主重试</span></label><label class="api-primary-retry-interval"><span>备用 API 连续使用</span><input id="api-polling-primary-interval" type="number" min="5" max="200" step="1" value="'+draft.primary_retry_interval+'"'+(draft.enabled&&draft.primary_retry_enabled?'':' disabled')+' onblur="this.value=Math.max(5,Math.min(200,Number(this.value)||20))"><span>次后重试第 1 个</span></label><p>第 1 个恢复后会继续固定使用；仍失败则按队列顺序回到备用。</p></div>'+
+    '<div class="api-polling-random'+(draft.enabled?'':' disabled')+(draft.random_mode?'':' off')+'">'+
+      '<label class="api-toggle"><input id="api-polling-random" type="checkbox"'+(draft.random_mode?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleRandom()"><span>随机模式</span></label>'+
+      '<p>不按队列顺序：每次发消息时在队列里随机摇一个用。摇到的那个会一直用下去，只有它报错才换（换人也是随机的）。想让它定期换人就勾下面的「回主重试」。</p>'+
+    '</div>'+
+    '<div class="api-primary-retry '+(draft.enabled?'':'disabled')+(draft.random_mode?' random':'')+(draft.primary_retry_enabled?'':' off')+'">'+
+      '<label class="api-toggle"><input id="api-polling-primary-retry" type="checkbox"'+(draft.primary_retry_enabled?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>'+(draft.random_mode?'定期重摇':'回主重试')+'</span></label>'+
+      '<label class="api-primary-retry-interval"><span>'+(draft.random_mode?'同一个 API 连续使用':'备用 API 连续使用')+'</span>'+
+        '<input id="api-polling-primary-interval" type="number" min="5" max="200" step="1" value="'+draft.primary_retry_interval+'"'+(draft.enabled&&draft.primary_retry_enabled?'':' disabled')+' onblur="this.value=Math.max(5,Math.min(200,Number(this.value)||20))">'+
+        '<span>'+(draft.random_mode?'次后重新摇一个':'次后重试第 1 个')+'</span></label>'+
+      '<p>'+(draft.random_mode
+        ?'随机模式下这里是「重摇」而不是「回主」：用满这么多轮就在队列里重新摇一个继续，摇到谁都算数（可能还是原来那个）。'
+        :'第 1 个恢复后会继续固定使用；仍失败则按队列顺序回到备用。')+'</p>'+
+    '</div>'+
+    '<div class="api-polling-expired'+(draft.enabled?'':' disabled')+(draft.random_mode?' na':'')+(draft.expired_return_primary?'':' off')+'">'+
+      '<label class="api-toggle"><input id="api-polling-expired-primary" type="checkbox"'+(draft.expired_return_primary?' checked':'')+(draft.enabled&&!draft.random_mode?'':' disabled')+' onchange="apiPollingToggleControls()"><span>缓存过期就回主</span></label>'+
+      '<p>顺序模式专用：距上一次成功已经超过当前缓存策略的有效期（原生1h / 分层算 1 小时，5min / 助手 / 原生5min 算 5 分钟）时，缓存反正已经读不到了，这一次直接回队列第 1 个，而不是继续用上次轮到的那个备用。共同前缀 24h 策略算不出到期点，不触发。</p>'+
+    '</div>'+
     '<div class="api-polling-display'+(draft.enabled?'':' disabled')+'">'+
       '<label class="api-toggle"><input id="api-polling-show-price" type="checkbox"'+(draft.show_billing_price?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>显示价格</span></label>'+
       '<label class="api-toggle"><input id="api-polling-show-status" type="checkbox"'+(draft.show_message_status?' checked':'')+(draft.enabled?'':' disabled')+' onchange="apiPollingToggleControls()"><span>显示 √</span></label>'+
@@ -11589,27 +11634,57 @@ function apiPollingCollectSwitches(){
   var enabled=document.getElementById('api-polling-enabled');
   var retry=document.getElementById('api-polling-primary-retry');
   var interval=document.getElementById('api-polling-primary-interval');
+  var randomMode=document.getElementById('api-polling-random');
+  var expired=document.getElementById('api-polling-expired-primary');
   var showPrice=document.getElementById('api-polling-show-price');
   var showStatus=document.getElementById('api-polling-show-status');
   if(enabled)draft.enabled=!!enabled.checked;
   if(retry)draft.primary_retry_enabled=!!retry.checked;
   if(interval)draft.primary_retry_interval=Math.max(5,Math.min(200,Number(interval.value)||20));
+  if(randomMode)draft.random_mode=!!randomMode.checked;
+  if(expired)draft.expired_return_primary=!!expired.checked;
   if(showPrice)draft.show_billing_price=!!showPrice.checked;
   if(showStatus)draft.show_message_status=!!showStatus.checked;
   return draft;
+}
+// 随机模式一改，「回主重试」整块的文案要跟着变成「定期重摇」，
+// 「缓存过期回主」也要跟着置灰，所以这一个开关走整页重渲染（其余开关只切 class）。
+function apiPollingToggleRandom(){
+  apiPollingCollectSwitches();
+  renderApiConfig();
 }
 function apiPollingToggleControls(){
   var draft=apiPollingCollectSwitches();
   var card=document.querySelector?document.querySelector('.api-primary-retry'):null;
   var display=document.querySelector?document.querySelector('.api-polling-display'):null;
+  var randomCard=document.querySelector?document.querySelector('.api-polling-random'):null;
+  var expiredCard=document.querySelector?document.querySelector('.api-polling-expired'):null;
   var retry=document.getElementById('api-polling-primary-retry');
   var interval=document.getElementById('api-polling-primary-interval');
+  var randomMode=document.getElementById('api-polling-random');
+  var expired=document.getElementById('api-polling-expired-primary');
   var showPrice=document.getElementById('api-polling-show-price');
   var showStatus=document.getElementById('api-polling-show-status');
-  if(card){card.classList.toggle('disabled',!draft.enabled);card.classList.toggle('off',!draft.primary_retry_enabled)}
+  if(card){
+    card.classList.toggle('disabled',!draft.enabled);
+    card.classList.toggle('off',!draft.primary_retry_enabled);
+    card.classList.toggle('random',!!draft.random_mode);
+  }
   if(display)display.classList.toggle('disabled',!draft.enabled);
+  if(randomCard){
+    randomCard.classList.toggle('disabled',!draft.enabled);
+    randomCard.classList.toggle('off',!draft.random_mode);
+  }
+  if(expiredCard){
+    expiredCard.classList.toggle('disabled',!draft.enabled);
+    expiredCard.classList.toggle('na',!!draft.random_mode);
+    expiredCard.classList.toggle('off',!draft.expired_return_primary);
+  }
   if(retry)retry.disabled=!draft.enabled;
   if(interval)interval.disabled=!draft.enabled||!draft.primary_retry_enabled;
+  if(randomMode)randomMode.disabled=!draft.enabled;
+  // 过期回主是顺序模式专用：随机模式下没有"主"，勾了也不生效，直接禁掉。
+  if(expired)expired.disabled=!draft.enabled||!!draft.random_mode;
   if(showPrice)showPrice.disabled=!draft.enabled;
   if(showStatus)showStatus.disabled=!draft.enabled;
 }
@@ -11675,6 +11750,9 @@ function saveApiPolling(){
     enabled:draft.enabled,
     primary_retry_enabled:draft.primary_retry_enabled,
     primary_retry_interval:draft.primary_retry_interval,
+    random_mode:draft.random_mode,
+    // 随机模式下"回主"这个概念不存在，别把一个不生效的开关存成开着。
+    expired_return_primary:draft.random_mode?false:draft.expired_return_primary,
     show_message_status:draft.show_message_status,
     show_billing_price:draft.show_billing_price,
     // 顺序保存用户自己排好的这几条（含暂时不可用的），保留他的优先级意图。
@@ -11716,8 +11794,10 @@ function apiPollingStatusText(data){
   var attempt=Number(data.attempt_number||0),total=Number(data.attempt_total||data.candidate_count||0);
   if(attempt>0&&total>0)text+=' · 本轮 '+attempt+'/'+total;
   if(data.primary_retry_enabled){
-    text+=' · 距下次回主 '+Math.max(0,Number(data.remaining_to_primary||0))+' 轮';
+    text+=(data.random_mode===true?' · 距下次重摇 ':' · 距下次回主 ')+Math.max(0,Number(data.remaining_to_primary||0))+' 轮';
   }
+  if(data.select_reason==='cache_expired')text+=' · 缓存过期已回主';
+  else if(data.select_reason==='random_roll'||data.select_reason==='random_reroll')text+=' · 本轮重摇';
   if(data.cache_strategy){
     var cacheMeta=chatCacheStrategyMeta(data.cache_strategy);
     if(cacheMeta&&cacheMeta.shortLabel)text+=' · 缓存 '+cacheMeta.shortLabel;

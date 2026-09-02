@@ -4361,6 +4361,19 @@ body.chat-active .chat-settings #chat-speech-publish:disabled{cursor:wait;opacit
 .api-primary-retry p{margin:0;color:var(--ck-muted);font-size:11.5px;line-height:1.55}
 .api-primary-retry.off .api-primary-retry-interval,.api-primary-retry.off p{display:none}
 .api-primary-retry.off::after{content:"未启用 · 换到备用后不会自动回主";color:var(--ck-muted);font-size:11.5px}
+/* 随机模式下这一块是「定期重摇」，未启用的提示语也要跟着换 */
+.api-primary-retry.random.off::after{content:"未启用 · 摇到的那个会一直用下去"}
+/* 随机模式 + 缓存过期回主：和上面那块同一套外观 */
+.api-polling-random,.api-polling-expired{display:grid;gap:8px;margin-top:10px;padding:12px;border:1px solid var(--ck-line);border-radius:8px;background:var(--ck-surface)}
+.api-polling-random.disabled,.api-polling-expired.disabled{opacity:.52}
+.api-polling-random p,.api-polling-expired p{margin:0;color:var(--ck-muted);font-size:11.5px;line-height:1.55}
+.api-polling-random.off p,.api-polling-expired.off p{display:none}
+.api-polling-random.off::after{content:"未启用 · 按队列顺序从第 1 个开始试";color:var(--ck-muted);font-size:11.5px}
+.api-polling-expired.off::after{content:"未启用 · 隔多久都继续用上次轮到的那个";color:var(--ck-muted);font-size:11.5px}
+/* .na 必须排在 .off 后面：随机模式下这一块整体不适用，提示语要压过「未启用」那条 */
+.api-polling-expired.na{opacity:.52}
+.api-polling-expired.na p{display:none}
+.api-polling-expired.na::after{content:"随机模式下不适用 · 随机模式没有「主」这个概念";color:var(--ck-muted);font-size:11.5px}
 /* 轮询开启时的两个显示开关（√ / 价格），默认都关 */
 .api-polling-display{display:grid;gap:8px;margin-top:10px;padding:12px;border:1px solid var(--ck-line);border-radius:8px;background:var(--ck-surface)}
 .api-polling-display.disabled{opacity:.52}
