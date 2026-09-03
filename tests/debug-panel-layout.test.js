@@ -145,4 +145,47 @@ assert(functionSource('chatAttachAssistantCost').includes('msg.tkRead=cost.read'
   'token 数必须落盘，否则刷新一次页面就算不出命中率了');
 assert(functionSource('chatRenderMessageRow').includes('+time+usage+'),'用量行要紧跟在时间那一行下面');
 
+// ── 召回记忆框开关（2026-09-03 用户要求）──────────────────────────────────
+// 助手消息上面那个「召回记忆」块可以关掉，按键放在设置页。关掉只是不显示，召回照常。
+assert(/id="chat-recall-box-visible"/.test(gateway),'召回记忆框开关必须落在设置页');
+assert(/id="chat-recall-box-visible"[^>]*onchange="chatSaveDisplayToggles\(\)"/.test(gateway),
+  '勾完要立刻生效，和计费/用量那两个开关同一条路');
+assert(/id="chat-recall-box-visible"[^>]*checked/.test(gateway),'默认显示，不能让老用户一升级就少一块');
+assert(functionSource('chatRenderMessageRow').includes('chatShouldShowRecallBox()'),
+  '渲染路径要先问开关再决定输不输出召回块');
+assert(functionSource('chatShouldShowRecallBox').includes('chatDisplayToggles().recallBox'),
+  '开关值要挂在 chatDisplayToggles 那份缓存上，别每条消息各 JSON.parse 一遍');
+assert(functionSource('chatApplyDisplayGateClasses').includes('chat-hide-recall'),
+  '增量刷新时消息签名不变，必须靠 body 上的类兜底');
+assert(chatCss.includes('body.chat-active.chat-hide-recall .chat-recall{display:none!important}'),
+  '兜底类要有对应样式');
+assert(functionSource('chatSaveConfigObject').includes('cfg.recallBoxVisible=cfg.recallBoxVisible!==false'),
+  '开关要落盘');
+// 三个显示开关都要进消息签名，否则关掉能藏、重新打开却不重渲染（节点从没生成过）。
+assert(functionSource('chatMessageRenderKey').includes('chatMessageDisplayGateKey()'),
+  '显示开关必须参与消息签名，开关才是双向的');
+['chatShouldShowMessageStatus','chatShouldShowBillingPrice','chatShouldShowRecallBox'].forEach(function(fn){
+  assert(functionSource('chatMessageDisplayGateKey').includes(fn+'()'),'签名漏了开关 '+fn);
+});
+
+// ── 默认价格（可维护多条，按模型关键字匹配；2026-09-03 用户要求）────────────
+assert(/id="chat-cost-defaults"/.test(gateway),'默认价格卡必须落在设置页');
+assert(gateway.indexOf('id="chat-billing-enabled"')<gateway.indexOf('id="chat-cost-defaults"'),
+  '默认价格维护在「开启计费」下面');
+assert(/onclick="chatAddCostDefault\(\)"/.test(gateway)&&/onclick="chatSaveCostDefaults\(\)"/.test(gateway),
+  '新增和保存两个按钮都要在');
+assert(functionSource('chatPricingForUsage').includes('chatCostDefaultForUsage'),
+  '供应商没维护价格时要落到默认价格表');
+assert(functionSource('chatPricingForUsage').indexOf('chatApiPricingLookup')<
+  functionSource('chatPricingForUsage').indexOf('chatCostDefaultForUsage'),
+  '供应商自己那份价永远优先于默认价格表');
+assert(functionSource('chatReadCostDefaults').includes("box.getAttribute('data-rendered')!=='1'"),
+  '还没渲染过（容器里是"读取中"）时要返回存档值，不能当成"用户删空了"');
+assert(functionSource('chatRenderCostDefaults').includes("setAttribute('data-rendered','1')"),
+  '渲染过要留标记，读回时才分得清"空"和"还没渲染"');
+assert(functionSource('chatSaveConfigObject').includes('cfg.costPricingDefaults=chatNormalizeCostDefaults'),
+  '默认价格要落盘');
+assert(functionSource('chatWriteForm').includes('chatRenderCostDefaults'),
+  '打开面板时要把已维护的默认价格渲染出来');
+
 console.log('debug panel layout tests: OK');

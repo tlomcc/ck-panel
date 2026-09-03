@@ -4160,5 +4160,22 @@ body.dark.chat-active .chat-thinking-copy{border-color:rgba(255,255,255,.18)!imp
    chat-polling-on 仍然保留（别的样式在用，也方便排查）。 */
 body.chat-active.chat-hide-tick .chat-cache-tick{display:none!important}
 body.chat-active.chat-hide-cost .chat-msg-cost{display:none!important}
+/* 召回记忆框同理：渲染路径已经按 chatShouldShowRecallBox 决定要不要输出这个块，
+   这里只防增量刷新留下的旧节点（关掉开关时消息签名没变，行不会重渲染）。 */
+body.chat-active.chat-hide-recall .chat-recall{display:none!important}
 /* 说明卡里的勾号是图例，不受"消息上不显示 √"影响——否则打开说明会是一片空白。 */
 body.chat-active.chat-hide-tick .chat-tick-legend .chat-cache-tick{display:inline-flex!important}
+/* 默认价格（设置页「开启计费」下面那张卡）。可维护多条，按模型关键字匹配。
+   输入框必须写在 body.chat-active 下并带 !important：components.css 最后加载、
+   特异度更高，页面级 input 样式压不过它（见 memory: components.css wins on inputs）。 */
+body.chat-active .chat-cost-defaults-card{margin-bottom:10px!important}
+body.chat-active .chat-cost-defaults{display:grid!important;gap:8px!important;margin-top:8px!important}
+body.chat-active .chat-cost-default-empty{color:var(--chat5-muted)!important;font-size:11.5px!important;line-height:1.55!important}
+body.chat-active .chat-cost-default-row{display:grid!important;gap:8px!important;padding:9px 10px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:8px!important;background:rgba(255,255,255,.6)!important}
+body.chat-active .chat-cost-default-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:end!important;gap:8px!important}
+body.chat-active .chat-cost-default-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important;gap:8px!important}
+body.chat-active .chat-cost-default-row label{display:grid!important;gap:4px!important;margin:0!important;color:var(--chat5-muted)!important;font-size:11px!important;font-weight:600!important}
+body.chat-active .chat-cost-default-row input{width:100%!important;height:34px!important;padding:4px 8px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:7px!important;background:#fff!important;color:#234b35!important;font:inherit!important;font-size:12px!important;box-sizing:border-box!important}
+body.chat-active .chat-cost-defaults-actions{display:flex!important;flex-wrap:wrap!important;gap:8px!important;margin-top:10px!important}
+body.dark.chat-active .chat-cost-default-row{border-color:#2f3b37!important;background:rgba(255,255,255,.04)!important}
+body.dark.chat-active .chat-cost-default-row input{border-color:#2f3b37!important;background:#111a17!important;color:#d8e6df!important}

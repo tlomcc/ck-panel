@@ -96,12 +96,13 @@ function testWiring(){
   assert(line.includes('chatFormatTimingSummary(data)'),'debug 事件里带 timing 就走专用格式化');
   assert(line.indexOf('data.timing_summary||data.timing_stages')<line.indexOf('data.latency_probe&&'),
     'timing 分支要排在首字链路那条之前，否则永远走不到');
-  assert(line.includes("data.timing_summary?('\\n　'+String(data.timing_summary))"),
-    '请求完成那条也要顺手带上汇总串');
+  assert(!line.includes("data.timing_summary?('\\n　'+String(data.timing_summary))"),
+    '请求完成那条不许再跟一串 timing（2026-09-03 用户明确要求删掉）');
   assert(extractFunction('chatDebugLine').includes('chatFormatDebug(record.event,record.data)'),
     '调试台每一行都走 chatFormatDebug');
   const safe=extractFunction('chatDebugSafeData');
-  assert(safe.includes('timing_summary:data.timing_summary'),'done 记录存下来时不能把汇总串丢掉');
+  assert(!safe.includes('timing_summary:data.timing_summary'),
+    'done 记录既然不显示汇总串，就不用再存一份');
   // 键名要和网关一一对应
   const labels=Object.keys(ctx.CHAT_TIMING_STAGE_LABELS);
   ['intent_rewrite_ms','vector_search_ms','recall_refine_ms','message_assembly_ms',

@@ -14,15 +14,15 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="style.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="polish.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="chat.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="wechat.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="shell.css?v=chat-v216-native-5min-random-polling">
-<link rel="stylesheet" href="components.css?v=chat-v216-native-5min-random-polling">
-<script>window.CK_PANEL_VERSION='chat-v216-native-5min-random-polling';</script>
+<link rel="stylesheet" href="tokens.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="style.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="polish.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="chat.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="wechat.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="shell.css?v=chat-v217-price-identity-recall-box-default-price">
+<link rel="stylesheet" href="components.css?v=chat-v217-price-identity-recall-box-default-price">
+<script>window.CK_PANEL_VERSION='chat-v217-price-identity-recall-box-default-price';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -31,7 +31,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><svg class="ck-mark" viewBox="0 0 36 36" aria-hidden="true"><path class="ck-mark-c" d="M22.6 11.4a8.2 8.2 0 1 0 0 13.2"/><path class="ck-mark-k1" d="M25.4 9.5v17"/><path class="ck-mark-k2" d="M32.8 11.2 25.6 18l7.2 6.8"/><circle class="ck-mark-node" cx="25.5" cy="18" r="1.7"/></svg></button><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v216">chat-v216-native-5min-random-polling</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v217">chat-v217-price-identity-recall-box-default-price</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -197,7 +197,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v216-native-5min-random-polling">v216</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v217-price-identity-recall-box-default-price">v217</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <div class="chat-memory-card"><b>伪思考链</b><p>开启后网关会要求每轮在正文前输出一个可折叠的思考块，并随窗口历史保存。</p></div>
@@ -216,11 +216,14 @@
 <label>面板 Key<input id="chat-panel-key" type="text" autocomplete="off" readonly></label>
 <div class="chat-memory-card chat-route-card"><b>主链路 API</b><p id="chat-main-route-summary" class="chat-main-route-summary empty">正在读取 API 配置的主链路...</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" onclick="chatOpenMainApiConfig()">打开主链路配置</button></div></div>
 <label class="chat-switch"><input id="chat-billing-enabled" type="checkbox" checked onchange="chatSaveDisplayToggles()"><span>开启计费</span></label>
-<p class="chat-field-hint">总闸。开启后助手消息旁边显示这一轮的价格，单价在「供应商库」里给每个供应商各自维护（可选，没维护过就按面板默认价）；关掉就一律不显示，轮询那边勾了「显示价格」也压不过这里。</p>
+<p class="chat-field-hint">总闸。开启后助手消息旁边显示这一轮的价格，单价在「供应商库」里给每个供应商各自维护（可选，没维护过就按下面的默认价格）；关掉就一律不显示，轮询那边勾了「显示价格」也压不过这里。</p>
+<div class="chat-memory-card chat-cost-defaults-card"><b>默认价格</b><p>供应商库里没给某个 API 维护价格时用这里，可以维护多条：模型名里包含哪一条的「模型关键字」就用哪一条，从上往下第一条命中的算数；关键字留空的那条是兜底。按每 100 万 token 填，最终价＝（输入＋输出＋缓存创建＋缓存命中）× 倍率。</p><div class="chat-cost-defaults" id="chat-cost-defaults">读取中</div><div class="chat-cost-defaults-actions"><button class="btn btn-outline btn-sm" type="button" onclick="chatAddCostDefault()">新增一条</button><button class="btn btn-blue btn-sm" type="button" onclick="chatSaveCostDefaults()">保存默认价格</button></div></div>
 <details class="chat-memory-card chat-cost-card chat-tick-legend-card"><summary><b>√ 的颜色代表什么</b><span>按需展开</span></summary><div class="chat-tick-legend" id="chat-tick-legend">读取中</div></details>
 <label class="chat-switch"><input id="chat-usage-stats-enabled" type="checkbox" onchange="chatSaveDisplayToggles()"><span>开启用量统计</span></label>
 <p class="chat-field-hint">开启后助手最后一条消息的时间下面多一行小字，用符号列出这一轮的输入、输出、缓存命中、缓存创建 token 和缓存命中率。</p>
 <details class="chat-memory-card chat-cost-card chat-usage-legend-card"><summary><b>↑↓⚡✚◎ 各是什么意思</b><span>按需展开</span></summary><div class="chat-usage-legend" id="chat-usage-legend">读取中</div></details>
+<label class="chat-switch"><input id="chat-recall-box-visible" type="checkbox" checked onchange="chatSaveDisplayToggles()"><span>显示召回记忆框</span></label>
+<p class="chat-field-hint">助手回复上面那个可折叠的「召回记忆」块。关掉只是不显示，召回本身照常进行（要停召回去「记忆」页关 Fact 召回）。</p>
 <label class="chat-switch"><input id="chat-use-mcp" type="checkbox" onchange="chatOnMcpToggle()"><span>启用 MCP 工具</span></label>
 <label>MCP 地址<input id="chat-mcp-url" autocomplete="off" readonly value="https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/mcp"></label>
 <button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存设置</button>
@@ -291,9 +294,9 @@
 </section></div>
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="chat-history.js?v=chat-v216-native-5min-random-polling"></script>
-<script src="script.js?v=chat-v216-native-5min-random-polling"></script>
-<script src="script-extra.js?v=chat-v216-native-5min-random-polling"></script>
-<script src="pwa.js?v=chat-v216-native-5min-random-polling"></script>
+<script src="chat-history.js?v=chat-v217-price-identity-recall-box-default-price"></script>
+<script src="script.js?v=chat-v217-price-identity-recall-box-default-price"></script>
+<script src="script-extra.js?v=chat-v217-price-identity-recall-box-default-price"></script>
+<script src="pwa.js?v=chat-v217-price-identity-recall-box-default-price"></script>
 </body>
 </html>

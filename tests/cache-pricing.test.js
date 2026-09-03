@@ -43,6 +43,11 @@ const functionNames=[
   'chatApiPricingToCostPricing',
   'chatApiPricingKey',
   'chatApiPricingLookup',
+  'chatNormalizeCostDefaultEntry',
+  'chatNormalizeCostDefaults',
+  'chatCostDefaults',
+  'chatCostDefaultMatch',
+  'chatCostDefaultForUsage',
   'chatPricingForUsage',
   'chatNormalizeCacheStrategy',
   'chatCacheStrategyMeta'
@@ -50,10 +55,13 @@ const functionNames=[
 
 const context={console};
 vm.createContext(context);
+vm.runInContext('var CHAT_COST_DEFAULT_MAX_ROWS=20;',context);
 vm.runInContext(functionNames.map(extractFunction).join('\n'),context);
 // 单价现在按"这一轮是谁答的"取。默认没有任何一条 API 维护过价格，
 // 于是全部落回 chatCurrentCostPricing()，也就是下面这些老断言原本测的那条路。
 context.chatPollingView=()=>({enabled:false,pricing:null});
+// 默认价格表（设置页维护）默认是空的，落回面板出厂单价。
+context.chatDisplayToggles=()=>({billing:true,usage:false,recallBox:true,costDefaults:[]});
 
 const defaults=context.chatNormalizeCostPricing({});
 assert.strictEqual(defaults.outputPerMTokens,25);
@@ -146,6 +154,64 @@ assert.strictEqual(unmaintained.status,'calculated');
 context.chatPollingView=()=>({enabled:true,pricing:{'p-9':{input:0,output:0,cache_create:0,cache_read:0,multiplier:1}}});
 const byId=context.chatUsageCost(Object.assign({},usage,{provider_id:'p-9'}));
 assert.strictEqual(byId.total,0,'单价全填 0 就该算出 0');
+
+// —— ID 必须比名字优先 ——
+// 同一个站点挂两条（不同号、不同倍率）时显示名可能重复、provider_url 还会顶上来当"名字"，
+// 靠名字必然认错人，算出来就是另一条的倍率。这是 2026-09-03「倍率乱套」那个 bug。
+context.chatPollingView=()=>({enabled:true,pricing:{
+  '甲':{currency:'¥',input:5,output:25,cache_create:6.25,cache_read:.5,multiplier:1},
+  'p-2':{currency:'¥',input:5,output:25,cache_create:6.25,cache_read:.5,multiplier:.1}
+}});
+const idWins=context.chatUsageCost(Object.assign({},usage,{provider_name:'甲',provider_id:'p-2'}));
+assert.strictEqual(idWins.pricing.multiplier,.1,'provider_id 命中时必须压过 provider_name');
+
+// —— 默认价格（可维护多条，按模型关键字匹配）——
+context.chatPollingView=()=>({enabled:false,pricing:null});
+context.chatDisplayToggles=()=>({billing:true,usage:false,recallBox:true,costDefaults:[
+  {model:'opus',currency:'¥',input:5,output:25,cache_create:6.25,cache_read:.5,multiplier:.2},
+  {model:'sonnet',currency:'¥',input:3,output:15,cache_create:3.75,cache_read:.3,multiplier:.2},
+  {model:'',currency:'$',input:15,output:75,cache_create:18.75,cache_read:1.5,multiplier:1}
+]});
+const opusCost=context.chatUsageCost(Object.assign({},usage,{model:'claude-opus-4-6'}));
+assert.strictEqual(opusCost.pricing.inputPerMTokens,5,'模型名含 opus 要命中第 1 条');
+assert.strictEqual(opusCost.pricing.multiplier,.2);
+const sonnetCost=context.chatUsageCost(Object.assign({},usage,{model:'Claude-Sonnet-4-6'}));
+assert.strictEqual(sonnetCost.pricing.inputPerMTokens,3,'匹配不分大小写');
+const otherCost=context.chatUsageCost(Object.assign({},usage,{model:'glm-4.6'}));
+assert.strictEqual(otherCost.pricing.inputPerMTokens,15,'谁都不匹配就用关键字留空那条兜底');
+assert.strictEqual(otherCost.pricing.multiplier,1);
+assert.strictEqual(otherCost.pricing.currency,'$','币种也跟着兜底那条走');
+// 缓存创建只填一个价，5m/1h 套同一个数
+assert.strictEqual(opusCost.pricing.cacheCreate5mPerMTokens,6.25);
+assert.strictEqual(opusCost.pricing.cacheCreate1hPerMTokens,6.25);
+// 供应商自己维护过价格时，默认价格表不许插队
+context.chatPollingView=()=>({enabled:true,pricing:{'乙':{currency:'¥',input:50,output:250,cache_create:60,cache_read:5,multiplier:1}}});
+const providerWins=context.chatUsageCost(Object.assign({},usage,{provider_name:'乙',model:'claude-opus-4-6'}));
+assert.strictEqual(providerWins.pricing.inputPerMTokens,50,'供应商身上那份价永远优先于默认价格表');
+// 一条默认价都没维护时落回面板出厂单价，绝不能算成 0
+context.chatPollingView=()=>({enabled:false,pricing:null});
+context.chatDisplayToggles=()=>({billing:true,usage:false,recallBox:true,costDefaults:[]});
+assert.strictEqual(
+  context.chatUsageCost(Object.assign({},usage,{model:'claude-opus-4-6'})).pricing.inputPerMTokens,
+  pricing.inputPerMTokens
+);
+// 归一化：坏数据、非数组、超量都要挡住
+// 数组是在 vm 里造的，跨 realm 过不了 deepStrictEqual，只比长度（见 memory: vm 沙箱测试要用 deepEqual）
+assert.strictEqual(context.chatNormalizeCostDefaults(null).length,0);
+assert.strictEqual(context.chatNormalizeCostDefaults('x').length,0);
+assert.strictEqual(context.chatNormalizeCostDefaults(new Array(50).fill({})).length,20,'最多 20 条');
+const messy=context.chatNormalizeCostDefaults([{model:'  Opus  ',input:'-3',output:'abc',multiplier:''}])[0];
+assert.strictEqual(messy.model,'Opus','模型关键字只去两头空白，大小写留给匹配时处理');
+assert.strictEqual(messy.input,pricing.inputPerMTokens,'负数按没填算');
+assert.strictEqual(messy.output,pricing.outputPerMTokens,'填了非数字按没填算');
+assert.strictEqual(messy.currency,'¥');
+// 关键字留空那条放在第一位也照样只当兜底
+assert.strictEqual(
+  context.chatCostDefaultMatch([{model:''},{model:'opus'}],'claude-opus-4-6').model,
+  'opus',
+  '兜底那条不许抢走能精确命中的那条'
+);
+assert.strictEqual(context.chatCostDefaultMatch([{model:'opus'}],'glm-4.6'),null,'没有兜底条目就返回 null');
 context.chatPollingView=()=>({enabled:false,pricing:null});
 
 assert.strictEqual(context.chatNormalizeCacheStrategy('cost_optimized'),'native_tiered');const tiered=context.chatCacheStrategyMeta('native_tiered');

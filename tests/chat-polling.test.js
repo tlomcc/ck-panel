@@ -22,6 +22,7 @@ const POLLING_FNS=[
   'providerNormalizeCacheStrategy','chatNormalizeCacheStrategy','providerCacheStrategy',
   'chatDefaultCostPricing','chatNormalizeCostMode','chatNumberOrDefault',
   'chatNormalizeCostPricing','chatCurrentCostPricing',
+  'chatNormalizeCostDefaultEntry','chatNormalizeCostDefaults',
   'providerNormalizePricing','providerEffectivePricing',
   'chatApiPricingKey','providerPricingMirror',
   'chatDisplayToggleInvalidate','chatDisplayToggles','chatBillingEnabled','chatUsageStatsEnabled',
@@ -45,6 +46,7 @@ function pollingContext(apiProviders,extra){
     API_POLLING_KEY:'chat_polling',
     CHAT_POLLING_VIEW_KEY:'ckChatPollingView',
     CHAT_CONFIG_KEY:'ckChatConfigV2',
+    CHAT_COST_DEFAULT_MAX_ROWS:20,
     chatDisplayToggleCache:null,
     chatPollingViewCache:null,
     apiPollingDraft:null,
@@ -593,6 +595,12 @@ function testPollingLiveStatusText(){
     select_reason:'cache_expired'
   });
   assert.ok(expired.includes('缓存过期已回主'),'过期回主要有明确说明');
+  const expiredReroll=context.apiPollingStatusText({
+    state:'success',active_provider_name:'乙',active_provider_index:1,
+    random_mode:true,select_reason:'cache_expired_reroll'
+  });
+  assert.ok(expiredReroll.includes('缓存过期已重摇'),'随机模式下过期是重摇，不是回主');
+  assert.ok(!expiredReroll.includes('缓存过期已回主'));
 }
 
 // ---------------------------------------------------------------------------
@@ -646,18 +654,23 @@ function testRandomAndExpiredSwitchesCollectFromDom(){
   assert.strictEqual(draft.primary_retry_interval,60,'随机模式下这个数字就是"用满多少轮重摇"');
 }
 
-// 过期回主是顺序模式专用：随机模式下没有"主"，勾了也不生效，
-// 因此保存时必须落成 false，别在配置里留一个骗人的 true。
-function testExpiredPrimaryIsSequentialOnly(){
+// 「缓存过期就回主」在随机模式下改口径为「缓存过期就重摇」（2026-09-03 用户要求）：
+// 两种模式都生效，勾选框不再禁用，也不再在保存时被强行写成 false。
+function testExpiredPrimaryWorksInBothModes(){
   const save=extractFunction('saveApiPolling');
-  assert.ok(/expired_return_primary:draft\.random_mode\?false:draft\.expired_return_primary/.test(save),
-    '随机模式保存时必须把过期回主写成 false');
+  assert.ok(!/expired_return_primary:draft\.random_mode\?false/.test(save),
+    '随机模式下这个开关也生效了，保存时不能再抹成 false');
+  assert.ok(/expired_return_primary:draft\.expired_return_primary/.test(save),
+    '保存时要原样写用户勾的那个值');
   const toggle=extractFunction('apiPollingToggleControls');
-  assert.ok(toggle.includes("expired.disabled=!draft.enabled||!!draft.random_mode"),
-    '随机模式下过期回主勾选框必须禁用');
+  assert.ok(toggle.includes('expired.disabled=!draft.enabled'),'只有整个轮询关掉才禁用');
+  assert.ok(!toggle.includes("expired.disabled=!draft.enabled||!!draft.random_mode"),
+    '随机模式下不许再禁用这个勾选框');
   const render=extractFunction('renderApiPolling');
   assert.ok(render.includes('api-polling-random'),'轮询页必须有随机模式勾选框');
   assert.ok(render.includes('api-polling-expired-primary'),'轮询页必须有过期回主勾选框');
+  assert.ok(render.includes('缓存过期就重摇')&&render.includes('缓存过期就回主'),
+    '随机模式显示"缓存过期就重摇"，顺序模式还是"缓存过期就回主"');
   // 随机模式下「回主重试」整块要改口径：文案是重摇，不是回主
   assert.ok(render.includes('定期重摇')&&render.includes('次后重新摇一个'),
     '随机模式下回主重试要显示成"定期重摇 / 用满 N 轮重新摇"');
@@ -665,12 +678,35 @@ function testExpiredPrimaryIsSequentialOnly(){
     '随机模式下「未启用」那句提示语也要换成重摇口径');
   assert.ok(/\.api-polling-random/.test(styleCss),'随机模式那一块要有样式');
   assert.ok(/\.api-polling-expired/.test(styleCss),'过期回主那一块要有样式');
-  // .na 必须排在 .off 之后，否则同特异度下"未启用"会压过"随机模式下不适用"
-  assert.ok(styleCss.indexOf('.api-polling-expired.na::after')>styleCss.indexOf('.api-polling-expired.off::after'),
-    '.na 的提示语必须写在 .off 后面才能生效');
+  assert.ok(!/\.api-polling-expired\.na/.test(styleCss),'".na 不适用"那套样式已经作废，别留死样式');
+  // .random 必须排在 .off 之后，否则同特异度下"未启用"那句会压过重摇口径
+  assert.ok(styleCss.indexOf('.api-polling-expired.random.off::after')>styleCss.indexOf('.api-polling-expired.off::after'),
+    '.random 的提示语必须写在 .off 后面才能生效');
   // 随机模式一改要整页重渲染：文案和禁用状态都要跟着变
   assert.ok(render.includes('apiPollingToggleRandom()'),'随机模式勾选要走重渲染');
   assert.ok(extractFunction('apiPollingToggleRandom').includes('renderApiConfig()'));
+  // 状态行要能说出这一轮是"过期重摇"
+  assert.ok(extractFunction('apiPollingStatusText').includes('缓存过期已重摇'),
+    '状态行要认识 cache_expired_reroll');
+}
+
+// 计费身份：请求体必须带上主链路的供应商 ID，网关会把"真的谁答的"盖回 usage。
+// 只靠名字或地址反查，同一个站点挂两条（不同号、不同倍率）时必然认错人，
+// 这就是 2026-09-03「用量统计的倍率和实际请求不符」那个 bug。
+function testBillingIdentityTravelsWithTheRequest(){
+  const body=source.slice(source.indexOf('var body={',source.indexOf('function chatSend')),
+    source.indexOf('client_cache_full_created_at'));
+  assert.ok(body.includes('provider_name:cfg.mainRouteProvider'),'请求体要带主链路供应商名');
+  assert.ok(body.includes('provider_id:cfg.mainRouteProviderId'),'请求体还要带主链路供应商 ID');
+  const apply=extractFunction('chatApplyMainRouteToConfig');
+  assert.ok(apply.includes("cfg.mainRouteProviderId=String((route.provider&&route.provider.id)||'')"),
+    'mainRouteProviderId 要从主链路供应商身上取');
+  assert.ok(apply.includes("cfg.mainRouteProviderId=''"),'主链路没配好时要清空，不能留上一次的 ID');
+  const lookup=extractFunction('chatApiPricingLookup');
+  assert.ok(lookup.indexOf('provider_id')<lookup.indexOf('chatUsageBillingProvider'),
+    'ID 必须排在名字前面：名字会重复，chatUsageBillingProvider 还会退化成 URL');
+  assert.ok(extractFunction('chatEnrichUsageRoute').includes('cfg.mainRouteProviderId'),
+    '网关没回 ID 时（老版本网关）用主链路那份补上');
 }
 
 function testPollingRuntimeWiring(){
@@ -710,7 +746,8 @@ testPollingHasHardDomFallback();
 testPollingLiveStatusText();
 testRandomAndExpiredSwitchesRoundTrip();
 testRandomAndExpiredSwitchesCollectFromDom();
-testExpiredPrimaryIsSequentialOnly();
+testExpiredPrimaryWorksInBothModes();
+testBillingIdentityTravelsWithTheRequest();
 testPollingRuntimeWiring();
 
 console.log('chat polling config tests: OK');
