@@ -22,8 +22,9 @@ const POLLING_FNS=[
   'providerNormalizeCacheStrategy','chatNormalizeCacheStrategy','providerCacheStrategy',
   'chatDefaultCostPricing','chatNormalizeCostMode','chatNumberOrDefault',
   'chatNormalizeCostPricing','chatCurrentCostPricing',
-  'chatNormalizeCostDefaultEntry','chatNormalizeCostDefaults',
+  'chatNormalizeCostDefaultEntry','chatNormalizeCostDefaults','chatCostDefaults',
   'providerNormalizePricing','providerEffectivePricing',
+  'providerPricePresetHtml','applyProviderPricePreset',
   'chatApiPricingKey','providerPricingMirror',
   'chatDisplayToggleInvalidate','chatDisplayToggles','chatBillingEnabled','chatUsageStatsEnabled',
   'apiPollingConfig','apiPollingWrite','apiPollingSyncFromProviders',
@@ -384,6 +385,54 @@ function testProviderPriceEditorRendersAndCollects(){
   assert.strictEqual(custom.input,7,'预填要用面板当前单价');
   assert.strictEqual(custom.output,77);
 }
+function testProviderPricePreset(){
+  const providers=library();
+  const context=pollingContext(providers,{
+    esc:v=>String(v),
+    escAttr:v=>String(v).replace(/"/g,'&quot;')
+  });
+  context.__store.ckChatConfigV2=JSON.stringify({costPricingDefaults:[
+    {model:'opus',currency:'¥',input:5,output:25,cache_create:6.25,cache_read:.5,multiplier:.2},
+    {model:'',currency:'$',input:15,output:75,cache_create:18.75,cache_read:1.5,multiplier:1}
+  ]});
+  context.chatDisplayToggleInvalidate();
+  const presetHtml=context.providerPricePresetHtml();
+  assert.ok(presetHtml.includes('prov-price-preset'),'供应商费用区要显示模板选择框');
+  assert.ok(presetHtml.includes('opus')&&presetHtml.includes('兜底模板'),'下拉选项要来自 CK 默认价格模板');
+
+  const fields={};
+  ['currency','input','output','cache_create','cache_read','multiplier'].forEach(field=>{
+    fields[field]={value:'old',getAttribute:key=>key==='data-price-field'?field:''};
+  });
+  const scope={attrs:{},setAttribute(k,v){this.attrs[k]=v},getAttribute(k){return this.attrs[k]},
+    querySelectorAll:sel=>sel==='.prov-price-input'?Object.values(fields):[]};
+  const select={value:'',closest:()=>scope};
+  context.applyProviderPricePreset(select);
+  assert.strictEqual(fields.currency.value,'old','空模板选项不能套用第一条模板');
+  assert.strictEqual(fields.input.value,'old','空模板选项不能修改供应商价格');
+  assert.strictEqual(scope.attrs['data-price-edited'],undefined,'空模板选项不能把供应商标成已改价');
+
+  select.value='1';
+  context.applyProviderPricePreset(select);
+  assert.strictEqual(fields.currency.value,'$');
+  assert.strictEqual(fields.input.value,'15');
+  assert.strictEqual(fields.output.value,'75');
+  assert.strictEqual(fields.cache_create.value,'18.75');
+  assert.strictEqual(fields.cache_read.value,'1.5');
+  assert.strictEqual(fields.multiplier.value,'1');
+  assert.strictEqual(scope.attrs['data-price-edited'],'1','套用模板要进入供应商专属价格保存路径');
+
+  vm.runInContext(extractFunction('readProvCardPricing'),context);
+  fields.output.value='88';
+  const card={
+    querySelectorAll:scope.querySelectorAll,
+    querySelector:sel=>sel==='.prov-price'?scope:null
+  };
+  const saved=context.readProvCardPricing(card,providers.provider_library.providers[0]);
+  assert.strictEqual(saved.output,88,'套用模板后手动修改的价格必须优先保存');
+  assert.strictEqual(saved.input,15,'未手动修改的字段继续使用所选模板值');
+  assert.strictEqual(saved.currency,'$');
+}
 function testDisplaySwitchesRoundTrip(){
   const providers=library();
   providers.chat_polling={enabled:true,show_message_status:true,show_billing_price:false,order:[{provider_id:'A',model:'m-a'}]};
@@ -740,6 +789,7 @@ testChatDisplayRulesUnderPolling();
 testBillingMasterSwitchBeatsPolling();
 testProviderPricingMirrorsAndStaysOutOfRevision();
 testProviderPriceEditorRendersAndCollects();
+testProviderPricePreset();
 testDisplaySwitchesRoundTrip();
 testChatDisplayFallsBackToLocalMirror();
 testPollingHasHardDomFallback();

@@ -52,6 +52,38 @@ body.chat-active .app-header h1{
 body.chat-active .app-header p,
 body.chat-active .install-app-btn{display:none!important}
 
+body.chat-active .chat-quick-toggle{
+  width:34px!important;
+  height:30px!important;
+  min-width:34px!important;
+  padding:0 5px!important;
+  border:1px solid var(--chat5-line)!important;
+  border-radius:7px!important;
+  background:var(--chat5-bg)!important;
+  color:var(--chat5-muted)!important;
+  font:700 10px/1 var(--chat5-font,inherit)!important;
+  letter-spacing:0!important;
+  cursor:pointer!important;
+  transition:background .14s ease,border-color .14s ease,color .14s ease,opacity .14s ease!important;
+}
+body.chat-active .chat-quick-toggle:hover{
+  border-color:var(--chat5-green-line)!important;
+  color:var(--chat5-text)!important;
+}
+body.chat-active .chat-quick-toggle.is-on{
+  border-color:var(--chat5-green-line)!important;
+  background:var(--chat5-green)!important;
+  color:#17351d!important;
+}
+body.chat-active .chat-quick-toggle.is-off{
+  background:transparent!important;
+  color:var(--chat5-muted)!important;
+}
+body.chat-active .chat-quick-toggle:disabled{
+  opacity:.42!important;
+  cursor:not-allowed!important;
+}
+
 body.chat-active .brand-mark{
   width:30px!important;
   height:30px!important;
@@ -4141,6 +4173,7 @@ body.dark.chat-active .chat-folder-menu:hover{background:#252e37;color:#d6dfda}
 body.chat-active .chat-recall-recent{display:grid!important;grid-template-columns:minmax(0,1fr) 68px auto!important;align-items:center!important;gap:8px!important;margin:8px 0 10px!important;color:#486356!important;font-size:11.5px!important;font-weight:700!important}
 body.chat-active .chat-recall-recent input{width:68px!important;height:34px!important;padding:4px 7px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:7px!important;background:#fff!important;color:#234b35!important;text-align:center!important}
 body.chat-active .chat-recall-recent small{color:#75877d!important;font-weight:500!important}
+body.chat-active #chat-auto-clean-rounds-row[hidden]{display:none!important}
 
 /* Thinking and recall share one geometry; color is their only visual distinction. */
 :root{--ck-aux-block-max-width:min(700px,82%);--ck-aux-block-radius:14px;--ck-aux-block-pad-y:8px;--ck-aux-block-pad-x:12px;--ck-aux-block-font-size:13px;--ck-aux-block-line-height:1.62;--ck-aux-block-margin:0 0 8px;--ck-aux-head-height:34px}
@@ -4171,11 +4204,16 @@ body.chat-active.chat-hide-tick .chat-tick-legend .chat-cache-tick{display:inlin
 body.chat-active .chat-cost-defaults-card{margin-bottom:10px!important}
 body.chat-active .chat-cost-defaults{display:grid!important;gap:8px!important;margin-top:8px!important}
 body.chat-active .chat-cost-default-empty{color:var(--chat5-muted)!important;font-size:11.5px!important;line-height:1.55!important}
-body.chat-active .chat-cost-default-row{display:grid!important;gap:8px!important;padding:9px 10px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:8px!important;background:rgba(255,255,255,.6)!important}
+body.chat-active .chat-cost-default-picker{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:end!important;gap:8px!important}
+body.chat-active .chat-cost-default-picker label{display:grid!important;gap:4px!important;margin:0!important;color:var(--chat5-muted)!important;font-size:11px!important;font-weight:600!important}
+body.chat-active .chat-cost-default-picker select{width:100%!important;min-width:0!important;height:34px!important;padding:4px 8px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:7px!important;background:#fff!important;color:#234b35!important;font:inherit!important;font-size:12px!important;box-sizing:border-box!important}
+body.chat-active .chat-cost-default-count{padding-bottom:8px!important;color:var(--chat5-muted)!important;font-size:11px!important;white-space:nowrap!important}
+body.chat-active .chat-cost-default-editor{display:grid!important;gap:8px!important;padding:9px 10px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:8px!important;background:rgba(255,255,255,.6)!important}
 body.chat-active .chat-cost-default-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:end!important;gap:8px!important}
 body.chat-active .chat-cost-default-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important;gap:8px!important}
-body.chat-active .chat-cost-default-row label{display:grid!important;gap:4px!important;margin:0!important;color:var(--chat5-muted)!important;font-size:11px!important;font-weight:600!important}
-body.chat-active .chat-cost-default-row input{width:100%!important;height:34px!important;padding:4px 8px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:7px!important;background:#fff!important;color:#234b35!important;font:inherit!important;font-size:12px!important;box-sizing:border-box!important}
+body.chat-active .chat-cost-default-editor label{display:grid!important;gap:4px!important;margin:0!important;color:var(--chat5-muted)!important;font-size:11px!important;font-weight:600!important}
+body.chat-active .chat-cost-default-editor input{width:100%!important;height:34px!important;padding:4px 8px!important;border:1px solid rgba(18,140,76,.2)!important;border-radius:7px!important;background:#fff!important;color:#234b35!important;font:inherit!important;font-size:12px!important;box-sizing:border-box!important}
 body.chat-active .chat-cost-defaults-actions{display:flex!important;flex-wrap:wrap!important;gap:8px!important;margin-top:10px!important}
-body.dark.chat-active .chat-cost-default-row{border-color:#2f3b37!important;background:rgba(255,255,255,.04)!important}
-body.dark.chat-active .chat-cost-default-row input{border-color:#2f3b37!important;background:#111a17!important;color:#d8e6df!important}
+body.dark.chat-active .chat-cost-default-picker select{border-color:#2f3b37!important;background:#111a17!important;color:#d8e6df!important}
+body.dark.chat-active .chat-cost-default-editor{border-color:#2f3b37!important;background:rgba(255,255,255,.04)!important}
+body.dark.chat-active .chat-cost-default-editor input{border-color:#2f3b37!important;background:#111a17!important;color:#d8e6df!important}

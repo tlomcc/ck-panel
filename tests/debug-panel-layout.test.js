@@ -183,6 +183,18 @@ assert(functionSource('chatReadCostDefaults').includes("box.getAttribute('data-r
   '还没渲染过（容器里是"读取中"）时要返回存档值，不能当成"用户删空了"');
 assert(functionSource('chatRenderCostDefaults').includes("setAttribute('data-rendered','1')"),
   '渲染过要留标记，读回时才分得清"空"和"还没渲染"');
+assert(functionSource('chatRenderCostDefaults').includes('chat-cost-default-select')&&
+  functionSource('chatRenderCostDefaults').includes('chat-cost-default-editor')&&
+  functionSource('chatRenderCostDefaults').includes('chatSelectCostDefault'),
+  '默认价格已维护条目必须收进下拉框，只显示当前模板编辑器');
+assert(functionSource('chatSelectCostDefault').includes('chatCostDefaultsCaptureEditor'),
+  '切换默认价格模板前必须先保存当前编辑器草稿');
+assert(functionSource('chatRenderCostDefaults').includes("box.innerHTML=html+'</div></div>'"),
+  '默认价格编辑器必须同时闭合价格网格和编辑器容器');
+assert(!functionSource('chatRenderCostDefaults').includes('chat-cost-default-row'),
+  '默认价格不能再把所有维护条目平铺成长列表');
+assert(chatCss.includes('.chat-cost-default-picker')&&chatCss.includes('.chat-cost-default-editor'),
+  '默认价格下拉和单模板编辑器需要对应样式');
 assert(functionSource('chatSaveConfigObject').includes('cfg.costPricingDefaults=chatNormalizeCostDefaults'),
   '默认价格要落盘');
 assert(functionSource('chatWriteForm').includes('chatRenderCostDefaults'),

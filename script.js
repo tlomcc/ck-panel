@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v217-price-identity-recall-box-default-price';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v219-cache-expiry-cleanup-quick-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1497,9 +1497,8 @@ var CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES=20;
 var CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS=200;
 var CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT=1000;
 var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
-// 按轮数自动清理召回与图片（2026-08-24 用户要求，轮数自己维护、可开关）。
-// 和自动截断是两件事：截断丢掉整轮历史，这个只把历史里的图片和召回块摘掉，
-// 轮次本身留着。默认关，开了以后每满 N 个真实轮次执行一次。
+// 自动清理召回与图片。默认关；开启后可按缓存过期 5min / 1h 触发，
+// 同时保留旧版按轮数配置的兼容入口。它只摘掉图片和召回块，不删除轮次。
 var CHAT_AUTO_CLEAN_DEFAULT_ROUNDS=100;
 var CHAT_AUTO_CLEAN_MIN_ROUNDS=5;
 var CHAT_AUTO_CLEAN_MAX_ROUNDS=5000;
@@ -1861,6 +1860,8 @@ var CHAT_COST_DEFAULT_FIELDS=[
   ['multiplier','倍率']
 ];
 var CHAT_COST_DEFAULT_MAX_ROWS=20;
+var chatCostDefaultsDraft=null;
+var chatCostDefaultsSelectedIndex=0;
 function chatNormalizeCostDefaultEntry(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
   var d=chatDefaultCostPricing();
@@ -1937,12 +1938,17 @@ function chatAutoTrimConfigFrom(cfg){
 // 和截断的"保留 N 轮"没有互相依赖的关系。
 function chatNormalizeAutoCleanConfig(raw){
   raw=(raw&&typeof raw==='object')?raw:{};
+  var mode=String(raw.mode!==undefined?raw.mode:(raw.trigger!==undefined?raw.trigger:raw.strategy)||'cache_5m').trim().toLowerCase().replace(/-/g,'_');
+  if(mode==='5m'||mode==='5min'||mode==='cache5m'||mode==='cache_5min'||mode==='cache_expired_5m')mode='cache_5m';
+  else if(mode==='1h'||mode==='60m'||mode==='60min'||mode==='cache1h'||mode==='cache_1hour'||mode==='cache_expired_1h')mode='cache_1h';
+  else if(mode!=='cache_5m'&&mode!=='cache_1h'&&mode!=='rounds')mode='rounds';
   var rounds=chatPositiveIntOrDefault(
     raw.rounds!==undefined?raw.rounds:(raw.everyRounds!==undefined?raw.everyRounds:raw.every_rounds),
     CHAT_AUTO_CLEAN_DEFAULT_ROUNDS
   );
   return {
     enabled:raw.enabled===true||raw.enabled==='true',
+    mode:mode,
     rounds:Math.max(CHAT_AUTO_CLEAN_MIN_ROUNDS,Math.min(CHAT_AUTO_CLEAN_MAX_ROUNDS,rounds))
   };
 }
@@ -1950,6 +1956,7 @@ function chatAutoCleanConfigFrom(cfg){
   cfg=cfg||{};
   return chatNormalizeAutoCleanConfig({
     enabled:cfg.autoCleanEnabled===true,
+    mode:cfg.autoCleanMode,
     rounds:cfg.autoCleanRounds
   });
 }
@@ -2389,6 +2396,7 @@ function chatDefaultConfig(){
     autoTrimRoundLimitEnabled:false,
     autoTrimRoundLimit:CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT,
     autoCleanEnabled:false,
+    autoCleanMode:'cache_5m',
     autoCleanRounds:CHAT_AUTO_CLEAN_DEFAULT_ROUNDS,
     settingsOpen:false,
     chatSideTab:'model',
@@ -2557,6 +2565,37 @@ function chatRecallMeta(enabled,mode){
     ? {enabled:true,label:'Fact 召回开启',debugText:modeMeta.debugText,mode:modeMeta.value,modeLabel:modeMeta.label}
     : {enabled:false,label:'Fact 召回关闭',debugText:'不加载 Fact、不调用召回 API、不注入记忆',mode:modeMeta.value,modeLabel:modeMeta.label};
 }
+function chatRenderQuickRecallControls(cfg){
+  cfg=cfg||chatLoadConfig()||{};
+  var recall=cfg.recall!==false;
+  var factMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
+  var recallButton=document.getElementById('chat-quick-recall-toggle');
+  if(recallButton){
+    recallButton.classList.toggle('is-on',recall);
+    recallButton.classList.toggle('is-off',!recall);
+    recallButton.setAttribute('aria-pressed',recall?'true':'false');
+    recallButton.setAttribute('aria-label',recall?'关闭 Fact 召回':'开启 Fact 召回');
+    recallButton.title=recall?'Fact 召回：开启，点击关闭':'Fact 召回：关闭，点击开启';
+  }
+  var factButton=document.getElementById('chat-quick-fact-toggle');
+  if(factButton){
+    factButton.classList.toggle('is-on',factMode==='b');
+    factButton.classList.toggle('is-off',factMode!=='b');
+    factButton.disabled=!recall;
+    factButton.setAttribute('aria-pressed',factMode==='b'?'true':'false');
+    factButton.setAttribute('aria-label',recall?'切换 Fact 召回 B 模式':'Fact 召回已关闭');
+    factButton.title=recall?('Fact 召回模式：'+(factMode==='b'?'B（宽松），点击切换 A':'A（经典），点击切换 B')):'Fact 召回已关闭';
+  }
+}
+function chatQuickToggleRecall(){
+  var cfg=chatLoadConfig()||{};
+  return chatSetRecallEnabled(cfg.recall===false,true);
+}
+function chatQuickToggleFactMode(){
+  var cfg=chatLoadConfig()||{};
+  if(cfg.recall===false)return cfg;
+  return chatSetFactRecallMode(cfg.factRecallMode==='b'?'a':'b',true);
+}
 function chatRenderRecallState(statusText,statusKind){
   var cfg=chatLoadConfig()||{};
   var modeMeta=chatRecallModeMeta(cfg.recallMode);
@@ -2587,6 +2626,7 @@ function chatRenderRecallState(statusText,statusKind){
     status.textContent=statusText||('已保存：'+meta.label+'｜'+meta.debugText);
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
   }
+  chatRenderQuickRecallControls(cfg);
 }
 function chatRenderNcContextState(statusText,statusKind){
   var cfg=chatLoadConfig()||{};
@@ -2803,6 +2843,9 @@ function chatLoadConfig(){
     if(raw){
       saved=JSON.parse(raw);
       Object.keys(saved||{}).forEach(function(k){cfg[k]=saved[k]});
+      // v217 及以前只有按轮数模式。旧存档没有 mode 时保持原行为；新用户默认 5min。
+      if(!Object.prototype.hasOwnProperty.call(saved||{},'autoCleanMode')&&
+        Object.prototype.hasOwnProperty.call(saved||{},'autoCleanRounds'))cfg.autoCleanMode='rounds';
     }
   }catch(e){}
   cfg.panelKey=storedPanelKey();
@@ -2837,6 +2880,7 @@ function chatLoadConfig(){
   cfg.autoTrimRoundLimit=trim.roundLimit;
   var autoClean=chatAutoCleanConfigFrom(cfg);
   cfg.autoCleanEnabled=autoClean.enabled;
+  cfg.autoCleanMode=autoClean.mode;
   cfg.autoCleanRounds=autoClean.rounds;
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   return cfg;
@@ -2872,6 +2916,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.autoTrimDrop;
   var autoCleanSave=chatAutoCleanConfigFrom(cfg);
   cfg.autoCleanEnabled=autoCleanSave.enabled;
+  cfg.autoCleanMode=autoCleanSave.mode;
   cfg.autoCleanRounds=autoCleanSave.rounds;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
@@ -3608,6 +3653,8 @@ function chatNormalizeSession(s){
     cacheGeneration:Number(s.cacheGeneration||0)||0,
     // 上一次（手动或自动）清理召回与图片时的真实轮号，按轮自动清理的基线。
     autoCleanLastRound:Number(s.autoCleanLastRound||0)||0,
+    // 上一次清理时对应的缓存活动时间，按缓存过期自动清理的基线。
+    autoCleanLastCacheActivityAt:Number(s.autoCleanLastCacheActivityAt||0)||0,
     firstUserText:String(s.firstUserText||'').slice(0,3000),
     firstUserTs:Number(s.firstUserTs||0)||0
   };
@@ -3737,6 +3784,7 @@ function chatReadForm(){
   });
   var cleanCfg=chatNormalizeAutoCleanConfig({
     enabled:chatFieldChecked('chat-auto-clean-enabled',saved.autoCleanEnabled===true),
+    mode:chatFieldValue('chat-auto-clean-mode',saved.autoCleanMode||'cache_5m'),
     rounds:chatFieldValue('chat-auto-clean-rounds',saved.autoCleanRounds||CHAT_AUTO_CLEAN_DEFAULT_ROUNDS)
   });
   var cfg={
@@ -3769,6 +3817,7 @@ function chatReadForm(){
     autoTrimRoundLimitEnabled:trimCfg.roundLimitEnabled,
     autoTrimRoundLimit:trimCfg.roundLimit,
     autoCleanEnabled:cleanCfg.enabled,
+    autoCleanMode:cleanCfg.mode,
     autoCleanRounds:cleanCfg.rounds,
     settingsOpen:settings?settings.classList.contains('open'):false,
     chatSideTab:activePanelTab||saved.chatSideTab||'model',
@@ -3814,7 +3863,9 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-auto-trim-round-limit',trimCfg.roundLimit);
   var cleanCfg=chatAutoCleanConfigFrom(cfg);
   chatSetFieldChecked('chat-auto-clean-enabled',cleanCfg.enabled);
+  chatSetFieldValue('chat-auto-clean-mode',cleanCfg.mode);
   chatSetFieldValue('chat-auto-clean-rounds',cleanCfg.rounds);
+  chatRenderAutoCleanControls(cleanCfg);
   var costPricing=chatNormalizeCostPricing(cfg.costPricing);
   chatSetFieldValue('chat-cost-mode',costPricing.mode);
   chatSetFieldValue('chat-cost-currency',costPricing.currency);
@@ -3949,71 +4000,108 @@ function chatSaveDisplayToggles(){
   return cfg;
 }
 /* ---- 默认价格：设置页「开启计费」下面那张卡 ---- */
-// 只在这里维护，可以维护多条：模型名里包含哪条的关键字就用哪条，关键字留空的那条兜底。
-// 草稿直接放在 DOM 上（和这一页别的字段一致），保存走 chatSaveConfig。
-function chatRenderCostDefaults(list){
+// 只显示一个当前编辑器，其他条目收在下拉里。草稿仍然留在前端内存，
+// 所以切换模板不会丢掉刚刚改过但尚未点击「保存默认价格」的数字。
+function chatCostDefaultsDraftList(fallback){
+  if(!Array.isArray(chatCostDefaultsDraft)){
+    chatCostDefaultsDraft=chatNormalizeCostDefaults(fallback!==undefined?fallback:chatCostDefaults());
+  }
+  return chatCostDefaultsDraft;
+}
+function chatCostDefaultsCaptureEditor(){
+  var box=document.getElementById('chat-cost-defaults');
+  if(!box||box.getAttribute('data-rendered')!=='1'||!Array.isArray(chatCostDefaultsDraft))return;
+  var index=Number(box.getAttribute('data-selected-index'));
+  if(!isFinite(index)||index<0||index>=chatCostDefaultsDraft.length)return;
+  var editor=box.querySelector('.chat-cost-default-editor');
+  if(!editor)return;
+  var entry=Object.assign({},chatCostDefaultsDraft[index]||{});
+  var model=editor.querySelector('.chat-cost-default-model');
+  if(model)entry.model=model.value;
+  Array.prototype.forEach.call(editor.querySelectorAll('.chat-cost-default-input'),function(input){
+    var field=input.getAttribute('data-price-field');
+    if(field)entry[field]=input.value;
+  });
+  chatCostDefaultsDraft[index]=chatNormalizeCostDefaultEntry(entry);
+}
+function chatRenderCostDefaults(list,opts){
   var box=document.getElementById('chat-cost-defaults');
   if(!box)return;
-  list=chatNormalizeCostDefaults(list!==undefined?list:chatCostDefaults());
+  opts=opts||{};
+  if(list!==undefined)chatCostDefaultsDraft=chatNormalizeCostDefaults(list);
+  list=chatCostDefaultsDraftList(list!==undefined?list:chatCostDefaults());
+  if(opts.selectedIndex!==undefined)chatCostDefaultsSelectedIndex=Number(opts.selectedIndex);
+  if(!isFinite(chatCostDefaultsSelectedIndex)||chatCostDefaultsSelectedIndex<0)chatCostDefaultsSelectedIndex=0;
+  if(chatCostDefaultsSelectedIndex>=list.length)chatCostDefaultsSelectedIndex=Math.max(0,list.length-1);
   // 渲染过的标记：没渲染过时容器里还是"读取中"，一行也没有——那不等于"用户删空了"。
   // 少这一步，第一次打开设置页就会把已维护的默认价格当成空的存回去。
   box.setAttribute('data-rendered','1');
+  box.setAttribute('data-selected-index',String(chatCostDefaultsSelectedIndex));
   if(!list.length){
     box.innerHTML='<div class="chat-cost-default-empty">还没有默认价格。没维护过的 API 会按面板出厂单价算，'+
       '点下面「新增一条」按你自己的中转价填。</div>';
     return;
   }
-  box.innerHTML=list.map(function(entry,index){
-    var html='<div class="chat-cost-default-row" data-cost-default-index="'+index+'">'+
+  var selected=list[chatCostDefaultsSelectedIndex]||list[0];
+  var options=list.map(function(entry,index){
+    var name=entry.model||'兜底模板';
+    var summary=entry.currency+' '+entry.input+' / '+entry.output+' · 倍率 '+entry.multiplier;
+    return '<option value="'+index+'"'+(index===chatCostDefaultsSelectedIndex?' selected':'')+'>'+esc(name+' · '+summary)+'</option>';
+  }).join('');
+  var html='<div class="chat-cost-default-picker"><label>选择默认价格模板<select class="chat-cost-default-select" onchange="chatSelectCostDefault(this)">'+options+'</select></label>'+
+    '<span class="chat-cost-default-count">'+list.length+' 条已维护</span></div>'+
+    '<div class="chat-cost-default-editor" data-cost-default-index="'+chatCostDefaultsSelectedIndex+'">'+
       '<div class="chat-cost-default-head">'+
-        '<label>模型关键字<input class="chat-cost-default-model" type="text" autocomplete="off" placeholder="留空＝兜底，例如 opus" value="'+escAttr(entry.model)+'"></label>'+
-        '<button class="btn btn-red btn-sm" type="button" onclick="chatRemoveCostDefault('+index+')">删除</button>'+
+        '<label>模型关键字<input class="chat-cost-default-model" type="text" autocomplete="off" placeholder="留空＝兜底，例如 opus" value="'+escAttr(selected.model)+'"></label>'+
+        '<button class="btn btn-red btn-sm" type="button" onclick="chatRemoveCostDefault('+chatCostDefaultsSelectedIndex+')">删除当前模板</button>'+
       '</div>'+
       '<div class="chat-cost-default-grid">'+
-        '<label>币种<input class="chat-cost-default-input" type="text" maxlength="4" data-price-field="currency" value="'+escAttr(entry.currency)+'"></label>';
-    CHAT_COST_DEFAULT_FIELDS.forEach(function(field){
-      html+='<label>'+esc(field[1])+'<input class="chat-cost-default-input" type="number" min="0" step="0.0001" data-price-field="'+
-        escAttr(field[0])+'" value="'+escAttr(String(entry[field[0]]))+'"></label>';
-    });
-    return html+'</div></div>';
-  }).join('');
+        '<label>币种<input class="chat-cost-default-input" type="text" maxlength="4" data-price-field="currency" value="'+escAttr(selected.currency)+'"></label>';
+  CHAT_COST_DEFAULT_FIELDS.forEach(function(field){
+    html+='<label>'+esc(field[1])+'<input class="chat-cost-default-input" type="number" min="0" step="0.0001" data-price-field="'+
+      escAttr(field[0])+'" value="'+escAttr(String(selected[field[0]]))+'"></label>';
+  });
+  box.innerHTML=html+'</div></div>';
+}
+function chatSelectCostDefault(select){
+  if(!select)return;
+  chatCostDefaultsCaptureEditor();
+  var raw=String(select.value===undefined||select.value===null?'':select.value).trim();
+  if(!raw)return;
+  var index=Math.floor(Number(raw));
+  var list=chatCostDefaultsDraftList(chatCostDefaults());
+  if(!isFinite(index)||index<0||index>=list.length)return;
+  chatCostDefaultsSelectedIndex=index;
+  chatRenderCostDefaults(list,{selectedIndex:index});
 }
 // 从 DOM 读回来。还没渲染过（容器不存在、或容器里还是"读取中"）时一律返回存档值，
 // 别把已维护的价格清空；渲染过而一行都没有，才是用户真的删空了。
 function chatReadCostDefaults(saved){
   var box=document.getElementById('chat-cost-defaults');
   if(!box||box.getAttribute('data-rendered')!=='1')return chatNormalizeCostDefaults(saved);
-  var rows=box.querySelectorAll?box.querySelectorAll('.chat-cost-default-row'):[];
-  if(!rows.length)return [];
-  var out=[];
-  Array.prototype.forEach.call(rows,function(row){
-    var entry={};
-    var model=row.querySelector('.chat-cost-default-model');
-    entry.model=model?model.value:'';
-    Array.prototype.forEach.call(row.querySelectorAll('.chat-cost-default-input'),function(input){
-      var field=input.getAttribute('data-price-field');
-      if(field)entry[field]=input.value;
-    });
-    out.push(chatNormalizeCostDefaultEntry(entry));
-  });
-  return out.slice(0,CHAT_COST_DEFAULT_MAX_ROWS);
+  var list=chatCostDefaultsDraftList(saved);
+  chatCostDefaultsCaptureEditor();
+  return chatNormalizeCostDefaults(list);
 }
 function chatAddCostDefault(){
   var list=chatReadCostDefaults(chatCostDefaults());
   if(list.length>=CHAT_COST_DEFAULT_MAX_ROWS){toast('默认价格最多 '+CHAT_COST_DEFAULT_MAX_ROWS+' 条');return}
   list.push(chatNormalizeCostDefaultEntry({}));
-  chatRenderCostDefaults(list);
+  chatCostDefaultsSelectedIndex=list.length-1;
+  chatRenderCostDefaults(list,{selectedIndex:chatCostDefaultsSelectedIndex});
 }
 function chatRemoveCostDefault(index){
   var list=chatReadCostDefaults(chatCostDefaults());
   if(index<0||index>=list.length)return;
   list.splice(index,1);
-  chatRenderCostDefaults(list);
+  chatCostDefaultsSelectedIndex=Math.min(index,Math.max(0,list.length-1));
+  chatRenderCostDefaults(list,{selectedIndex:chatCostDefaultsSelectedIndex});
 }
 function chatSaveCostDefaults(){
   var cfg=chatSaveConfig(true);
   var list=chatNormalizeCostDefaults(cfg.costPricingDefaults);
-  chatRenderCostDefaults(list);
+  chatCostDefaultsSelectedIndex=Math.min(chatCostDefaultsSelectedIndex,Math.max(0,list.length-1));
+  chatRenderCostDefaults(list,{selectedIndex:chatCostDefaultsSelectedIndex});
   chatRenderMessages({respectUserScroll:true});
   toast(list.length?('默认价格已保存 '+list.length+' 条'):'默认价格已清空，按面板出厂单价算');
   return cfg;
@@ -5431,8 +5519,9 @@ function chatFormatDebug(ev,data){
       '｜'+(data.before||0)+' 条 → '+(data.after||0)+' 条｜下一轮注入 '+(data.chars||0)+' 字';
   }
   if(ev==='auto_clean'){
-    if(data.ok===false)return '⚠️ 按轮自动清理失败｜第 '+(data.rounds||0)+' 轮（每 '+(data.every||0)+' 轮一次）｜'+(data.error||'未知原因');
-    return '🧽 按轮自动清理｜第 '+(data.rounds||0)+' 轮（每 '+(data.every||0)+' 轮一次）｜清掉 '+(data.images||0)+' 张图片 / '+(data.recalls||0)+' 条召回';
+    var cleanLabel=data.mode==='cache_5m'?'缓存过期 5min':(data.mode==='cache_1h'?'缓存过期 1h':('第 '+(data.rounds||0)+' 轮（每 '+(data.every||0)+' 轮一次）'));
+    if(data.ok===false)return '⚠️ 自动清理失败｜'+cleanLabel+'｜'+(data.error||'未知原因');
+    return '🧽 自动清理｜'+cleanLabel+'｜清掉 '+(data.images||0)+' 张图片 / '+(data.recalls||0)+' 条召回';
   }
   if(ev==='speech_preference_prepare'){
     if(data.skipped)return '🗣 措辞偏好提取｜跳过：'+data.skipped;
@@ -5964,6 +6053,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       cacheLastReadTokens:s.cacheLastReadTokens||0,
       cacheGeneration:s.cacheGeneration||0,
       autoCleanLastRound:s.autoCleanLastRound||0,
+      autoCleanLastCacheActivityAt:s.autoCleanLastCacheActivityAt||0,
       firstUserText:String(s.firstUserText||'').slice(0,3000),
       firstUserTs:s.firstUserTs||0
     };
@@ -7601,9 +7691,9 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
     chatIdleTrimBusy=false;
   }
 }
-/* ---- 每 N 轮自动清理召回与图片（2026-08-24 用户要求）---- */
+/* ---- 自动清理召回与图片（2026-08-24 用户要求）---- */
 // 和自动截断刻意分开：截断丢轮次、这个只摘掉历史里的图片和召回块，轮次留着。
-// 判定基线存在会话上（autoCleanLastRound），不是全局计数器——换会话、开新窗口都该重新起算。
+// 默认按缓存过期触发；旧版按轮数配置仍保留兼容，避免升级后改变已有用户的选择。
 var chatAutoCleanBusy=false;
 var chatAutoCleanLastCheckAt=0;
 function chatAutoCleanSessionById(sessionId){
@@ -7617,28 +7707,74 @@ function chatAutoCleanSessionById(sessionId){
 function chatAutoCleanLastRound(session){
   return Number((session||{}).autoCleanLastRound||0)||0;
 }
+function chatAutoCleanLastCacheActivityAt(session){
+  return Number((session||{}).autoCleanLastCacheActivityAt||0)||0;
+}
+function chatAutoCleanCacheReference(session){
+  session=session||chatCurrentSession();
+  var messages=(session&&Array.isArray(session.messages))?session.messages:chatMessages;
+  var fallback=0;
+  for(var i=(messages||[]).length-1;i>=0;i--){
+    var message=messages[i];
+    if(message&&(message.role==='user'||message.role==='assistant')&&chatMessageHasContent(message)){
+      fallback=Number(message.ts||0)||0;
+      if(fallback)break;
+    }
+  }
+  var reference=chatCacheActivityReference(session,fallback);
+  if(fallback>Number(reference.timestamp||0))return {timestamp:fallback,source:'last_message'};
+  return reference;
+}
 // 清完（手动也算）把基线对齐到当前轮：否则刚手动清过，下一次检查还会立刻自动再清一遍。
-function chatAutoCleanMarkDone(sessionId,round){
+function chatAutoCleanMarkDone(sessionId,round,cacheActivityAt){
   var session=chatAutoCleanSessionById(sessionId);
   if(!session)return 0;
   var count=Number(round);
   if(!isFinite(count)||count<=0)count=chatCurrentConversationRoundCount();
   session.autoCleanLastRound=Math.max(0,Math.floor(count)||0);
+  var activityAt=Number(cacheActivityAt);
+  if(!isFinite(activityAt)||activityAt<=0){
+    activityAt=chatAutoCleanCacheReference(session).timestamp||Date.now();
+  }
+  session.autoCleanLastCacheActivityAt=Math.max(0,activityAt);
   session.updated=Date.now();
   chatSaveSessions();
   return session.autoCleanLastRound;
+}
+function chatAutoCleanModeLabel(mode){
+  mode=chatNormalizeAutoCleanConfig({mode:mode}).mode;
+  if(mode==='cache_5m')return '缓存过期 5min';
+  if(mode==='cache_1h')return '缓存过期 1h';
+  return '按轮数';
+}
+function chatRenderAutoCleanControls(clean){
+  clean=clean||chatAutoCleanConfigFrom(chatLoadConfig());
+  var row=document.getElementById('chat-auto-clean-rounds-row');
+  if(row)row.hidden=clean.mode!=='rounds';
 }
 function chatRenderAutoCleanState(cfg){
   var el=document.getElementById('chat-auto-clean-state');
   if(!el)return;
   cfg=cfg||chatLoadConfig();
   var clean=chatAutoCleanConfigFrom(cfg);
+  chatRenderAutoCleanControls(clean);
   var session=chatCurrentSession();
   var count=chatCurrentConversationRoundCount();
   var last=chatAutoCleanLastRound(session);
   if(last>count)last=0;
   if(!clean.enabled){
     el.textContent='已关闭：只有点 ➕ 里的「清理」才会清。当前 '+count+' 轮。';
+    return;
+  }
+  if(clean.mode==='cache_5m'||clean.mode==='cache_1h'){
+    var ttl=clean.mode==='cache_5m'?5*60*1000:60*60*1000;
+    var activity=chatAutoCleanCacheReference(session);
+    var lastClean=chatAutoCleanLastCacheActivityAt(session);
+    var age=activity.timestamp?Math.max(0,Date.now()-activity.timestamp):0;
+    var waiting=lastClean>=activity.timestamp&&lastClean>0;
+    var remain=activity.timestamp&&!waiting?Math.max(0,ttl-age):0;
+    el.textContent='已开启：'+chatAutoCleanModeLabel(clean.mode)+'后清理召回与图片。'+
+      (waiting?'本轮缓存已清理，等下一次缓存活动。':'当前'+(activity.timestamp?'还差约 '+Math.ceil(remain/60000)+' 分钟':'等待缓存活动'));
     return;
   }
   var remain=Math.max(0,clean.rounds-(count-last));
@@ -7650,12 +7786,12 @@ function chatSaveAutoCleanSetting(auto){
   var clean=chatAutoCleanConfigFrom(cfg);
   chatRenderAutoCleanState(cfg);
   if(!auto){
-    toast(clean.enabled?('已保存：每 '+clean.rounds+' 轮自动清理一次召回与图片'):'已保存：自动清理已关闭');
+    toast(clean.enabled?('已保存：'+chatAutoCleanModeLabel(clean.mode)+'后自动清理召回与图片'):'已保存：自动清理已关闭');
   }
   return cfg;
 }
 // 页面在线时的执行路径，挂在既有的 15 秒定时器和"回复落定"那一下上，不新开定时器。
-async function chatMaybeAutoCleanByRounds(opts){
+async function chatMaybeAutoClean(opts){
   opts=opts||{};
   if(chatAutoCleanBusy||chatSending||chatIdleTrimBusy||chatSpeechPreferenceManualBusy)return;
   if(currentPanelTab!=='chat')return;
@@ -7673,25 +7809,36 @@ async function chatMaybeAutoCleanByRounds(opts){
   var count=chatCurrentConversationRoundCount();
   if(count<=0)return;
   var last=chatAutoCleanLastRound(session);
-  // 截断会把轮数拉回去，基线比当前轮还大时必须跟着回退，否则清理被永远推迟。
-  if(last>count)last=0;
-  if(count-last<clean.rounds)return;
+  var cacheReferenceTimestamp=0;
+  if(clean.mode==='rounds'){
+    // 截断会把轮数拉回去，基线比当前轮还大时必须跟着回退，否则清理被永远推迟。
+    if(last>count)last=0;
+    if(count-last<clean.rounds)return;
+  }else{
+    var cacheReference=chatAutoCleanCacheReference(session);
+    cacheReferenceTimestamp=Number(cacheReference.timestamp||0)||0;
+    if(!cacheReferenceTimestamp)return;
+    var cacheTtlMs=clean.mode==='cache_5m'?5*60*1000:60*60*1000;
+    var lastCacheActivity=chatAutoCleanLastCacheActivityAt(session);
+    if(lastCacheActivity>=cacheReferenceTimestamp&&lastCacheActivity>0)return;
+    if(Date.now()-cacheReferenceTimestamp<cacheTtlMs)return;
+  }
   chatAutoCleanBusy=true;
   try{
     var result=await chatCleanHistoryCore(cfg);
     if(!result||!result.ok){
-      chatDebug('auto_clean',{ok:false,rounds:count,every:clean.rounds,
+      chatDebug('auto_clean',{ok:false,mode:clean.mode,rounds:count,every:clean.rounds,
         error:String((result&&result.error)||'unknown').slice(0,200)});
       return;
     }
-    chatAutoCleanMarkDone(result.sessionId,count);
+    chatAutoCleanMarkDone(result.sessionId,count,cacheReferenceTimestamp);
     chatRenderAutoCleanState(cfg);
-    chatDebug('auto_clean',{ok:true,rounds:count,every:clean.rounds,
+    chatDebug('auto_clean',{ok:true,mode:clean.mode,rounds:count,every:clean.rounds,
       images:result.images,recalls:result.recalls});
     // 必须出声：图片会当场从消息里消失，静默处理会让人以为面板出错了。
-    toast('已到 '+count+' 轮：自动清理了 '+result.images+' 张图片 / '+result.recalls+' 条召回',4000);
+    toast((clean.mode==='rounds'?'已到 '+count+' 轮':'缓存已过期')+'：自动清理了 '+result.images+' 张图片 / '+result.recalls+' 条召回',4000);
   }catch(error){
-    chatDebug('auto_clean',{ok:false,rounds:count,every:clean.rounds,
+    chatDebug('auto_clean',{ok:false,mode:clean.mode,rounds:count,every:clean.rounds,
       error:String((error&&error.message)||error).slice(0,200)});
   }finally{
     chatAutoCleanBusy=false;
@@ -9948,7 +10095,7 @@ function chatInit(){
     // 不满足条件时立即返回，不会每 15 秒做重活。
     chatMaybeAutoTrimAtIdleBoundary();
     // 按轮自动清理走同一个定时器，也自带 30s 节流和前置判断。
-    chatMaybeAutoCleanByRounds();
+    chatMaybeAutoClean();
   },15000);
   if(input){
     chatAutosizeInput(input);
@@ -10600,7 +10747,7 @@ async function chatSubmitPendingMessages(options){
       // forceCheck 只跳过 30 秒节流，函数内部仍会检查是否真的达到上限。
       setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
       // 清理排在截断之后：先让截断决定这一轮还剩多少历史，再按最终轮数判断要不要清。
-      setTimeout(function(){chatMaybeAutoCleanByRounds({forceCheck:true})},0);
+      setTimeout(function(){chatMaybeAutoClean({forceCheck:true})},0);
     }
   }
 }
@@ -10984,6 +11131,55 @@ var PROVIDER_PRICE_FIELDS=[
   ['cache_read','缓存命中 / 1M'],
   ['multiplier','倍率']
 ];
+function providerPricePresetHtml(){
+  var list=[];
+  try{
+    list=chatNormalizeCostDefaults(
+      typeof chatReadCostDefaults==='function' && typeof chatCostDefaults==='function'
+        ?chatReadCostDefaults(chatCostDefaults())
+        :(typeof chatCostDefaults==='function'?chatCostDefaults():[])
+    );
+  }catch(e){list=[]}
+  if(!list.length)return '';
+  var html='<label class="prov-price-preset-label">费用模板<select class="prov-price-preset" onchange="applyProviderPricePreset(this)" aria-label="选择 CK 面板默认价格模板">'+
+    '<option value="">选择 CK 面板默认价格</option>';
+  list.forEach(function(entry,index){
+    var name=entry.model||'兜底模板';
+    var summary=entry.currency+' '+entry.input+' / '+entry.output+' · 倍率 '+entry.multiplier;
+    html+='<option value="'+index+'">'+esc(name+' · '+summary)+'</option>';
+  });
+  return html+'</select></label>';
+}
+function applyProviderPricePreset(select){
+  if(!select)return;
+  var raw=String(select.value===undefined||select.value===null?'':select.value).trim();
+  if(!raw)return;
+  var index=Math.floor(Number(raw));
+  if(!isFinite(index)||index<0)return;
+  var list=[];
+  try{
+    list=chatNormalizeCostDefaults(
+      typeof chatReadCostDefaults==='function' && typeof chatCostDefaults==='function'
+        ?chatReadCostDefaults(chatCostDefaults())
+        :(typeof chatCostDefaults==='function'?chatCostDefaults():[])
+    );
+  }catch(e){list=[]}
+  var entry=list[index];
+  if(!entry)return;
+  var scope=select.closest?select.closest('.prov-price'):null;
+  if(!scope)return;
+  scope.setAttribute('data-price-edited','1');
+  var values={currency:entry.currency,input:entry.input,output:entry.output,
+    cache_create:entry.cache_create,cache_read:entry.cache_read,multiplier:entry.multiplier};
+  Array.prototype.forEach.call(scope.querySelectorAll('.prov-price-input'),function(input){
+    var field=input.getAttribute('data-price-field');
+    if(Object.prototype.hasOwnProperty.call(values,field))input.value=String(values[field]);
+  });
+}
+function markProviderPriceEdited(input){
+  var scope=input&&input.closest?input.closest('.prov-price'):null;
+  if(scope)scope.setAttribute('data-price-edited','1');
+}
 // 价格块和缓存策略块都长在供应商卡片里。价格默认折叠（大部分时候不用看），
 // 输入框预填当前生效价，用户改哪个填哪个。
 function providerPriceHtml(p){
@@ -10994,11 +11190,12 @@ function providerPriceHtml(p){
   var html='<details class="prov-price">'+
     '<summary><span>费用（可选）</span><b>'+esc(summary)+'</b></summary>'+
     '<div class="prov-price-grid">'+
-    '<label>币种<input class="prov-price-input" type="text" maxlength="4" data-price-field="currency" value="'+
+    (typeof providerPricePresetHtml==='function'?providerPricePresetHtml():'')+
+      '<label>币种<input class="prov-price-input" type="text" maxlength="4" data-price-field="currency" oninput="markProviderPriceEdited(this)" value="'+
       escAttr(price.currency)+'"></label>';
   PROVIDER_PRICE_FIELDS.forEach(function(field){
     html+='<label>'+esc(field[1])+'<input class="prov-price-input" type="number" min="0" step="0.0001" data-price-field="'+
-      escAttr(field[0])+'" value="'+escAttr(String(price[field[0]]))+'"></label>';
+      escAttr(field[0])+'" oninput="markProviderPriceEdited(this)" value="'+escAttr(String(price[field[0]]))+'"></label>';
   });
   html+='</div>'+
     '<p class="prov-price-note">按每 100 万 token 填。最终价＝（输入＋输出＋缓存创建＋缓存命中）× 倍率。'+
@@ -12161,20 +12358,30 @@ function readProvCard(card){
 // 注意 Number('')===0：清空的输入框必须当成"没改"。
 function readProvCardPricing(card,old){
   var price=providerEffectivePricing(old);
+  var kept=providerNormalizePricing(old&&old.pricing);
   var nodes=card.querySelectorAll?card.querySelectorAll('.prov-price-input'):null;
-  if(!nodes||!nodes.length)return providerNormalizePricing(old&&old.pricing);
+  if(!nodes||!nodes.length)return kept;
+  var edited=false;
+  var priceScope=card.querySelector?card.querySelector('.prov-price'):null;
+  if(priceScope&&priceScope.getAttribute('data-price-edited')==='1')edited=true;
   Array.prototype.forEach.call(nodes,function(node){
     var field=String(node.getAttribute('data-price-field')||'');
     if(!field)return;
     if(field==='currency'){
-      price.currency=String(node.value||'').trim().slice(0,4)||'¥';
+      var nextCurrency=String(node.value||'').trim().slice(0,4)||'¥';
+      if(String(price.currency||'')!==nextCurrency)edited=true;
+      price.currency=nextCurrency;
       return;
     }
     var raw=String(node.value===undefined||node.value===null?'':node.value).trim();
     if(!raw)return;
     var n=Number(raw);
-    if(isFinite(n)&&n>=0)price[field]=n;
+    if(isFinite(n)&&n>=0){
+      if(Number(price[field])!==n)edited=true;
+      price[field]=n;
+    }
   });
+  if(!kept&&!edited)return null;
   return providerNormalizePricing(price);
 }
 function addProvider(){
