@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v221-provider-api-cache-trim-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v222-recall-b-toggle';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2590,32 +2590,24 @@ function chatRenderQuickRecallControls(cfg){
   cfg=cfg||chatLoadConfig()||{};
   var recall=cfg.recall!==false;
   var factMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
-  var recallButton=document.getElementById('chat-quick-recall-toggle');
-  if(recallButton){
-    recallButton.classList.toggle('is-on',recall);
-    recallButton.classList.toggle('is-off',!recall);
-    recallButton.setAttribute('aria-pressed',recall?'true':'false');
-    recallButton.setAttribute('aria-label',recall?'关闭 Fact 召回':'开启 Fact 召回');
-    recallButton.title=recall?'Fact 召回：开启，点击关闭':'Fact 召回：关闭，点击开启';
-  }
   var factButton=document.getElementById('chat-quick-fact-toggle');
+  var factOn=recall&&factMode==='b';
   if(factButton){
-    factButton.classList.toggle('is-on',factMode==='b');
-    factButton.classList.toggle('is-off',factMode!=='b');
-    factButton.disabled=!recall;
-    factButton.setAttribute('aria-pressed',factMode==='b'?'true':'false');
-    factButton.setAttribute('aria-label',recall?'切换 Fact 召回 B 模式':'Fact 召回已关闭');
-    factButton.title=recall?('Fact 召回模式：'+(factMode==='b'?'B（宽松），点击切换 A':'A（经典），点击切换 B')):'Fact 召回已关闭';
+    factButton.classList.toggle('is-on',factOn);
+    factButton.classList.toggle('is-off',!factOn);
+    factButton.disabled=false;
+    factButton.setAttribute('aria-pressed',factOn?'true':'false');
+    factButton.setAttribute('aria-label',factOn?'关闭 Fact B 召回':'开启 Fact B 召回');
+    factButton.title=factOn?'关闭 Fact B 召回':'开启 Fact B 召回';
   }
-}
-function chatQuickToggleRecall(){
-  var cfg=chatLoadConfig()||{};
-  return chatSetRecallEnabled(cfg.recall===false,true);
 }
 function chatQuickToggleFactMode(){
   var cfg=chatLoadConfig()||{};
-  if(cfg.recall===false)return cfg;
-  return chatSetFactRecallMode(cfg.factRecallMode==='b'?'a':'b',true);
+  var factOn=cfg.recall!==false&&chatNormalizeFactRecallMode(cfg.factRecallMode)==='b';
+  var recallInput=document.getElementById('chat-recall-enabled');
+  if(recallInput)recallInput.checked=!factOn;
+  chatSetFactRecallModeField('b');
+  return chatSaveRecallSetting(true);
 }
 function chatRenderRecallState(statusText,statusKind){
   var cfg=chatLoadConfig()||{};

@@ -52,39 +52,7 @@ body.chat-active .app-header h1{
 body.chat-active .app-header p,
 body.chat-active .install-app-btn{display:none!important}
 
-body.chat-active .chat-quick-toggle{
-  width:34px!important;
-  height:30px!important;
-  min-width:34px!important;
-  padding:0 5px!important;
-  border:1px solid var(--chat5-line)!important;
-  border-radius:7px!important;
-  background:var(--chat5-bg)!important;
-  color:var(--chat5-muted)!important;
-  font:700 10px/1 var(--chat5-font,inherit)!important;
-  letter-spacing:0!important;
-  cursor:pointer!important;
-  transition:background .14s ease,border-color .14s ease,color .14s ease,opacity .14s ease!important;
-}
-body.chat-active .chat-quick-toggle:hover{
-  border-color:var(--chat5-green-line)!important;
-  color:var(--chat5-text)!important;
-}
-body.chat-active .chat-quick-toggle.is-on{
-  border-color:var(--chat5-green-line)!important;
-  background:var(--chat5-green)!important;
-  color:#17351d!important;
-}
-body.chat-active .chat-quick-toggle.is-off{
-  background:transparent!important;
-  color:var(--chat5-muted)!important;
-}
-body.chat-active .chat-quick-toggle:disabled{
-  opacity:.42!important;
-  cursor:not-allowed!important;
-}
-
-/* 召回B快捷键特殊样式 - 铃铛图标，灰色关/亮色开 */
+/* 召回B快捷键：星星亮起代表 B 已开启，灰色代表彻底关闭 */
 body.chat-active .chat-quick-fact-toggle{
   width:30px!important;
   height:30px!important;

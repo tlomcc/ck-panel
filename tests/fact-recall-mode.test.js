@@ -20,15 +20,15 @@ assert(/id="chat-recall-recent-rounds"[^>]+value="10"/.test(html),'recent recall
 assert(/recallRecentRounds:10/.test(script),'recent recall window default must be 10');
 assert(/recall_recent_rounds:chatNormalizeRecallRecentRounds\(cfg\.recallRecentRounds\)/.test(script),'recent recall window must be sent to gateway');
 assert(/Math\.max\(0,Math\.min\(100,number\)\)/.test(script),'recent recall window must be clamped to 0-100');
-assert(/id="chat-quick-recall-toggle"[^>]*onclick="chatQuickToggleRecall\(\)"/.test(html),'chat header must have a Fact recall quick toggle');
 assert(/id="chat-quick-fact-toggle"[^>]*onclick="chatQuickToggleFactMode\(\)"/.test(html),'chat header must have a Fact B quick toggle');
+assert(!/chat-quick-recall-toggle|chatQuickToggleRecall/.test(html+script),'the duplicate text recall toggle must be gone');
 assert(/function chatRenderQuickRecallControls\(cfg\)/.test(script),'quick recall controls need a shared renderer');
 assert(/chatRenderQuickRecallControls\(cfg\)/.test(script.slice(script.indexOf('function chatRenderRecallState('),script.indexOf('function chatRenderNcContextState('))),
   'recall state refresh must update header quick controls');
-assert(/function chatQuickToggleRecall\(\)/.test(script)&&/chatSetRecallEnabled\(cfg\.recall===false,true\)/.test(script),
-  'Fact quick toggle must use the existing recall save path');
-assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSetFactRecallMode\(cfg\.factRecallMode==='b'\?'a':'b',true\)/.test(script),
-  'Fact B quick toggle must use the existing mode save path');
-assert(/\.chat-quick-toggle/.test(fs.readFileSync(path.join(root,'chat.css'),'utf8')),'quick controls need compact chat header styling');
+assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSetFactRecallModeField\('b'\)/.test(script)&&/chatSaveRecallSetting\(true\)/.test(script),
+  'Fact B quick toggle must enable B or fully disable recall');
+assert(/aria-label',factOn\?'关闭 Fact B 召回':'开启 Fact B 召回'/.test(script),
+  'Fact B quick toggle needs explicit on/off labels');
+assert(/\.chat-quick-fact-toggle/.test(fs.readFileSync(path.join(root,'chat.css'),'utf8')),'quick controls need compact chat header styling');
 
 console.log('fact recall mode tests: OK');

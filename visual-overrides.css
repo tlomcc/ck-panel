@@ -174,7 +174,12 @@ body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]
   box-shadow:0 2px 8px rgba(47,143,98,.16)!important;
 }
 body.chat-active .chat-head-actions .chat-quick-fact-toggle.is-off,
-body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"]{opacity:.66!important}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"]{
+  opacity:.86!important;
+  border-color:var(--ck-line)!important;
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-muted)!important;
+}
 body.chat-active .chat-head-actions .chat-quick-fact-toggle:hover,
 body.chat-active .chat-head-actions .chat-quick-fact-toggle:focus-visible{opacity:1!important}
 body.chat-active .chat-head-actions .chat-quick-fact-toggle:active{transform:scale(.94)!important}
