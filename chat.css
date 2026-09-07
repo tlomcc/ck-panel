@@ -84,6 +84,41 @@ body.chat-active .chat-quick-toggle:disabled{
   cursor:not-allowed!important;
 }
 
+/* 召回B快捷键特殊样式 - 铃铛图标，灰色关/亮色开 */
+body.chat-active .chat-quick-fact-toggle{
+  width:30px!important;
+  height:30px!important;
+  min-width:30px!important;
+  padding:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  background:transparent!important;
+  border:none!important;
+}
+body.chat-active .chat-quick-fact-toggle svg{
+  width:18px!important;
+  height:18px!important;
+  display:block!important;
+  transition:stroke .2s ease,opacity .2s ease!important;
+}
+body.chat-active .chat-quick-fact-toggle[aria-pressed="false"]{
+  opacity:0.4!important;
+}
+body.chat-active .chat-quick-fact-toggle[aria-pressed="false"] svg{
+  stroke:var(--chat5-muted)!important;
+}
+body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] svg{
+  stroke:var(--chat5-green)!important;
+}
+body.chat-active .chat-quick-fact-toggle:hover{
+  opacity:1!important;
+  border:none!important;
+}
+body.chat-active .chat-quick-fact-toggle:hover svg{
+  stroke:var(--chat5-green-line)!important;
+}
+
 body.chat-active .brand-mark{
   width:30px!important;
   height:30px!important;

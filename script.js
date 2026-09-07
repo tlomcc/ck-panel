@@ -5806,23 +5806,18 @@ function chatRenderTrimState(cfg){
   var current=document.getElementById('chat-trim-current');
   var next=document.getElementById('chat-trim-next');
   var manual=document.getElementById('chat-manual-trim-btn');
-  var speech=document.getElementById('chat-manual-speech-btn');
   if(!current&&!next)return;
   cfg=cfg||chatLoadConfig();
   var trim=chatAutoTrimConfigFrom(cfg);
   var count=chatCurrentConversationRoundCount();
   if(current)current.textContent='当前 '+count+' 个真实轮次'+(trim.roundLimitEnabled?'｜上限 '+trim.roundLimit+' 轮':'');
-  if(speech){
-    speech.disabled=chatSending||chatSpeechPreferenceManualBusy||count<=0;
-    speech.title=count<=0?'当前没有可检查的对话':'检查尚未审阅的用户措辞，不主动删除历史';
-  }
   if(manual){
     manual.disabled=chatSending||chatSpeechPreferenceManualBusy||count<=0;
     manual.title=count<=0
       ?'当前没有可处理的对话'
       :(count>trim.keep
-        ?'先更新措辞偏好，再保留最近 '+trim.keep+' 个完整真实轮次'
-        :'当前不足 '+trim.keep+' 个真实轮次，只同步措辞偏好');
+        ?'保留最近 '+trim.keep+' 个完整真实轮次'
+        :'当前不足 '+trim.keep+' 个真实轮次，不会删除内容');
   }
   if(!next)return;
   if(!trim.enabled&&!trim.roundLimitEnabled){
@@ -7464,9 +7459,13 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     chatRenderTrimState(cfg);
     return plan;
   }
+  // 检查措辞偏好是否启用
+  var speechEnabled=rulesPageState&&rulesPageState.data&&rulesPageState.data.enabled!==false;
+  var skipSpeech=opts&&opts.skipTrim===true?false:!speechEnabled;
   var queuedRows=chatSpeechPreferenceQueueRows(chatCurrentSession());
-  if(!chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages,queuedRows).length){
-    chatDebug('speech_preference_prepare',{ok:true,skipped:'no_text',event_id:'',dropped_rounds:plan.dropped});
+  var prepareMessages=skipSpeech?[]:chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages,queuedRows);
+  if(!prepareMessages.length||skipSpeech){
+    chatDebug('speech_preference_prepare',{ok:true,skipped:skipSpeech?'speech_disabled':'no_text',event_id:'',dropped_rounds:plan.dropped});
     return await chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,{
       ok:true,activationId:'',eventId:'',durationMs:0,
       reviewedThroughTs:Number(plan.preferenceThroughTs||0)||0,reviewComplete:true
@@ -7555,26 +7554,27 @@ async function chatManualTrimNow(){
   chatSpeechPreferenceManualBusy=true;
   chatRenderTrimState(cfg);
   var button=document.getElementById('chat-manual-trim-btn');
-  if(button){button.disabled=true;button.textContent='正在审阅并按真实轮次裁剪...'}
+  if(button){button.disabled=true;button.textContent='正在按真实轮次裁剪...'}
   try{
     var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim'});
     // 偏好同步失败只提示，不再取消截断：手动截断的语义是"现在就清理历史"。
-    if(result&&result.prepareFailed)toast('措辞偏好暂时无法同步，已保留旧规则；历史仍按真实轮次截断',5000);
+    var speechEnabled=rulesPageState&&rulesPageState.data&&rulesPageState.data.enabled!==false;
+    if(result&&result.prepareFailed&&speechEnabled)toast('措辞偏好暂时无法同步，已保留旧规则；历史仍按真实轮次截断',5000);
     if(result&&result.trimmed){
       chatSaveLocalMessages();
       chatRenderMessages();
       await chatSyncTrimmedHistoryToGateway(cfg,result);
-      toast(
-        '已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息应用偏好并建立新缓存',
-        5000
-      );
+      var toastMsg=speechEnabled
+        ?'已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息应用偏好并建立新缓存'
+        :'已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息建立新缓存';
+      toast(toastMsg,5000);
       chatSetStatus('已截断，下一条消息重建缓存');
     }else if(result&&result.cacheBoundary){
-      toast(
-        '当前 '+result.historyAfter+' 个真实轮次，未删除历史；措辞偏好已同步',
-        5000
-      );
-      chatSetStatus('已准备，下一条消息应用偏好');
+      var toastMsg2=speechEnabled
+        ?'当前 '+result.historyAfter+' 个真实轮次，未删除历史；措辞偏好已同步'
+        :'当前 '+result.historyAfter+' 个真实轮次，未删除历史';
+      toast(toastMsg2,5000);
+      chatSetStatus(speechEnabled?'已准备，下一条消息应用偏好':'已准备');
     }
     chatRenderTrimState(cfg);
   }catch(error){
@@ -7582,7 +7582,7 @@ async function chatManualTrimNow(){
     toast('手动操作失败：'+chatFriendlyError(error),5000,{type:'error',closable:true});
   }finally{
     chatSpeechPreferenceManualBusy=false;
-    if(button){button.textContent='立即按真实轮次截断并同步偏好';chatRenderTrimState(cfg)}
+    if(button){button.textContent='立即按真实轮次截断';chatRenderTrimState(cfg)}
   }
 }
 // 截断后把裁剪结果同步到网关 session。
@@ -9483,7 +9483,17 @@ function chatCacheExpiryInfo(){
   }
   if(meta&&meta.ttl==='1h')return {ttlMs:60*60*1000,text:'缓存已连续 1h 未读取或创建，下一次会重新创建缓存'};
   var seconds=(meta&&meta.retentionSeconds)||300;
-  return {ttlMs:seconds*1000,text:CHAT_CACHE_NOTICE_TEXT};
+  var text='';
+  if(seconds>=3600){
+    var hours=Math.round(seconds/3600);
+    text='已超过'+hours+'h，下一次会重新创建缓存';
+  }else if(seconds>=60){
+    var minutes=Math.round(seconds/60);
+    text='已超过'+minutes+'min，下一次会重新创建缓存';
+  }else{
+    text='已超过'+seconds+'s，下一次会重新创建缓存';
+  }
+  return {ttlMs:seconds*1000,text:text};
 }
 function chatEnsureCacheExpiryNotice(){
   var lastTs=chatLastMessageTs();
@@ -12303,6 +12313,9 @@ function providerCardHtml(p){
   var categoryOptions=providerCategories();
   var datalistId='prov-categories-'+String(p.id||'').replace(/[^a-zA-Z0-9_-]/g,'');
   var categoryChips=categoryOptions.length?'<div class="prov-category-chips">'+categoryOptions.map(function(value){return '<button type="button" data-value="'+escAttr(value)+'" onclick="setProviderCategoryChip(this)">'+esc(value)+'</button>'}).join('')+'</div>':'';
+  var apiType=String(p.api_type||'claude');
+  var apiTypeOptions='<option value="claude"'+(apiType==='claude'?' selected':'')+'>Claude 接口</option>'+
+    '<option value="openai"'+(apiType==='openai'?' selected':'')+'>OpenAI 接口</option>';
   return '<div class="prov-card" data-id="'+escAttr(p.id)+'">'+
     '<div class="prov-card-head" onclick="toggleProvCard(this)"><div class="prov-title-wrap"><span class="prov-name">'+esc(providerDisplayName(p))+'</span>'+(noteFirst?'<small class="prov-note-preview" title="'+escAttr(note)+'">备注 · '+esc(noteFirst)+'</small>':'')+'<small>'+esc(providerHost(p.url)||'未填写 URL')+'</small></div><div class="prov-card-badges">'+(category?'<span class="prov-status prov-category-badge">'+esc(category)+'</span>':'')+(noteDate?'<span class="prov-status prov-date-badge">日期 '+esc(noteDate.slice(5))+'</span>':'')+'<span class="prov-status prov-status-model">'+models.length+' 模型</span><span class="prov-status '+(usage.length?'prov-status-on':'prov-status-off')+'">'+usedLabel+'</span></div></div>'+
     usageHtml+
@@ -12310,6 +12323,7 @@ function providerCardHtml(p){
       '<div class="prov-row"><label>名称</label><input class="prov-name-input" type="text" value="'+escAttr(p.name||'')+'" placeholder="给这个供应商起个名字"></div>'+
       '<div class="prov-row"><label>归类（文件夹）</label><input class="prov-category-input" type="text" list="'+escAttr(datalistId)+'" value="'+escAttr(p.category||'')+'" placeholder="选择已有归类或输入新归类"><datalist id="'+escAttr(datalistId)+'">'+categoryOptions.map(function(value){return '<option value="'+escAttr(value)+'"></option>'}).join('')+'</datalist>'+categoryChips+'</div>'+
       '<div class="prov-row prov-row-wide"><label>备注</label><textarea class="prov-note-input" rows="4" placeholder="例：\n限速 3 次/分钟\n只有 opus 能用，sonnet 会 404\n2026-09-01 到期">'+esc(p.note||'')+'</textarea></div>'+
+      '<div class="prov-row"><label>API 接口类型</label><select class="prov-api-type">'+apiTypeOptions+'</select></div>'+
       '<div class="prov-row"><label>API Key</label><input class="prov-key" type="text" value="'+escAttr(p.key||'')+'" placeholder="sk-..." autocomplete="off" autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>API URL</label><input class="prov-url" type="text" value="'+escAttr(p.url||'')+'" placeholder="https://..." autocapitalize="off" spellcheck="false"></div>'+
       '<div class="prov-row prov-row-wide"><label>默认模型</label><input class="prov-model" type="text" value="'+escAttr(p.model||'')+'" placeholder="模型名称" autocapitalize="off" spellcheck="false"><div class="prov-model-tools"><div class="prov-model-picker">'+modelSearchHtml(models)+'<select class="prov-model-select" onchange="pickProvModel(this)">'+modelOptionsHtml(models,p.model)+'</select></div><button class="prov-fetch-models" type="button" onclick="fetchProviderModels(this)">拉取模型</button></div>'+modelHint+'</div>'+
@@ -12352,7 +12366,8 @@ function readProvCard(card){
   var old=findLibraryProvider(id);
   return {id:id,name:v('.prov-name-input'),category:v('.prov-category-input'),note:v('.prov-note-input'),url:v('.prov-url'),key:v('.prov-key'),model:v('.prov-model'),models:old&&Array.isArray(old.models)?old.models:[],
     cache_strategy:providerNormalizeCacheStrategy(v('.prov-cache-strategy')),
-    pricing:readProvCardPricing(card,old)};
+    pricing:readProvCardPricing(card,old),
+    api_type:v('.prov-api-type')||'claude'};
 }
 // 先把当前生效价整份铺开再用输入框覆盖，避免只改一个格子就把其余清成 0。
 // 注意 Number('')===0：清空的输入框必须当成"没改"。
@@ -12387,7 +12402,7 @@ function readProvCardPricing(card,old){
 function addProvider(){
   switchApiTab('providers');
   var id=newProvId();
-  apiProviderLibrarySlot().providers.push({id:id,name:'',category:'',note:'',url:'',key:'',model:'',models:[],cache_strategy:'',pricing:null});
+  apiProviderLibrarySlot().providers.push({id:id,name:'',category:'',note:'',url:'',key:'',model:'',models:[],cache_strategy:'',pricing:null,api_type:'claude'});
   renderApiConfig();
   setTimeout(function(){
     var card=document.querySelector('.prov-card[data-id="'+id+'"]');
@@ -12399,7 +12414,7 @@ function pickAssignModel(sel){
   var inp=row.querySelector('.assign-model');if(inp&&sel.value)inp.value=sel.value;
 }
 function fetchModelsForProvider(p){
-  return panelDataFetch(PROVIDER_MODELS_URL+'?_t='+Date.now(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key})}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})}).then(function(res){
+  return panelDataFetch(PROVIDER_MODELS_URL+'?_t='+Date.now(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:p.url,key:p.key,api_type:p.api_type||'claude'})}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})}).then(function(res){
     if(!res.ok||!res.j||!res.j.ok)throw new Error((res.j&&res.j.error)||'拉取失败');
     return cleanModelList(res.j.models,p.model);
   });
@@ -12411,7 +12426,7 @@ function fetchProviderModels(btn){
   if(!d.key.trim()){toast('先填写 API Key');return}
   var p=findLibraryProvider(d.id)||{};
   p.id=d.id;p.name=d.name.trim();p.category=d.category.trim();p.note=d.note.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();
-  p.cache_strategy=d.cache_strategy;p.pricing=d.pricing;
+  p.cache_strategy=d.cache_strategy;p.pricing=d.pricing;p.api_type=d.api_type||'claude';
   btn.disabled=true;var old=btn.textContent;btn.textContent='拉取中...';
   fetchModelsForProvider(p).then(function(models){
     p.models=cleanModelList(models,p.model);
@@ -12435,6 +12450,7 @@ function saveProvider(btn){
   p.name=d.name.trim();p.category=d.category.trim();p.note=d.note.trim();p.url=d.url.trim();p.key=d.key.trim();p.model=d.model.trim();p.models=cleanModelList(d.models,p.model);
   p.cache_strategy=d.cache_strategy;
   p.pricing=d.pricing;
+  p.api_type=d.api_type||'claude';
   // 缓存策略改了以后必须重刷轮询那份镜像并重算 config_revision，
   // 否则网关的别的热实例不会重新拉配置，改了策略还在按旧策略打断点。
   apiPollingSyncFromProviders();
