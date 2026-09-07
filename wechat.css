@@ -98,6 +98,7 @@ body.chat-active .chat-head-actions{
   grid-template-columns:repeat(2,36px)!important;
   gap:6px!important;
 }
+body.chat-active .chat-head-actions{grid-template-columns:repeat(3,36px)!important}
 body.chat-active .chat-left-actions{left:16px!important}
 body.chat-active .chat-head-actions{right:16px!important}
 body.chat-active .chat-icon-btn{
@@ -168,9 +169,9 @@ body.chat-active .chat-title-meta{
   min-width:0!important;
 }
 body.chat-active .chat-title-meta #chat-status{margin:3px 0 0!important}
-/* 等待期间的真实进度（阶段 + 已等秒数），挂在右上角两颗图标按钮的正下方。
+/* 等待期间的真实进度（阶段 + 已等秒数），挂在右上角图标按钮的正下方。
    标题栏中间那句「对方正在输入...」保持原样，一个字不加。
-   必须绝对定位：.chat-head-actions 在聊天页是两列网格，直接塞第三个子元素
+   必须绝对定位：.chat-head-actions 在聊天页是图标网格，直接塞进子元素
    会被挤到第二行去。父容器本身就是 absolute，所以这里的定位基准已经有了。 */
 #chat-head-progress{
   position:absolute!important;
@@ -419,6 +420,7 @@ body.dark.chat-active .chat-send.chat-stop-btn:not(:disabled){background:#d94c4c
     grid-template-columns:repeat(2,34px)!important;
     gap:3px!important;
   }
+  body.chat-active .chat-head-actions{grid-template-columns:repeat(3,34px)!important}
   body.chat-active .chat-left-actions{left:7px!important}
   body.chat-active .chat-head-actions{right:7px!important}
   body.chat-active .chat-icon-btn{width:34px!important;height:34px!important;min-width:34px!important}

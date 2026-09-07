@@ -19,7 +19,7 @@ function extractFunction(name){
 }
 
 const POLLING_FNS=[
-  'providerNormalizeCacheStrategy','chatNormalizeCacheStrategy','providerCacheStrategy',
+  'providerNormalizeCacheStrategy','providerNormalizeApiType','chatNormalizeCacheStrategy','providerCacheStrategy',
   'chatDefaultCostPricing','chatNormalizeCostMode','chatNumberOrDefault',
   'chatNormalizeCostPricing','chatCurrentCostPricing',
   'chatNormalizeCostDefaultEntry','chatNormalizeCostDefaults','chatCostDefaults',

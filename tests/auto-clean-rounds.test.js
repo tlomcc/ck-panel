@@ -104,7 +104,7 @@ async function testExpiryBehavior(){
     CHAT_AUTO_CLEAN_MAX_ROUNDS:5000,
     Date:{now:()=>now},
     currentPanelTab:'chat',chatAutoCleanBusy:false,chatSending:false,chatIdleTrimBusy:false,
-    chatSpeechPreferenceManualBusy:false,chatEditingIndex:-1,chatAutoCleanLastCheckAt:0,
+    chatTrimBusy:false,chatEditingIndex:-1,chatAutoCleanLastCheckAt:0,
     chatMessages:session.messages,chatSessions:[session],
     chatLoadConfig:()=>({panelKey:'key',autoCleanEnabled:true,autoCleanMode:'cache_5m'}),
     chatCurrentSession:()=>session,chatCurrentConversationRoundCount:()=>1,

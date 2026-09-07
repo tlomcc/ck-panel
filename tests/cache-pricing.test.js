@@ -218,8 +218,9 @@ assert.strictEqual(context.chatNormalizeCacheStrategy('cost_optimized'),'native_
 assert.strictEqual(tiered.ttl,'mixed');
 assert.strictEqual(tiered.requestTtl,'1h');
 assert.strictEqual(tiered.retentionSeconds,3600);
-// 三个原生档都必须显式发 anthropic：/messages 形状是它们的定义前提
-assert(/if\(cacheStrategy==='native_stable'\|\|cacheStrategy==='native_tiered'\|\|cacheStrategy==='native_5m'\)body\.upstream_format='anthropic';/.test(source));
+// 请求协议由当前供应商维护的 API 类型决定，不能再被缓存策略偷偷改写。
+assert(/upstream_format:cfg\.mainRouteApiType==='claude'\?'anthropic':'openai'/.test(source));
+assert(!/if\(cacheStrategy==='native_stable'\|\|cacheStrategy==='native_tiered'\|\|cacheStrategy==='native_5m'\)body\.upstream_format='anthropic';/.test(source));
 
 // —— 原生5min：断点照 Claude Code 的尾部方案，TTL 全 5m ——
 // 'native_5m' 以前是 native_stable 的别名，改造后必须归它自己。

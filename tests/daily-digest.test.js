@@ -263,7 +263,7 @@ function testWaitWiring(){
 
   const apply=source.slice(
     source.indexOf('async function chatApplyAutoTrimForPendingBatch'),
-    source.indexOf('async function chatManualSyncSpeechPreferences'),
+    source.indexOf('async function chatManualTrimNow'),
   );
   assert.strictEqual((apply.match(/chatAwaitTrimDigest\(/g)||[]).length,3,
     '三条提交路径（无可审阅内容 / 偏好失败 / 正常）都要等总结');

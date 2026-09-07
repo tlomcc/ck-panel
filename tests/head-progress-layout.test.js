@@ -2,7 +2,7 @@
 // 不靠读 8 份 CSS 猜（见 memory: ck-panel-headless-css-probe）。
 // 要保证的事：
 //   1. 它真的在右上角（贴着视口右边、在标题栏高度附近）；
-//   2. 不和右上角那两颗图标按钮重叠，也不把它们挤成两行；
+//   2. 不和右上角三颗图标按钮重叠，也不把它们挤成两行；
 //   3. 文字再长也不冲出视口、不盖住中间的标题。
 const fs = require('fs');
 const path = require('path');
@@ -93,13 +93,13 @@ function overlaps(a, b) {
   check(tag + ' 不能冲出视口左边', p.left >= 0, { left: p.left });
   check(tag + ' 不能冲出视口右边', p.right <= data.viewport.w, { right: p.right, viewport: data.viewport.w });
 
-  check(tag + ' 右上角必须还是两颗按钮', data.buttons.length === 2, data.buttons.length);
+  check(tag + ' 右上角必须是三颗按钮', data.buttons.length === 3, data.buttons.length);
   data.buttons.forEach(function (b, i) {
     check(tag + ' 不能盖住第 ' + (i + 1) + ' 颗图标按钮', !overlaps(p, b), { progress: p, button: b });
   });
-  if (data.buttons.length === 2) {
-    check(tag + ' 两颗按钮必须还在同一行（没被挤成两行）',
-      Math.abs(data.buttons[0].top - data.buttons[1].top) < 2,
+  if (data.buttons.length === 3) {
+    check(tag + ' 三颗按钮必须还在同一行（没被挤成两行）',
+      data.buttons.every(function (button) { return Math.abs(button.top - data.buttons[0].top) < 2; }),
       data.buttons.map(function (b) { return b.top; }));
   }
   check(tag + ' 不能盖住中间的标题', !overlaps(p, data.titleCenter),

@@ -63,6 +63,19 @@ assert(!allCss.includes('chat-side-tabs'),'dead .chat-side-tabs styles must be g
 assert(!source.includes('chat-side-tabs'),'dead .chat-side-tabs query must be gone');
 assert(/id="chat-side-model"/.test(html)&&/id="chat-side-debug"/.test(html),'side panels themselves must stay');
 
+// ── 聊天标题栏的 Fact B 快捷键 ───────────────────────────────────────
+assert((html.match(/id="chat-quick-fact-toggle"/g)||[]).length===1,'Fact B shortcut must render exactly once');
+const chatHead=html.slice(html.indexOf('<div class="chat-head-actions">'),html.indexOf('</div>',html.indexOf('<div class="chat-head-actions">'))+6);
+assert(chatHead.indexOf('chat-quick-fact-toggle')<chatHead.indexOf('chat-theme-toggle'),'Fact B shortcut must sit left of the moon button');
+assert(/chat-quick-fact-toggle[^>]*>\s*<svg/.test(chatHead),'Fact B shortcut should use an icon without visible text');
+
+// ── 供应商接口类型 ─────────────────────────────────────────────────
+assert(/function providerNormalizeApiType\(/.test(source),'provider API type normalizer must exist');
+assert(/<label>API 接口类型<\/label>/.test(source),'provider editor must expose the API type field');
+assert(/api_type:providerNormalizeApiType\(v\('\.prov-api-type'\)/.test(source),'provider saves must persist the selected API type');
+assert(/api_type:'openai'/.test(source),'new providers must default to OpenAI');
+assert(/fetchModelsForProvider\(p\)[\s\S]{0,500}api_type:providerNormalizeApiType/.test(source),'model discovery must receive the selected API type');
+
 // ── 抽屉统一节奏 ────────────────────────────────────────────────────
 assert(/input\[readonly\]/.test(css.wechat),'readonly fields must look read-only');
 assert(/\.chat-memory-card p\.chat-field-hint/.test(css.wechat),'hint text must render at one size everywhere');
