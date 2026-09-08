@@ -3,6 +3,7 @@ const fs=require('fs');
 const vm=require('vm');
 
 const source=fs.readFileSync(require.resolve('../script.js'),'utf8');
+const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
 
 function extractFunction(name){
   const start=source.indexOf(`function ${name}(`);
@@ -88,6 +89,8 @@ function testTrimConfigAndSystemPrompt(){
   assert.strictEqual(context.chatNormalizeAutoTrimConfig({keep:'invalid'}).keep,200,'invalid values must fall back to the default');
   assert.strictEqual(context.chatComposeSystemPrompt({system:''}),'','empty custom system prompt must stay empty');
   assert.strictEqual(context.chatComposeSystemPrompt({system:'只按我填写的内容'}),'只按我填写的内容','custom system prompt must pass through unchanged');
+  assert.strictEqual(context.chatComposeSystemPrompt({system:'关闭时不应发送',systemPromptEnabled:false}),'','disabled custom system prompt must not be sent');
+  assert.strictEqual(context.chatComposeSystemPrompt({system:'旧配置默认仍启用'}),'旧配置默认仍启用','missing toggle must preserve legacy enabled behavior');
 }
 
 // 聊天抽屉的措辞偏好是纯预览：只显示条数和规则正文，
@@ -133,6 +136,7 @@ assert(prepareTimeoutMatch,'missing speech preference prepare timeout');
 assert(Number(prepareTimeoutMatch[1])>60000,'frontend timeout must exceed the default backend prepare budget');
 testMemoryAuthenticationSurvivesStorageFailure();
 testTrimConfigAndSystemPrompt();
+assert(html.includes('id="chat-system-enabled"'),'system prompt must have an independent toggle');
 testSpeechPreferenceStatusRendering();
 testPanelDataFetch().then(()=>console.log('panel auth tests: OK')).catch(error=>{
   console.error(error);

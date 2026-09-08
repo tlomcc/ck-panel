@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v222-recall-b-toggle';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v223-native-cache-system-toggle';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2375,6 +2375,7 @@ function chatDefaultConfig(){
     model:'',
     sessionId:chatSessionId(),
     system:'',
+    systemPromptEnabled:true,
     ncContextInjection:true,
     backendSwitchNotification:true,
     recall:true,
@@ -2697,7 +2698,18 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   chatRenderBackendSwitchNotificationState();
 }
 function chatComposeSystemPrompt(cfg){
+  if(cfg&&cfg.systemPromptEnabled===false)return '';
   return String((cfg&&cfg.system)||'').trim();
+}
+function chatRequestUpstreamFormat(cfg,cacheStrategy){
+  var strategy=chatNormalizeCacheStrategy(cacheStrategy);
+  // native_* 的断点形状就是 Claude /messages。这个行为在供应商接口类型
+  // 字段加入前就是如此，不能让 OpenAI 兼容类型把原生缓存降级成无断点的转换请求。
+  if(strategy==='native_stable'||strategy==='native_tiered'||strategy==='native_5m')return 'anthropic';
+  var apiType=String((cfg&&cfg.mainRouteApiType)||'').trim().toLowerCase();
+  if(apiType==='claude')return 'anthropic';
+  if(apiType==='openai')return 'openai';
+  return '';
 }
 function chatNormalizeInjectionPosition(value,fallback){
   var raw=String(value||'').trim();
@@ -2920,6 +2932,7 @@ function chatSaveConfigObject(cfg){
   delete cfg.mainRouteReason;
   delete cfg.chatApiSource;
   cfg.recall=cfg.recall!==false;
+  cfg.systemPromptEnabled=cfg.systemPromptEnabled!==false;
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
   cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
@@ -3813,6 +3826,7 @@ function chatReadForm(){
     model:'',
     sessionId:String(chatFieldValue('chat-session-id',saved.sessionId||chatSessionId())||saved.sessionId||chatSessionId()),
     system:chatFieldValue('chat-system',saved.system||'')||'',
+    systemPromptEnabled:chatFieldChecked('chat-system-enabled',saved.systemPromptEnabled!==false),
     ncContextInjection:chatFieldChecked('chat-nc-context-injection',saved.ncContextInjection!==false),
     backendSwitchNotification:chatFieldChecked('chat-backend-switch-notification',saved.backendSwitchNotification!==false),
     recall:chatFieldChecked('chat-recall-enabled',saved.recall!==false),
@@ -3858,6 +3872,7 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-panel-key',cfg.panelKey||'');
   chatSetFieldValue('chat-session-id',cfg.sessionId||chatSessionId());
   chatSetFieldValue('chat-system',cfg.system||'');
+  chatSetFieldChecked('chat-system-enabled',cfg.systemPromptEnabled!==false);
   chatSetFieldChecked('chat-nc-context-injection',cfg.ncContextInjection!==false);
   chatSetFieldChecked('chat-backend-switch-notification',cfg.backendSwitchNotification!==false);
   chatSetFieldValue('chat-memory-pack',cfg.memoryPreview||'');
@@ -10442,9 +10457,8 @@ async function chatSubmitPendingMessages(options){
     model:cfg.model,
     provider_name:cfg.mainRouteProvider||'',
     // 供应商 ID 一起发：网关会把它原样盖回 usage，面板据此反查这一条自己维护的
-     // 单价和倍率。只靠名字或地址反查会在"同站两条不同倍率"时认错人。
-     provider_id:cfg.mainRouteProviderId||'',
-     upstream_format:cfg.mainRouteApiType==='claude'?'anthropic':'openai',
+    // 单价和倍率。只靠名字或地址反查会在"同站两条不同倍率"时认错人。
+    provider_id:cfg.mainRouteProviderId||'',
     system:chatComposeSystemPrompt(cfg),
     worldbook_pack:chatWorldbookPack(cfg),
     worldbook_injection_position:chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail'),
@@ -10499,6 +10513,8 @@ async function chatSubmitPendingMessages(options){
     body.speech_preference_applied_revision=currentSession.speechPreferenceAppliedRevision;
   }
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
+  var requestUpstreamFormat=chatRequestUpstreamFormat(cfg,cacheStrategy);
+  if(requestUpstreamFormat)body.upstream_format=requestUpstreamFormat;
   if(regenerateRequest){
     currentSession.transportMessages=[];
     currentSession.transportUpdated=0;

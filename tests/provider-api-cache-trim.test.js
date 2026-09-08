@@ -34,6 +34,30 @@ function testProviderTypeNormalization(){
   assert.strictEqual(context.providerNormalizeApiType('', 'https://provider.example/v1'),'openai');
 }
 
+function testNativeCacheRestoresClaudeTransport(){
+  const context=load({console},['chatNormalizeCacheStrategy','chatRequestUpstreamFormat']);
+  assert.strictEqual(
+    context.chatRequestUpstreamFormat({mainRouteApiType:'openai'},'native_5m'),
+    'anthropic',
+    'native 5m must retain the pre-interface Claude transport'
+  );
+  assert.strictEqual(
+    context.chatRequestUpstreamFormat({mainRouteApiType:'openai'},'native_stable'),
+    'anthropic',
+    'native 1h must retain the pre-interface Claude transport'
+  );
+  assert.strictEqual(
+    context.chatRequestUpstreamFormat({mainRouteApiType:'openai'},'single_5m'),
+    'openai',
+    'ordinary strategies should still honor an OpenAI provider'
+  );
+  assert.strictEqual(
+    context.chatRequestUpstreamFormat({mainRouteApiType:'claude'},'single_5m'),
+    'anthropic',
+    'ordinary strategies should still honor a Claude provider'
+  );
+}
+
 function testCacheNoticeUsesProviderStrategy(){
   const context=load({
     console,
@@ -83,6 +107,7 @@ function testTrimDoesNotSyncSpeechPreferences(){
 }
 
 testProviderTypeNormalization();
+testNativeCacheRestoresClaudeTransport();
 testCacheNoticeUsesProviderStrategy();
 testPollingNoticeUsesActiveProvider();
 testTrimDoesNotSyncSpeechPreferences();
