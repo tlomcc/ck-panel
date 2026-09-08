@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v223-native-cache-system-toggle';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v224-native-thinking-modes';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2382,6 +2382,8 @@ function chatDefaultConfig(){
     recallMode:'fact_only',
     factRecallMode:'a',
     recallRecentRounds:10,
+    thinkingMode:'off',
+    thinkingBudgetTokens:4096,
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:'system_after_anchor',
@@ -2409,6 +2411,57 @@ function chatDefaultConfig(){
     recallBoxVisible:true,
     worldbooks:[]
   };
+}
+function chatNormalizeThinkingMode(value,legacyFake){
+  var raw=String(value||'').trim().toLowerCase();
+  if(raw==='native'||raw==='anthropic'||raw==='原生'||raw==='原生思考')return 'native';
+  if(raw==='compat'||raw==='compatible'||raw==='pseudo'||raw==='fake'||raw==='ck'||raw==='兼容'||raw==='兼容思考')return 'compat';
+  if(!raw&&legacyFake===true)return 'compat';
+  return 'off';
+}
+function chatNormalizeThinkingBudget(value){
+  var n=Math.round(Number(value));
+  if(!isFinite(n))return 4096;
+  if(n<=1024)return 1024;
+  if(n<=4096)return 4096;
+  return 8192;
+}
+function chatThinkingModeLabel(value){
+  var mode=chatNormalizeThinkingMode(value);
+  return mode==='native'?'原生思考':(mode==='compat'?'兼容思考':'关闭');
+}
+function chatRenderThinkingControls(cfg){
+  cfg=cfg||chatLoadConfig()||{};
+  var mode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
+  var modeInput=document.getElementById('chat-thinking-mode');
+  if(modeInput)modeInput.value=mode;
+  var budgetInput=document.getElementById('chat-thinking-budget');
+  if(budgetInput)budgetInput.value=String(chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens));
+  var budgetLabel=document.getElementById('chat-thinking-budget-label');
+  if(budgetLabel)budgetLabel.hidden=mode!=='native';
+  var budgetHint=document.getElementById('chat-thinking-budget-hint');
+  if(budgetHint)budgetHint.hidden=mode!=='native';
+  var fake=document.getElementById('chat-fake-thinking');
+  if(fake){fake.checked=mode==='compat';fake.disabled=false;}
+  var prompt=document.getElementById('chat-thinking-prompt');
+  if(prompt)prompt.disabled=mode!=='compat';
+  var position=document.getElementById('chat-thinking-injection-position');
+  if(position)position.disabled=mode!=='compat';
+}
+function chatThinkingModeChanged(value){
+  var mode=chatNormalizeThinkingMode(value);
+  var fake=document.getElementById('chat-fake-thinking');
+  if(fake)fake.checked=mode==='compat';
+  var cfg=chatSaveConfig(true);
+  chatRenderThinkingControls(cfg);
+  return cfg;
+}
+function chatCompatThinkingChanged(enabled){
+  var modeInput=document.getElementById('chat-thinking-mode');
+  if(modeInput)modeInput.value=enabled?'compat':'off';
+  var cfg=chatSaveConfig(true);
+  chatRenderThinkingControls(cfg);
+  return cfg;
 }
 function chatNormalizeCacheStrategy(value){
   var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
@@ -2892,7 +2945,12 @@ function chatLoadConfig(){
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
   cfg.factRecallMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
-  cfg.fakeThinking=cfg.fakeThinking===true;
+  cfg.thinkingMode=chatNormalizeThinkingMode(
+    Object.prototype.hasOwnProperty.call(saved||{},'thinkingMode')?cfg.thinkingMode:'',
+    cfg.fakeThinking===true,
+  );
+  cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.fakeThinking=cfg.thinkingMode==='compat';
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
@@ -2912,6 +2970,9 @@ function chatLoadConfig(){
   cfg.autoCleanMode=autoClean.mode;
   cfg.autoCleanRounds=autoClean.rounds;
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
+  cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
+  cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.fakeThinking=cfg.thinkingMode==='compat';
   return cfg;
 }
 function chatSaveConfigObject(cfg){
@@ -2935,6 +2996,9 @@ function chatSaveConfigObject(cfg){
   cfg.systemPromptEnabled=cfg.systemPromptEnabled!==false;
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
   cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
+  cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
+  cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.fakeThinking=cfg.thinkingMode==='compat';
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   var trim=chatAutoTrimConfigFrom(cfg);
@@ -3833,7 +3897,14 @@ function chatReadForm(){
     recallMode:chatRecallModeFromForm(saved.recallMode),
     factRecallMode:chatFactRecallModeFromForm(saved.factRecallMode),
     recallRecentRounds:chatNormalizeRecallRecentRounds(chatFieldValue('chat-recall-recent-rounds',saved.recallRecentRounds)),
-    fakeThinking:chatFieldChecked('chat-fake-thinking',saved.fakeThinking===true),
+    thinkingMode:chatNormalizeThinkingMode(
+      chatFieldValue('chat-thinking-mode',saved.thinkingMode),
+      saved.fakeThinking===true,
+    ),
+    thinkingBudgetTokens:chatNormalizeThinkingBudget(
+      chatFieldValue('chat-thinking-budget',saved.thinkingBudgetTokens||4096)
+    ),
+    fakeThinking:false,
     fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
     useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
@@ -3864,7 +3935,9 @@ function chatReadForm(){
     worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
   cfg=chatMergeActiveWorldbookDraft(cfg);
-  return chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
+  cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
+  cfg.fakeThinking=cfg.thinkingMode==='compat';
+  return cfg;
 }
 function chatWriteForm(cfg){
   cfg=chatApplyMainRouteToConfig(cfg||chatLoadConfig(),chatMainRouteConfig());
@@ -3880,7 +3953,7 @@ function chatWriteForm(cfg){
   chatSetRecallModeField(cfg.recallMode);
   chatSetFactRecallModeField(cfg.factRecallMode);
   chatSetFieldValue('chat-recall-recent-rounds',chatNormalizeRecallRecentRounds(cfg.recallRecentRounds));
-  chatSetFieldChecked('chat-fake-thinking',cfg.fakeThinking===true);
+  chatRenderThinkingControls(cfg);
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   chatSetFieldChecked('chat-use-mcp',cfg.useMcp===true);
@@ -4008,6 +4081,7 @@ function chatSaveConfig(silent){
   chatRenderRecallState();
   chatRenderNcContextState();
   chatRenderBackendSwitchNotificationState();
+  chatRenderThinkingControls(cfg);
   chatRenderCostPricingModeHint(cfg.costPricing&&cfg.costPricing.mode);
   chatRenderDailyDigest(cfg);
   chatRenderAutoCleanState(cfg);
@@ -5502,7 +5576,12 @@ function chatFormatDebug(ev,data){
     var requestToolsText=requestTools!==undefined?('｜本轮上游tools：'+(requestTools||0)):'';
     var mcpText=data.mcp_enabled?('｜MCP：'+(data.mcp_source||'unknown')+' '+(data.mcp_tools||0)+' 个工具'+requestToolsText+mcpCache):'｜MCP：关闭';
     var windowText=data.window_history_supplied?('｜窗口历史：'+(data.window_history_messages||0)+' 条'):'';
-    var thinkingText=data.ck_thinking_enabled?('｜思考链：开 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考链：关';
+     var thinkingMode=data.thinking_mode||(
+       data.native_thinking_enabled?'native':(data.ck_thinking_enabled?'compat':'off')
+     );
+     var thinkingText=thinkingMode==='native'
+       ?('｜思考：原生 '+(data.native_thinking_budget_tokens||0)+' tokens')
+       :(thinkingMode==='compat'?('｜思考：兼容 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考：关');
     var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')+' / 当日总结 '+(data.injection_positions.daily_digest||'-')):'';
     var dailyDigestText=data.daily_digest_chars?('｜当日截断总结：'+data.daily_digest_chars+' 字'):'';
     var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
@@ -7876,6 +7955,9 @@ function chatWindowContextMessages(){
       ts:m.ts||0
     };
     var content=chatMessageContentParts(m);
+    if(m.role==='assistant'&&String(m.thinking||'').trim()){
+      content.unshift({type:'thinking',thinking:String(m.thinking||'')});
+    }
     if(content.length)item.content=content;
     return item;
   });
@@ -8014,6 +8096,7 @@ async function chatRecoverInterruptedTurns(opts){
         userSentTs:Number(interrupted[0].ts)||0,
         usage:reply.usage||null,
         turnId:String(reply.turn_id||turnId||''),
+        thinking:String(reply.assistant_thinking||reply.thinking||''),
       });
       recovered=1;
       chatDebug('resume_recovered',{
@@ -8426,7 +8509,8 @@ function chatMessageCopyText(m){
 }
 function chatMessageThinkingText(m){
   if(!m)return '';
-  return String(chatSplitThinkingText(String(m.text||'')).thinking||'');
+  var pseudo=String(chatSplitThinkingText(String(m.text||'')).thinking||'').trim();
+  return [String(m.thinking||'').trim(),pseudo].filter(Boolean).join('\n\n');
 }
 function chatLooksLikePartialThinkingTag(text){
   var t=String(text||'').trim().toLowerCase();
@@ -8510,25 +8594,26 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
-function chatRenderAssistantParts(rawText,streaming,tools,messageIndex){
+function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
   var toolTrace=chatRenderToolTrace(tools);
   var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
   var body=split.text?(tagged!==null?tagged:'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
   var thinking='';
-  if(split.thinking){
+   var thinkingText=[String(nativeThinking||'').trim(),String(split.thinking||'').trim()].filter(Boolean).join('\n\n');
+   if(thinkingText){
     // 闭合标签丢了又没剩正文时默认展开：否则用户只看到一个空气泡，会以为回复整条丢了。
     var thinkingCls=(split.unclosed&&!split.text)?'chat-thinking open':'chat-thinking';
     var thinkingLabel=split.unclosed?'思考（未闭合）':'思考';
     var thinkingActions=(typeof messageIndex==='number'&&messageIndex>=0)
       ?('<div class="chat-thinking-actions"><button class="chat-thinking-copy" type="button" data-i="'+messageIndex+'">复制思考链</button></div>')
       :'';
-    thinking='<div class="'+thinkingCls+'"><button class="chat-thinking-head" type="button"><span>'+esc(thinkingLabel)+'</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(split.thinking)+thinkingActions+'</div></div>';
+     thinking='<div class="'+thinkingCls+'"><button class="chat-thinking-head" type="button"><span>'+esc(thinkingLabel)+'</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(thinkingText)+thinkingActions+'</div></div>';
   }
   return {thinking:thinking,toolTrace:toolTrace,body:body};
 }
-function chatRenderAssistantContent(rawText,streaming,tools,messageIndex){
-  var parts=chatRenderAssistantParts(rawText,streaming,tools,messageIndex);
+function chatRenderAssistantContent(rawText,streaming,tools,messageIndex,nativeThinking){
+  var parts=chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking);
   return parts.thinking+parts.toolTrace+parts.body;
 }
 function chatStreamingAssistantPreviewText(rawText){
@@ -8538,8 +8623,8 @@ function chatStreamingAssistantPreviewText(rawText){
   var units=chatNaturalUnits(text);
   return units.length?chatJoinNaturalUnits(units.slice(0,1)):text;
 }
-function chatRenderStreamingAssistantContent(rawText,tools){
-  return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools);
+function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking){
+  return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools,undefined,nativeThinking);
 }
 function chatSplitOutsideCodeBlocks(text){
   var lines=String(text||'').replace(/\r\n/g,'\n').split('\n');
@@ -8774,7 +8859,8 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   opts=opts||{};
   var parts=chatSplitAssistantReplies(rawText,!(opts.splitAssistantReplies===false));
   var tools=chatCloneToolEvents(toolEvents);
-  if(!parts.length&&tools.length)parts=[''];
+  var nativeThinking=String(opts.thinking||'').trim();
+  if(!parts.length&&(tools.length||nativeThinking))parts=[''];
   if(!parts.length)return Promise.resolve();
   chatFlushAssistantRevealQueue({render:false});
   var firstReplyTs=Number(opts.firstReplyTs)||Date.now();
@@ -8783,7 +8869,8 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   for(var i=0;i<parts.length;i++){
     var part=parts[i];
     var ts=i===0?firstReplyTs:Math.max(Date.now(),firstReplyTs+i);
-    var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts,turnId:String(opts.turnId||'')};
+     var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts,turnId:String(opts.turnId||'')};
+     if(i===0&&nativeThinking)msg.thinking=nativeThinking;
     if(i===parts.length-1&&userSentTs){
       msg.userSentTs=userSentTs;
       msg.firstReplyTs=firstReplyTs;
@@ -9687,7 +9774,7 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&chatShouldShowRecallBox()&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
-  var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i):null;
+   var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i,m.thinking):null;
   var thinking=assistantParts?assistantParts.thinking:'';
   var inner=assistantParts?(assistantParts.toolTrace+assistantParts.body):esc(m.text||'');
   if(role==='user')inner=chatRenderUserMessageContent(m,i);
@@ -9723,7 +9810,7 @@ function chatMessageDisplayGateKey(){
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-  var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
+   var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.thinking,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;
@@ -10448,6 +10535,8 @@ async function chatSubmitPendingMessages(options){
   var cacheStrategy=cacheMeta.value;
   var recallRetention=cacheMeta.retentionSeconds;
   var promptCacheTtl=cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl;
+  var thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
+  var thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
   var body={
     key:cfg.panelKey,
     session_id:cfg.sessionId,
@@ -10486,6 +10575,13 @@ async function chatSubmitPendingMessages(options){
     client_cache_generation:Number(currentSession.cacheGeneration||0)||0,
     client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0
   };
+  // Native thinking is a top-level Anthropic option. Keep it out of system/messages
+  // so changing depth does not rewrite the reusable prompt-cache prefix.
+  if(thinkingMode!=='off')body.thinking_mode=thinkingMode;
+  if(thinkingMode==='native'){
+    body.native_thinking_enabled=true;
+    body.thinking_budget_tokens=thinkingBudgetTokens;
+  }
   // 轮询只发开关和配置修订。候选的地址、Key、模型一律由网关自己从已加载配置解析，
   // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。
   var pollingView=chatPollingView();
@@ -10535,7 +10631,7 @@ async function chatSubmitPendingMessages(options){
   if(!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   body=chatLockGatewayBody(body);
   var requestBodyText=JSON.stringify(body);
-  var assistantText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
+  var assistantText='',nativeThinkingText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
   var responseUserTs=submitTs;
   var firstReplyTs=0;
   var latencyTrace={
@@ -10577,11 +10673,11 @@ async function chatSubmitPendingMessages(options){
   function flushStreamRender(){
     if(streamRenderStopped)return;
     streamRenderDirty=false;
-    if(!out||!toolEvents.length)return;
+    if(!out||(!toolEvents.length&&!nativeThinkingText))return;
     var shouldStick=chatIsMessagesNearBottom();
     out.classList.remove('streaming-empty');
     if(out.parentNode)out.parentNode.classList.remove('streaming-empty-row');
-    out.innerHTML=chatRenderToolTrace(toolEvents);
+    out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents,nativeThinkingText);
     chatFollowMessagesBottom(shouldStick,true,true);
   }
   function scheduleStreamRender(){
@@ -10647,6 +10743,14 @@ async function chatSubmitPendingMessages(options){
           if(deltaText)markFirstReplyTs();
           if(deltaText)chatStreamProgressSet('正在写');
           assistantText+=deltaText;
+        }else if(ev==='thinking'){
+          var thinkingDelta=typeof data==='string'?data:String((data&&data.text)||'');
+          if(thinkingDelta){
+            nativeThinkingText+=thinkingDelta;
+            markFirstReplyTs();
+            chatStreamProgressSet('正在思考');
+            scheduleStreamRender();
+          }
         }else if(ev==='memory'){
           recallInfo={chars:data.memory_chars||(data.memory_pack?String(data.memory_pack).length:0),preview:String(data.memory_pack||data.memory_preview||'')};
           var memoryPackEl=document.getElementById('chat-memory-pack');
@@ -10746,7 +10850,7 @@ async function chatSubmitPendingMessages(options){
     chatStreamProgressStop();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText});
     // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
     carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
     chatClearInFlightMarks(userMessageIndexes);
