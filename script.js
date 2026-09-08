@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v226-input-breakdown';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v227-strict-fact-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2622,7 +2622,7 @@ function chatFactRecallModeMeta(value){
   var mode=chatNormalizeFactRecallMode(value);
   return mode==='b'
     ? {value:'b',label:'B（宽松）',shortLabel:'B',debugText:'宽松过滤 + 强制保底 + 模型精筛'}
-    : {value:'a',label:'A（经典）',shortLabel:'A',debugText:'沿用现有经典 Fact 召回逻辑'};
+    : {value:'a',label:'A（严格）',shortLabel:'A',debugText:'小模型先判定；PASS 立即停止；通过后最多注入 1 条高匹配 Fact'};
 }
 function chatFactRecallModeFromForm(fallback){
   var selected=document.querySelector('input[name="chat-fact-recall-mode"]:checked');
@@ -5718,7 +5718,7 @@ function chatFormatDebug(ev,data){
       var breakdown=data.prompt_breakdown&&typeof data.prompt_breakdown==='object'?data.prompt_breakdown:null;
       var breakdownText='';
       if(breakdown){
-        breakdownText='｜请求拆分：系统 '+(breakdown.system_chars||0)+'字/'+(breakdown.system_bytes||0)+'B，历史 '+(breakdown.history_chars||0)+'字，当前输入 '+(breakdown.current_user_chars||0)+'字，世界书 '+(breakdown.worldbook_chars||0)+'字，记忆/总结 '+(breakdown.memory_chars||0)+'字，临时上下文 '+(breakdown.context_chars||0)+'字，工具 schema '+(breakdown.tools_bytes||0)+'B，总计约 '+(breakdown.total_chars||0)+'字';
+        breakdownText='｜请求拆分：系统 '+(breakdown.system_chars||0)+'字/'+(breakdown.system_bytes||0)+'B，历史 '+(breakdown.history_chars||0)+'字，当前输入 '+(breakdown.current_user_chars||0)+'字（原文 '+(breakdown.current_original_chars||0)+'，回复目标 '+(breakdown.current_reply_target_chars||0)+'，网关上下文 '+(breakdown.current_gateway_context_chars||0)+'，其他 '+(breakdown.current_other_chars||0)+'），世界书 '+(breakdown.worldbook_chars||0)+'字，记忆/总结 '+(breakdown.memory_chars||0)+'字，临时上下文 '+(breakdown.context_chars||0)+'字，工具 schema '+(breakdown.tools_bytes||0)+'B，总计约 '+(breakdown.total_chars||0)+'字';
       }
       var cacheDiag='🧊 缓存诊断'+diagMode+boundaryText+idleText+cleanText+diagRecall+'｜召回模式：'+activeRecallMode+pathText+transition+cleanup+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint)+breakdownText;
       if(data.fact_stats_queued)cacheDiag+='\n'+chatFormatFactStatsLine(data);

@@ -33,6 +33,7 @@ assert(cacheBranch.includes('重建边界')&&cacheBranch.includes('空闲：')&&
 assert(cacheBranch.includes('路径：'),'the cache diagnosis must state the Fact recall path');
 assert(cacheBranch.includes('prompt_breakdown'),'the cache diagnosis must include prompt size breakdown data');
 assert(cacheBranch.includes('当前输入')&&cacheBranch.includes('工具 schema'),'the cache diagnosis must show the current input and tool schema portions');
+assert(cacheBranch.includes('回复目标')&&cacheBranch.includes('网关上下文'),'the current input must be split into original and injected suffixes');
 assert((format.match(/缓存诊断/g)||[]).length===1,'only one cache diagnosis title may exist');
 assert(source.includes('【已保存的设置】'),'the saved-config banner must stop looking like a second diagnosis');
 
