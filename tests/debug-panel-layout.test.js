@@ -20,7 +20,7 @@ function functionSource(name){
 
 const format=functionSource('chatFormatDebug');
 const metaBranch=format.slice(format.indexOf("if(ev==='meta')"),format.indexOf("if(ev==='memory')"));
-const cacheBranch=format.slice(format.indexOf('🧊 缓存诊断')-1500,format.indexOf('🧊 缓存诊断')+900);
+const cacheBranch=format.slice(format.indexOf('🧊 缓存诊断')-2500,format.indexOf('🧊 缓存诊断')+5000);
 
 // 只留一条缓存诊断：缓存相关字段全部归到 🧊 缓存诊断，请求信息只讲请求结构。
 assert(!metaBranch.includes('缓存策略'),'request info must not carry a second cache report');
@@ -31,6 +31,8 @@ assert(!metaBranch.includes('记忆召回：'),'recall state belongs to the cach
 assert(metaBranch.includes('历史来源')&&metaBranch.includes('注入：世界书'),'request info must keep the request structure');
 assert(cacheBranch.includes('重建边界')&&cacheBranch.includes('空闲：')&&cacheBranch.includes('清旧历史'),'the single cache diagnosis must absorb the moved fields');
 assert(cacheBranch.includes('路径：'),'the cache diagnosis must state the Fact recall path');
+assert(cacheBranch.includes('prompt_breakdown'),'the cache diagnosis must include prompt size breakdown data');
+assert(cacheBranch.includes('当前输入')&&cacheBranch.includes('工具 schema'),'the cache diagnosis must show the current input and tool schema portions');
 assert((format.match(/缓存诊断/g)||[]).length===1,'only one cache diagnosis title may exist');
 assert(source.includes('【已保存的设置】'),'the saved-config banner must stop looking like a second diagnosis');
 

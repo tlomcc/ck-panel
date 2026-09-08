@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v225-thinking-prompt-display';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v226-input-breakdown';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5715,7 +5715,12 @@ function chatFormatDebug(ev,data){
       var pathText=data.fact_recall_mode?('｜路径：'+chatFactRecallModeMeta(data.fact_recall_mode).label):'';
       var cleanup='｜epoch '+(data.recall_mode_epoch||0)+'｜清理注入 '+(data.cleared_injected_context_count||0)+'｜清理 canonical '+(data.canonical_sessions_cleared||0);
       var diagRecall=data.recall_enabled===false?'｜召回关闭':(data.gateway_context_injected?('｜召回已注入 '+(data.gateway_context_chars||0)+'字'):'｜无召回注入');
-      var cacheDiag='🧊 缓存诊断'+diagMode+boundaryText+idleText+cleanText+diagRecall+'｜召回模式：'+activeRecallMode+pathText+transition+cleanup+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint);
+      var breakdown=data.prompt_breakdown&&typeof data.prompt_breakdown==='object'?data.prompt_breakdown:null;
+      var breakdownText='';
+      if(breakdown){
+        breakdownText='｜请求拆分：系统 '+(breakdown.system_chars||0)+'字/'+(breakdown.system_bytes||0)+'B，历史 '+(breakdown.history_chars||0)+'字，当前输入 '+(breakdown.current_user_chars||0)+'字，世界书 '+(breakdown.worldbook_chars||0)+'字，记忆/总结 '+(breakdown.memory_chars||0)+'字，临时上下文 '+(breakdown.context_chars||0)+'字，工具 schema '+(breakdown.tools_bytes||0)+'B，总计约 '+(breakdown.total_chars||0)+'字';
+      }
+      var cacheDiag='🧊 缓存诊断'+diagMode+boundaryText+idleText+cleanText+diagRecall+'｜召回模式：'+activeRecallMode+pathText+transition+cleanup+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint)+breakdownText;
       if(data.fact_stats_queued)cacheDiag+='\n'+chatFormatFactStatsLine(data);
       return cacheDiag;
     }
