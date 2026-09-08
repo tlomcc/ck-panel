@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v224-native-thinking-modes';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v225-thinking-prompt-display';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1982,12 +1982,13 @@ var chatDisplayToggleCache=null;
 function chatDisplayToggleInvalidate(){chatDisplayToggleCache=null}
 function chatDisplayToggles(){
   if(chatDisplayToggleCache)return chatDisplayToggleCache;
-  var out={billing:true,usage:false,recallBox:true,costDefaults:[]};
+  var out={billing:true,usage:false,recallBox:true,nativeThinkingVisible:true,costDefaults:[]};
   try{
     var raw=JSON.parse(localStorage.getItem(CHAT_CONFIG_KEY)||'{}');
     out.billing=raw.billingEnabled!==false;
     out.usage=raw.usageStatsEnabled===true;
     out.recallBox=raw.recallBoxVisible!==false;
+    out.nativeThinkingVisible=raw.nativeThinkingVisible!==false;
     out.costDefaults=chatNormalizeCostDefaults(raw.costPricingDefaults);
   }catch(e){}
   chatDisplayToggleCache=out;
@@ -1997,6 +1998,7 @@ function chatBillingEnabled(){return chatDisplayToggles().billing}
 function chatUsageStatsEnabled(){return chatDisplayToggles().usage}
 // 召回记忆框（助手消息上面那个可折叠的「召回记忆」块）默认显示，设置里可以关掉。
 function chatShouldShowRecallBox(){return chatDisplayToggles().recallBox}
+function chatShouldShowNativeThinking(){return chatDisplayToggles().nativeThinkingVisible}
 // 轮询页存的是用户手填的那几个数；这里翻译成 chatUsageCost 认识的 costPricing 形状。
 // 缓存创建只让用户填一个价（5m/1h 两档他不关心），两档都套同一个数。
 function chatApiPricingToCostPricing(raw,base){
@@ -2384,8 +2386,10 @@ function chatDefaultConfig(){
     recallRecentRounds:10,
     thinkingMode:'off',
     thinkingBudgetTokens:4096,
+    thinkingPrompt:chatDefaultThinkingPrompt(),
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
+    nativeThinkingVisible:true,
     thinkingInjectionPosition:'system_after_anchor',
     useMcp:false,
     mcpUrl:API_BASE,
@@ -2438,13 +2442,23 @@ function chatRenderThinkingControls(cfg){
   var budgetInput=document.getElementById('chat-thinking-budget');
   if(budgetInput)budgetInput.value=String(chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens));
   var budgetLabel=document.getElementById('chat-thinking-budget-label');
-  if(budgetLabel)budgetLabel.hidden=mode!=='native';
+  if(budgetLabel){
+    budgetLabel.classList.toggle('is-disabled',mode!=='native');
+    budgetLabel.setAttribute('aria-disabled',mode!=='native'?'true':'false');
+  }
+  var budgetUnavailable=document.getElementById('chat-thinking-budget-unavailable');
+  if(budgetUnavailable)budgetUnavailable.hidden=mode==='native';
   var budgetHint=document.getElementById('chat-thinking-budget-hint');
-  if(budgetHint)budgetHint.hidden=mode!=='native';
+  if(budgetHint)budgetHint.textContent=mode==='native'
+    ?'这是原生 thinking 的预算上限，不是固定消耗；实际用量按上游返回的输出 token 计费。'
+    :'选择原生思考后才能设置预算；它是预算上限，不是固定消耗。';
+  if(budgetInput)budgetInput.disabled=mode!=='native';
   var fake=document.getElementById('chat-fake-thinking');
-  if(fake){fake.checked=mode==='compat';fake.disabled=false;}
+  if(fake){fake.checked=mode==='compat';fake.disabled=mode==='native';}
+  var nativeVisible=document.getElementById('chat-native-thinking-visible');
+  if(nativeVisible){nativeVisible.checked=cfg.nativeThinkingVisible!==false;nativeVisible.disabled=mode!=='native';}
   var prompt=document.getElementById('chat-thinking-prompt');
-  if(prompt)prompt.disabled=mode!=='compat';
+  if(prompt)prompt.disabled=mode==='off';
   var position=document.getElementById('chat-thinking-injection-position');
   if(position)position.disabled=mode!=='compat';
 }
@@ -2461,6 +2475,12 @@ function chatCompatThinkingChanged(enabled){
   if(modeInput)modeInput.value=enabled?'compat':'off';
   var cfg=chatSaveConfig(true);
   chatRenderThinkingControls(cfg);
+  return cfg;
+}
+function chatSaveThinkingDisplay(){
+  var cfg=chatSaveConfig(true);
+  chatRenderMessages({respectUserScroll:true});
+  toast('原生思考块已'+(cfg.nativeThinkingVisible!==false?'显示':'隐藏'));
   return cfg;
 }
 function chatNormalizeCacheStrategy(value){
@@ -2950,6 +2970,9 @@ function chatLoadConfig(){
     cfg.fakeThinking===true,
   );
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.thinkingPrompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
+  cfg.fakeThinkingPrompt=cfg.thinkingPrompt;
+  cfg.nativeThinkingVisible=cfg.nativeThinkingVisible!==false;
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
@@ -2972,6 +2995,9 @@ function chatLoadConfig(){
   cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
   cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.thinkingPrompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
+  cfg.fakeThinkingPrompt=cfg.thinkingPrompt;
+  cfg.nativeThinkingVisible=cfg.nativeThinkingVisible!==false;
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   return cfg;
 }
@@ -3904,8 +3930,10 @@ function chatReadForm(){
     thinkingBudgetTokens:chatNormalizeThinkingBudget(
       chatFieldValue('chat-thinking-budget',saved.thinkingBudgetTokens||4096)
     ),
+    thinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.thinkingPrompt||saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     fakeThinking:false,
-    fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
+    fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.thinkingPrompt||saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
+    nativeThinkingVisible:chatFieldChecked('chat-native-thinking-visible',saved.nativeThinkingVisible!==false),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
     useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
     mcpUserSet:true,
@@ -3954,7 +3982,8 @@ function chatWriteForm(cfg){
   chatSetFactRecallModeField(cfg.factRecallMode);
   chatSetFieldValue('chat-recall-recent-rounds',chatNormalizeRecallRecentRounds(cfg.recallRecentRounds));
   chatRenderThinkingControls(cfg);
-  if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
+  if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
+  if(document.getElementById('chat-native-thinking-visible'))document.getElementById('chat-native-thinking-visible').checked=cfg.nativeThinkingVisible!==false;
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   chatSetFieldChecked('chat-use-mcp',cfg.useMcp===true);
   chatSetFieldValue('chat-mcp-url',API_BASE);
@@ -8594,13 +8623,13 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
-function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking){
+function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking,showNativeThinking){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
   var toolTrace=chatRenderToolTrace(tools);
   var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
   var body=split.text?(tagged!==null?tagged:'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
   var thinking='';
-   var thinkingText=[String(nativeThinking||'').trim(),String(split.thinking||'').trim()].filter(Boolean).join('\n\n');
+   var thinkingText=[showNativeThinking===false?'':String(nativeThinking||'').trim(),String(split.thinking||'').trim()].filter(Boolean).join('\n\n');
    if(thinkingText){
     // 闭合标签丢了又没剩正文时默认展开：否则用户只看到一个空气泡，会以为回复整条丢了。
     var thinkingCls=(split.unclosed&&!split.text)?'chat-thinking open':'chat-thinking';
@@ -8612,8 +8641,8 @@ function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThi
   }
   return {thinking:thinking,toolTrace:toolTrace,body:body};
 }
-function chatRenderAssistantContent(rawText,streaming,tools,messageIndex,nativeThinking){
-  var parts=chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking);
+function chatRenderAssistantContent(rawText,streaming,tools,messageIndex,nativeThinking,showNativeThinking){
+  var parts=chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking,showNativeThinking);
   return parts.thinking+parts.toolTrace+parts.body;
 }
 function chatStreamingAssistantPreviewText(rawText){
@@ -8623,8 +8652,8 @@ function chatStreamingAssistantPreviewText(rawText){
   var units=chatNaturalUnits(text);
   return units.length?chatJoinNaturalUnits(units.slice(0,1)):text;
 }
-function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking){
-  return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools,undefined,nativeThinking);
+function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking,showNativeThinking){
+  return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools,undefined,nativeThinking,showNativeThinking);
 }
 function chatSplitOutsideCodeBlocks(text){
   var lines=String(text||'').replace(/\r\n/g,'\n').split('\n');
@@ -9774,7 +9803,7 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&chatShouldShowRecallBox()&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
-   var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i,m.thinking):null;
+   var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i,m.thinking,chatShouldShowNativeThinking()):null;
   var thinking=assistantParts?assistantParts.thinking:'';
   var inner=assistantParts?(assistantParts.toolTrace+assistantParts.body):esc(m.text||'');
   if(role==='user')inner=chatRenderUserMessageContent(m,i);
@@ -9805,7 +9834,8 @@ function chatRenderMessageRow(m,i){
 function chatMessageDisplayGateKey(){
   return (chatShouldShowMessageStatus()?'1':'0')+
     (chatShouldShowBillingPrice()?'1':'0')+
-    (chatShouldShowRecallBox()?'1':'0');
+    (chatShouldShowRecallBox()?'1':'0')+
+    (chatShouldShowNativeThinking()?'1':'0');
 }
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
@@ -10563,7 +10593,7 @@ async function chatSubmitPendingMessages(options){
     RECALL_MODE:chatNormalizeFactRecallMode(cfg.factRecallMode),
     recall_recent_rounds:chatNormalizeRecallRecentRounds(cfg.recallRecentRounds),
     ck_thinking_enabled:cfg.fakeThinking===true,
-    ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
+    ck_thinking_prompt:cfg.fakeThinking===true?String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt()):'',
     ck_thinking_injection_position:chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor'),
     use_mcp:cfg.useMcp===true,
     cache_strategy:cacheStrategy,
@@ -10581,6 +10611,7 @@ async function chatSubmitPendingMessages(options){
   if(thinkingMode==='native'){
     body.native_thinking_enabled=true;
     body.thinking_budget_tokens=thinkingBudgetTokens;
+    body.thinking_prompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
   }
   // 轮询只发开关和配置修订。候选的地址、Key、模型一律由网关自己从已加载配置解析，
   // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。
@@ -10677,7 +10708,9 @@ async function chatSubmitPendingMessages(options){
     var shouldStick=chatIsMessagesNearBottom();
     out.classList.remove('streaming-empty');
     if(out.parentNode)out.parentNode.classList.remove('streaming-empty-row');
-    out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents,nativeThinkingText);
+    // 流式阶段的 out 是临时助手气泡；原生思考的正式结构在回复落定后才会
+    // 作为气泡外的独立块渲染，避免先黏在正文上再跳出去。
+    out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents,nativeThinkingText,false);
     chatFollowMessagesBottom(shouldStick,true,true);
   }
   function scheduleStreamRender(){
@@ -10850,7 +10883,7 @@ async function chatSubmitPendingMessages(options){
     chatStreamProgressStop();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
     // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
     carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
     chatClearInFlightMarks(userMessageIndexes);

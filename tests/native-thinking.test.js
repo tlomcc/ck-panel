@@ -22,5 +22,17 @@ assert(/id="chat-thinking-budget"/.test(html),'thinking budget control is missin
 assert(/value="off"/.test(html)&&/value="native"/.test(html)&&/value="compat"/.test(html),
   'the three thinking modes are missing');
 assert(/id="chat-fake-thinking"/.test(html),'legacy compatibility switch must remain available');
+assert(/id="chat-thinking-budget-unavailable"/.test(html)&&html.includes('不可用'),
+  'native budget must show an unavailable state outside native mode');
+assert(/id="chat-native-thinking-visible"/.test(html),
+  'native thinking display switch is missing');
+assert(source.includes("fake.disabled=mode==='native'"),
+  'native mode must disable the compatibility thinking switch');
+assert(source.includes("body.thinking_prompt=String(cfg.thinkingPrompt"),
+  'native mode must send the shared thinking prompt separately');
+assert(source.includes('chatShouldShowNativeThinking()'),
+  'native thinking display must have a render gate');
+assert(source.includes('chatRenderStreamingAssistantContent(assistantText,toolEvents,nativeThinkingText,false)'),
+  'streaming native thinking must stay out of the temporary assistant bubble');
 
 console.log('native thinking panel tests: OK');
