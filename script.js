@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v227-strict-fact-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v228-adaptive-recall-input-fixes';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2418,6 +2418,7 @@ function chatDefaultConfig(){
 }
 function chatNormalizeThinkingMode(value,legacyFake){
   var raw=String(value||'').trim().toLowerCase();
+  if(raw==='adaptive'||raw==='auto'||raw==='自适应'||raw==='自适应思考')return 'adaptive';
   if(raw==='native'||raw==='anthropic'||raw==='原生'||raw==='原生思考')return 'native';
   if(raw==='compat'||raw==='compatible'||raw==='pseudo'||raw==='fake'||raw==='ck'||raw==='兼容'||raw==='兼容思考')return 'compat';
   if(!raw&&legacyFake===true)return 'compat';
@@ -2432,7 +2433,7 @@ function chatNormalizeThinkingBudget(value){
 }
 function chatThinkingModeLabel(value){
   var mode=chatNormalizeThinkingMode(value);
-  return mode==='native'?'原生思考':(mode==='compat'?'兼容思考':'关闭');
+  return mode==='adaptive'?'自适应思考':(mode==='native'?'原生思考':(mode==='compat'?'兼容思考':'关闭'));
 }
 function chatRenderThinkingControls(cfg){
   cfg=cfg||chatLoadConfig()||{};
@@ -2447,11 +2448,16 @@ function chatRenderThinkingControls(cfg){
     budgetLabel.setAttribute('aria-disabled',mode!=='native'?'true':'false');
   }
   var budgetUnavailable=document.getElementById('chat-thinking-budget-unavailable');
-  if(budgetUnavailable)budgetUnavailable.hidden=mode==='native';
+  if(budgetUnavailable){
+    budgetUnavailable.hidden=mode==='native';
+    budgetUnavailable.textContent=mode==='adaptive'?'自动决定':'不可用';
+  }
   var budgetHint=document.getElementById('chat-thinking-budget-hint');
   if(budgetHint)budgetHint.textContent=mode==='native'
     ?'这是原生 thinking 的预算上限，不是固定消耗；实际用量按上游返回的输出 token 计费。'
-    :'选择原生思考后才能设置预算；它是预算上限，不是固定消耗。';
+    :(mode==='adaptive'
+      ?'自适应思考由 Claude 根据问题自动决定思考量；这里不设置固定预算。'
+      :'选择原生思考后才能设置预算；它是预算上限，不是固定消耗。');
   if(budgetInput)budgetInput.disabled=mode!=='native';
   var fake=document.getElementById('chat-fake-thinking');
   if(fake){fake.checked=mode==='compat';fake.disabled=mode==='native';}
@@ -8657,8 +8663,10 @@ function chatStreamingAssistantPreviewText(rawText){
   var units=chatNaturalUnits(text);
   return units.length?chatJoinNaturalUnits(units.slice(0,1)):text;
 }
-function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking,showNativeThinking){
-  return chatRenderAssistantContent(chatStreamingAssistantPreviewText(rawText),true,tools,undefined,nativeThinking,showNativeThinking);
+function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking,showNativeThinking,splitEnabled){
+  // "整段"模式只在流结束后落一条完整消息，避免先显示首段再被整段替换。
+  var preview=splitEnabled===false?'':chatStreamingAssistantPreviewText(rawText);
+  return chatRenderAssistantContent(preview,true,tools,undefined,nativeThinking,showNativeThinking);
 }
 function chatSplitOutsideCodeBlocks(text){
   var lines=String(text||'').replace(/\r\n/g,'\n').split('\n');
@@ -8992,12 +9000,17 @@ function chatLayoutCompose(opts){
   opts=opts||{};
   var vv=window.visualViewport;
   var h=vv&&vv.height?vv.height:window.innerHeight;
+  if(vv&&document.documentElement){
+    // On mobile the visual viewport can pan while the keyboard is open. Keep
+    // the fixed chat surface aligned with that viewport instead of letting a
+    // second upward swipe separate the composer from the keyboard.
+    document.documentElement.style.setProperty('--ck-chat-vv-top',Math.max(0,Math.floor(vv.offsetTop||0))+'px');
+  }
   if(h&&document.documentElement){
     var next=Math.max(320,Math.floor(h));
     var delta=chatLastLayoutHeight?Math.abs(next-chatLastLayoutHeight):9999;
     if(opts.force||vv||!chatKeyboardProtectActive()||!chatLastLayoutHeight||delta>=72){
       document.documentElement.style.setProperty('--ck-chat-vh',next+'px');
-      document.documentElement.style.setProperty('--ck-chat-vv-top',Math.max(0,Math.floor((vv&&vv.offsetTop)||0))+'px');
       chatLastLayoutHeight=next;
     }
   }
@@ -9476,11 +9489,36 @@ function chatFollowMessagesBottom(shouldStick,instant,showHint){
 function chatJumpToLatest(){
   chatScrollMessagesBottom(false);
 }
+function chatCaptureOpenAuxBlocks(box){
+  var state={};
+  if(!box)return state;
+  Array.prototype.slice.call(box.querySelectorAll('.chat-msg-row[data-chat-index]')).forEach(function(row){
+    var index=row.getAttribute('data-chat-index');
+    if(index===null||index==='')return;
+    var thinking=row.querySelector('.chat-thinking.open');
+    var recall=row.querySelector('.chat-recall.open');
+    if(thinking||recall)state[index]={thinking:!!thinking,recall:!!recall};
+  });
+  return state;
+}
+function chatRestoreOpenAuxBlocks(box,state){
+  if(!box||!state)return;
+  Object.keys(state).forEach(function(index){
+    var row=box.querySelector('.chat-msg-row[data-chat-index="'+index.replace(/"/g,'')+'"]');
+    if(!row)return;
+    var saved=state[index]||{};
+    var thinking=row.querySelector('.chat-thinking');
+    var recall=row.querySelector('.chat-recall');
+    if(thinking)thinking.classList.toggle('open',saved.thinking===true);
+    if(recall)recall.classList.toggle('open',saved.recall===true);
+  });
+}
 function chatRenderMessages(opts){
   opts=opts||{};
   var box=chatMessagesBox();
   if(!box)return;
   chatAttachPendingGestures();
+  var openAuxBlocks=chatCaptureOpenAuxBlocks(box);
   var respectUserScroll=opts.respectUserScroll===true;
   var shouldStick=!respectUserScroll||chatIsMessagesNearBottom();
   var previousScrollTop=box.scrollTop;
@@ -9524,6 +9562,7 @@ function chatRenderMessages(opts){
     }
   }
   chatFinalizeRenderedAssistantWaits(box);
+  chatRestoreOpenAuxBlocks(box,openAuxBlocks);
   chatRenderPendingBar();
   if(shouldStick){
     chatScrollMessagesBottom(opts.smooth!==true);
@@ -10613,10 +10652,10 @@ async function chatSubmitPendingMessages(options){
   // Native thinking is a top-level Anthropic option. Keep it out of system/messages
   // so changing depth does not rewrite the reusable prompt-cache prefix.
   if(thinkingMode!=='off')body.thinking_mode=thinkingMode;
-  if(thinkingMode==='native'){
+  if(thinkingMode==='native'||thinkingMode==='adaptive'){
     body.native_thinking_enabled=true;
-    body.thinking_budget_tokens=thinkingBudgetTokens;
     body.thinking_prompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
+    if(thinkingMode==='native')body.thinking_budget_tokens=thinkingBudgetTokens;
   }
   // 轮询只发开关和配置修订。候选的地址、Key、模型一律由网关自己从已加载配置解析，
   // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。
@@ -10715,7 +10754,9 @@ async function chatSubmitPendingMessages(options){
     if(out.parentNode)out.parentNode.classList.remove('streaming-empty-row');
     // 流式阶段的 out 是临时助手气泡；原生思考的正式结构在回复落定后才会
     // 作为气泡外的独立块渲染，避免先黏在正文上再跳出去。
-    out.innerHTML=chatRenderStreamingAssistantContent(assistantText,toolEvents,nativeThinkingText,false);
+    out.innerHTML=chatRenderStreamingAssistantContent(
+      assistantText,toolEvents,nativeThinkingText,false,cfg.splitAssistantReplies!==false
+    );
     chatFollowMessagesBottom(shouldStick,true,true);
   }
   function scheduleStreamRender(){

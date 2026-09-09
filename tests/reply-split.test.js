@@ -145,6 +145,12 @@ function testStreamingPreview(){
     '预览不会把后面的条数提前泄漏出来');
 }
 
+function testWholeReplyStreamingIsHiddenUntilComplete(){
+  const render=extractFunction('chatRenderStreamingAssistantContent');
+  assert(render.includes("splitEnabled===false?'':chatStreamingAssistantPreviewText(rawText)"),
+    '整段模式流式阶段不能先显示第一段');
+}
+
 testOneNewlineOneBubble();
 testDeterministic();
 testLengthDoesNotMatter();
@@ -152,5 +158,6 @@ testNoContentLossOrGluing();
 testCodeBlocks();
 testToggleAndThinking();
 testStreamingPreview();
+testWholeReplyStreamingIsHiddenUntilComplete();
 
 console.log('reply-split tests: OK');

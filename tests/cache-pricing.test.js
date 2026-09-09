@@ -219,7 +219,9 @@ assert.strictEqual(tiered.ttl,'mixed');
 assert.strictEqual(tiered.requestTtl,'1h');
 assert.strictEqual(tiered.retentionSeconds,3600);
 // 请求协议由当前供应商维护的 API 类型决定，不能再被缓存策略偷偷改写。
-assert(/upstream_format:cfg\.mainRouteApiType==='claude'\?'anthropic':'openai'/.test(source));
+const requestFormat=extractFunction('chatRequestUpstreamFormat');
+assert(requestFormat.includes("if(apiType==='claude')return 'anthropic';"));
+assert(requestFormat.includes("if(apiType==='openai')return 'openai';"));
 assert(!/if\(cacheStrategy==='native_stable'\|\|cacheStrategy==='native_tiered'\|\|cacheStrategy==='native_5m'\)body\.upstream_format='anthropic';/.test(source));
 
 // —— 原生5min：断点照 Claude Code 的尾部方案，TTL 全 5m ——

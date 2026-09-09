@@ -20,6 +20,11 @@ function functionSource(name){
 
 const row=functionSource('chatRenderMessageRow');
 const parts=functionSource('chatRenderAssistantParts');
+const thinkingMode=functionSource('chatNormalizeThinkingMode');
+const thinkingControls=functionSource('chatRenderThinkingControls');
+const renderStream=functionSource('chatRenderStreamingAssistantContent');
+const openState=functionSource('chatCaptureOpenAuxBlocks');
+const restoreState=functionSource('chatRestoreOpenAuxBlocks');
 const provider=functionSource('providerCardHtml');
 const normalize=functionSource('normalizeProvider');
 const readCard=functionSource('readProvCard');
@@ -37,6 +42,16 @@ assert(row.includes("(role==='assistant'?recall+thinking:'')+bubble+"),
   'thinking must be placed beside recall and before the assistant bubble');
 assert(/--ck-aux-block-max-width:min\(700px,82%\)/.test(css),'shared auxiliary block width is missing');
 assert(/\.chat-recall,body\.chat-active \.chat-thinking\{[\s\S]*?max-width:var\(--ck-aux-block-max-width\)/.test(css),'thinking and recall must share geometry');
+assert(/value="adaptive">自适应思考/.test(html),'adaptive thinking mode must be available');
+assert(thinkingMode.includes("raw==='adaptive'")&&thinkingMode.includes("return 'adaptive'"),'adaptive thinking mode must normalize');
+assert(thinkingControls.includes("mode==='adaptive'")&&thinkingControls.includes('自动决定'),'adaptive mode must explain that budget is automatic');
+assert(source.includes("if(thinkingMode==='native'||thinkingMode==='adaptive')"),'adaptive mode must send native thinking fields');
+assert(source.includes("if(thinkingMode==='native')body.thinking_budget_tokens"),'fixed budget must remain native-only');
+assert(renderStream.includes("splitEnabled===false?'':chatStreamingAssistantPreviewText(rawText)"),'whole reply mode must suppress streaming text preview');
+assert(source.includes('cfg.splitAssistantReplies!==false'),'stream renderer must receive the whole-reply setting');
+assert(openState.includes("querySelector('.chat-thinking.open')")&&restoreState.includes("classList.toggle('open'"),'open thinking blocks must survive message rerenders');
+assert(css.includes('top:var(--ck-chat-vv-top,0px)!important'),'chat surface must follow visual viewport offset');
+assert(/chat-editing \.chat-compose-row > #chat-input\{[\s\S]*?min-height:36px!important/.test(css),'editing input must autosize instead of locking to two lines');
 
 assert(provider.includes('prov-note-input'),'provider note editor is missing');
 assert(provider.includes('prov-category-input'),'provider category editor is missing');

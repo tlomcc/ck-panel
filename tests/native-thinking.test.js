@@ -32,7 +32,7 @@ assert(source.includes("body.thinking_prompt=String(cfg.thinkingPrompt"),
   'native mode must send the shared thinking prompt separately');
 assert(source.includes('chatShouldShowNativeThinking()'),
   'native thinking display must have a render gate');
-assert(source.includes('chatRenderStreamingAssistantContent(assistantText,toolEvents,nativeThinkingText,false)'),
+assert(/chatRenderStreamingAssistantContent\(\s*assistantText,toolEvents,nativeThinkingText,false(?:,|\))/.test(source),
   'streaming native thinking must stay out of the temporary assistant bubble');
 
 console.log('native thinking panel tests: OK');
