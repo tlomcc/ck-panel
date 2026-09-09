@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v229-dynamic-history-retention';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v230-request-accounting-and-thinking-display';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2468,7 +2468,8 @@ function chatRenderThinkingControls(cfg){
   var fake=document.getElementById('chat-fake-thinking');
   if(fake){fake.checked=mode==='compat';fake.disabled=mode==='native';}
   var nativeVisible=document.getElementById('chat-native-thinking-visible');
-  if(nativeVisible){nativeVisible.checked=cfg.nativeThinkingVisible!==false;nativeVisible.disabled=mode!=='native';}
+  // This is a display preference, including already saved replies in any mode.
+  if(nativeVisible){nativeVisible.checked=cfg.nativeThinkingVisible!==false;nativeVisible.disabled=false;}
   var prompt=document.getElementById('chat-thinking-prompt');
   if(prompt)prompt.disabled=mode==='off';
   var position=document.getElementById('chat-thinking-injection-position');
@@ -5593,6 +5594,112 @@ function chatFormatFactStatsLine(data){
   data=data&&typeof data==='object'?data:{};
   return '📈 Fact 召回统计｜最终注入 '+(data.fact_stats_count||0)+' 条｜模式：'+chatRecallModeDisplayLabel(data.recall_mode)+'｜epoch '+(data.recall_mode_epoch||0)+'｜异步写入';
 }
+function chatFormatRequestAccounting(data){
+  var labels={
+    body:'正文/其他文本',native_thinking:'原生思考正文',pseudo_thinking:'伪思考',
+    signature:'原生思考签名',redacted_thinking:'加密思考',recall:'召回',
+    current_time:'当前时间',time_gap:'时间间隔提醒',backend_switch:'后端切换通知',
+    context_wrapper:'上下文标签/说明',reply_target:'回复目标（含重复引用）',
+    time_reply_hint:'本轮时间核对提示',worldbook:'世界书',memory_pack:'固定记忆包',
+    daily_digest:'当日截断总结',session_anchor:'会话首条锚点',speech_preferences:'措辞偏好',
+    thinking_instruction:'思考提示词',time_protocol:'时间理解规则',tool_call:'工具调用参数',
+    tool_result:'工具返回结果',tools_schema:'工具定义',image:'图片',document:'文档',
+    unknown_block:'其他非文本块'
+  };
+  var areas={system:'系统区',history:'历史区',current:'当前用户消息',continuation:'本轮工具续传',tools:'工具定义'};
+  var number=function(v){return v===null||v===undefined?'未返回':String(v);};
+  var actual=function(v){return v===null||v===undefined?'未返回':v+' token';};
+  var zero={chars:0,bytes:0,count:0,estimated_tokens:0};
+  var measure=function(row){
+    if(!row)return '未记录';
+    if(row.estimated_tokens===null)return (row.count||0)+' 块 / '+(row.bytes||0)+' B / token无法从此数据推算';
+    return (row.chars||0)+' 字 / 约 '+(row.estimated_tokens||0)+' token';
+  };
+  var policy=function(value){return value===false?'关闭':value===true?'保留':'未记录';};
+  var request=data.request_details||{};
+  var lines=['🧊 缓存诊断｜请求 '+(data.debug_id||'-')+'｜'+(request.model||'-')+'｜'+
+    ({complete:'已完成',failed:'失败',upstream_returned:'已收到上游返回'}[data.diagnostic_status]||'等待上游用量')];
+  var usageLine=function(prefix,u){
+    u=u||{};
+    return prefix+'输入总计 '+actual(u.input_total)+' = 普通输入 '+actual(u.input_uncached)+
+      ' + 缓存读取 '+actual(u.cache_read)+' + 缓存创建 '+actual(u.cache_create)+
+      '\n  输出合计 '+actual(u.output)+'｜原生思考 token（输出子集）：'+actual(u.thinking)+
+      '｜缓存命中率 '+(u.cache_hit_percent===null||u.cache_hit_percent===undefined?'未返回':u.cache_hit_percent+'%')+
+      '\n  缓存创建分档：5m '+actual(u.cache_create_5m)+' / 1h '+actual(u.cache_create_1h);
+  };
+  lines.push('📊 实际用量（上游 usage）');
+  if(data.diagnostic_usage_total)lines.push(usageLine('  整次聊天累计：',data.diagnostic_usage_total));
+  else lines.push('  尚无完整累计用量；未返回的字段不会记作 0。');
+  lines.push('  缓存创建含新尾部写入及重建；创建量大于 0 本身不代表整段缓存失效。');
+  lines.push('📋 历史保留设置（仅控制下一轮发送历史）');
+  [
+    ['原生思考','retain_native_thinking_history'],['伪思考','retain_pseudo_thinking_history'],
+    ['召回','retain_recall_history'],['当前时间','retain_current_time_history'],
+    ['时间间隔提醒','retain_time_gap_history'],['后端切换通知','retain_backend_switch_history']
+  ].forEach(function(entry){lines.push('  '+entry[0]+'：'+policy(data[entry[1]]));});
+  lines.push('  本轮思考模式：'+(request.thinking_type||'off')+'｜固定预算 '+number(request.thinking_budget)+
+    '｜最大输出 '+number(request.max_output_tokens)+' token');
+  var cleanup=data.history_cleanup;
+  if(cleanup){
+    lines.push('🧹 清理账单（新用户轮次开始时执行一次）');
+    lines.push('  来源 '+(data.history_source||'-')+'｜读取 '+cleanup.before.messages+' 条 → 清理后 '+cleanup.after.messages+' 条');
+    lines.push('  清理前 '+measure(cleanup.before)+' → 清理后 '+measure(cleanup.after)+'｜移除 '+measure(cleanup.removed));
+    lines.push('  网关上下文处理：'+(cleanup.strip_all_context?'整块清理（模式切换/召回关闭/策略或空闲到期）':'按各历史开关过滤')+
+      '｜原生思考清理 '+number((cleanup.native||{}).messages)+' 条消息 / '+number((cleanup.native||{}).blocks)+' 块'+
+      '｜伪思考清理 '+number((cleanup.pseudo||{}).messages)+' 条消息 / '+number((cleanup.pseudo||{}).spans)+' 段');
+    var keys=['native_thinking','pseudo_thinking','recall','current_time','time_gap','backend_switch','signature','redacted_thinking'];
+    Object.keys((cleanup.removed||{}).parts||{}).forEach(function(k){if(keys.indexOf(k)<0)keys.push(k);});
+    keys.forEach(function(k){
+      var before=(cleanup.before.parts||{})[k]||zero,after=(cleanup.after.parts||{})[k]||zero;
+      var removed=((cleanup.removed||{}).parts||{})[k]||zero;
+      lines.push('  '+(labels[k]||k)+'：'+before.count+' → '+after.count+' 项｜移除 '+measure(removed)+'｜清理后剩余 '+measure(after));
+    });
+    lines.push('  字段按实际文本分类；移除量为分项差值估算，不能当成本轮实际省下的计费 token。');
+  }else lines.push('🧹 清理账单：旧日志未记录。');
+  var describeRequest=function(snapshot,prefix){
+    snapshot=snapshot||{};
+    lines.push(prefix+measure(snapshot)+'｜'+(snapshot.messages||0)+' 条消息｜请求 JSON '+(snapshot.request_bytes||0)+' B');
+    Object.keys(areas).forEach(function(key){
+      var area=(snapshot.areas||{})[key];
+      if(!area)return;
+      lines.push('  '+areas[key]+'合计：'+measure(area));
+      Object.keys(area.parts||{}).forEach(function(kind){
+        lines.push('    '+(labels[kind]||kind)+'：'+measure(area.parts[kind]));
+      });
+    });
+  };
+  lines.push('🧾 输入明细（网关组装后的请求，各区域互不重复）');
+  describeRequest(request,'  文本及工具定义合计：');
+  var latest=(request.areas||{}).current||{},history=(request.areas||{}).history||{};
+  lines.push('📥 本轮动态注入 / 最终历史残留（冻结恢复及组装后再次统计）');
+  ['recall','current_time','time_gap','backend_switch','time_reply_hint','native_thinking','pseudo_thinking'].forEach(function(kind){
+    lines.push('  '+labels[kind]+'：本轮 '+measure((latest.parts||{})[kind]||zero)+'｜最终历史 '+measure((history.parts||{})[kind]||zero));
+  });
+  var rounds=Array.isArray(data.diagnostic_rounds)?data.diagnostic_rounds:[];
+  rounds.forEach(function(round){
+    lines.push('📝 上游第 '+round.round+' 次调用（'+(round.round===1?'首次请求':'工具续轮')+'，'+(round.ok?'成功':'失败')+'）');
+    lines.push(usageLine('  ',round.usage));
+    lines.push('  输出明细（思考已包含在输出合计内）：');
+    Object.keys((round.output||{}).parts||{}).forEach(function(kind){
+      lines.push('    '+(labels[kind]||kind)+'：'+measure(round.output.parts[kind]));
+    });
+    if(rounds.length>1)describeRequest(round.request,'  此次输入：');
+  });
+  if(rounds.length>1)lines.push('  多次调用的输入分别计费；上方整次累计已相加，历史清理只执行一次。');
+  (data.diagnostic_failed_attempts||[]).forEach(function(attempt,index){
+    lines.push('失败候选 '+(index+1)+'（未计入成功轮次累计）');
+    lines.push(usageLine('  已收到的用量：',attempt.usage));
+    lines.push('  未返回的用量无法确认，不能据此认定没有计费。');
+  });
+  lines.push('估算说明：'+(request.estimate_method||'旧日志未提供估算口径')+'。');
+  lines.push('分项均为估算，实际计费看上游 usage；原生思考未单独返回时只展示正文估算，签名/加密思考/图片不折算 token。');
+  var meta=chatCacheStrategyMeta(data.cache_strategy||'single_5m');
+  lines.push('缓存设置：'+meta.label+'｜TTL '+(data.prompt_cache_ttl||'上游决定')+
+    '｜策略召回保留基线 '+number(data.recall_history_retention_seconds)+' 秒（历史关闭项仍会逐轮清理）｜空闲 '+number(data.idle_seconds)+' 秒');
+  lines.push('缓存锚点：'+(data.cache_anchors||[]).join('，'));
+  lines.push('历史冻结/恢复记录：'+(data.canonical_changes||[]).join('；'));
+  return lines.join('\n');
+}
 function chatFormatDebug(ev,data){
   data=data||{};
   if(ev==='intent_rewrite')return chatFormatIntentRewrite(data);
@@ -5742,6 +5849,11 @@ function chatFormatDebug(ev,data){
       return '⚠️ MCP异常｜'+(data.mcp_source||'-')+'｜'+(data.mcp_host||'-')+'｜'+data.mcp_error;
     }
     if(data.cache_anchors||data.canonical_changes){
+      if(data.request_details){
+        var accounting=chatFormatRequestAccounting(data)+'\n前缀比较（不是实际命中用量）'+fingerprintZh(data.cache_fingerprint);
+        if(data.fact_stats_queued)accounting+='\n'+chatFormatFactStatsLine(data);
+        return accounting;
+      }
       var changes=(Array.isArray(data.canonical_changes)?data.canonical_changes:[]).join('；')||'无';
       changes=changes.replace(/canonical inject: session=/g,'会话=').replace(/ users=/g,'｜用户消息数=').replace(/ restored_past=/g,'｜已恢复旧消息=');
       var diagMeta=chatCacheStrategyMeta(data.effective_cache_strategy||data.cache_strategy||'single_5m');
