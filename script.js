@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v228-adaptive-recall-input-fixes';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v229-dynamic-history-retention';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2390,6 +2390,12 @@ function chatDefaultConfig(){
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
     nativeThinkingVisible:true,
+    retainNativeThinkingHistory:true,
+    retainPseudoThinkingHistory:true,
+    retainRecallHistory:true,
+    retainCurrentTimeHistory:true,
+    retainTimeGapHistory:true,
+    retainBackendSwitchHistory:true,
     thinkingInjectionPosition:'system_after_anchor',
     useMcp:false,
     mcpUrl:API_BASE,
@@ -2979,6 +2985,12 @@ function chatLoadConfig(){
   cfg.thinkingPrompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
   cfg.fakeThinkingPrompt=cfg.thinkingPrompt;
   cfg.nativeThinkingVisible=cfg.nativeThinkingVisible!==false;
+  cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
+  cfg.retainPseudoThinkingHistory=cfg.retainPseudoThinkingHistory!==false;
+  cfg.retainRecallHistory=cfg.retainRecallHistory!==false;
+  cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
+  cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
+  cfg.retainBackendSwitchHistory=cfg.retainBackendSwitchHistory!==false;
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   if(!String(cfg.fakeThinkingPrompt||'').trim())cfg.fakeThinkingPrompt=chatDefaultThinkingPrompt();
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
@@ -3004,6 +3016,12 @@ function chatLoadConfig(){
   cfg.thinkingPrompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
   cfg.fakeThinkingPrompt=cfg.thinkingPrompt;
   cfg.nativeThinkingVisible=cfg.nativeThinkingVisible!==false;
+  cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
+  cfg.retainPseudoThinkingHistory=cfg.retainPseudoThinkingHistory!==false;
+  cfg.retainRecallHistory=cfg.retainRecallHistory!==false;
+  cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
+  cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
+  cfg.retainBackendSwitchHistory=cfg.retainBackendSwitchHistory!==false;
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   return cfg;
 }
@@ -3032,6 +3050,12 @@ function chatSaveConfigObject(cfg){
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
+  cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
+  cfg.retainPseudoThinkingHistory=cfg.retainPseudoThinkingHistory!==false;
+  cfg.retainRecallHistory=cfg.retainRecallHistory!==false;
+  cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
+  cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
+  cfg.retainBackendSwitchHistory=cfg.retainBackendSwitchHistory!==false;
   cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
@@ -3940,6 +3964,12 @@ function chatReadForm(){
     fakeThinking:false,
     fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',saved.thinkingPrompt||saved.fakeThinkingPrompt||chatDefaultThinkingPrompt())||chatDefaultThinkingPrompt(),
     nativeThinkingVisible:chatFieldChecked('chat-native-thinking-visible',saved.nativeThinkingVisible!==false),
+    retainNativeThinkingHistory:chatFieldChecked('chat-retain-native-thinking-history',saved.retainNativeThinkingHistory!==false),
+    retainPseudoThinkingHistory:chatFieldChecked('chat-retain-pseudo-thinking-history',saved.retainPseudoThinkingHistory!==false),
+    retainRecallHistory:chatFieldChecked('chat-retain-recall-history',saved.retainRecallHistory!==false),
+    retainCurrentTimeHistory:chatFieldChecked('chat-retain-current-time-history',saved.retainCurrentTimeHistory!==false),
+    retainTimeGapHistory:chatFieldChecked('chat-retain-time-gap-history',saved.retainTimeGapHistory!==false),
+    retainBackendSwitchHistory:chatFieldChecked('chat-retain-backend-switch-history',saved.retainBackendSwitchHistory!==false),
     thinkingInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-thinking-injection-position',saved.thinkingInjectionPosition),'system_after_anchor'),
     useMcp:chatFieldChecked('chat-use-mcp',saved.useMcp===true),
     mcpUserSet:true,
@@ -3990,6 +4020,12 @@ function chatWriteForm(cfg){
   chatRenderThinkingControls(cfg);
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt();
   if(document.getElementById('chat-native-thinking-visible'))document.getElementById('chat-native-thinking-visible').checked=cfg.nativeThinkingVisible!==false;
+  chatSetFieldChecked('chat-retain-native-thinking-history',cfg.retainNativeThinkingHistory!==false);
+  chatSetFieldChecked('chat-retain-pseudo-thinking-history',cfg.retainPseudoThinkingHistory!==false);
+  chatSetFieldChecked('chat-retain-recall-history',cfg.retainRecallHistory!==false);
+  chatSetFieldChecked('chat-retain-current-time-history',cfg.retainCurrentTimeHistory!==false);
+  chatSetFieldChecked('chat-retain-time-gap-history',cfg.retainTimeGapHistory!==false);
+  chatSetFieldChecked('chat-retain-backend-switch-history',cfg.retainBackendSwitchHistory!==false);
   if(document.getElementById('chat-thinking-injection-position'))document.getElementById('chat-thinking-injection-position').value=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   chatSetFieldChecked('chat-use-mcp',cfg.useMcp===true);
   chatSetFieldValue('chat-mcp-url',API_BASE);
@@ -10631,6 +10667,12 @@ async function chatSubmitPendingMessages(options){
     upstream_key:cfg.upstreamKey,
     nc_context_injection:cfg.ncContextInjection!==false,
     backend_switch_notification:cfg.backendSwitchNotification!==false,
+    retain_native_thinking_history:cfg.retainNativeThinkingHistory!==false,
+    retain_pseudo_thinking_history:cfg.retainPseudoThinkingHistory!==false,
+    retain_recall_history:cfg.retainRecallHistory!==false,
+    retain_current_time_history:cfg.retainCurrentTimeHistory!==false,
+    retain_time_gap_history:cfg.retainTimeGapHistory!==false,
+    retain_backend_switch_history:cfg.retainBackendSwitchHistory!==false,
     recall:cfg.recall!==false,
     recall_mode:chatNormalizeRecallMode(cfg.recallMode),
     fact_recall_mode:chatNormalizeFactRecallMode(cfg.factRecallMode),
