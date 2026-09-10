@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v230-request-accounting-and-thinking-display';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v231-token-cache-diagnostics-and-control-cleanup';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5438,7 +5438,9 @@ function chatDebugRecordHtml(record,index){
   var time=m?m[1]:'--:--:--';
   var body=m?m[2]:line;
   var kind=chatDebugRecordKind(record,body);
-  var html=chatDecorateDebugBody(esc(body),record);
+  var html=record&&record.event==='debug'&&record.data&&record.data.request_details
+    ?chatFormatRequestAccountingHtml(record.data)
+    :chatDecorateDebugBody(esc(body),record);
   return '<div class="chat-debug-record chat-debug-'+kind+'"><span class="chat-debug-time">['+esc(time)+']</span><button class="chat-debug-copy" type="button" data-debug-copy-index="'+index+'" aria-label="复制此调试模块" title="复制此调试模块"><svg class="chat-debug-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="1.5"/><path d="M16 8V6.5A1.5 1.5 0 0 0 14.5 5h-8A1.5 1.5 0 0 0 5 6.5v8A1.5 1.5 0 0 0 6.5 16H8"/></svg><svg class="chat-debug-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.5"/></svg></button><div class="chat-debug-body">'+html+'</div></div>';
 }
 function chatRenderDebugRecords(){
@@ -5594,111 +5596,215 @@ function chatFormatFactStatsLine(data){
   data=data&&typeof data==='object'?data:{};
   return '📈 Fact 召回统计｜最终注入 '+(data.fact_stats_count||0)+' 条｜模式：'+chatRecallModeDisplayLabel(data.recall_mode)+'｜epoch '+(data.recall_mode_epoch||0)+'｜异步写入';
 }
+var CHAT_DIAG_TOKEN_LABELS={
+  body:'正文/其他文本',native_thinking:'原生思考正文',pseudo_thinking:'伪思考',
+  signature:'原生思考签名',redacted_thinking:'加密思考',recall:'召回',
+  backend_switch:'后端切换通知',worldbook:'世界书',memory_pack:'固定记忆包',
+  daily_digest:'当日截断总结',session_anchor:'会话首条锚点',speech_preferences:'措辞偏好',
+  thinking_instruction:'思考提示词',tool_call:'工具调用参数',tool_result:'工具返回结果',
+  tools_schema:'工具定义',image:'图片',document:'文档',unknown_block:'其他非文本块'
+};
+var CHAT_DIAG_HIDDEN_PARTS={
+  current_time:true,time_gap:true,context_wrapper:true,reply_target:true,
+  time_reply_hint:true,time_protocol:true
+};
+var CHAT_DIAG_REQUEST_AREAS={
+  system:'系统区',history:'历史区',current:'当前用户消息',
+  continuation:'本轮工具续传',tools:'工具定义'
+};
+function chatDiagTokenText(value,fallback){
+  if(value===null||value===undefined||value==='')return fallback||'未记录';
+  var n=Number(value);
+  return isFinite(n)?dsNum(Math.round(n))+' token':(fallback||'未记录');
+}
+function chatDiagSnapshotToken(row){
+  if(!row)return '未记录';
+  if(row.estimated_tokens===null)return '—';
+  return chatDiagTokenText(row.estimated_tokens);
+}
+function chatDiagActualToken(value){
+  return value===null||value===undefined?'未返回':chatDiagTokenText(value);
+}
+function chatDiagNumber(value){
+  return value===null||value===undefined?'未返回':String(value);
+}
+function chatDiagPolicy(value){
+  return value===false?'关闭':value===true?'保留':'未记录';
+}
+function chatDiagPartLabel(kind){
+  return CHAT_DIAG_TOKEN_LABELS[kind]||kind;
+}
+function chatDiagStatus(data){
+  return ({complete:'已完成',failed:'失败',upstream_returned:'已收到上游返回'}[data&&data.diagnostic_status]||'等待上游用量');
+}
+function chatDiagUsageLine(prefix,usage){
+  var u=usage||{};
+  return prefix+'输入总计 '+chatDiagActualToken(u.input_total)+' = 普通输入 '+chatDiagActualToken(u.input_uncached)+
+    ' + 缓存读取 '+chatDiagActualToken(u.cache_read)+' + 缓存创建 '+chatDiagActualToken(u.cache_create)+
+    '\n  输出合计 '+chatDiagActualToken(u.output)+'｜原生思考（输出子集）'+chatDiagActualToken(u.thinking)+
+    '｜缓存命中率 '+(u.cache_hit_percent===null||u.cache_hit_percent===undefined?'未返回':u.cache_hit_percent+'%')+
+    '\n  缓存创建分档：5m '+chatDiagActualToken(u.cache_create_5m)+' / 1h '+chatDiagActualToken(u.cache_create_1h);
+}
+function chatDiagShouldHidePart(kind){
+  return !!CHAT_DIAG_HIDDEN_PARTS[kind];
+}
+function chatDiagCacheSummary(data){
+  data=data&&typeof data==='object'?data:{};
+  var meta=chatCacheStrategyMeta(data.cache_strategy||'single_5m');
+  var compare=data.cache_fingerprint&&data.cache_fingerprint.compare_previous;
+  var compareText=compare&&typeof compare==='object'
+    ?(compare.common_prefix_token_estimate!==undefined
+      ?'可复用前缀约 '+chatDiagTokenText(compare.common_prefix_token_estimate)+'（'+(compare.common_prefix_segments||0)+' 段）'
+      :'上一轮前缀暂无比较')
+    :'上一轮前缀暂无比较';
+  return meta.label+'｜TTL '+(data.prompt_cache_ttl||'上游决定')+'｜'+compareText;
+}
 function chatFormatRequestAccounting(data){
-  var labels={
-    body:'正文/其他文本',native_thinking:'原生思考正文',pseudo_thinking:'伪思考',
-    signature:'原生思考签名',redacted_thinking:'加密思考',recall:'召回',
-    current_time:'当前时间',time_gap:'时间间隔提醒',backend_switch:'后端切换通知',
-    context_wrapper:'上下文标签/说明',reply_target:'回复目标（含重复引用）',
-    time_reply_hint:'本轮时间核对提示',worldbook:'世界书',memory_pack:'固定记忆包',
-    daily_digest:'当日截断总结',session_anchor:'会话首条锚点',speech_preferences:'措辞偏好',
-    thinking_instruction:'思考提示词',time_protocol:'时间理解规则',tool_call:'工具调用参数',
-    tool_result:'工具返回结果',tools_schema:'工具定义',image:'图片',document:'文档',
-    unknown_block:'其他非文本块'
-  };
-  var areas={system:'系统区',history:'历史区',current:'当前用户消息',continuation:'本轮工具续传',tools:'工具定义'};
-  var number=function(v){return v===null||v===undefined?'未返回':String(v);};
-  var actual=function(v){return v===null||v===undefined?'未返回':v+' token';};
-  var zero={chars:0,bytes:0,count:0,estimated_tokens:0};
-  var measure=function(row){
-    if(!row)return '未记录';
-    if(row.estimated_tokens===null)return (row.count||0)+' 块 / '+(row.bytes||0)+' B / token无法从此数据推算';
-    return (row.chars||0)+' 字 / 约 '+(row.estimated_tokens||0)+' token';
-  };
-  var policy=function(value){return value===false?'关闭':value===true?'保留':'未记录';};
+  data=data&&typeof data==='object'?data:{};
   var request=data.request_details||{};
-  var lines=['🧊 缓存诊断｜请求 '+(data.debug_id||'-')+'｜'+(request.model||'-')+'｜'+
-    ({complete:'已完成',failed:'失败',upstream_returned:'已收到上游返回'}[data.diagnostic_status]||'等待上游用量')];
-  var usageLine=function(prefix,u){
-    u=u||{};
-    return prefix+'输入总计 '+actual(u.input_total)+' = 普通输入 '+actual(u.input_uncached)+
-      ' + 缓存读取 '+actual(u.cache_read)+' + 缓存创建 '+actual(u.cache_create)+
-      '\n  输出合计 '+actual(u.output)+'｜原生思考 token（输出子集）：'+actual(u.thinking)+
-      '｜缓存命中率 '+(u.cache_hit_percent===null||u.cache_hit_percent===undefined?'未返回':u.cache_hit_percent+'%')+
-      '\n  缓存创建分档：5m '+actual(u.cache_create_5m)+' / 1h '+actual(u.cache_create_1h);
-  };
+  var lines=['🧊 缓存诊断｜请求 '+(data.debug_id||'-')+'｜'+(request.model||'-')+'｜'+chatDiagStatus(data)];
   lines.push('📊 实际用量（上游 usage）');
-  if(data.diagnostic_usage_total)lines.push(usageLine('  整次聊天累计：',data.diagnostic_usage_total));
+  if(data.diagnostic_usage_total)lines.push(chatDiagUsageLine('  整次聊天累计：',data.diagnostic_usage_total));
   else lines.push('  尚无完整累计用量；未返回的字段不会记作 0。');
-  lines.push('  缓存创建含新尾部写入及重建；创建量大于 0 本身不代表整段缓存失效。');
+  lines.push('  缓存创建含新尾部写入及重建；创建量大于 0 不代表整段缓存失效。');
   lines.push('📋 历史保留设置（仅控制下一轮发送历史）');
   [
     ['原生思考','retain_native_thinking_history'],['伪思考','retain_pseudo_thinking_history'],
-    ['召回','retain_recall_history'],['当前时间','retain_current_time_history'],
-    ['时间间隔提醒','retain_time_gap_history'],['后端切换通知','retain_backend_switch_history']
-  ].forEach(function(entry){lines.push('  '+entry[0]+'：'+policy(data[entry[1]]));});
-  lines.push('  本轮思考模式：'+(request.thinking_type||'off')+'｜固定预算 '+number(request.thinking_budget)+
-    '｜最大输出 '+number(request.max_output_tokens)+' token');
+    ['召回','retain_recall_history'],['后端切换通知','retain_backend_switch_history']
+  ].forEach(function(entry){lines.push('  '+entry[0]+'：'+chatDiagPolicy(data[entry[1]]));});
+  lines.push('  本轮思考模式：'+(request.thinking_type||'off')+'｜固定预算 '+chatDiagNumber(request.thinking_budget)+
+    '｜最大输出 '+chatDiagNumber(request.max_output_tokens)+' token');
   var cleanup=data.history_cleanup;
   if(cleanup){
     lines.push('🧹 清理账单（新用户轮次开始时执行一次）');
-    lines.push('  来源 '+(data.history_source||'-')+'｜读取 '+cleanup.before.messages+' 条 → 清理后 '+cleanup.after.messages+' 条');
-    lines.push('  清理前 '+measure(cleanup.before)+' → 清理后 '+measure(cleanup.after)+'｜移除 '+measure(cleanup.removed));
+    lines.push('  来源 '+(data.history_source||'-')+'｜读取 '+(cleanup.before&&cleanup.before.messages||0)+' 条 → 清理后 '+(cleanup.after&&cleanup.after.messages||0)+' 条');
+    lines.push('  清理前 '+chatDiagSnapshotToken(cleanup.before)+' → 清理后 '+chatDiagSnapshotToken(cleanup.after)+'｜移除 '+chatDiagSnapshotToken(cleanup.removed));
     lines.push('  网关上下文处理：'+(cleanup.strip_all_context?'整块清理（模式切换/召回关闭/策略或空闲到期）':'按各历史开关过滤')+
-      '｜原生思考清理 '+number((cleanup.native||{}).messages)+' 条消息 / '+number((cleanup.native||{}).blocks)+' 块'+
-      '｜伪思考清理 '+number((cleanup.pseudo||{}).messages)+' 条消息 / '+number((cleanup.pseudo||{}).spans)+' 段');
-    var keys=['native_thinking','pseudo_thinking','recall','current_time','time_gap','backend_switch','signature','redacted_thinking'];
-    Object.keys((cleanup.removed||{}).parts||{}).forEach(function(k){if(keys.indexOf(k)<0)keys.push(k);});
-    keys.forEach(function(k){
-      var before=(cleanup.before.parts||{})[k]||zero,after=(cleanup.after.parts||{})[k]||zero;
-      var removed=((cleanup.removed||{}).parts||{})[k]||zero;
-      lines.push('  '+(labels[k]||k)+'：'+before.count+' → '+after.count+' 项｜移除 '+measure(removed)+'｜清理后剩余 '+measure(after));
+      '｜原生思考清理 '+chatDiagNumber((cleanup.native||{}).messages)+' 条消息 / '+chatDiagNumber((cleanup.native||{}).blocks)+' 块'+
+      '｜伪思考清理 '+chatDiagNumber((cleanup.pseudo||{}).messages)+' 条消息 / '+chatDiagNumber((cleanup.pseudo||{}).spans)+' 段');
+    var keys=['native_thinking','pseudo_thinking','recall','backend_switch','signature','redacted_thinking'];
+    Object.keys((cleanup.removed||{}).parts||{}).forEach(function(k){
+      if(keys.indexOf(k)<0&&!chatDiagShouldHidePart(k))keys.push(k);
     });
-    lines.push('  字段按实际文本分类；移除量为分项差值估算，不能当成本轮实际省下的计费 token。');
+    keys.forEach(function(k){
+      var before=((cleanup.before||{}).parts||{})[k];
+      var after=((cleanup.after||{}).parts||{})[k];
+      var removed=((cleanup.removed||{}).parts||{})[k];
+      lines.push('  '+chatDiagPartLabel(k)+'：'+chatDiagSnapshotToken(before)+' → '+chatDiagSnapshotToken(after)+'｜移除 '+chatDiagSnapshotToken(removed));
+    });
   }else lines.push('🧹 清理账单：旧日志未记录。');
   var describeRequest=function(snapshot,prefix){
     snapshot=snapshot||{};
-    lines.push(prefix+measure(snapshot)+'｜'+(snapshot.messages||0)+' 条消息｜请求 JSON '+(snapshot.request_bytes||0)+' B');
-    Object.keys(areas).forEach(function(key){
+    lines.push(prefix+chatDiagSnapshotToken(snapshot)+'｜'+(snapshot.messages||0)+' 条消息');
+    Object.keys(CHAT_DIAG_REQUEST_AREAS).forEach(function(key){
       var area=(snapshot.areas||{})[key];
       if(!area)return;
-      lines.push('  '+areas[key]+'合计：'+measure(area));
+      lines.push('  '+CHAT_DIAG_REQUEST_AREAS[key]+'合计：'+chatDiagSnapshotToken(area));
       Object.keys(area.parts||{}).forEach(function(kind){
-        lines.push('    '+(labels[kind]||kind)+'：'+measure(area.parts[kind]));
+        if(chatDiagShouldHidePart(kind))return;
+        lines.push('    '+chatDiagPartLabel(kind)+'：'+chatDiagSnapshotToken(area.parts[kind]));
       });
     });
   };
-  lines.push('🧾 输入明细（网关组装后的请求，各区域互不重复）');
-  describeRequest(request,'  文本及工具定义合计：');
+  lines.push('🧾 输入 token 明细（网关组装后的请求，各区域互不重复）');
+  describeRequest(request,'  请求合计：');
   var latest=(request.areas||{}).current||{},history=(request.areas||{}).history||{};
-  lines.push('📥 本轮动态注入 / 最终历史残留（冻结恢复及组装后再次统计）');
-  ['recall','current_time','time_gap','backend_switch','time_reply_hint','native_thinking','pseudo_thinking'].forEach(function(kind){
-    lines.push('  '+labels[kind]+'：本轮 '+measure((latest.parts||{})[kind]||zero)+'｜最终历史 '+measure((history.parts||{})[kind]||zero));
+  lines.push('📥 本轮动态注入 / 最终历史残留（仅保留可发送内容）');
+  ['recall','backend_switch','native_thinking','pseudo_thinking'].forEach(function(kind){
+    lines.push('  '+chatDiagPartLabel(kind)+'：本轮 '+chatDiagSnapshotToken((latest.parts||{})[kind])+'｜最终历史 '+chatDiagSnapshotToken((history.parts||{})[kind]));
   });
   var rounds=Array.isArray(data.diagnostic_rounds)?data.diagnostic_rounds:[];
   rounds.forEach(function(round){
     lines.push('📝 上游第 '+round.round+' 次调用（'+(round.round===1?'首次请求':'工具续轮')+'，'+(round.ok?'成功':'失败')+'）');
-    lines.push(usageLine('  ',round.usage));
-    lines.push('  输出明细（思考已包含在输出合计内）：');
+    lines.push(chatDiagUsageLine('  ',round.usage));
+    lines.push('  输出 token 明细（思考已包含在输出合计内）：');
     Object.keys((round.output||{}).parts||{}).forEach(function(kind){
-      lines.push('    '+(labels[kind]||kind)+'：'+measure(round.output.parts[kind]));
+      if(chatDiagShouldHidePart(kind))return;
+      lines.push('    '+chatDiagPartLabel(kind)+'：'+chatDiagSnapshotToken(round.output.parts[kind]));
     });
     if(rounds.length>1)describeRequest(round.request,'  此次输入：');
   });
   if(rounds.length>1)lines.push('  多次调用的输入分别计费；上方整次累计已相加，历史清理只执行一次。');
   (data.diagnostic_failed_attempts||[]).forEach(function(attempt,index){
     lines.push('失败候选 '+(index+1)+'（未计入成功轮次累计）');
-    lines.push(usageLine('  已收到的用量：',attempt.usage));
+    lines.push(chatDiagUsageLine('  已收到的用量：',attempt.usage));
     lines.push('  未返回的用量无法确认，不能据此认定没有计费。');
   });
-  lines.push('估算说明：'+(request.estimate_method||'旧日志未提供估算口径')+'。');
-  lines.push('分项均为估算，实际计费看上游 usage；原生思考未单独返回时只展示正文估算，签名/加密思考/图片不折算 token。');
-  var meta=chatCacheStrategyMeta(data.cache_strategy||'single_5m');
-  lines.push('缓存设置：'+meta.label+'｜TTL '+(data.prompt_cache_ttl||'上游决定')+
-    '｜策略召回保留基线 '+number(data.recall_history_retention_seconds)+' 秒（历史关闭项仍会逐轮清理）｜空闲 '+number(data.idle_seconds)+' 秒');
+  lines.push('请求拆分 token 为网关侧计算值；实际计费以每次上游 usage 为准。签名、加密思考和图片不强行换算。');
+  var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'手动截断（旧记录）',pending_rebuild:'已准备操作后的下一条消息'};
+  lines.push('缓存设置：'+chatDiagCacheSummary(data)+'｜重建边界 '+(boundaryLabels[data.cache_rebuild_boundary]||'未触发')+
+    '｜策略召回保留基线 '+chatDiagNumber(data.recall_history_retention_seconds)+' 秒｜空闲 '+chatDiagNumber(data.idle_seconds)+' 秒');
+  lines.push('召回路径：'+(data.fact_recall_mode?chatFactRecallModeMeta(data.fact_recall_mode).label:'未记录')+
+    '｜召回状态：'+(data.recall_enabled===false?'关闭':(data.gateway_context_injected?'已注入':'无注入')));
   lines.push('缓存锚点：'+(data.cache_anchors||[]).join('，'));
   lines.push('历史冻结/恢复记录：'+(data.canonical_changes||[]).join('；'));
   return lines.join('\n');
+}
+function chatDiagHtmlTable(title,rows){
+  if(!rows.length)return '';
+  var html='<section class="chat-debug-sheet-section"><div class="chat-debug-sheet-section-title">'+esc(title)+'</div>'+
+    '<div class="chat-debug-sheet-table-wrap"><table class="chat-debug-sheet-table"><thead><tr><th>区域</th><th>项目</th><th>Token</th><th>状态 / 说明</th></tr></thead><tbody>';
+  rows.forEach(function(row){
+    html+='<tr><td>'+esc(row.area||'')+'</td><td>'+esc(row.item||'')+'</td>'+
+      '<td class="chat-debug-sheet-token">'+esc(row.token||'—')+'</td><td>'+esc(row.note||'')+'</td></tr>';
+  });
+  return html+'</tbody></table></div></section>';
+}
+function chatFormatRequestAccountingHtml(data){
+  data=data&&typeof data==='object'?data:{};
+  var request=data.request_details||{},rows=[],usage=data.diagnostic_usage_total||{};
+  function add(area,item,token,note){rows.push({area:area,item:item,token:token,note:note||''});}
+  add('实际用量','输入总计',chatDiagActualToken(usage.input_total),'普通 '+chatDiagActualToken(usage.input_uncached)+' / 读取 '+chatDiagActualToken(usage.cache_read)+' / 创建 '+chatDiagActualToken(usage.cache_create));
+  add('实际用量','输出合计',chatDiagActualToken(usage.output),'原生思考（输出子集） '+chatDiagActualToken(usage.thinking));
+  add('实际用量','缓存命中率',usage.cache_hit_percent===null||usage.cache_hit_percent===undefined?'未返回':usage.cache_hit_percent+'%','5m 创建 '+chatDiagActualToken(usage.cache_create_5m)+' / 1h 创建 '+chatDiagActualToken(usage.cache_create_1h));
+  Object.keys(CHAT_DIAG_REQUEST_AREAS).forEach(function(key){
+    var area=(request.areas||{})[key];
+    if(!area)return;
+    add('输入 · '+CHAT_DIAG_REQUEST_AREAS[key],'区域合计',chatDiagSnapshotToken(area),'请求组装区');
+    Object.keys(area.parts||{}).forEach(function(kind){
+      if(chatDiagShouldHidePart(kind))return;
+      add('输入 · '+CHAT_DIAG_REQUEST_AREAS[key],'↳ '+chatDiagPartLabel(kind),chatDiagSnapshotToken(area.parts[kind]),'分项');
+    });
+  });
+  var cleanup=data.history_cleanup;
+  if(cleanup){
+    add('历史清理','清理前',chatDiagSnapshotToken(cleanup.before),'读取 '+((cleanup.before||{}).messages||0)+' 条消息');
+    add('历史清理','清理后',chatDiagSnapshotToken(cleanup.after),'保留 '+((cleanup.after||{}).messages||0)+' 条消息');
+    add('历史清理','移除',chatDiagSnapshotToken(cleanup.removed),'本轮历史预处理');
+    ['native_thinking','pseudo_thinking','recall','backend_switch','signature','redacted_thinking'].forEach(function(kind){
+      var removed=((cleanup.removed||{}).parts||{})[kind];
+      if(removed)add('历史清理','↳ 移除 '+chatDiagPartLabel(kind),chatDiagSnapshotToken(removed),'分项');
+    });
+  }
+  var fp=data.cache_fingerprint&&typeof data.cache_fingerprint==='object'?data.cache_fingerprint:{};
+  var cmp=fp.compare_previous&&typeof fp.compare_previous==='object'?fp.compare_previous:{};
+  var reusable=Array.isArray(cmp.reusable_breakpoints)?cmp.reusable_breakpoints:[];
+  add('缓存','策略 / TTL',chatDiagCacheSummary(data),'断点 '+((data.cache_anchors||[]).join('，')||'无'));
+  var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'手动截断（旧记录）',pending_rebuild:'已准备操作后的下一条消息'};
+  add('缓存','重建边界',boundaryLabels[data.cache_rebuild_boundary]||'未触发','空闲 '+chatDiagNumber(data.idle_seconds)+' 秒');
+  add('缓存','召回路径',data.fact_recall_mode?chatFactRecallModeMeta(data.fact_recall_mode).label:'未记录',data.recall_enabled===false?'关闭':(data.gateway_context_injected?'已注入':'无注入'));
+  add('缓存','相同前缀',cmp.common_prefix_token_estimate!==undefined?chatDiagTokenText(cmp.common_prefix_token_estimate):'未记录',(cmp.common_prefix_segments||0)+' 段');
+  add('缓存','上一轮可复用断点',reusable.length+' 个',reusable.length?'可继续读取':'本轮可能重建');
+  add('缓存','清理状态',data.strip_old_recall?'已清理旧动态历史':'按保留策略处理','canonical '+(data.canonical_sessions_cleared||0));
+  (Array.isArray(data.diagnostic_rounds)?data.diagnostic_rounds:[]).forEach(function(round){
+    var u=round.usage||{};
+    add('上游第 '+round.round+' 次','输入 / 输出',chatDiagActualToken(u.input_total)+' / '+chatDiagActualToken(u.output),round.ok?'成功':'失败');
+  });
+  var status=chatDiagStatus(data);
+  var meta=chatCacheStrategyMeta(data.cache_strategy||'single_5m');
+  var chips=[
+    ['请求',data.debug_id||'-'],['模型',request.model||'-'],['状态',status],
+    ['策略',meta.label],['TTL',data.prompt_cache_ttl||'上游决定'],
+    ['消息',(request.messages||0)+' 条']
+  ];
+  var chipHtml=chips.map(function(pair){
+    return '<span class="chat-debug-sheet-chip"><b>'+esc(pair[0])+'</b><span>'+esc(String(pair[1]))+'</span></span>';
+  }).join('');
+  return '<div class="chat-debug-sheet" data-debug-sheet="cache"><div class="chat-debug-sheet-head">'+
+    '<div><strong>🧊 缓存诊断</strong><small>只显示 token 与缓存状态</small></div>'+
+    '<div class="chat-debug-sheet-chip-row">'+chipHtml+'</div></div>'+
+    chatDiagHtmlTable('用量与请求拆分',rows)+
+    '<div class="chat-debug-sheet-note">请求拆分 token 为网关侧计算值；实际计费以每次上游 usage 为准。</div></div>';
 }
 function chatFormatDebug(ev,data){
   data=data||{};
@@ -5728,7 +5834,7 @@ function chatFormatDebug(ev,data){
     // 这三项才是「本轮该不该命中」的判据：和上一轮逐段对齐后的最长相同前缀、
     // 第一处变化在哪一段、上一轮哪些断点还落在这段相同前缀里。
     var commonText=cmp.common_prefix_bytes!==undefined
-      ?('｜相同前缀 '+(cmp.common_prefix_bytes||0)+'B/~'+(cmp.common_prefix_token_estimate||0)+'t（'+(cmp.common_prefix_segments||0)+' 段）')
+      ?('｜相同前缀 ~'+(cmp.common_prefix_token_estimate||0)+' token（'+(cmp.common_prefix_segments||0)+' 段）')
       :'';
     var firstChangeText=cmp.first_change_label?('｜首个变化：'+cmp.first_change_label):'';
     var reusableText=cmp.common_prefix_bytes===undefined
@@ -5741,10 +5847,13 @@ function chatFormatDebug(ev,data){
     var bps=Array.isArray(fp.breakpoint_summary)?fp.breakpoint_summary:[];
     var details=Array.isArray(fp.breakpoints)?fp.breakpoints:[];
     var sizes=details.map(function(x){
-      return String(x.label||'-')+':'+(x.prefix_bytes||0)+'B/~'+(x.prefix_token_estimate||0)+'t';
+      return String(x.label||'-')+':~'+(x.prefix_token_estimate||0)+' token';
     });
     var sizeText=sizes.length?'｜断点累计 '+sizes.slice(0,4).join('，'):'';
-    return '｜'+status+commonText+firstChangeText+reusableText+stableText+changeText+'｜请求 '+(fp.request_hash||'-')+'/'+(fp.request_bytes||0)+'B（哈希不含断点标记）｜断点 '+(bps.join('，')||'-')+sizeText;
+    var breakpointText=details.length
+      ?details.map(function(x){return String(x.label||'-')+(x.ttl?'@'+x.ttl:'')}).join('，')
+      :bps.map(function(x){return String(x).replace(/@\d+B/g,'')}).join('，');
+    return '｜'+status+commonText+firstChangeText+reusableText+stableText+changeText+'｜请求 '+(fp.request_hash||'-')+'（哈希不含断点标记）｜断点 '+(breakpointText||'-')+sizeText;
   }
   if(ev==='meta'){
     var source=data.history_source||'';
@@ -5862,18 +5971,14 @@ function chatFormatDebug(ev,data){
       var boundaryLabels={cache_1h:'真实缓存 generation 到期',round_limit:'达到真实轮数上限',manual_trim:'手动完整轮次截断',manual_sync:'手动截断（旧记录）',pending_rebuild:'已准备操作后的下一条消息'};
       var boundaryText=data.cache_rebuild_boundary?('｜重建边界：'+(boundaryLabels[data.cache_rebuild_boundary]||data.cache_rebuild_boundary)):'';
       var idleText=data.idle_seconds!==undefined?('｜空闲：'+data.idle_seconds+'s｜旧召回保留：'+(data.recall_history_retention_seconds||0)+'s'):'';
-      var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条/'+(data.stripped_gateway_context_chars||0)+'字｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
+      var cleanText=data.strip_old_recall?('｜清旧历史：'+(data.stripped_gateway_context_messages||0)+'条｜旧图片：'+(data.stripped_old_image_blocks||0)):'';
       var activeRecallMode=chatRecallModeDisplayLabel(data.recall_mode||(data.recall_enabled===false?'off':'full'));
       var priorRecallMode=data.previous_recall_mode?chatRecallModeDisplayLabel(data.previous_recall_mode):'';
       var transition=data.mode_switched?('｜召回切换：'+(priorRecallMode||'-')+' → '+activeRecallMode):(data.mode_initialized?'｜召回模式初始化':'');
       var pathText=data.fact_recall_mode?('｜路径：'+chatFactRecallModeMeta(data.fact_recall_mode).label):'';
       var cleanup='｜epoch '+(data.recall_mode_epoch||0)+'｜清理注入 '+(data.cleared_injected_context_count||0)+'｜清理 canonical '+(data.canonical_sessions_cleared||0);
-      var diagRecall=data.recall_enabled===false?'｜召回关闭':(data.gateway_context_injected?('｜召回已注入 '+(data.gateway_context_chars||0)+'字'):'｜无召回注入');
-      var breakdown=data.prompt_breakdown&&typeof data.prompt_breakdown==='object'?data.prompt_breakdown:null;
-      var breakdownText='';
-      if(breakdown){
-        breakdownText='｜请求拆分：系统 '+(breakdown.system_chars||0)+'字/'+(breakdown.system_bytes||0)+'B，历史 '+(breakdown.history_chars||0)+'字，当前输入 '+(breakdown.current_user_chars||0)+'字（原文 '+(breakdown.current_original_chars||0)+'，回复目标 '+(breakdown.current_reply_target_chars||0)+'，网关上下文 '+(breakdown.current_gateway_context_chars||0)+'，其他 '+(breakdown.current_other_chars||0)+'），世界书 '+(breakdown.worldbook_chars||0)+'字，记忆/总结 '+(breakdown.memory_chars||0)+'字，临时上下文 '+(breakdown.context_chars||0)+'字，工具 schema '+(breakdown.tools_bytes||0)+'B，总计约 '+(breakdown.total_chars||0)+'字';
-      }
+      var diagRecall=data.recall_enabled===false?'｜召回关闭':(data.gateway_context_injected?'｜召回已注入':'｜无召回注入');
+      var breakdownText=data.request_details?'':'｜请求拆分 token：旧日志未记录';
       var cacheDiag='🧊 缓存诊断'+diagMode+boundaryText+idleText+cleanText+diagRecall+'｜召回模式：'+activeRecallMode+pathText+transition+cleanup+'｜锚点：'+anchorsZh(data.cache_anchors)+'｜'+changes+'｜请求消息数：'+(data.request_messages||0)+'｜第 '+(data.round||1)+' 轮'+fingerprintZh(data.cache_fingerprint)+breakdownText;
       if(data.fact_stats_queued)cacheDiag+='\n'+chatFormatFactStatsLine(data);
       return cacheDiag;

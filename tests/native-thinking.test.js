@@ -32,9 +32,9 @@ assert(source.includes("body.thinking_prompt=String(cfg.thinkingPrompt"),
   'native mode must send the shared thinking prompt separately');
 assert(source.includes('chatShouldShowNativeThinking()'),
   'native thinking display must have a render gate');
-assert(source.includes('🧾 输入明细')&&source.includes('📊 实际用量')&&source.includes('🧹 清理账单'),
+assert(source.includes('🧾 输入 token 明细')&&source.includes('📊 实际用量')&&source.includes('🧹 清理账单'),
   'cache diagnostics must show input, actual usage, and cleanup accounting');
-assert(source.includes('输出明细')&&source.includes('原生思考'),
+assert(source.includes('输出 token 明细')&&source.includes('原生思考'),
   'cache diagnostics must show output and native thinking accounting');
 assert(/chatRenderStreamingAssistantContent\(\s*assistantText,toolEvents,nativeThinkingText,false(?:,|\))/.test(source),
   'streaming native thinking must stay out of the temporary assistant bubble');

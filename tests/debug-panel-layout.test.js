@@ -31,9 +31,13 @@ assert(!metaBranch.includes('记忆召回：'),'recall state belongs to the cach
 assert(metaBranch.includes('历史来源')&&metaBranch.includes('注入：世界书'),'request info must keep the request structure');
 assert(cacheBranch.includes('重建边界')&&cacheBranch.includes('空闲：')&&cacheBranch.includes('清旧历史'),'the single cache diagnosis must absorb the moved fields');
 assert(cacheBranch.includes('路径：'),'the cache diagnosis must state the Fact recall path');
-assert(cacheBranch.includes('prompt_breakdown'),'the cache diagnosis must include prompt size breakdown data');
-assert(cacheBranch.includes('当前输入')&&cacheBranch.includes('工具 schema'),'the cache diagnosis must show the current input and tool schema portions');
-assert(cacheBranch.includes('回复目标')&&cacheBranch.includes('网关上下文'),'the current input must be split into original and injected suffixes');
+const accounting=functionSource('chatFormatRequestAccounting');
+const accountingHtml=functionSource('chatFormatRequestAccountingHtml');
+assert(accounting.includes('🧾 输入 token 明细'),'the cache diagnosis must include token-only request breakdown data');
+assert(source.includes("current:'当前用户消息'")&&source.includes("tools:'工具定义'"),'the cache diagnosis must show the current input and tool schema portions');
+assert(!/字数|字节|字符|估算/.test(accounting)&&!accounting.includes(' B'),'cache accounting must not render character or byte estimates');
+assert(source.includes('function chatDiagHtmlTable')&&accountingHtml.includes('chatDiagHtmlTable('),'the cache diagnosis must have an Excel-like table renderer');
+assert(accountingHtml.includes('只显示 token 与缓存状态'),'the table must state its token-only scope');
 assert((format.match(/缓存诊断/g)||[]).length===1,'only one cache diagnosis title may exist');
 assert(source.includes('【已保存的设置】'),'the saved-config banner must stop looking like a second diagnosis');
 
