@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v231-token-cache-diagnostics-and-control-cleanup';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v232-time-injection-and-gap-cache-fix';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2379,6 +2379,7 @@ function chatDefaultConfig(){
     system:'',
     systemPromptEnabled:true,
     ncContextInjection:true,
+    timeInjectionEveryRounds:1,
     backendSwitchNotification:true,
     recall:true,
     recallMode:'fact_only',
@@ -2631,6 +2632,10 @@ function chatNormalizeRecallRecentRounds(value){
   var number=Math.round(Number(value));
   return isFinite(number)?Math.max(0,Math.min(100,number)):10;
 }
+function chatNormalizeTimeInjectionEveryRounds(value){
+  var number=Math.round(Number(value));
+  return isFinite(number)?Math.max(1,Math.min(1000,number)):1;
+}
 function chatFactRecallModeMeta(value){
   var mode=chatNormalizeFactRecallMode(value);
   return mode==='b'
@@ -2731,11 +2736,14 @@ function chatRenderRecallState(statusText,statusKind){
 function chatRenderNcContextState(statusText,statusKind){
   var cfg=chatLoadConfig()||{};
   var enabled=cfg.ncContextInjection!==false;
+  var every=chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds);
   var input=document.getElementById('chat-nc-context-injection');
   if(input)input.checked=enabled;
+  var rounds=document.getElementById('chat-time-injection-every-rounds');
+  if(rounds)rounds.value=String(every);
   var status=document.getElementById('chat-nc-context-save-status');
   if(status){
-    status.textContent=statusText||('已保存：'+(enabled?'开启｜只注入当前时间':'关闭｜不注入当前时间'));
+    status.textContent=statusText||('已保存：'+(enabled?'开启｜每 '+every+' 轮注入当前时间':'关闭｜不注入当前时间'));
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
   }
 }
@@ -2973,6 +2981,7 @@ function chatLoadConfig(){
   if(!cfg.sessionId)cfg.sessionId=chatSessionId();
   cfg.worldbooks=chatNormalizeWorldbooks(cfg.worldbooks);
   cfg.ncContextInjection=cfg.ncContextInjection!==false;
+  cfg.timeInjectionEveryRounds=chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds);
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
   cfg.recall=cfg.recall!==false;
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
@@ -3045,6 +3054,8 @@ function chatSaveConfigObject(cfg){
   delete cfg.chatApiSource;
   cfg.recall=cfg.recall!==false;
   cfg.systemPromptEnabled=cfg.systemPromptEnabled!==false;
+  cfg.ncContextInjection=cfg.ncContextInjection!==false;
+  cfg.timeInjectionEveryRounds=chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds);
   cfg.recallMode=chatNormalizeRecallMode(cfg.recallMode);
   cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
   cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
@@ -3949,6 +3960,7 @@ function chatReadForm(){
     system:chatFieldValue('chat-system',saved.system||'')||'',
     systemPromptEnabled:chatFieldChecked('chat-system-enabled',saved.systemPromptEnabled!==false),
     ncContextInjection:chatFieldChecked('chat-nc-context-injection',saved.ncContextInjection!==false),
+    timeInjectionEveryRounds:chatNormalizeTimeInjectionEveryRounds(chatFieldValue('chat-time-injection-every-rounds',saved.timeInjectionEveryRounds)),
     backendSwitchNotification:chatFieldChecked('chat-backend-switch-notification',saved.backendSwitchNotification!==false),
     recall:chatFieldChecked('chat-recall-enabled',saved.recall!==false),
     recallMode:chatRecallModeFromForm(saved.recallMode),
@@ -4012,6 +4024,7 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-system',cfg.system||'');
   chatSetFieldChecked('chat-system-enabled',cfg.systemPromptEnabled!==false);
   chatSetFieldChecked('chat-nc-context-injection',cfg.ncContextInjection!==false);
+  chatSetFieldValue('chat-time-injection-every-rounds',chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds));
   chatSetFieldChecked('chat-backend-switch-notification',cfg.backendSwitchNotification!==false);
   chatSetFieldValue('chat-memory-pack',cfg.memoryPreview||'');
   chatSetFieldChecked('chat-recall-enabled',cfg.recall!==false);
@@ -4113,7 +4126,8 @@ function chatSaveRecallSetting(auto){
 function chatSaveNcContextInjection(auto){
   var cfg=chatSaveConfig(true);
   var enabled=cfg.ncContextInjection!==false;
-  chatRenderNcContextState('已保存成功：'+(enabled?'开启｜只注入当前时间':'关闭｜不注入当前时间'),'ok');
+  var every=chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds);
+  chatRenderNcContextState('已保存成功：'+(enabled?'开启｜每 '+every+' 轮注入当前时间':'关闭｜不注入当前时间'),'ok');
   if(!auto)toast('当前时间上下文已'+(enabled?'开启':'关闭'));
   return cfg;
 }
@@ -10883,6 +10897,7 @@ async function chatSubmitPendingMessages(options){
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
     nc_context_injection:cfg.ncContextInjection!==false,
+    time_injection_every_rounds:chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds),
     backend_switch_notification:cfg.backendSwitchNotification!==false,
     retain_native_thinking_history:cfg.retainNativeThinkingHistory!==false,
     retain_pseudo_thinking_history:cfg.retainPseudoThinkingHistory!==false,

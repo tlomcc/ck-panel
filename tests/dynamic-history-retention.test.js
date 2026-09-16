@@ -15,6 +15,12 @@ const fields=[
   'backend-switch-history'
 ];
 
+assert(source.includes('timeInjectionEveryRounds:1'),'time injection interval must default to every round');
+assert(source.includes('chatNormalizeTimeInjectionEveryRounds'),'time injection interval must be normalized');
+assert(html.includes('id="chat-time-injection-every-rounds"'),'time injection interval control is missing');
+assert(source.includes('time_injection_every_rounds:chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds)'),
+  'time injection interval must be sent to the gateway');
+
 for(const suffix of fields){
   assert(html.includes(`id="chat-retain-${suffix}"`),`missing history switch: ${suffix}`);
 }
