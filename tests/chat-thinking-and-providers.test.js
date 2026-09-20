@@ -108,12 +108,15 @@ assert(functionSource('normalizeApiProviders').includes('providerAdoptLegacyPoll
 // 单链路：主链路供应商自己维护了策略就按它走，没维护才跟随聊天面板。
 const effective=functionSource('chatEffectiveCacheStrategy');
 assert(effective.includes('mainRouteCacheStrategy'),'单链路要认主链路供应商那份策略');
-assert(effective.includes('chatPollingView().enabled===true'),'轮询开着时要发聊天面板那个全局策略，让网关按候选覆盖');
+assert(effective.includes('chatPollingEnabledForConfig(cfg)'),'缓存策略必须按当前窗口是否覆盖 API 来判断轮询');
+assert(functionSource('chatPollingEnabledForConfig').includes("cfg.chatApiSource==='chat_window_api'"),
+  '窗口独立 API 必须压过全局聊天轮询；跟随主链路的窗口仍按原轮询设置执行');
 assert(functionSource('chatApplyMainRouteToConfig').includes('providerCacheStrategy(route.provider)'),
   '主链路解析时把供应商那份策略带出来');
 assert(source.includes('chatCacheStrategyMeta(chatEffectiveCacheStrategy(cfg))'),
   '发请求时算的必须是生效策略，否则 TTL 和旧召回保留时长会跟策略不一致');
-assert(functionSource('chatRenderCacheStrategyState').includes('主链路供应商自带策略'),
-  '被供应商那份覆盖时界面必须写出来，不能让用户以为面板的选择坏了');
+const cacheState=functionSource('chatRenderCacheStrategyState');
+assert(cacheState.includes("savedCfg.chatApiSource==='chat_window_api'")&&cacheState.includes("'当前窗口供应商':'主链路供应商'"),
+  '缓存策略覆盖提示必须区分当前窗口供应商和主链路供应商');
 
 console.log('chat thinking and provider tests: OK');

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v232-time-injection-and-gap-cache-fix';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v233-window-api-digest-and-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1515,6 +1515,7 @@ var CHAT_DAILY_DIGEST_TIMEOUT_MS=90000;
 // 总预算再 +5 秒；面板只等到这里为止，超时就放弃等待、照常发送，
 // 总结仍在后台继续落地（退回原来的异步行为）。绝不能因为总结慢就卡死发送。
 var CHAT_DAILY_DIGEST_TRIM_WAIT_MS=45000;
+var CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE='小克';
 var CHAT_SCROLL_JUMP_VISIBLE_MS=1500;
 var CHAT_SCROLL_JUMP_INTENT_MS=1200;
 var CHAT_IMAGE_MAX_COUNT=4;
@@ -1674,7 +1675,7 @@ async function chatCleanHistoryCore(cfg){
         transport_updated_at:currentSession.transportUpdated||0,
         transport_messages:transport,
         window_messages:windowMessages,
-        chat_polling_enabled:chatPollingView().enabled===true,
+        chat_polling_enabled:chatPollingEnabledForConfig(cfg),
         visible_counts:visibleCounts
       })
     });
@@ -1926,6 +1927,9 @@ function chatNormalizeAutoTrimConfig(raw){
 }
 function chatAutoTrimConfigFrom(cfg){
   cfg=cfg||{};
+  if(cfg.windowTrimOverride===true&&cfg.windowTrimConfig){
+    return chatNormalizeAutoTrimConfig(cfg.windowTrimConfig);
+  }
   return chatNormalizeAutoTrimConfig({
     enabled:cfg.autoTrimEnabled,
     prefixSilent:cfg.autoTrimPrefixSilent===true,
@@ -1933,6 +1937,47 @@ function chatAutoTrimConfigFrom(cfg){
     roundLimitEnabled:cfg.autoTrimRoundLimitEnabled===true,
     roundLimit:cfg.autoTrimRoundLimit
   });
+}
+function chatWindowTrimConfigFromSession(session){
+  if(!session||session.trimOverrideEnabled!==true)return null;
+  return chatNormalizeAutoTrimConfig(session.trimConfig);
+}
+function chatApplyWindowTrimToConfig(cfg){
+  cfg=cfg||{};
+  var session=chatSessionForRoute(cfg);
+  var override=chatWindowTrimConfigFromSession(session);
+  cfg.windowTrimOverride=!!override;
+  cfg.windowTrimConfig=override;
+  return cfg;
+}
+function chatRenderWindowTrimControls(cfg){
+  cfg=cfg||chatLoadConfig();
+  var override=cfg.windowTrimOverride===true;
+  ['chat-window-trim-enabled','chat-window-trim-keep','chat-window-trim-round-limit-enabled','chat-window-trim-round-limit','chat-window-trim-prefix-silent'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el)el.disabled=!override;
+  });
+  var hint=document.getElementById('chat-window-trim-hint');
+  if(hint){
+    var trim=chatAutoTrimConfigFrom(cfg);
+    hint.textContent=override
+      ?'当前窗口已启用独立截断：启用状态、保留轮数、轮数上限和静默通知均按下面设置执行。'
+      :'当前窗口跟随默认截断；打开上面的开关后，下面的设置只对本窗口生效。当前有效保留 '+trim.keep+' 轮。';
+  }
+}
+function chatSaveWindowTrimFromConfig(cfg){
+  if(!cfg||cfg.windowTrimFormRead!==true)return;
+  var session=chatSessionForRoute(cfg);
+  if(!session)return;
+  if(cfg.windowTrimOverride===true){
+    session.trimOverrideEnabled=true;
+    session.trimConfig=chatNormalizeAutoTrimConfig(cfg.windowTrimConfig);
+  }else{
+    delete session.trimOverrideEnabled;
+    delete session.trimConfig;
+  }
+  session.updated=Date.now();
+  chatSaveSessions();
 }
 // 按轮数自动清理召回与图片。轮数只做上下限约束，不跟保留轮数联动——它不删轮次，
 // 和截断的"保留 N 轮"没有互相依赖的关系。
@@ -2417,6 +2462,7 @@ function chatDefaultConfig(){
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
+    newSessionDigestSyncEnabled:true,
     costPricing:chatDefaultCostPricing(),
     costPricingDefaults:[],
     recallBoxVisible:true,
@@ -2513,8 +2559,7 @@ function chatNormalizeCacheStrategy(value){
 // 策略，网关会在切到具体候选时按候选自己的策略覆盖掉——那份也来自供应商。
 function chatEffectiveCacheStrategy(cfg){
   cfg=cfg||{};
-  var pollingOn=false;
-  try{pollingOn=chatPollingView().enabled===true}catch(e){}
+  var pollingOn=chatPollingEnabledForConfig(cfg);
   if(!pollingOn){
     var bound=providerNormalizeCacheStrategy(cfg.mainRouteCacheStrategy);
     if(bound)return bound;
@@ -2523,8 +2568,7 @@ function chatEffectiveCacheStrategy(cfg){
 }
 function chatCacheNoticeStrategy(cfg){
   cfg=cfg||{};
-  var pollingOn=false;
-  try{pollingOn=chatPollingView().enabled===true}catch(e){}
+  var pollingOn=chatPollingEnabledForConfig(cfg);
   if(pollingOn){
     var live=chatPollingLiveState||apiPollingStatusState.data||{};
     var liveStrategy=providerNormalizeCacheStrategy(live.cache_strategy||live.cacheStrategy);
@@ -2772,10 +2816,10 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   // 供应商自己维护了策略时，这里必须写出来：否则用户在面板选了 5min，
   // 实际按供应商那份走，看不到任何提示就会以为面板的选择坏了。
   var bound=providerNormalizeCacheStrategy(savedCfg.mainRouteCacheStrategy);
-  var pollingOn=false;
-  try{pollingOn=chatPollingView().enabled===true}catch(e){}
+  var pollingOn=chatPollingEnabledForConfig(savedCfg);
+  var boundOwner=savedCfg.chatApiSource==='chat_window_api'?'当前窗口供应商':'主链路供应商';
   var boundText=(bound&&!pollingOn)
-    ?('｜主链路供应商自带策略：'+chatCacheStrategyMeta(bound).label+'（本轮按它走，不看上面这个选择）')
+    ?('｜'+boundOwner+'自带策略：'+chatCacheStrategyMeta(bound).label+'（本轮按它走，不看上面这个选择）')
     :'';
   if(savedEl)savedEl.textContent='已保存：'+savedMeta.label+'｜发送：'+savedMeta.debugText+'｜TTL：'+chatCacheStrategyTtlLabel(savedMeta)+boundText;
   var debugMode=document.getElementById('chat-debug-cache-mode');
@@ -2867,6 +2911,155 @@ function chatMainRouteConfig(){
   else route.ok=true;
   return route;
 }
+function chatSessionForRoute(cfg){
+  var activeId=String(chatActiveSessionId||'');
+  if(activeId){
+    var active=chatSessions.find(function(session){return session&&String(session.id||'')===activeId});
+    if(active)return active;
+  }
+  var sessionId=String((cfg&&cfg.sessionId)||'');
+  return sessionId?chatSessions.find(function(session){return session&&String(session.id||'')===sessionId})||null:null;
+}
+function chatWindowApiRouteConfig(cfg){
+  var main=chatMainRouteConfig();
+  if(!apiProvidersLoaded)return main;
+  var session=chatSessionForRoute(cfg);
+  var providerId=String((session&&session.apiProviderId)||'').trim();
+  if(!providerId)return main;
+  var provider=findLibraryProvider(providerId);
+  if(!provider)return main;
+  var model=String((session&&session.apiModel)||provider.model||'').trim();
+  var route={
+    ok:false,
+    provider:provider,
+    providerName:providerDisplayName(provider),
+    providerHost:providerHost(provider.url),
+    apiBase:String(provider.url||'').trim(),
+    upstreamKey:String(provider.key||'').trim(),
+    model:model,
+    apiType:providerNormalizeApiType(provider.api_type,provider.url),
+    source:'chat_window_api',
+    reason:''
+  };
+  if(!route.apiBase)route.reason='当前窗口供应商缺少 API URL';
+  else if(!route.upstreamKey)route.reason='当前窗口供应商缺少 API Key';
+  else if(!route.model)route.reason='当前窗口供应商未选择模型';
+  else route.ok=true;
+  return route;
+}
+function chatPollingEnabledForConfig(cfg){
+  if(cfg&&cfg.chatApiSource==='chat_window_api')return false;
+  try{return chatPollingView().enabled===true}catch(e){return false}
+}
+function chatApplyWindowRouteToConfig(cfg){
+  return chatApplyMainRouteToConfig(cfg,chatWindowApiRouteConfig(cfg));
+}
+function chatWindowApiCurrentValues(){
+  var editor=document.getElementById('chat-window-api-editor');
+  var providerEl=editor&&editor.querySelector('.chat-window-api-provider');
+  var modelEl=document.getElementById('chat-window-api-model');
+  return {
+    providerId:String((providerEl&&providerEl.value)||'').trim(),
+    model:String((modelEl&&modelEl.value)||'').trim()
+  };
+}
+function chatWindowApiSummary(providerId,model,dirty){
+  var summary=document.getElementById('chat-window-api-summary');
+  if(!summary)return;
+  providerId=String(providerId||'').trim();
+  model=String(model||'').trim();
+  var provider=providerId?findLibraryProvider(providerId):null;
+  if(provider){
+    summary.textContent='本窗口使用：'+providerDisplayName(provider)+(model?' · '+model:' · 请补充模型')+(dirty?'（未保存）':'');
+    summary.classList.remove('empty');
+  }else if(providerId){
+    summary.textContent='这个窗口保存的供应商已不在供应商库里，将回退主链路。';
+    summary.classList.add('empty');
+  }else{
+    summary.textContent='未单独选择，跟随主链路 API。';
+    summary.classList.add('empty');
+  }
+}
+function chatWindowApiRenderModelOptions(provider,model){
+  var modelEl=document.getElementById('chat-window-api-model');
+  var list=document.getElementById('chat-window-api-models');
+  if(!modelEl||!list)return;
+  var models=cleanModelList(provider&&provider.models,provider&&provider.model);
+  model=String(model||'').trim();
+  if(model&&models.indexOf(model)<0)models.unshift(model);
+  list.innerHTML=models.map(function(name){return '<option value="'+escAttr(name)+'"></option>'}).join('');
+  modelEl.value=model;
+}
+function chatWindowApiDraftChanged(){
+  var values=chatWindowApiCurrentValues();
+  chatWindowApiSummary(values.providerId,values.model,true);
+}
+function chatWindowApiProviderChanged(providerId){
+  var provider=findLibraryProvider(providerId);
+  var model=provider?String(provider.model||cleanModelList(provider.models,provider.model)[0]||'').trim():'';
+  chatWindowApiRenderModelOptions(provider,model);
+  chatWindowApiSummary(providerId,model,true);
+}
+function chatRenderWindowApi(){
+  var editor=document.getElementById('chat-window-api-editor');
+  if(!editor)return;
+  if(!apiProvidersLoaded){
+    editor.innerHTML='<p class="chat-field-hint">'+esc(apiProvidersLoadError?('供应商库读取失败：'+apiProvidersLoadError):'正在读取供应商库...')+'</p>';
+    chatWindowApiSummary('','',false);
+    return;
+  }
+  var session=chatSessionForRoute(chatLoadConfig());
+  var providerId=String((session&&session.apiProviderId)||'').trim();
+  var model=String((session&&session.apiModel)||'').trim();
+  var provider=providerId?findLibraryProvider(providerId):null;
+  editor.innerHTML='<div class="chat-window-api-row"><span>供应商</span>'+
+    providerPickerHtml(providerId,{scope:'window',valueClass:'chat-window-api-provider',allowEmpty:true,emptyLabel:'跟随主链路',title:'选择当前窗口 API'})+
+    '</div>'+
+    '<label>模型名<input id="chat-window-api-model" list="chat-window-api-models" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+escAttr(model)+'" placeholder="留空使用供应商默认模型" oninput="chatWindowApiDraftChanged()"><datalist id="chat-window-api-models"></datalist></label>'+
+    '<p class="chat-field-hint">供应商的 URL 和 Key 仍在「API 配置 → 供应商」里维护；这里每个窗口只保存选择。单独选择后，本窗口固定走这条 API，不参与全局聊天轮询。</p>'+
+    '<div class="chat-actions"><button class="btn btn-blue btn-sm" type="button" onclick="chatSaveWindowApi()">保存当前窗口 API</button><button class="btn btn-outline btn-sm" type="button" onclick="chatResetWindowApi()">跟随主链路</button></div>';
+  chatWindowApiRenderModelOptions(provider,model);
+  chatWindowApiSummary(providerId,model,false);
+}
+function chatSaveWindowApi(){
+  if(!apiProvidersLoaded){toast('供应商库还没读取完成');return}
+  var session=chatSessionForRoute(chatLoadConfig());
+  if(!session){toast('当前窗口还没准备好');return}
+  var values=chatWindowApiCurrentValues();
+  var provider=values.providerId?findLibraryProvider(values.providerId):null;
+  if(values.providerId&&!provider){toast('这个供应商已经不在供应商库里了');return}
+  if(provider&&!String(provider.url||'').trim()){toast('该供应商还没填 API URL，请到「供应商库」补全');return}
+  if(provider&&!String(provider.key||'').trim()){toast('该供应商还没填 API Key，请到「供应商库」补全');return}
+  if(provider&&!values.model)values.model=String(provider.model||cleanModelList(provider.models,provider.model)[0]||'').trim();
+  if(provider&&!values.model){toast('该供应商还没有模型，请先填写模型名');return}
+  if(provider){
+    session.apiProviderId=values.providerId;
+    session.apiModel=values.model;
+  }else{
+    delete session.apiProviderId;
+    delete session.apiModel;
+  }
+  session.updated=Date.now();
+  chatSaveSessions();
+  var cfg=chatLoadConfig();
+  chatWriteForm(cfg);
+  chatUpdateRuntime(cfg);
+  chatRenderSessions();
+  toast(provider?'当前窗口 API 已保存：'+providerDisplayName(provider):'当前窗口已改为跟随主链路');
+}
+function chatResetWindowApi(){
+  var session=chatSessionForRoute(chatLoadConfig());
+  if(!session)return;
+  delete session.apiProviderId;
+  delete session.apiModel;
+  session.updated=Date.now();
+  chatSaveSessions();
+  var cfg=chatLoadConfig();
+  chatWriteForm(cfg);
+  chatUpdateRuntime(cfg);
+  chatRenderSessions();
+  toast('当前窗口已跟随主链路');
+}
 function chatApplyMainRouteToConfig(cfg,route){
   cfg=cfg||chatDefaultConfig();
   route=route||chatMainRouteConfig();
@@ -2893,7 +3086,7 @@ function chatApplyMainRouteToConfig(cfg,route){
     // 供应商自己维护的缓存策略（可选）。空＝跟随聊天面板下面选的那一个。
     cfg.mainRouteCacheStrategy=providerCacheStrategy(route.provider);
   }
-  cfg.chatApiSource='api_config_main_io';
+  cfg.chatApiSource=route.source||'api_config_main_io';
   cfg.mainRouteReady=route.ok===true;
   cfg.mainRouteReason=route.reason||'';
   return cfg;
@@ -2944,7 +3137,7 @@ function chatEnsureMainRouteReady(){
       chatRenderMainRouteSummary();
       return {ok:false,reason:'API 配置读取失败'};
     }
-    var route=chatMainRouteConfig();
+    var route=chatWindowApiRouteConfig(chatLoadConfig());
     chatRenderMainRouteSummary();
     return route;
   }).catch(function(){
@@ -2953,10 +3146,16 @@ function chatEnsureMainRouteReady(){
   });
 }
 function chatHandleMainRouteNotReady(route){
-  var reason=(route&&route.reason)||'主链路未配置';
-  chatSetStatus('主链路未配置');
-  toast('主链路未配置：'+reason);
-  chatOpenMainApiConfig();
+  var windowRoute=route&&route.source==='chat_window_api';
+  var reason=(route&&route.reason)||(windowRoute?'当前窗口 API 未配置':'主链路未配置');
+  chatSetStatus(windowRoute?'当前窗口 API 未就绪':'主链路未配置');
+  toast((windowRoute?'当前窗口 API 未就绪：':'主链路未配置：')+reason);
+  if(windowRoute){
+    chatTogglePlus(false);
+    chatToggleSettings(false,true);
+    switchPanelTab('apiconfig');
+    switchApiTab('providers');
+  }else chatOpenMainApiConfig();
 }
 function chatLoadConfig(){
   var cfg=chatDefaultConfig();
@@ -3007,6 +3206,7 @@ function chatLoadConfig(){
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
+  cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   cfg.costPricingDefaults=chatNormalizeCostDefaults(cfg.costPricingDefaults);
   cfg.recallBoxVisible=cfg.recallBoxVisible!==false;
@@ -3020,7 +3220,8 @@ function chatLoadConfig(){
   cfg.autoCleanEnabled=autoClean.enabled;
   cfg.autoCleanMode=autoClean.mode;
   cfg.autoCleanRounds=autoClean.rounds;
-  cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
+  cfg=chatApplyWindowRouteToConfig(cfg);
+  cfg=chatApplyWindowTrimToConfig(cfg);
   cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
   cfg.thinkingPrompt=String(cfg.thinkingPrompt||cfg.fakeThinkingPrompt||chatDefaultThinkingPrompt());
@@ -3052,6 +3253,9 @@ function chatSaveConfigObject(cfg){
   delete cfg.mainRouteReady;
   delete cfg.mainRouteReason;
   delete cfg.chatApiSource;
+  delete cfg.windowTrimOverride;
+  delete cfg.windowTrimConfig;
+  delete cfg.windowTrimFormRead;
   cfg.recall=cfg.recall!==false;
   cfg.systemPromptEnabled=cfg.systemPromptEnabled!==false;
   cfg.ncContextInjection=cfg.ncContextInjection!==false;
@@ -3082,6 +3286,7 @@ function chatSaveConfigObject(cfg){
   cfg.autoCleanMode=autoCleanSave.mode;
   cfg.autoCleanRounds=autoCleanSave.rounds;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
+  cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   cfg.costPricingDefaults=chatNormalizeCostDefaults(cfg.costPricingDefaults);
@@ -3808,6 +4013,10 @@ function chatNormalizeSession(s){
     speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
     speechPreferencePendingBoundaryReason:String(s.speechPreferencePendingBoundaryReason||''),
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
+    apiProviderId:String(s.apiProviderId||'').trim(),
+    apiModel:String(s.apiModel||'').trim(),
+    trimOverrideEnabled:s.trimOverrideEnabled===true,
+    trimConfig:chatNormalizeAutoTrimConfig(s.trimConfig),
     cacheRebuildPending:s.cacheRebuildPending===true,
     cacheFullCreatedAt:Number(s.cacheFullCreatedAt||0)||0,
     cacheFullCreateTokens:Number(s.cacheFullCreateTokens||0)||0,
@@ -3933,6 +4142,15 @@ function chatSetFieldChecked(id,value){
 }
 function chatReadForm(){
   var saved=chatLoadConfig();
+  var currentSession=chatSessionForRoute(saved);
+  var defaultTrim=chatNormalizeAutoTrimConfig({
+    enabled:saved.autoTrimEnabled!==false,
+    prefixSilent:saved.autoTrimPrefixSilent===true,
+    keep:saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
+    roundLimitEnabled:saved.autoTrimRoundLimitEnabled===true,
+    roundLimit:saved.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT
+  });
+  var currentTrim=chatWindowTrimConfigFromSession(currentSession)||defaultTrim;
   var settings=document.querySelector('.chat-settings');
   var activePanel=document.querySelector('.chat-side-panel.active');
   var activePanelTab=activePanel&&activePanel.id?activePanel.id.replace(/^chat-side-/,''):'';
@@ -3999,11 +4217,21 @@ function chatReadForm(){
     autoCleanEnabled:cleanCfg.enabled,
     autoCleanMode:cleanCfg.mode,
     autoCleanRounds:cleanCfg.rounds,
+    windowTrimOverride:chatFieldChecked('chat-window-trim-override',currentSession&&currentSession.trimOverrideEnabled===true),
+    windowTrimConfig:chatNormalizeAutoTrimConfig({
+      enabled:chatFieldChecked('chat-window-trim-enabled',currentTrim.enabled),
+      prefixSilent:chatFieldChecked('chat-window-trim-prefix-silent',currentTrim.prefixSilent),
+      keep:chatFieldValue('chat-window-trim-keep',currentTrim.keep),
+      roundLimitEnabled:chatFieldChecked('chat-window-trim-round-limit-enabled',currentTrim.roundLimitEnabled),
+      roundLimit:chatFieldValue('chat-window-trim-round-limit',currentTrim.roundLimit)
+    }),
+    windowTrimFormRead:true,
     settingsOpen:settings?settings.classList.contains('open'):false,
     chatSideTab:activePanelTab||saved.chatSideTab||'model',
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
+    newSessionDigestSyncEnabled:chatFieldChecked('chat-new-session-digest-sync',saved.newSessionDigestSyncEnabled!==false),
     costPricing:chatReadCostPricing(saved.costPricing),
     costPricingDefaults:chatReadCostDefaults(saved.costPricingDefaults),
     billingEnabled:chatFieldChecked('chat-billing-enabled',saved.billingEnabled!==false),
@@ -4012,12 +4240,13 @@ function chatReadForm(){
     worldbooks:chatNormalizeWorldbooks(saved.worldbooks)
   };
   cfg=chatMergeActiveWorldbookDraft(cfg);
-  cfg=chatApplyMainRouteToConfig(cfg,chatMainRouteConfig());
+  cfg=chatApplyWindowRouteToConfig(cfg);
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   return cfg;
 }
 function chatWriteForm(cfg){
-  cfg=chatApplyMainRouteToConfig(cfg||chatLoadConfig(),chatMainRouteConfig());
+  cfg=chatApplyWindowRouteToConfig(cfg||chatLoadConfig());
+  cfg=chatApplyWindowTrimToConfig(cfg);
   chatSetFieldValue('chat-gateway-url',GRAPH_API_BASE);
   chatSetFieldValue('chat-panel-key',cfg.panelKey||'');
   chatSetFieldValue('chat-session-id',cfg.sessionId||chatSessionId());
@@ -4046,12 +4275,26 @@ function chatWriteForm(cfg){
   var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cacheMeta.value;
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String(cacheMeta.retentionSeconds);
+  var defaultTrim=chatNormalizeAutoTrimConfig({
+    enabled:cfg.autoTrimEnabled!==false,
+    prefixSilent:cfg.autoTrimPrefixSilent===true,
+    keep:cfg.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
+    roundLimitEnabled:cfg.autoTrimRoundLimitEnabled===true,
+    roundLimit:cfg.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT
+  });
   var trimCfg=chatAutoTrimConfigFrom(cfg);
-  chatSetFieldChecked('chat-auto-trim-enabled',trimCfg.enabled);
-  chatSetFieldChecked('chat-auto-trim-prefix-silent',trimCfg.prefixSilent);
-  chatSetFieldValue('chat-auto-trim-keep',trimCfg.keep);
-  chatSetFieldChecked('chat-auto-trim-round-limit-enabled',trimCfg.roundLimitEnabled);
-  chatSetFieldValue('chat-auto-trim-round-limit',trimCfg.roundLimit);
+  chatSetFieldChecked('chat-auto-trim-enabled',defaultTrim.enabled);
+  chatSetFieldChecked('chat-auto-trim-prefix-silent',defaultTrim.prefixSilent);
+  chatSetFieldValue('chat-auto-trim-keep',defaultTrim.keep);
+  chatSetFieldChecked('chat-auto-trim-round-limit-enabled',defaultTrim.roundLimitEnabled);
+  chatSetFieldValue('chat-auto-trim-round-limit',defaultTrim.roundLimit);
+  chatSetFieldChecked('chat-window-trim-override',cfg.windowTrimOverride===true);
+  chatSetFieldChecked('chat-window-trim-enabled',trimCfg.enabled);
+  chatSetFieldChecked('chat-window-trim-prefix-silent',trimCfg.prefixSilent);
+  chatSetFieldValue('chat-window-trim-keep',trimCfg.keep);
+  chatSetFieldChecked('chat-window-trim-round-limit-enabled',trimCfg.roundLimitEnabled);
+  chatSetFieldValue('chat-window-trim-round-limit',trimCfg.roundLimit);
+  chatRenderWindowTrimControls(cfg);
   var cleanCfg=chatAutoCleanConfigFrom(cfg);
   chatSetFieldChecked('chat-auto-clean-enabled',cleanCfg.enabled);
   chatSetFieldValue('chat-auto-clean-mode',cleanCfg.mode);
@@ -4071,6 +4314,7 @@ function chatWriteForm(cfg){
   chatSetFieldChecked('chat-billing-enabled',cfg.billingEnabled!==false);
   chatSetFieldChecked('chat-usage-stats-enabled',cfg.usageStatsEnabled===true);
   chatSetFieldChecked('chat-recall-box-visible',cfg.recallBoxVisible!==false);
+  chatSetFieldChecked('chat-new-session-digest-sync',cfg.newSessionDigestSyncEnabled!==false);
   chatRenderCostDefaults(cfg.costPricingDefaults);
   chatApplyDisplayGateClasses();
   chatRenderTickLegend();
@@ -4078,6 +4322,7 @@ function chatWriteForm(cfg){
   chatUpdateSplitReplyButton(cfg);
   if(document.getElementById('chat-worldbook-injection-position'))document.getElementById('chat-worldbook-injection-position').value=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   chatRenderDailyDigest(cfg);
+  chatRenderWindowApi();
   chatRenderAutoCleanState(cfg);
   chatToggleSettings(!!cfg.settingsOpen,true);
   chatSwitchSideTab(cfg.chatSideTab||'model',true);
@@ -4157,10 +4402,12 @@ function chatSetRecallMode(value,auto){
 }
 function chatSaveConfig(silent){
   var cfg=chatReadForm();
+  chatSaveWindowTrimFromConfig(cfg);
   chatSaveConfigObject(cfg);
   if(!apiProvidersLoaded&&String(cfg.panelKey||'').trim())loadApiProviders({silentAuth:true});
   chatRenderMainRouteSummary();
   chatRenderTrimState(cfg);
+  chatRenderWindowTrimControls(cfg);
   chatUpdateSplitReplyButton(cfg);
   chatUpdateRuntime(cfg);
   chatRenderCacheStrategyState();
@@ -6470,6 +6717,10 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
       speechPreferencePendingBoundaryReason:s.speechPreferencePendingBoundaryReason||'',
       dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
+      apiProviderId:String(s.apiProviderId||'').trim(),
+      apiModel:String(s.apiModel||'').trim(),
+      trimOverrideEnabled:s.trimOverrideEnabled===true,
+      trimConfig:chatNormalizeAutoTrimConfig(s.trimConfig),
       cacheRebuildPending:s.cacheRebuildPending===true,
       cacheFullCreatedAt:s.cacheFullCreatedAt||0,
       cacheFullCreateTokens:s.cacheFullCreateTokens||0,
@@ -7402,6 +7653,13 @@ function chatDailyDigestEntries(session,dayKey){
   if(!session)return [];
   return chatDailyDigestKeepDay(session.dailyDigests,dayKey||chatDailyDigestDayKey(Date.now()));
 }
+function chatNewSessionDailyDigests(cfg,sourceSession){
+  cfg=cfg||chatLoadConfig();
+  sourceSession=sourceSession||null;
+  if(cfg.newSessionDigestSyncEnabled===false||!sourceSession)return [];
+  if(String(sourceSession.title||'').trim()!==CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE)return [];
+  return chatDailyDigestKeepDay(sourceSession.dailyDigests,chatDailyDigestDayKey(Date.now()));
+}
 // 把非目标自然日的条目就地作废。dayKey 省略时按"现在"算，
 // 写入新条目时由调用方传入新条目自己的 dayKey。
 function chatDailyDigestPrune(session,dayKey){
@@ -8022,7 +8280,7 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
         window_messages:chatWindowContextMessages(),
         // 轮询开启时聊天用的是固定 session scope，这里必须同样标注，
         // 否则会清到另一个 scope，聊天侧历史根本不会被更新。
-        chat_polling_enabled:chatPollingView().enabled===true,
+        chat_polling_enabled:chatPollingEnabledForConfig(cfg),
         trim_event_id:String(result.speechPreferenceTrimEventId||''),
         trim_trigger:String(result.trigger||'')
       })
@@ -10456,19 +10714,23 @@ function chatClearLocalMessages(){
 function chatNewSession(){
   chatFlushAssistantRevealQueue();
   var cfg=chatReadForm();
+  var previousSession=chatCurrentSession();
+  chatSaveWindowTrimFromConfig(cfg);
+  var inheritedDigests=chatNewSessionDailyDigests(cfg,previousSession);
   cfg.sessionId=chatSessionId();
   cfg.memoryPreview='';
   chatActiveSessionId=cfg.sessionId;
   chatMessages=[];
-  chatSessions.unshift({id:cfg.sessionId,title:chatDefaultWindowTitle(),messages:[],transportMessages:[],firstUserText:'',firstUserTs:0,created:Date.now(),updated:Date.now()});
+  chatSessions.unshift({id:cfg.sessionId,title:chatDefaultWindowTitle(),messages:[],transportMessages:[],firstUserText:'',firstUserTs:0,dailyDigests:inheritedDigests,created:Date.now(),updated:Date.now()});
   document.getElementById('chat-session-id').value=cfg.sessionId;
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
   chatSaveSessions();
+  chatWriteForm(cfg);
   chatRenderSessions();
   chatRenderMessages();
-  // 新会话没有任何截断总结，面板不能还挂着上一个会话的内容。
+  // 重画新窗口自己的总结；开启继承且来源为“小克”时这里会显示复制后的当天条目。
   chatRenderDailyDigest(cfg);
   chatDebug('debug',{session_id:cfg.sessionId,mode:'new_session',history:'empty'});
   chatUpdateRuntime(cfg);
@@ -10934,7 +11196,7 @@ async function chatSubmitPendingMessages(options){
   // 轮询只发开关和配置修订。候选的地址、Key、模型一律由网关自己从已加载配置解析，
   // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。
   var pollingView=chatPollingView();
-  body.chat_polling_enabled=pollingView.enabled===true;
+  body.chat_polling_enabled=chatPollingEnabledForConfig(cfg);
   body.chat_polling_revision=String(pollingView.revision||'');
   var speechBoundaryNow=!!(trimResult.cacheBoundary||currentSession.cacheRebuildPending);
   var speechEnabledForRequest=chatSpeechPreferencesEnabledForTrim();
@@ -11142,7 +11404,7 @@ async function chatSubmitPendingMessages(options){
           if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
           if(ev==='done'&&data&&data.usage)userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data.usage,null)});
           if(ev==='done'){
-            if(chatPollingLiveState&&chatPollingView().enabled===true){
+            if(chatPollingLiveState&&chatPollingEnabledForConfig(cfg)){
               chatPollingLiveState=Object.assign({},chatPollingLiveState,{state:'success'});
               apiPollingStatusState.data=chatPollingLiveState;
             }
@@ -11401,6 +11663,7 @@ function navTo(tab){
 var currentApiTab='providers';
 var apiProviders={};
 var apiProvidersLoaded=false;
+var apiProvidersLoadError='';
 var apiProvIdSeq=0;
 var pendingProvDel=null;
 var RELOAD_CONFIG_URL=GRAPH_API_BASE+'/reload-config';
@@ -12266,6 +12529,7 @@ async function openProviderPicker(button){
   valueEl.value=picked;
   providerPickerRefresh(button);
   if(scope==='assign')onAssignProviderChange(valueEl);
+  if(scope==='window')chatWindowApiProviderChanged(String(valueEl.value||''));
 }
 function providerCategories(){
   var seen={};
@@ -13030,6 +13294,7 @@ function fetchAssignmentModels(btn){
 var apiProvidersLoadInFlight=null;
 function loadApiProviders(opts){
   if(apiProvidersLoadInFlight)return apiProvidersLoadInFlight;
+  apiProvidersLoadError='';
   apiProvidersLoadInFlight=keyCfgFetch(undefined,opts||{}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
     var prov=(d&&d.providers&&typeof d.providers==='object'&&!Array.isArray(d.providers))?d.providers:{};
     apiDirectConfig={};
@@ -13040,13 +13305,16 @@ function loadApiProviders(opts){
     chatPollingViewPersist();
     renderApiConfig();
     chatRenderMainRouteSummary();
+    chatRenderWindowApi();
     chatUpdateRuntime(chatLoadConfig());
     return true;
   }).catch(function(e){
     apiProvidersLoaded=false;
+    apiProvidersLoadError=(e&&e.message)||'读取失败';
     var body=document.getElementById('api-config-body');
     if(body)body.innerHTML=apiConfigErrorHtml((e&&e.message)||'请确认 CK 网关面板 Key 正确。');
     chatRenderMainRouteSummary();
+    chatRenderWindowApi();
     chatUpdateRuntime(chatLoadConfig());
     return false;
   }).then(function(result){

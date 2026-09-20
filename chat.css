@@ -1161,7 +1161,7 @@ body.chat-active .chat-plus-panel{
   --ck-plus-row:68px;
   --ck-plus-gap:10px;
   --ck-plus-peek:0px;
-  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap) + var(--ck-plus-peek));
+  --ck-plus-view:calc(var(--ck-plus-row) + var(--ck-plus-row) + var(--ck-plus-gap) + var(--ck-plus-peek));
   --ck-plus-chrome:14px;
 }
 body.chat-active .chat-plus-grid{
@@ -1584,6 +1584,23 @@ body.chat-active .chat-main-route-summary{
 
 body.chat-active .chat-main-route-summary.empty{
   color:var(--chat5-muted)!important;
+}
+
+body.chat-active .chat-window-api-row{
+  display:grid!important;
+  gap:6px!important;
+  margin-top:10px!important;
+}
+
+body.chat-active .chat-window-api-row>span{
+  color:var(--chat5-text)!important;
+  font-size:12.5px!important;
+  font-weight:600!important;
+}
+
+body.chat-active .chat-window-api-card>label,
+body.chat-active .chat-window-api-card>.chat-actions{
+  margin-top:10px!important;
 }
 
 body.chat-active .chat-cache-mode-card{

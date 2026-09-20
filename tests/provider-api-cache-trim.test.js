@@ -64,7 +64,7 @@ function testCacheNoticeUsesProviderStrategy(){
     chatPollingView:()=>({enabled:false}),
     chatLoadConfig:()=>({mainRouteCacheStrategy:'native_stable',cacheStrategy:'single_5m'}),
   },[
-    'chatNormalizeCacheStrategy','providerNormalizeCacheStrategy','providerNormalizeApiType',
+    'chatNormalizeCacheStrategy','providerNormalizeCacheStrategy','providerNormalizeApiType','chatPollingEnabledForConfig',
     'chatCacheStrategyMeta','chatCacheNoticeStrategy','chatCacheExpiryInfo',
   ]);
   let info=context.chatCacheExpiryInfo();
@@ -86,7 +86,7 @@ function testPollingNoticeUsesActiveProvider(){
     findLibraryProvider:id=>id==='p1'?{cache_strategy:'native_5m'}:null,
     chatLoadConfig:()=>({cacheStrategy:'native_stable'}),
   },[
-    'chatNormalizeCacheStrategy','providerNormalizeCacheStrategy','chatCacheStrategyMeta',
+    'chatNormalizeCacheStrategy','providerNormalizeCacheStrategy','chatCacheStrategyMeta','chatPollingEnabledForConfig',
     'providerCacheStrategy','chatCacheNoticeStrategy','chatCacheExpiryInfo',
   ]);
   const info=context.chatCacheExpiryInfo();

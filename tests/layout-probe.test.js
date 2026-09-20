@@ -61,7 +61,9 @@ fs.writeFileSync(path.join(outDir,'probe.html'),html);
 const probeJs=`
 const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect();const s=getComputedStyle(el);
   return {top:+r.top.toFixed(1),bottom:+r.bottom.toFixed(1),left:+r.left.toFixed(1),h:+r.height.toFixed(1),w:+r.width.toFixed(1),
-    fontSize:s.fontSize,overflowY:s.overflowY,pointerEvents:s.pointerEvents,display:s.display};};
+    fontSize:s.fontSize,overflowY:s.overflowY,pointerEvents:s.pointerEvents,display:s.display,
+    maxHeight:s.maxHeight,flex:s.flex,paddingTop:s.paddingTop,paddingBottom:s.paddingBottom,borderTopWidth:s.borderTopWidth,
+    plusView:s.getPropertyValue('--ck-plus-view'),plusChrome:s.getPropertyValue('--ck-plus-chrome')};};
 const grid=document.getElementById('chat-plus-grid');
 const buttons=grid?[...grid.querySelectorAll('button')]:[];
 const out={
@@ -86,39 +88,25 @@ console.log('CKPROBE '+JSON.stringify(out));
 `;
 fs.writeFileSync(path.join(outDir,'probe.js'),probeJs);
 
+// 把探针直接内联后只启动一次 Chrome。旧实现先跑一次不含探针的页面、再复用同一个
+// profile 跑第二次，在连续测试时偶发量到展开前的 0 高度。
+let html2=fs.readFileSync(path.join(outDir,'probe.html'),'utf8');
+html2=html2.replace('</body>','<pre id="ck-probe-out"></pre><script>'+
+  'setTimeout(function(){'+probeJs.replace("console.log('CKPROBE '+JSON.stringify(out));","document.getElementById('ck-probe-out').textContent='CKPROBE '+JSON.stringify(out);")+
+  '},100);</script></body>');
+fs.writeFileSync(path.join(outDir,'probe2.html'),html2);
 let raw='';
 try{
   raw=execFileSync(CHROME,[
     '--headless=new','--disable-gpu','--no-sandbox','--hide-scrollbars',
-    '--window-size=414,896','--virtual-time-budget=1500',
-    '--dump-dom','--run-all-compositor-stages-before-draw',
-    '--enable-logging=stderr','--v=0',
-    'file:///'+path.join(outDir,'probe.html').replace(/\\/g,'/')
+    '--user-data-dir='+path.join(outDir,'chrome-profile'),'--force-device-scale-factor=1',
+    '--window-size=414,896','--virtual-time-budget=1500','--dump-dom',
+    'file:///'+path.join(outDir,'probe2.html').replace(/\\/g,'/')
   ],{encoding:'utf8',stdio:['ignore','pipe','ignore'],timeout:90000});
 }catch(e){
   cleanup();
   console.log('layout probe: SKIP (chrome failed: '+(e&&e.message||e)+')');
   process.exit(0);
-}
-
-// --dump-dom 不跑我们的 probe.js，所以改成把探针内联进页面并把结果写进一个隐藏节点。
-if(!/CKPROBE/.test(raw)){
-  let html2=fs.readFileSync(path.join(outDir,'probe.html'),'utf8');
-  html2=html2.replace('</body>','<pre id="ck-probe-out"></pre><script>'+
-    probeJs.replace("console.log('CKPROBE '+JSON.stringify(out));","document.getElementById('ck-probe-out').textContent='CKPROBE '+JSON.stringify(out);")+
-    '</script></body>');
-  fs.writeFileSync(path.join(outDir,'probe2.html'),html2);
-  try{
-    raw=execFileSync(CHROME,[
-      '--headless=new','--disable-gpu','--no-sandbox','--hide-scrollbars',
-      '--window-size=414,896','--virtual-time-budget=1500','--dump-dom',
-      'file:///'+path.join(outDir,'probe2.html').replace(/\\/g,'/')
-    ],{encoding:'utf8',stdio:['ignore','pipe','ignore'],timeout:90000});
-  }catch(e){
-    cleanup();
-    console.log('layout probe: SKIP (chrome failed on second pass)');
-    process.exit(0);
-  }
 }
 
 const match=/CKPROBE (\{[\s\S]*?\})\s*<\/pre>/.exec(raw)||/CKPROBE (\{[\s\S]*\})/.exec(raw);
@@ -141,7 +129,9 @@ if(m.grid&&m.buttons.length===12){
   check(rows.length===3,'12 个图标应该排成 3 行（4 列）',rows);
   const rowH=m.buttons[0].h;
   const visible=rows.map(top=>+(Math.min(m.grid.bottom,top+rowH)-Math.max(m.grid.top,top)).toFixed(1));
-  check(visible[0]>=rowH-1&&visible[1]>=rowH-1,'前两行必须完整露出',{visible,rowH});
+  check(visible[0]>=rowH-1&&visible[1]>=rowH-1,'前两行必须完整露出',{
+    visible,rowH,rows,panel:m.panel,grid:m.grid,scrollHeight:m.gridScrollHeight,clientHeight:m.gridClientHeight
+  });
   check(visible[2]<=1,'展开后正好两行：第三行一点都不许露（2026-08-23 用户要求）',{visible,rowH});
   check(m.gridScrollHeight>m.gridClientHeight+8,'第三行往后必须靠滚动出来',{scroll:m.gridScrollHeight,client:m.gridClientHeight});
   check(m.grid.overflowY==='auto'||m.grid.overflowY==='scroll','滚动必须是原生的（跟手 1:1）',m.grid.overflowY);

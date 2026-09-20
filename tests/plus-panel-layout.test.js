@@ -40,8 +40,8 @@ assert(!/grid-template-rows:repeat\(2,70px\)/.test(css.wechat),'the fixed second
 // 只露 2 行必须靠"限高 + 网格自己能滚"实现，不许改行模板、不许回到 JS 分页。
 // 2026-08-23 起第三行一点都不露（用户说露半行太高了）：peek 归零，公式里只留一个 gap。
 const wechatFlat=css.wechat.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\s+/g,'');
-assert(/--ck-plus-view:calc\(var\(--ck-plus-row\)\*2\+var\(--ck-plus-gap\)\+var\(--ck-plus-peek\)\)/.test(wechatFlat),
-  'the open tray must be exactly 2 rows tall: row*2 + one gap + peek');
+assert(/--ck-plus-view:calc\(var\(--ck-plus-row\)\+var\(--ck-plus-row\)\+var\(--ck-plus-gap\)\+var\(--ck-plus-peek\)\)/.test(wechatFlat),
+  'the open tray must be exactly 2 rows tall using broadly supported calc addition');
 assert(/--ck-plus-peek:0px/.test(wechatFlat),'peek must be 0 — no half-visible third row');
 assert(!/--ck-plus-peek:(?!0px)/.test(wechatFlat),'no media query may re-introduce a peeked third row');
 assert(/\.chat-plus-grid\{[^}]*max-height:var\(--ck-plus-view\)/.test(wechatFlat),'the grid itself must be the scroll container');

@@ -1464,10 +1464,12 @@ body.chat-active .chat-plus-panel{
   --ck-plus-row:70px;
   --ck-plus-gap:8px;
   --ck-plus-peek:0px;
-  --ck-plus-view:calc(var(--ck-plus-row)*2 + var(--ck-plus-gap) + var(--ck-plus-peek));
-  --ck-plus-chrome:26px;
+  --ck-plus-view:calc(var(--ck-plus-row) + var(--ck-plus-row) + var(--ck-plus-gap) + var(--ck-plus-peek));
+  /* max-height uses the panel border box: chrome includes top/bottom padding plus the 1px border. */
+  --ck-plus-chrome:27px;
 }
 body.chat-active .chat-plus-panel.open{
+  flex:0 0 calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;
   max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;
   margin-top:9px!important;
   padding-top:16px!important;
@@ -1552,7 +1554,7 @@ body.dark.chat-active .chat-plus-grid > button.chat-toggle-off b{color:#737373!i
     --ck-plus-row:67px;
     --ck-plus-gap:7px;
     --ck-plus-peek:0px;
-    --ck-plus-chrome:23px;
+    --ck-plus-chrome:24px;
   }
   body.chat-active .chat-plus-panel.open{max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;padding-top:14px!important;padding-bottom:9px!important}
   body.chat-active .chat-plus-grid{grid-auto-rows:67px!important;gap:7px 8px!important;max-height:var(--ck-plus-view)!important}
@@ -1572,7 +1574,7 @@ body.chat-active .chat-plus-grid > button.chat-toggle-off span{
     --ck-plus-row:64px;
     --ck-plus-gap:6px;
     --ck-plus-peek:0px;
-    --ck-plus-chrome:13px;
+    --ck-plus-chrome:14px;
   }
   body.chat-active .chat-plus-panel.open{
     max-height:calc(var(--ck-plus-view) + var(--ck-plus-chrome))!important;
