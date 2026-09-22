@@ -3,9 +3,8 @@
 //
 // 关键不变量（改动前先看这里）：
 // 1. 条目归属的自然日按"被总结内容最后一条消息"的日期算，不是按写入时间算。
-// 2. 写入新条目时按新条目的 dayKey 作废其它日期的全部条目 —— 这就是"跨零点那次截断
-//    保留下来并开始新的一天"的实现方式。
-// 3. 注入包超限时只丢最旧的整条，不做半条截断。
+// 2. 今天及过去 N 天都保留；同日一段，跨日期批次独立。
+// 3. 注入包完整保留范围内的段，不受旧条数或字数限制。
 // 4. 助手正文里的伪思考链不进总结输入。
 // 5. 单条上限对齐网关的防写飞边界（8000）。网关按被截断内容的体量自适应决定写多少字、
 //    且不做硬切；面板这里要是还按 1400 切，等于把一整天重新压回 1400 字。
@@ -46,6 +45,7 @@ function load(context,names){
 }
 
 const DIGEST_CORE=[
+  'chatDailyDigestRetentionDays','chatDailyDigestFirstDay',
   'chatDailyDigestPad2','chatDailyDigestDayKey','chatDailyDigestClock','chatDailyDigestRangeLabel',
   'chatDailyDigestNormalize','chatDailyDigestKeepDay','chatDailyDigestEntries','chatDailyDigestPrune',
   'chatDailyDigestBlockText','chatDailyDigestPack',
@@ -78,13 +78,13 @@ function testRangeLabelMarksTheMidnightCrossing(){
   const ctx=coreContext();
   assert.strictEqual(
     ctx.chatDailyDigestRangeLabel({startTs:at(2026,8,22,14,3),endTs:at(2026,8,22,15,47)}),
-    '14:03–15:47',
-    '同一天只写时刻',
+    '2026-08-22 14:03-15:47',
+    '同一天也必须写完整日期',
   );
   assert.strictEqual(
     ctx.chatDailyDigestRangeLabel({startTs:at(2026,8,21,23,50),endTs:at(2026,8,22,0,20)}),
-    '08-21 23:50–00:20',
-    '跨零点必须把起始那天的日期写出来',
+    '2026-08-21 23:50-2026-08-22 00:20',
+    '跨零点必须把两端完整日期写出来',
   );
 }
 
@@ -96,24 +96,19 @@ function testNormalizeSortsCapsAndDerivesDayKey(){
     {text:'早',end_ts:at(2026,8,22,8,0),start_ts:at(2026,8,22,7,0)},
     {text:'没有时间'},
   ]);
-  assert.strictEqual(rows.map(r=>r.text).join('|'),'早|晚','按结束时间升序，空正文和无时间的丢掉');
+  assert.strictEqual(rows.map(r=>r.text).join('|'),'早\n\n晚','旧存档同日多条完整并为一个日段');
   assert.strictEqual(rows[0].dayKey,'2026-08-22','dayKey 缺失时由 endTs 推出');
   assert.strictEqual(rows[0].startTs,at(2026,8,22,7,0));
-  assert.strictEqual(rows[1].startTs,rows[1].endTs,'没给起始时间就退回结束时间');
+  assert.strictEqual(rows[0].endTs,at(2026,8,22,20,0));
 
   const many=[];
   for(let i=0;i<20;i++)many.push({text:'第'+i,endTs:at(2026,8,22,1,0)+i*60000});
   const capped=ctx.chatDailyDigestNormalize(many);
-  assert.strictEqual(capped.length,12,'按条数上限保留最新的');
-  assert.strictEqual(capped[capped.length-1].text,'第19');
+  assert.strictEqual(capped.length,1,'同一天只有一段');
+  for(let i=0;i<20;i++)assert.ok(capped[0].text.includes('第'+i),'不能丢旧条目');
 
   const long=ctx.chatDailyDigestNormalize([{text:'甲'.repeat(50000),endTs:at(2026,8,22,1,0)}]);
-  assert.strictEqual(long[0].text.length,8000,'单条正文按上限截断');
-
-  // 真实常量必须跟网关的防写飞边界对齐，别再退回 1400。
-  assert.ok(/var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=8000;/.test(source),
-    '单条上限要对齐网关 CHAT_DIGEST_GUARD_CHARS=8000，否则网关不切面板照样切');
-  assert.ok(/var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=24000;/.test(source),'注入包上限要跟着放宽');
+  assert.strictEqual(long[0].text.length,50000,'手写或旧存档合并的正文不能被静默切断');
 }
 
 // 这一组是需求里最容易写错的地方。
@@ -141,7 +136,7 @@ function testExpiryDiscardsOtherDaysOnly(){
 function testPackFormatAndBudget(){
   const entries=[
     {text:'第一段',startTs:at(2026,8,22,9,0),endTs:at(2026,8,22,9,30)},
-    {text:'第二段',startTs:at(2026,8,22,10,0),endTs:at(2026,8,22,10,30)},
+    {text:'第二段',startTs:at(2026,8,23,10,0),endTs:at(2026,8,23,10,30)},
   ];
   const ctx=coreContext({
     chatCurrentSession:()=>({dailyDigests:entries}),
@@ -149,23 +144,23 @@ function testPackFormatAndBudget(){
   });
   // chatDailyDigestEntries 依赖"今天"，测试直接给定 dayKey 走 keepDay。
   const todays=ctx.chatDailyDigestKeepDay(entries,'2026-08-22');
-  assert.strictEqual(todays.length,2);
-  assert.strictEqual(ctx.chatDailyDigestBlockText(todays[0]),'【09:00–09:30】\n第一段');
+  assert.strictEqual(todays.length,1);
+  assert.strictEqual(ctx.chatDailyDigestBlockText(todays[0]),'【2026-08-22 09:00-09:30】\n第一段');
 
   const ctx2=coreContext({
     chatCurrentSession:()=>({dailyDigests:entries}),
   });
-  ctx2.chatDailyDigestEntries=()=>ctx2.chatDailyDigestKeepDay(entries,'2026-08-22');
+  ctx2.chatDailyDigestEntries=()=>ctx2.chatDailyDigestNormalize(entries);
   const pack=ctx2.chatDailyDigestPack({dailyDigestEnabled:true});
-  assert.ok(pack.indexOf('【09:00–09:30】')<pack.indexOf('【10:00–10:30】'),'注入包保持时间顺序');
+  assert.ok(pack.indexOf('【2026-08-22 09:00-09:30】')<pack.indexOf('【2026-08-23 10:00-10:30】'),'注入包保持时间顺序');
 
   assert.strictEqual(ctx2.chatDailyDigestPack({dailyDigestEnabled:false}),'','关闭后不注入');
 
   ctx2.CHAT_DAILY_DIGEST_MAX_PACK_CHARS=20;
   const tight=ctx2.chatDailyDigestPack({dailyDigestEnabled:true});
-  assert.ok(tight.indexOf('第一段')<0,'超预算先丢最旧的整条');
+  assert.ok(tight.indexOf('第一段')>=0,'旧字数限制不能丢掉有效期内的段');
   assert.ok(tight.indexOf('第二段')>=0);
-  assert.ok(tight.indexOf('【10:00–10:30】')===0,'剩下的仍然是完整条目，不是半条');
+  assert.strictEqual(tight,pack,'设置保留期内完整注入');
 }
 
 function testRequestMessagesStripPseudoThinking(){
@@ -198,7 +193,7 @@ function testPanelWiring(){
   const digest=html.indexOf('id="chat-daily-digest-pack"');
   const actions=html.indexOf('onclick="chatClearLocalMessages()"');
   assert.ok(recall>=0&&digest>recall&&digest<actions,'当日截断总结必须排在本轮召回内容下面');
-  assert.ok(/<label>当日截断总结<textarea id="chat-daily-digest-pack"[^>]*oninput="chatDailyDigestMarkEdited\(\)"/.test(html),
+  assert.ok(/<label>截断总结<textarea id="chat-daily-digest-pack"[^>]*oninput="chatDailyDigestMarkEdited\(\)"/.test(html),
     '结构必须和本轮召回内容对齐：裸 label + textarea，并且要接上编辑标记');
   assert.ok(!/<textarea id="chat-daily-digest-pack"[^>]*readonly/.test(html),
     '总结正文要可编辑，readonly 必须撤掉');
@@ -229,8 +224,8 @@ function testPanelWiring(){
   const request=extractFunction('chatDailyDigestRequest');
   assert.ok(!/toast\(/.test(request.slice(0,request.indexOf('}catch('))),'成功路径不能弹通知');
   assert.ok(/toast\([^)]*当日截断总结失败/.test(request),'失败必须在面板通知');
-  assert.ok(request.includes("chatDailyDigestPrune(session,dayKey)"),'写入前按新条目的自然日作废旧条目');
-  assert.ok(request.includes("data.merge_with_previous===true"),'要处理网关给的合并决定');
+  assert.ok(request.includes('chatDailyDigestPrune(session,todayKey,cfg)'),'按真实当前日期和保留期过期');
+  assert.ok(request.includes('data.merge_with_previous!==true'),'模型不合并时必须保住同日旧正文');
   // 合并时网关要按"旧总结有多长、覆盖了多少轮"算字数预算，rounds 必须一起送。
   assert.ok(/rounds:Number\(row\.rounds\|\|0\)\|\|0/.test(request),
     'previous 里要带 rounds，否则几十轮的旧总结会被当成一条短总结重写，越合并越薄');
@@ -379,7 +374,7 @@ function testEditParsing(){
 
   // 1. 保留表头逐条替换：只有改过的那条打 edited 标记。
   // （断言一律用 join 比字符串：条目数组是在 vm realm 里造的，deepStrictEqual 过不了跨 realm 检查。）
-  let parsed=ctx.chatDailyDigestParseEdit('【09:00–09:30】\n甲改写\n\n【11:00–12:00】\n乙原文',[a,b]);
+  let parsed=ctx.chatDailyDigestParseEdit('【2026-08-24 09:00-09:30】\n甲改写\n\n【2026-08-24 11:00-12:00】\n乙原文',[a,b]);
   assert.strictEqual(parsed.mode,'blocks');
   assert.strictEqual(parsed.entries.map(r=>r.text).join('|'),'甲改写|乙原文');
   assert.strictEqual(parsed.entries[0].edited,true,'改过的要标记');
@@ -388,9 +383,9 @@ function testEditParsing(){
   assert.strictEqual(parsed.entries[0].rounds,4,'轮数等元数据不能被编辑抹掉');
 
   // 2. 正文清空 = 删掉这一条；整块删掉也一样。
-  parsed=ctx.chatDailyDigestParseEdit('【09:00–09:30】\n\n【11:00–12:00】\n乙原文',[a,b]);
+  parsed=ctx.chatDailyDigestParseEdit('【2026-08-24 09:00-09:30】\n\n【2026-08-24 11:00-12:00】\n乙原文',[a,b]);
   assert.strictEqual(parsed.entries.map(r=>r.id).join('|'),'b','正文清空就是删这一条');
-  parsed=ctx.chatDailyDigestParseEdit('【11:00–12:00】\n乙原文',[a,b]);
+  parsed=ctx.chatDailyDigestParseEdit('【2026-08-24 11:00-12:00】\n乙原文',[a,b]);
   assert.strictEqual(parsed.entries.map(r=>r.id).join('|'),'b','整块删掉的条目不再保留');
 
   // 3. 整段不带【】：合并成一条，时间范围取并集、轮数累加。
@@ -416,7 +411,7 @@ function testEditParsing(){
   // 6. 表头对不上就报错，不猜、不丢数据。
   assert.ok(ctx.chatDailyDigestParseEdit('【08:00–08:30】\n乱写',[a,b]).error,'时段对不上必须报错');
   assert.ok(!ctx.chatDailyDigestParseEdit('【08:00–08:30】\n乱写',[a,b]).entries,'报错时不返回任何条目');
-  assert.ok(ctx.chatDailyDigestParseEdit('先写一句\n【09:00–09:30】\n甲',[a,b]).error,
+  assert.ok(ctx.chatDailyDigestParseEdit('先写一句\n【2026-08-24 09:00-09:30】\n甲',[a,b]).error,
     '第一个表头上面还有内容时无法判断归属，要报错');
 }
 
@@ -430,7 +425,97 @@ testPanelWiring();
 testWaitWiring();
 testEditWiring();
 testEditParsing();
-testWaitBehaviour().then(()=>{
+function testRetentionWindow(){
+  const ctx=coreContext();
+  for(const [value,expected] of [[undefined,0],['bad',0],[-1,0],[0,0],[1,1],[3.9,3],[100,100],[101,100]]){
+    assert.strictEqual(ctx.chatDailyDigestRetentionDays(value),expected);
+  }
+  const rows=[];
+  for(let day=1;day<=22;day++)rows.push({id:'d'+day,text:'日'+day,endTs:at(2026,9,day,15,0)});
+  const session={dailyDigests:rows};
+  for(const days of [0,1,3]){
+    const kept=ctx.chatDailyDigestEntries(session,'2026-09-22',{dailyDigestRetentionDays:days});
+    assert.strictEqual(kept.length,days+1);
+    assert.strictEqual(kept[0].dayKey,'2026-09-'+(22-days));
+  }
+  assert.strictEqual(ctx.chatDailyDigestFirstDay('2026-03-01',1),'2026-02-28');
+  assert.strictEqual(ctx.chatDailyDigestFirstDay('2028-03-01',1),'2028-02-29');
+  assert.strictEqual(ctx.chatDailyDigestFirstDay('2026-01-01',1),'2025-12-31');
+  const full=[];
+  for(let i=101;i>=0;i--)full.push({id:'long'+i,text:'正文'.repeat(500),endTs:at(2026,9,22-i,12,0)});
+  const fullSession={dailyDigests:JSON.parse(JSON.stringify(ctx.chatDailyDigestNormalize(full)))};
+  const kept=ctx.chatDailyDigestEntries(fullSession,'2026-09-22',{dailyDigestRetentionDays:100});
+  assert.strictEqual(kept.length,101,'刷新后仍然有101个日期，不能被旧12条上限裁掉');
+  ctx.chatDailyDigestEntries=()=>kept;
+  const pack=ctx.chatDailyDigestPack({dailyDigestRetentionDays:100},fullSession);
+  assert.strictEqual((pack.match(/^【/gm)||[]).length,101);
+  assert.ok(pack.length>100000,'整包不能被旧24000字上限裁掉');
+  assert.ok(html.includes('id="chat-daily-digest-retention-days" type="number" min="0" max="100"'));
+}
+
+async function testDateAwareRequests(){
+  let clock=at(2026,9,22,12,0), cfg={panelKey:'test',dailyDigestRetentionDays:3};
+  class TestDate extends Date{
+    constructor(...args){super(...(args.length?args:[clock]))}
+    static now(){return clock}
+  }
+  let session={id:'s',dailyDigests:[]}, calls=[], beforeReply=null, output='生成正文', merge=false;
+  const ctx=coreContext({
+    Date:TestDate,setTimeout,clearTimeout,CHAT_DAILY_DIGEST_TIMEOUT_MS:5000,
+    chatLoadConfig:()=>cfg,chatCurrentSession:()=>session,chatSessions:[session],
+    chatDailyDigestEndpoint:()=> 'https://test.invalid',
+    chatSaveSessions:()=>{},chatRenderDailyDigest:()=>{},chatDebug:()=>{},
+    chatDailyDigestSetStatus:()=>{},toast:()=>{},
+    fetch:async(url,options)=>{
+      calls.push(JSON.parse(options.body));
+      if(beforeReply)beforeReply();
+      return {ok:true,json:async()=>({ok:true,prepared:true,text:output,merge_with_previous:merge})};
+    },
+  });
+  load(ctx,['chatDailyDigestFindSession','chatDailyDigestRequest']);
+  const run=(start,end)=>ctx.chatDailyDigestRequest(cfg,{sessionId:'s',rounds:20,trigger:'manual',messages:[
+    {role:'user',text:'问题',ts:start},{role:'assistant',text:'回答',ts:end},
+  ]});
+  await run(at(2026,9,19,13,18),at(2026,9,19,19,32));
+  await run(at(2026,9,20,13,18),at(2026,9,20,19,32));
+  await run(at(2026,9,21,13,18),at(2026,9,21,19,32));
+  await run(at(2026,9,22,1,0),at(2026,9,22,2,0));
+  assert.strictEqual(session.dailyDigests.length,4,'3天=四个日段');
+  const oldToday=session.dailyDigests[3].text;
+  await run(at(2026,9,21,23,50),at(2026,9,22,0,20));
+  assert.strictEqual(calls.at(-1).previous.length,0,'跨日期20轮单独生成，不读日段作为合并目标');
+  assert.strictEqual(session.dailyDigests.length,5);
+  assert.strictEqual(session.dailyDigests[3].kind,'cross_date','跨日期段排在昨天和今天之间');
+  merge=true;output='当天合并正文';
+  await run(at(2026,9,22,3,0),at(2026,9,22,4,0));
+  assert.strictEqual(calls.at(-1).previous.length,1);
+  assert.strictEqual(calls.at(-1).previous[0].text,oldToday,'只能并入今天日段，不能并入跨日期段');
+  assert.strictEqual(session.dailyDigests.length,5);
+  assert.strictEqual(session.dailyDigests.at(-1).text,output);
+  assert.strictEqual(session.dailyDigests.at(-1).rounds,40);
+  merge=false;output='换话题的新正文';
+  await run(at(2026,9,22,5,0),at(2026,9,22,6,0));
+  assert.strictEqual(session.dailyDigests.length,5,'模型说不合并仍然要保持每天一段');
+  assert.ok(session.dailyDigests.at(-1).text.includes('当天合并正文'));
+  assert.ok(session.dailyDigests.at(-1).text.includes(output));
+  const before=calls.length;
+  await run(at(2026,9,18,5,0),at(2026,9,18,6,0));
+  assert.strictEqual(calls.length,before,'保留期外不调用模型');
+  cfg.dailyDigestRetentionDays=0;
+  beforeReply=()=>{clock=at(2026,9,23,0,1)};
+  await run(at(2026,9,22,7,0),at(2026,9,22,8,0));
+  assert.strictEqual(ctx.chatDailyDigestPack(cfg,session),'','跨午夜晚回来的结果不能重新注入已过期内容');
+  clock=at(2026,9,22,12,0);cfg.dailyDigestRetentionDays=3;
+  beforeReply=()=>{session.dailyDigests.at(-1).text='用户编辑的新正文'};
+  await run(at(2026,9,22,7,0),at(2026,9,22,8,0));
+  assert.strictEqual(session.dailyDigests.at(-1).text,'用户编辑的新正文','后台结果不能覆盖期间已保存的编辑');
+  const edit=editContext();
+  assert.ok(edit.chatDailyDigestParseEdit('想合成一段',session.dailyDigests).error,
+    '多日手工编辑不能删除时间分段');
+}
+
+testRetentionWindow();
+Promise.all([testWaitBehaviour(),testDateAwareRequests()]).then(()=>{
   console.log('daily digest tests: OK');
 },error=>{
   console.error(error);

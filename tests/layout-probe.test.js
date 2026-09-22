@@ -92,8 +92,8 @@ fs.writeFileSync(path.join(outDir,'probe.js'),probeJs);
 // profile 跑第二次，在连续测试时偶发量到展开前的 0 高度。
 let html2=fs.readFileSync(path.join(outDir,'probe.html'),'utf8');
 html2=html2.replace('</body>','<pre id="ck-probe-out"></pre><script>'+
-  'setTimeout(function(){'+probeJs.replace("console.log('CKPROBE '+JSON.stringify(out));","document.getElementById('ck-probe-out').textContent='CKPROBE '+JSON.stringify(out);")+
-  '},100);</script></body>');
+  'window.addEventListener("load",function(){document.querySelectorAll("*").forEach(function(el){el.style.setProperty("transition","none","important");el.style.setProperty("animation","none","important")});setTimeout(function(){'+probeJs.replace("console.log('CKPROBE '+JSON.stringify(out));","document.getElementById('ck-probe-out').textContent='CKPROBE '+JSON.stringify(out);")+
+  '},100)});</script></body>');
 fs.writeFileSync(path.join(outDir,'probe2.html'),html2);
 let raw='';
 try{

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v233-window-api-digest-and-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v234-digest-date-retention';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1502,14 +1502,7 @@ var CHAT_AUTO_TRIM_IDLE_MS=60*60*1000;
 var CHAT_AUTO_CLEAN_DEFAULT_ROUNDS=100;
 var CHAT_AUTO_CLEAN_MIN_ROUNDS=5;
 var CHAT_AUTO_CLEAN_MAX_ROUNDS=5000;
-// 当日截断总结。每次真正丢掉历史的自动截断都会静默生成一条，成功不通知、失败才提示。
-// 条目归属的自然日按"被总结内容里最后一条消息"落在哪一天算：
-// 跨零点那一次截断（例如 23:50–00:20）因此算新一天的第一条，并作废前一天全部条目。
-var CHAT_DAILY_DIGEST_MAX_ENTRIES=12;
-// 单条上限对齐网关的 CHAT_DIGEST_GUARD_CHARS：网关按被截断内容的体量自适应决定
-// 写多少字、且不做硬切，面板这里要是还按 1400 切，等于把一整天压回 1400 字。
-var CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS=8000;
-var CHAT_DAILY_DIGEST_MAX_PACK_CHARS=24000;
+// 截断总结：每日段及跨日期段，按用户设置的自然日范围保留。
 var CHAT_DAILY_DIGEST_TIMEOUT_MS=90000;
 // 截断那一轮等总结的上限。网关侧 CHAT_DIGEST_TIMEOUT_SECONDS 默认 80 秒、prepare
 // 总预算再 +5 秒；面板只等到这里为止，超时就放弃等待、照常发送，
@@ -2462,6 +2455,7 @@ function chatDefaultConfig(){
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
+    dailyDigestRetentionDays:0,
     newSessionDigestSyncEnabled:true,
     costPricing:chatDefaultCostPricing(),
     costPricingDefaults:[],
@@ -3206,6 +3200,7 @@ function chatLoadConfig(){
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
+  cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   cfg.costPricingDefaults=chatNormalizeCostDefaults(cfg.costPricingDefaults);
@@ -3286,6 +3281,7 @@ function chatSaveConfigObject(cfg){
   cfg.autoCleanMode=autoCleanSave.mode;
   cfg.autoCleanRounds=autoCleanSave.rounds;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
+  cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
@@ -4231,6 +4227,7 @@ function chatReadForm(){
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
+    dailyDigestRetentionDays:chatDailyDigestRetentionDays(chatFieldValue('chat-daily-digest-retention-days',saved.dailyDigestRetentionDays)),
     newSessionDigestSyncEnabled:chatFieldChecked('chat-new-session-digest-sync',saved.newSessionDigestSyncEnabled!==false),
     costPricing:chatReadCostPricing(saved.costPricing),
     costPricingDefaults:chatReadCostDefaults(saved.costPricingDefaults),
@@ -7579,13 +7576,21 @@ function chatDiscardPendingSpeechPreference(session){
   if(session.speechPreferenceRetryAtBoundary===true){session.speechPreferenceRetryAtBoundary=false;changed=true}
   return changed;
 }
-// ===== 当日截断总结 =====
+// ===== 按日期保留的截断总结 =====
 // 截断把最旧的完整真实轮次从上下文里删掉，这里负责让助手仍然记得刚才聊了什么、
 // 当时是什么气氛。生成在网关（无状态的 /ck/chat-digest/prepare），存储和有效期在这里，
 // 因为只有面板知道用户本地时钟的自然日边界。
-// 有效期规则：条目只在"它自己的 dayKey"那一天有效；写入新条目时按新条目的 dayKey
-// 作废其它日期的全部条目。所以 23:50–00:20 那一次截断会被保留成新一天的第一条，
-// 并顺手把前一天的所有条目丢掉。
+// 保留今天及之前 N 个自然日；跨日期批次按结束日期过期，始终独立于每日总结。
+function chatDailyDigestRetentionDays(value){
+  var days=Number(value);
+  return isFinite(days)?Math.max(0,Math.min(100,Math.floor(days))):0;
+}
+function chatDailyDigestFirstDay(dayKey,days){
+  var parts=String(dayKey||'').split('-').map(Number);
+  var date=new Date(parts[0],parts[1]-1,parts[2],12);
+  date.setDate(date.getDate()-chatDailyDigestRetentionDays(days));
+  return chatDailyDigestDayKey(date.getTime());
+}
 function chatDailyDigestPad2(value){
   value=Math.floor(Number(value)||0);
   return (value<10?'0':'')+value;
@@ -7612,8 +7617,8 @@ function chatDailyDigestRangeLabel(entry){
   var endTs=Number(entry.endTs||0)||0;
   var startDay=chatDailyDigestDayKey(startTs);
   var endDay=chatDailyDigestDayKey(endTs);
-  var head=(startDay&&endDay&&startDay!==endDay)?(startDay.slice(5)+' '):'';
-  return head+chatDailyDigestClock(startTs)+'–'+chatDailyDigestClock(endTs);
+  return (startDay||entry.dayKey||'日期未知')+' '+chatDailyDigestClock(startTs)+'-'+
+    (startDay!==endDay?(endDay+' '):'')+chatDailyDigestClock(endTs);
 }
 function chatDailyDigestNormalize(list){
   var out=[];
@@ -7623,14 +7628,15 @@ function chatDailyDigestNormalize(list){
     if(!text)return;
     var endTs=Number(row.endTs!==undefined?row.endTs:row.end_ts)||0;
     var startTs=Number(row.startTs!==undefined?row.startTs:row.start_ts)||endTs;
-    var dayKey=String(row.dayKey||row.day_key||'')||chatDailyDigestDayKey(endTs);
+    var dayKey=chatDailyDigestDayKey(endTs)||String(row.dayKey||row.day_key||'');
     if(!dayKey)return;
     out.push({
       id:String(row.id||('dg-'+endTs+'-'+Math.random().toString(36).slice(2,7))),
       startTs:startTs,
       endTs:endTs,
       dayKey:dayKey,
-      text:text.slice(0,CHAT_DAILY_DIGEST_ENTRY_MAX_CHARS),
+      kind:chatDailyDigestDayKey(startTs)!==dayKey?'cross_date':'daily',
+      text:text,
       rounds:Number(row.rounds||0)||0,
       mergedCount:Number(row.mergedCount||row.merged_count||0)||0,
       trigger:String(row.trigger||''),
@@ -7640,18 +7646,39 @@ function chatDailyDigestNormalize(list){
     });
   });
   out.sort(function(a,b){return (a.endTs||0)-(b.endTs||0)||(a.createdAt||0)-(b.createdAt||0)});
-  if(out.length>CHAT_DAILY_DIGEST_MAX_ENTRIES)out=out.slice(out.length-CHAT_DAILY_DIGEST_MAX_ENTRIES);
-  return out;
+  // 兼容旧存档同日多条：完整拼接成一个日段，不丢正文；跨日期段各自保留。
+  var grouped=[],days={};
+  out.forEach(function(row){
+    var previous=row.kind==='daily'?days[row.dayKey]:null;
+    if(previous){
+      previous.text+='\n\n'+row.text;
+      previous.startTs=Math.min(previous.startTs,row.startTs);
+      previous.endTs=Math.max(previous.endTs,row.endTs);
+      previous.rounds+=row.rounds;
+      previous.mergedCount+=row.mergedCount+1;
+      previous.edited=previous.edited||row.edited;
+    }else{
+      grouped.push(row);
+      if(row.kind==='daily')days[row.dayKey]=row;
+    }
+  });
+  grouped.sort(function(a,b){return a.startTs-b.startTs||a.endTs-b.endTs});
+  return grouped;
 }
 function chatDailyDigestKeepDay(list,dayKey){
   dayKey=String(dayKey||'');
   if(!dayKey)return [];
   return chatDailyDigestNormalize(list).filter(function(row){return row.dayKey===dayKey});
 }
-function chatDailyDigestEntries(session,dayKey){
+function chatDailyDigestEntries(session,dayKey,cfg){
   session=session||chatCurrentSession();
   if(!session)return [];
-  return chatDailyDigestKeepDay(session.dailyDigests,dayKey||chatDailyDigestDayKey(Date.now()));
+  cfg=cfg||chatLoadConfig();
+  dayKey=dayKey||chatDailyDigestDayKey(Date.now());
+  var firstDay=chatDailyDigestFirstDay(dayKey,cfg.dailyDigestRetentionDays);
+  return chatDailyDigestNormalize(session.dailyDigests).filter(function(row){
+    return row.dayKey>=firstDay&&row.dayKey<=dayKey;
+  });
 }
 function chatNewSessionDailyDigests(cfg,sourceSession){
   cfg=cfg||chatLoadConfig();
@@ -7660,32 +7687,22 @@ function chatNewSessionDailyDigests(cfg,sourceSession){
   if(String(sourceSession.title||'').trim()!==CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE)return [];
   return chatDailyDigestKeepDay(sourceSession.dailyDigests,chatDailyDigestDayKey(Date.now()));
 }
-// 把非目标自然日的条目就地作废。dayKey 省略时按"现在"算，
-// 写入新条目时由调用方传入新条目自己的 dayKey。
-function chatDailyDigestPrune(session,dayKey){
+// 过期边界始终以当前自然日计算，不因晚到的旧日总结而向过去移动。
+function chatDailyDigestPrune(session,dayKey,cfg){
   if(!session)return {changed:false,entries:[]};
   var before=chatDailyDigestNormalize(session.dailyDigests);
-  var kept=chatDailyDigestKeepDay(before,dayKey||chatDailyDigestDayKey(Date.now()));
+  var kept=chatDailyDigestEntries(session,dayKey,cfg);
   session.dailyDigests=kept;
   return {changed:kept.length!==before.length,entries:kept};
 }
 function chatDailyDigestBlockText(entry){
   return '【'+chatDailyDigestRangeLabel(entry)+'】\n'+String((entry&&entry.text)||'');
 }
-// 注入用的正文。超出总字数上限时先丢最旧的整条，不做半条截断。
+// 保留范围内所有完整段都注入，不再受旧的 12 条 / 24000 字容量限制。
 function chatDailyDigestPack(cfg,session){
   cfg=cfg||chatLoadConfig();
   if(cfg.dailyDigestEnabled===false)return '';
-  var entries=chatDailyDigestEntries(session);
-  var blocks=[],chars=0;
-  for(var i=entries.length-1;i>=0;i--){
-    var block=chatDailyDigestBlockText(entries[i]);
-    if(blocks.length&&chars+block.length+2>CHAT_DAILY_DIGEST_MAX_PACK_CHARS)break;
-    blocks.push(block);
-    chars+=block.length+2;
-  }
-  blocks.reverse();
-  return blocks.join('\n\n');
+  return chatDailyDigestEntries(session,null,cfg).map(chatDailyDigestBlockText).join('\n\n');
 }
 function chatDailyDigestEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
@@ -7747,7 +7764,7 @@ function chatRenderDailyDigest(cfg,opts){
   cfg=cfg||chatLoadConfig();
   opts=opts||{};
   var session=chatCurrentSession();
-  var pruned=chatDailyDigestPrune(session);
+  var pruned=chatDailyDigestPrune(session,null,cfg);
   if(pruned.changed)chatSaveSessions();
   var entries=pruned.entries;
   var sessionId=String((session||{}).id||'');
@@ -7756,6 +7773,7 @@ function chatRenderDailyDigest(cfg,opts){
   var keepDraft=chatDailyDigestEditDirty&&opts.force!==true;
   if(!keepDraft)chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestDisplayText(entries));
   chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
+  chatSetFieldValue('chat-daily-digest-retention-days',chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays));
   var hint=document.getElementById('chat-daily-digest-hint');
   if(hint){
     var edited=entries.filter(function(row){return row.edited===true}).length;
@@ -7764,12 +7782,13 @@ function chatRenderDailyDigest(cfg,opts){
     }else if(!entries.length&&chatDailyDigestLastError){
       hint.textContent='空的原因是最近一次生成失败："'+chatDailyDigestLastError+'"。可以直接在这里手写今天的总结再保存。';
     }else if(!entries.length){
-      hint.textContent='今天还没有发生过截断。截断成功时静默生成，不会打扰你；也可以直接在这里手写一段再保存。';
+      hint.textContent='保留范围内还没有截断总结。截断成功时静默生成；也可以直接在这里手写今天的总结再保存。';
     }else{
       var chars=chatDailyDigestPack(cfg,session).length;
-      hint.textContent='今天 '+entries.length+' 条'+(edited?('（'+edited+' 条已手工编辑）'):'')+
-        ' · 注入 '+chars+' 字 · 位置：系统缓存断点之前（和系统提示词一起进缓存）。明天零点自动作废。'+
-        '正文可以直接改：保留【时段】那一行就按条替换，整段删成一段没有【】的文字就合并成一条。';
+      var crossCount=entries.filter(function(row){return row.kind==='cross_date'}).length;
+      hint.textContent='保留今天及之前 '+chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays)+' 天 · '+
+        (entries.length-crossCount)+' 段每日总结 / '+crossCount+' 段跨日期总结'+(edited?('（'+edited+' 段已手工编辑）'):'')+
+        ' · 注入 '+chars+' 字。每天零点按保留天数过期，跨日期段按结束日期计算。保留【日期 时段】并修改各段正文。';
     }
   }
   if(keepDraft)chatDailyDigestSetStatus('有未保存的修改，点「保存总结正文」才会生效。');
@@ -7825,7 +7844,12 @@ function chatDailyDigestParseEdit(raw,entries){
     (sections.length?sections[sections.length-1].lines:lead).push(line);
   });
   function body(rows){return rows.join('\n').trim()}
-  if(!sections.length)return {mode:'merge',entries:chatDailyDigestMergeEdit(body(lead),entries)};
+  if(!sections.length){
+    if(body(lead)&&entries.some(function(row){return chatDailyDigestDayKey(row.startTs)!==entries[0].dayKey||row.dayKey!==entries[0].dayKey})){
+      return {error:'有多个日期或跨日期总结时，请保留每段【日期 时段】分别修改，避免把不同日期合成一段。'};
+    }
+    return {mode:'merge',entries:chatDailyDigestMergeEdit(body(lead),entries)};
+  }
   if(body(lead))return {error:'第一个【时段】上面不能再写内容：要么每段都跟在自己的【时段】下面，要么整段都不写【】（那样会合并成一条）。'};
   var out=[];
   for(var i=0;i<sections.length;i++){
@@ -7847,7 +7871,7 @@ function chatSaveDailyDigestText(){
   var cfg=chatLoadConfig();
   var session=chatCurrentSession();
   if(!session){toast('没有可保存的会话');return null}
-  var before=chatDailyDigestEntries(session);
+  var before=chatDailyDigestEntries(session,null,cfg);
   var parsed=chatDailyDigestParseEdit(el.value,before);
   if(parsed.error){
     chatDailyDigestSetStatus(parsed.error,'error');
@@ -7868,16 +7892,16 @@ function chatSaveDailyDigestText(){
   chatDailyDigestSetStatus(
     next.length
       ?'已保存：'+next.length+' 条 · 下一轮注入 '+chars+' 字'
-      :'已保存：今天的总结已清空，不再注入。',
+      :'已保存：保留范围内的总结已清空，不再注入。',
     'ok'
   );
-  toast(next.length?'当日截断总结已保存':'当日截断总结已清空');
+  toast(next.length?'截断总结已保存':'截断总结已清空');
   return next;
 }
 function chatResetDailyDigestText(){
   chatDailyDigestEditDirty=false;
   var entries=chatRenderDailyDigest(chatLoadConfig(),{force:true});
-  chatDailyDigestSetStatus('已恢复为当前存档'+(entries.length?('（'+entries.length+' 条）'):'（今天还没有条目）'),'ok');
+  chatDailyDigestSetStatus('已恢复为当前存档'+(entries.length?('（'+entries.length+' 条）'):'（保留范围内还没有条目）'),'ok');
   return entries;
 }
 function chatSaveDailyDigestSetting(auto){
@@ -7885,11 +7909,11 @@ function chatSaveDailyDigestSetting(auto){
   if(!auto){
     chatDailyDigestSetStatus(
       cfg.dailyDigestEnabled===false
-        ?'已保存：当日截断总结已关闭'
-        :'已保存：当日截断总结已启用',
+        ?'已保存：截断总结已关闭'
+        :'已保存：截断总结已启用，保留今天及之前 '+cfg.dailyDigestRetentionDays+' 天',
       'ok'
     );
-    toast('当日截断总结设置已保存');
+    toast('截断总结设置已保存');
   }
   return cfg;
 }
@@ -7968,7 +7992,7 @@ async function chatDailyDigestRequest(cfg,job){
   if(cfg.dailyDigestEnabled===false)return null;
   var panelKey=String(cfg.panelKey||'').trim();
   if(!panelKey)return null;
-  var session=chatDailyDigestFindSession(job.sessionId)||chatCurrentSession();
+  var session=chatDailyDigestFindSession(job.sessionId);
   if(!session)return null;
   var startTs=0,endTs=0;
   messages.forEach(function(row){
@@ -7982,20 +8006,19 @@ async function chatDailyDigestRequest(cfg,job){
   if(!startTs)startTs=endTs;
   var dayKey=chatDailyDigestDayKey(endTs);
   var todayKey=chatDailyDigestDayKey(now);
-  // 内容整段落在过去某一天：总结出来当天就已经过期，没必要花一次模型调用。
-  // 顺手把陈旧条目清掉，这样"隔天回来第一次截断"不会留下前一天的注入。
-  if(dayKey!==todayKey){
-    var stale=chatDailyDigestPrune(session,todayKey);
+  // 未截断的旧消息也可能仍在用户设置的保留期内。
+  if(dayKey<chatDailyDigestFirstDay(todayKey,cfg.dailyDigestRetentionDays)||dayKey>todayKey){
+    var stale=chatDailyDigestPrune(session,todayKey,cfg);
     if(stale.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
     chatDebug('daily_digest',{ok:true,skipped:'expired_day',day_key:dayKey,today:todayKey,messages:messages.length});
     return null;
   }
-  // 先按新条目的自然日作废其它日期的条目，再把剩下的当日条目交给网关做合并判断。
-  // 跨零点的那一次截断就是在这里"开始新的一天"。
-  var pruned=chatDailyDigestPrune(session,dayKey);
+  var pruned=chatDailyDigestPrune(session,todayKey,cfg);
+  var crossDate=chatDailyDigestDayKey(startTs)!==dayKey;
+  var targets=chatDailyDigestNormalize(pruned.entries).filter(function(row){return !crossDate&&row.kind==='daily'&&row.dayKey===dayKey});
   // rounds 一起送过去：网关按"这条旧总结覆盖了多少轮"和它自己的字数算合并时的字数预算，
   // 否则一整天几十轮会被当成一条短总结重写，越合并越薄。
-  var previous=pruned.entries.map(function(row){
+  var previous=targets.map(function(row){
     return {start_ts:row.startTs,end_ts:row.endTs,text:row.text,rounds:Number(row.rounds||0)||0};
   });
   var controller=null,timer=0,timedOut=false;
@@ -8014,6 +8037,7 @@ async function chatDailyDigestRequest(cfg,job){
         session_id:String(session.id||cfg.sessionId||''),
         event_id:'dg-'+endTs+'-'+Math.random().toString(36).slice(2,8),
         reason:job.trigger||'auto_trim',
+        merge_mode:'by_date',
         tz_offset_minutes:-new Date().getTimezoneOffset(),
         messages:messages,
         previous:previous
@@ -8033,20 +8057,33 @@ async function chatDailyDigestRequest(cfg,job){
       startTs:startTs,
       endTs:endTs,
       dayKey:dayKey,
+      kind:crossDate?'cross_date':'daily',
       text:text,
       rounds:Number(job.rounds||0)||0,
       trigger:String(job.trigger||''),
       createdAt:Date.now()
     };
-    var kept=pruned.entries.slice();
-    var merged=data.merge_with_previous===true&&kept.length>0;
+    // 等待期间用户可能改设置、编辑或删除会话；不能把旧快照写回并复活数据。
+    cfg=chatLoadConfig();
+    session=chatDailyDigestFindSession(job.sessionId);
+    if(!session||cfg.dailyDigestEnabled===false)return null;
+    var kept=chatDailyDigestEntries(session,null,cfg);
+    if(!chatDailyDigestEntries({dailyDigests:[entry]},null,cfg).length)return null;
+    var target=targets.length?targets[0]:null;
+    var liveTarget=target?kept.find(function(row){return row.id===target.id}):null;
+    if(target&&(!liveTarget||liveTarget.text!==target.text)){
+      throw new Error('总结生成期间原正文已被修改，本次结果未覆盖你的修改');
+    }
+    var merged=!!liveTarget;
     if(merged){
-      // 话题连续时替换掉上一条，时间范围往前扩到旧条目的起点，保持一条完整连贯的记录。
-      var last=kept[kept.length-1];
+      // 同一天始终只有一段，跨日期批次不参与合并。
+      var last=liveTarget;
+      if(data.merge_with_previous!==true)entry.text=last.text+'\n\n'+entry.text;
       entry.startTs=Math.min(Number(last.startTs||entry.startTs)||entry.startTs,entry.startTs);
+      entry.endTs=Math.max(last.endTs,entry.endTs);
       entry.rounds=(Number(last.rounds||0)||0)+entry.rounds;
       entry.mergedCount=(Number(last.mergedCount||0)||0)+1;
-      kept=kept.slice(0,kept.length-1);
+      kept=kept.filter(function(row){return row.id!==last.id});
     }
     kept.push(entry);
     session.dailyDigests=chatDailyDigestNormalize(kept);
@@ -11751,7 +11788,7 @@ var API_TABS=[
   {key:'memory',label:'记忆',info:'这一栏管 Fact 提取、言语要求提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'},
-    {key:'chat_digest',label:'截断总结',info:'每次自动截断都会丢掉一批完整轮次。这一步把被丢掉的那批对话压成一段当日短文（单条约 500 字，合并后约 800 字），下一轮直接放进系统区，让助手还记得刚才聊了什么、当时是什么气氛和态度。只在发生截断时调用一次，普通每轮聊天不调用。这一组留空时会自动退回「言语要求提取」的供应商和模型。'}
+    {key:'chat_digest',label:'截断总结',info:'截断时把被丢掉的完整轮次写成总结，同一天合成一段，跨日期批次单独一段，均标明完整日期和起止时间。保留范围可在「记忆与缓存」设为今天及过去 0–100 天，下一轮注入系统区。普通聊天不调用。这一组留空时自动退回「言语要求提取」的供应商和模型。'}
   ]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},

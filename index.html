@@ -14,15 +14,15 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="style.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="polish.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="chat.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="wechat.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="shell.css?v=chat-v233-window-api-digest-and-trim">
-<link rel="stylesheet" href="components.css?v=chat-v233-window-api-digest-and-trim">
-<script>window.CK_PANEL_VERSION='chat-v233-window-api-digest-and-trim';</script>
+<link rel="stylesheet" href="tokens.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="style.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="polish.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="chat.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="wechat.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="shell.css?v=chat-v234-digest-date-retention">
+<link rel="stylesheet" href="components.css?v=chat-v234-digest-date-retention">
+<script>window.CK_PANEL_VERSION='chat-v234-digest-date-retention';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -31,7 +31,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><svg class="ck-mark" viewBox="0 0 36 36" aria-hidden="true"><path class="ck-mark-c" d="M22.6 11.4a8.2 8.2 0 1 0 0 13.2"/><path class="ck-mark-k1" d="M25.4 9.5v17"/><path class="ck-mark-k2" d="M32.8 11.2 25.6 18l7.2 6.8"/><circle class="ck-mark-node" cx="25.5" cy="18" r="1.7"/></svg></button><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v233">chat-v233-window-api-digest-and-trim</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v234">chat-v234-digest-date-retention</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -199,7 +199,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v233-window-api-digest-and-trim">v233</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v234-digest-date-retention">v234</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <div class="chat-side-panel active" id="chat-side-model">
 <label>系统提示词<textarea id="chat-system" rows="6" placeholder="留空使用网关默认人格"></textarea></label>
 <label class="chat-switch"><input id="chat-system-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用系统提示词</span></label>
@@ -263,8 +263,14 @@
 <input id="chat-recall-retention-seconds" type="hidden" value="300">
 <label>本轮召回内容<textarea id="chat-memory-pack" rows="9" readonly placeholder="本轮没有召回时这里为空"></textarea></label>
 <label class="chat-switch chat-recall-switch"><input id="chat-new-session-digest-sync" type="checkbox" checked onchange="chatSaveConfig(true)"><span>新窗口继承「小克」窗口的当日总结</span></label><p class="chat-field-hint">新建窗口时默认继承上一个标题为「小克」的窗口当天总结；关闭后不再继承。</p>
-<label>当日截断总结<textarea id="chat-daily-digest-pack" rows="9" oninput="chatDailyDigestMarkEdited()" placeholder="今天还没有发生过截断时这里为空；也可以直接在这里手写今天的总结"></textarea><small class="chat-field-hint" id="chat-daily-digest-hint">自动截断时静默生成，成功不通知、失败才提示。正文可以自己改，改完点下面的「保存总结正文」。</small></label>
-<div class="chat-memory-card chat-recall-mode-card"><b>当日截断总结注入</b><p>只在当天有效，明天零点自动作废；跨零点的那一次截断算新一天的第一条，并作废前一天全部条目。</p><p>注入位置固定在系统缓存断点之前，和系统提示词一起进缓存。这是为了保住缓存：缓存断点必须是系统区的最后一块，把总结挂在断点后面会让上游缓存忽好忽坏、整段重建。代价是总结变一次（每次截断变一次）连带重建一小段系统前缀，比整段历史重建便宜得多。</p><p>发生截断的那一轮会先把总结生成完再发请求，这样整段缓存重建只发生一次；最多等 45 秒，超时或失败都照常发送，总结在后台继续补上。</p><p>总结长度按被截断内容的体量自适应：丢掉的轮数越多就写得越长，同一天反复合并时篇幅也跟着涨，不做固定字数硬切，免得把结论和待办切掉一半。</p><p>上面那个框可以直接改：模型写得太长、写偏了，就自己重写一遍再点「保存总结正文」，注入的就是你改后的版本。保留【时段】那一行就按条替换（正文清空＝删掉这一条）；把所有【】都删掉、只留一段文字，就合并成一条。今天本来没有条目时直接写字也算数。</p><label class="chat-switch chat-recall-switch"><input id="chat-daily-digest-enabled" type="checkbox" checked onchange="chatSaveDailyDigestSetting(true)"><span>启用当日截断总结</span></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveDailyDigestText()">保存总结正文</button><button class="chat-cache-save-btn" type="button" onclick="chatResetDailyDigestText()">放弃修改</button><button class="chat-cache-save-btn" type="button" onclick="chatSaveDailyDigestSetting()">保存总结设置</button><span class="chat-cache-save-status" id="chat-daily-digest-save-status">注入位置固定在系统缓存断点之前</span></div></div>
+<label>截断总结<textarea id="chat-daily-digest-pack" rows="9" oninput="chatDailyDigestMarkEdited()" placeholder="保留范围内的总结按日期显示；也可以直接手写今天的总结"></textarea><small class="chat-field-hint" id="chat-daily-digest-hint">自动截断时静默生成，成功不通知、失败才提示。正文可以自己改，改完点下面的「保存总结正文」。</small></label>
+<div class="chat-memory-card chat-recall-mode-card"><b>截断总结保留与注入</b>
+<label>额外保留过去几天<input id="chat-daily-digest-retention-days" type="number" min="0" max="100" step="1" value="0" onchange="chatSaveDailyDigestSetting(true)"></label>
+<p>可设 0–100 天，默认 0：只保留今天；1：昨天和今天；3：大前天、前天、昨天、今天。设置适用于所有窗口，每个窗口分别保存自己的总结。没有总结的日期不补空段，已经过期清除的总结不会因调大天数恢复。</p>
+<p>同一天合成一段，每段标明完整日期和起止时间，例如【2026-09-18 13:18-19:32】。一次截断包含多个日期时，单独作为跨日期中间段，例如【2026-09-18 23:50-2026-09-19 00:20】，按结束日期计算保留期，并按时间顺序放置。</p>
+<p>注入位置固定在系统缓存断点之前。截断那一轮最多等总结 45 秒，超时或失败照常发送，后台继续生成。总结长度按内容体量调整，不做固定字数硬切；保留范围内的完整段都会注入。</p>
+<p>可以直接修改各段正文，再点「保存总结正文」。请保留【日期 时段】表头；正文清空或删去整段即删除这一段。仅有同一天总结时，也可以删去表头，把正文重写成一段；没有条目时可手写今天的总结。</p>
+<label class="chat-switch chat-recall-switch"><input id="chat-daily-digest-enabled" type="checkbox" checked onchange="chatSaveDailyDigestSetting(true)"><span>启用截断总结</span></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveDailyDigestText()">保存总结正文</button><button class="chat-cache-save-btn" type="button" onclick="chatResetDailyDigestText()">放弃修改</button><button class="chat-cache-save-btn" type="button" onclick="chatSaveDailyDigestSetting()">保存总结设置</button><span class="chat-cache-save-status" id="chat-daily-digest-save-status">注入位置固定在系统缓存断点之前</span></div></div>
 <div class="chat-actions"><button class="btn btn-outline btn-sm" onclick="chatRenameCurrent()">重命名</button><button class="btn btn-outline btn-sm" onclick="chatClearLocalMessages()">新会话</button></div>
 </div>
 <div class="chat-side-panel" id="chat-side-trim">
@@ -308,9 +314,9 @@
 </section></div>
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="chat-history.js?v=chat-v233-window-api-digest-and-trim"></script>
-<script src="script.js?v=chat-v233-window-api-digest-and-trim"></script>
-<script src="script-extra.js?v=chat-v233-window-api-digest-and-trim"></script>
-<script src="pwa.js?v=chat-v233-window-api-digest-and-trim"></script>
+<script src="chat-history.js?v=chat-v234-digest-date-retention"></script>
+<script src="script.js?v=chat-v234-digest-date-retention"></script>
+<script src="script-extra.js?v=chat-v234-digest-date-retention"></script>
+<script src="pwa.js?v=chat-v234-digest-date-retention"></script>
 </body>
 </html>
