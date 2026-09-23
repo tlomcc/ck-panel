@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v234-digest-date-retention';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v235-settings-time-focus';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1950,6 +1950,8 @@ function chatRenderWindowTrimControls(cfg){
     var el=document.getElementById(id);
     if(el)el.disabled=!override;
   });
+  var fields=document.getElementById('chat-window-trim-fields');
+  if(fields){fields.hidden=!override;fields.disabled=!override}
   var hint=document.getElementById('chat-window-trim-hint');
   if(hint){
     var trim=chatAutoTrimConfigFrom(cfg);
@@ -9638,8 +9640,17 @@ function chatInitPlusPager(){
     panel.querySelectorAll('button').forEach(function(button){button.tabIndex=-1});
   }
 }
+function chatSelectTrimScope(scope){
+  scope=scope==='default'?'default':'window';
+  ['window','default'].forEach(function(key){
+    var section=document.getElementById('chat-trim-'+key+'-section');
+    if(section)section.hidden=key!==scope;
+    var button=document.querySelector('[data-trim-view="'+key+'"]');
+    if(button)button.setAttribute('aria-pressed',key===scope?'true':'false');
+  });
+}
 function chatSettingTitle(tab){
-  return ({model:'提示词设置',speech:'措辞偏好',gateway:'设置',worldbook:'世界书',memory:'记忆与缓存',trim:'自动截断',debug:'调试记录'})[tab]||'聊天设置';
+  return ({"model": "提示词", "thinking": "思考", "speech": "措辞偏好", "gateway": "API 连接", "billing": "计费显示", "tools": "工具", "worldbook": "世界书", "memory": "Fact 召回", "time": "时间提醒", "cache": "缓存策略", "history": "历史保留", "cleanup": "清理", "digest": "截断总结", "session": "会话管理", "trim": "截断", "debug": "调试"})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
@@ -9797,7 +9808,9 @@ function ckAttachChatSheetDismiss(){
   },true);
 }
 function chatSwitchSideTab(tab,silent){
-  tab=tab||'model';
+  tab=document.getElementById('chat-side-'+tab)?tab:'model';
+  var nav=document.getElementById('chat-settings-nav');
+  if(nav)nav.value=tab;
   var title=document.getElementById('chat-settings-title');
   if(title)title.textContent=chatSettingTitle(tab);
   var version=document.getElementById('chat-debug-version');
@@ -9809,7 +9822,7 @@ function chatSwitchSideTab(tab,silent){
     chatSaveConfigObject(cfg);
   }
   // 两块折叠说明（√ 的颜色 / 用量符号）和默认价格表都长在「设置」页的计费开关下面。
-  if(tab==='gateway'){
+  if(tab==='billing'){
     chatRenderTickLegend();
     chatRenderUsageLegend();
     // 读回来再渲染：没渲染过就用存档值，已经在改的那几行不能被冲掉。
@@ -9819,9 +9832,10 @@ function chatSwitchSideTab(tab,silent){
     chatRenderDebugRecords();
     chatScrollDebugBottom();
   }
-  if(tab==='trim')chatRenderTrimState();
+  if(tab==='speech'&&!silent)chatLoadSpeechPreferences(false);
+  if(tab==='trim'){chatSelectTrimScope('window');chatRenderTrimState()}
   // 打开「记忆与缓存」时现算一遍：总结是异步落地的，光靠上一次渲染的快照会看到空框。
-  if(tab==='memory'){
+  if(tab==='digest'||tab==='cleanup'){
     var memoryCfg=chatLoadConfig();
     chatRenderDailyDigest(memoryCfg);
     chatRenderAutoCleanState(memoryCfg);

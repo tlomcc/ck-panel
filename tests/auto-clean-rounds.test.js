@@ -149,8 +149,8 @@ function testStateLineAndHtml(){
   assert.ok(/value="cache_5m">缓存过期 5min</.test(html)&&/value="cache_1h">缓存过期 1h</.test(html));
   assert.ok(/id="chat-auto-clean-rounds-row"/.test(html));
   assert.ok(/id="chat-auto-clean-state"/.test(html));
-  const memoryStart=html.indexOf('id="chat-side-memory"');
-  const memoryEnd=html.indexOf('id="chat-side-trim"');
+  const memoryStart=html.indexOf('id="chat-side-cleanup"');
+  const memoryEnd=html.indexOf('id="chat-side-digest"');
   const card=html.indexOf('id="chat-auto-clean-enabled"');
   assert.ok(memoryStart>=0&&card>memoryStart&&card<memoryEnd);
   const render=extractFunction('chatRenderAutoCleanState');

@@ -23,8 +23,8 @@ assert(!/chat-plus-page/.test(html),'paged plus tray markup must be gone');
 assert(!/chat-plus-dots|chat-plus-dot"/.test(html),'plus pager dots must be gone');
 assert(!/chat-plus-arrow/.test(html),'plus pager arrows must be gone');
 const trayButtons=(html.match(/<div class="chat-plus-grid"[\s\S]*?<\/div>/)||[''])[0];
-assert((trayButtons.match(/<button/g)||[]).length===12,'all 12 plus entries must live in one grid');
-['相册','拍摄','上传文件','提示词','设置','世界书','记忆','分条','截断','调试','清理','措辞偏好'].forEach(function(label){
+assert((trayButtons.match(/<button/g)||[]).length===20,'all 20 plus entries must live in one grid');
+['相册','拍摄','上传文件','提示词','API 连接','世界书','Fact 召回','分条','截断','调试','清理','措辞偏好','思考','时间提醒','缓存策略','截断总结','历史保留','计费显示','工具','会话管理'].forEach(function(label){
   assert(trayButtons.includes('<b>'+label+'</b>'),'plus tray lost entry '+label);
 });
 ['chatPlusRenderPager','chatPlusSetPage','chatPlusPrevPage','chatPlusNextPage','chatPlusHandleTouchStart','chatPlusPager'].forEach(function(name){
@@ -105,7 +105,7 @@ const worldbookRender=source.slice(source.indexOf('function chatRenderWorldbooks
 assert(/chat-worldbook-select[\s\S]{0,400}onchange="chatSelectWorldbook\(this\.value\)"/.test(worldbookRender),
   'the picker must be a <select> that still routes through chatSelectWorldbook (draft flush)');
 assert(!/class="chat-worldbook-row /.test(worldbookRender),'the one-row-per-entry list must be gone');
-const model=html.slice(html.indexOf('id="chat-side-model"'),html.indexOf('id="chat-side-speech"'));
+const model=html.slice(html.indexOf('id="chat-side-thinking"'),html.indexOf('id="chat-side-speech"'));
 assert(model.indexOf('伪思考链</b>')<model.indexOf('chat-fake-thinking'),'the switch needs its explanation above it, not a hint below a later field');
 
 console.log('plus panel layout tests: OK');

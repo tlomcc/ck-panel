@@ -351,8 +351,8 @@ function testEditWiring(){
   assert.ok(/chatDailyDigestLastError=errorText/.test(request),'失败原因要留下来给记忆块显示');
 
   // 问题 1：刷新后那块是空的 —— 两个补渲染点。
-  assert.ok(/if\(tab==='memory'\)\{[\s\S]*?chatRenderDailyDigest\(memoryCfg\)/.test(source),
-    '切到「记忆与缓存」要现算一遍，不能只看上一次渲染的快照');
+  assert.ok(/if\(tab==='digest'\|\|tab==='cleanup'\)\{[\s\S]*?chatRenderDailyDigest\(memoryCfg\)/.test(source),
+    '切到「截断总结」要现算一遍，不能只看上一次渲染的快照');
   const idb=extractFunction('chatStartIndexedDbSessionLoad');
   assert.ok(/chatRenderDailyDigest\(cfg\)/.test(idb),
     'IndexedDB 权威全量回填后必须重画总结，否则刷新页面那块一直是空的');

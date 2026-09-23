@@ -97,7 +97,7 @@ const debugPanel=html.slice(html.indexOf('id="chat-side-debug"'));
   assert(!html.includes('id="'+id+'"'),'单价输入框必须全部撤掉，价格改在供应商库里按供应商维护：'+id);
 });
 assert(!debugPanel.includes('计费标准'),'计费标准整块必须搬去设置页');
-const gateway=html.slice(html.indexOf('id="chat-side-gateway"'),html.indexOf('id="chat-side-worldbook"'));
+const gateway=html.slice(html.indexOf('id="chat-side-billing"'),html.indexOf('id="chat-side-tools"'));
 assert(/id="chat-billing-enabled"/.test(gateway),'计费总闸必须落在设置页');
 assert(/id="chat-usage-stats-enabled"/.test(gateway),'用量统计开关必须落在设置页');
 assert(!/id="chat-full-window-context"/.test(html),'同窗口全量上下文是死开关，必须删掉');
@@ -123,8 +123,8 @@ const legendRows=source.slice(source.indexOf('var CHAT_TICK_LEGEND_ROWS='),sourc
 });
 // 打开「设置」那一页时两块说明都要现渲染，否则用户看到的永远是"读取中"。
 const switchTab=functionSource('chatSwitchSideTab');
-assert(/tab==='gateway'[\s\S]{0,160}chatRenderTickLegend\(\)/.test(switchTab),'切到设置页要渲染 √ 说明');
-assert(/tab==='gateway'[\s\S]{0,160}chatRenderUsageLegend\(\)/.test(switchTab),'切到设置页要渲染符号说明');
+assert(/tab==='billing'[\s\S]{0,160}chatRenderTickLegend\(\)/.test(switchTab),'切到设置页要渲染 √ 说明');
+assert(/tab==='billing'[\s\S]{0,160}chatRenderUsageLegend\(\)/.test(switchTab),'切到设置页要渲染符号说明');
 
 // ── 聊天面板的价格文案：直接给数字，不写"按单价 / 估算" ────────────────────
 const costLabel=functionSource('chatAssistantCostLabel');
@@ -154,10 +154,11 @@ assert(functionSource('chatRenderMessageRow').includes('+time+usage+'),'用量�
 
 // ── 召回记忆框开关（2026-09-03 用户要求）──────────────────────────────────
 // 助手消息上面那个「召回记忆」块可以关掉，按键放在设置页。关掉只是不显示，召回照常。
-assert(/id="chat-recall-box-visible"/.test(gateway),'召回记忆框开关必须落在设置页');
-assert(/id="chat-recall-box-visible"[^>]*onchange="chatSaveDisplayToggles\(\)"/.test(gateway),
+const recallPanel=html.slice(html.indexOf('id="chat-side-memory"'),html.indexOf('id="chat-side-time"'));
+assert(/id="chat-recall-box-visible"/.test(recallPanel),'召回记忆框开关必须落在召回页');
+assert(/id="chat-recall-box-visible"[^>]*onchange="chatSaveDisplayToggles\(\)"/.test(recallPanel),
   '勾完要立刻生效，和计费/用量那两个开关同一条路');
-assert(/id="chat-recall-box-visible"[^>]*checked/.test(gateway),'默认显示，不能让老用户一升级就少一块');
+assert(/id="chat-recall-box-visible"[^>]*checked/.test(recallPanel),'默认显示，不能让老用户一升级就少一块');
 assert(functionSource('chatRenderMessageRow').includes('chatShouldShowRecallBox()'),
   '渲染路径要先问开关再决定输不输出召回块');
 assert(functionSource('chatShouldShowRecallBox').includes('chatDisplayToggles().recallBox'),

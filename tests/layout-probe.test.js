@@ -80,8 +80,8 @@ const out={
   wbAdd:rect(document.querySelector('.chat-worldbook-add')),
   legendOpen:!!(document.querySelector('.chat-tick-legend-card')||{}).open,
   usageLegendOpen:!!(document.querySelector('.chat-usage-legend-card')||{}).open,
-  legendInGateway:!!document.querySelector('#chat-side-gateway .chat-tick-legend-card'),
-  usageLegendInGateway:!!document.querySelector('#chat-side-gateway .chat-usage-legend-card'),
+  legendInGateway:!!document.querySelector('#chat-side-billing .chat-tick-legend-card'),
+  usageLegendInGateway:!!document.querySelector('#chat-side-billing .chat-usage-legend-card'),
   savedOpen:!!(document.querySelector('.chat-debug-saved-card')||{}).open
 };
 console.log('CKPROBE '+JSON.stringify(out));
@@ -124,9 +124,9 @@ const check=(ok,msg,detail)=>{if(!ok)fail.push(msg+(detail!==undefined?('  →  
 
 // ── ➕ 功能区 ────────────────────────────────────────────────────────
 check(m.grid&&m.grid.h>0,'➕ 功能区展开后必须有高度',m.grid);
-if(m.grid&&m.buttons.length===12){
+if(m.grid&&m.buttons.length===20){
   const rows=[...new Set(m.buttons.map(b=>b.top))].sort((a,b)=>a-b);
-  check(rows.length===3,'12 个图标应该排成 3 行（4 列）',rows);
+  check(rows.length===5,'20 个图标应该排成 5 行（4 列）',rows);
   const rowH=m.buttons[0].h;
   const visible=rows.map(top=>+(Math.min(m.grid.bottom,top+rowH)-Math.max(m.grid.top,top)).toFixed(1));
   check(visible[0]>=rowH-1&&visible[1]>=rowH-1,'前两行必须完整露出',{
@@ -137,9 +137,9 @@ if(m.grid&&m.buttons.length===12){
   check(m.grid.overflowY==='auto'||m.grid.overflowY==='scroll','滚动必须是原生的（跟手 1:1）',m.grid.overflowY);
   const peeked=m.buttons.filter(b=>b.top===rows[2]);
   check(peeked.every(b=>b.pointerEvents!=='none'),'滑上来以后第三行要能点',peeked.map(b=>b.pointerEvents));
-  check(m.buttonLabels.includes('设置'),'➕ 里的入口已经改名叫「设置」',m.buttonLabels);
+  check(m.buttonLabels.includes('API 连接'),'➕ 里的入口已经改名叫「设置」',m.buttonLabels);
 }else{
-  check(false,'➕ 功能区应该有 12 个按钮',m.buttons.length);
+  check(false,'➕ 功能区应该有 20 个按钮',m.buttons.length);
 }
 
 // ── 用量统计行 ──────────────────────────────────────────────────────

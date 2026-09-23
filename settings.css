@@ -1,0 +1,86 @@
+/* Settings use scope as their visual hierarchy: window blue, shared purple. */
+body.chat-active .chat-settings{
+  --settings-ink:#24364b;--settings-muted:#64748b;--settings-paper:#f4f7fa;
+  --settings-surface:#fff;--settings-line:#dce4ec;--settings-window:#2563ab;
+  --settings-global:#7854ad;--settings-teal:#197b71;--settings-amber:#aa671e;
+  --settings-window-bg:#eef5ff;--settings-global-bg:#f5f0fc;
+  color:var(--settings-ink)!important;
+  font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+}
+body.chat-active .chat-settings .chat-settings-nav{
+  display:flex!important;flex:0 0 auto;flex-direction:row!important;align-items:center;gap:12px!important;
+  margin:0!important;padding:10px 18px!important;border-bottom:1px solid var(--settings-line);
+  background:var(--settings-surface);color:var(--settings-muted)!important;
+}
+body.chat-active .chat-settings .chat-settings-nav>span{flex:none;font-size:12px}
+body.chat-active .chat-settings .chat-settings-nav select{min-height:36px!important;padding:6px 10px!important;font-weight:600!important}
+body.chat-active .chat-settings .chat-side-panel{background:var(--settings-paper)!important;gap:14px!important}
+body.chat-active .chat-settings [hidden]{display:none!important}
+body.chat-active .chat-settings :is(button,select,input,textarea,summary):focus-visible{
+  outline:2px solid var(--settings-window)!important;outline-offset:3px!important;
+}
+body.chat-active .chat-settings .chat-scope-heading{
+  display:flex;align-items:flex-start;gap:10px;padding:2px 0 6px;
+}
+body.chat-active .chat-settings .chat-scope-heading b{
+  font-family:"Microsoft YaHei","Segoe UI",sans-serif;font-size:15px!important;line-height:1.5;color:var(--settings-ink)!important;
+}
+body.chat-active .chat-settings .chat-scope-heading p{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--settings-muted)}
+body.chat-active .chat-settings .chat-scope-badge{
+  flex:none;white-space:nowrap;padding:4px 7px;border-radius:5px;font-size:11px;font-weight:700;
+  background:var(--settings-global-bg);color:var(--settings-global);
+}
+body.chat-active .chat-settings [data-scope="window"]>.chat-scope-badge{background:var(--settings-window-bg);color:var(--settings-window)}
+body.chat-active .chat-settings .chat-setting-group{
+  display:flex;flex-direction:column;gap:12px;min-width:0;margin:0;padding:16px;
+  border:1px solid var(--settings-line);border-top:3px solid var(--settings-global);
+  border-radius:10px;background:var(--settings-surface);
+}
+body.chat-active .chat-settings .chat-setting-group[data-scope="window"]{border-top-color:var(--settings-window)}
+body.chat-active .chat-settings .chat-setting-group h3{font-size:14px;margin:0;color:var(--settings-ink);font-weight:650}
+body.chat-active .chat-settings .chat-setting-group>.chat-memory-card{border:0!important;padding:0!important;background:transparent!important}
+body.chat-active .chat-settings .chat-memory-card{border-color:var(--settings-line)!important;padding:14px!important;border-radius:10px!important}
+body.chat-active .chat-settings .chat-memory-card>label{margin-top:12px}
+body.chat-active .chat-settings .chat-memory-card>b{display:block;margin-bottom:8px}
+body.chat-active .chat-settings label{color:var(--settings-muted)!important;font-size:12px!important}
+body.chat-active .chat-settings .chat-switch{padding:10px 0!important;min-height:44px!important;background:transparent!important}
+body.chat-active .chat-settings .chat-switch span{font-size:13px!important;color:var(--settings-ink)!important}
+body.chat-active .chat-settings .chat-setting-help{border:0;border-top:1px solid var(--settings-line);margin:8px 0 0;padding:0;background:transparent}
+body.chat-active .chat-settings .chat-setting-help summary{cursor:pointer;padding:10px 0;font-size:12px;color:var(--settings-muted);font-weight:500;line-height:1.5}
+body.chat-active .chat-settings .chat-setting-help p{font-size:12px!important;line-height:1.7!important;margin:0 0 8px;color:var(--settings-muted)!important}
+body.chat-active .chat-settings .chat-setting-help[open] summary{color:var(--settings-window)}
+body.chat-active .chat-settings .chat-scope-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:5px;border:1px solid var(--settings-line);border-radius:9px;background:var(--settings-surface)}
+body.chat-active .chat-settings .chat-scope-tabs button{min-height:40px;border:0;border-radius:6px;background:transparent;color:var(--settings-muted);font-size:13px;font-weight:600;cursor:pointer}
+body.chat-active .chat-settings [data-trim-view="window"][aria-pressed="true"]{background:var(--settings-window-bg);color:var(--settings-window)}
+body.chat-active .chat-settings [data-trim-view="default"][aria-pressed="true"]{background:var(--settings-global-bg);color:var(--settings-global)}
+body.chat-active .chat-settings .chat-trim-fields{display:flex;flex-direction:column;gap:12px;min-width:0;margin:12px 0;padding:12px;border:1px solid var(--settings-line);border-radius:8px}
+body.chat-active .chat-settings .chat-trim-fields legend{font-size:12px;color:var(--settings-window);padding:0 5px}
+body.chat-active .chat-settings .chat-setting-link{border:0;background:transparent;color:var(--settings-window);padding:8px 0;font-size:12px;text-align:left;cursor:pointer}
+body.chat-active .chat-settings .chat-time-preview{padding:18px;border-radius:10px;background:var(--settings-window-bg);border-left:4px solid var(--settings-window)}
+body.chat-active .chat-settings .chat-time-preview>span{font-size:11px;color:var(--settings-muted)}
+body.chat-active .chat-settings .chat-time-preview>b{display:block;font-size:22px;letter-spacing:.04em;color:var(--settings-window);margin:8px 0}
+body.chat-active .chat-settings .chat-time-preview p{font-family:Consolas,"Microsoft YaHei",monospace;font-size:12px;color:var(--settings-muted);margin:0 0 12px}
+body.chat-active .chat-settings .chat-time-preview>div{font-size:12px;color:var(--settings-amber);font-weight:600}
+body.chat-active .chat-settings .chat-cache-mode-actions{display:flex!important;flex-wrap:wrap;gap:8px!important;align-items:center}
+body.chat-active .chat-settings .chat-cache-save-status{flex:1 1 180px}
+body.chat-active .chat-settings .chat-wide-btn{min-height:40px!important;flex:none}
+body.chat-active .chat-settings textarea{max-height:260px!important;resize:vertical}
+body.chat-active .chat-settings .chat-trim-state{border-left:3px solid var(--settings-window)!important;background:var(--settings-window-bg)!important}
+/* The tray keeps its two-row footprint; color ties related destinations together. */
+body.chat-active .chat-plus-grid [data-setting]>span{border-color:#dce4ec!important}
+body.chat-active .chat-plus-grid :is([data-setting="model"],[data-setting="thinking"],[data-setting="worldbook"],[data-setting="speech"])>span{color:#7854ad!important;background:#f5f0fc!important}
+body.chat-active .chat-plus-grid :is([data-setting="memory"],[data-setting="digest"],[data-setting="cache"])>span{color:#197b71!important;background:#edf8f4!important}
+body.chat-active .chat-plus-grid [data-setting="time"]>span{color:#aa671e!important;background:#fff6e9!important}
+body.chat-active .chat-plus-grid :is([data-setting="trim"],[data-setting="cleanup"],[data-setting="history"],[data-setting="gateway"])>span{color:#2563ab!important;background:#eef5ff!important}
+body.dark.chat-active .chat-settings{
+  --settings-ink:#e4ecf5;--settings-muted:#a0afc0;--settings-paper:#151d27;
+  --settings-surface:#1d2835;--settings-line:#354354;--settings-window:#82b6f6;
+  --settings-global:#c4a3f0;--settings-window-bg:#203751;--settings-global-bg:#352b49;
+  --settings-teal:#7bd0bd;--settings-amber:#f2bb73;
+}
+body.dark.chat-active .chat-plus-grid [data-setting]>span{background:#253443!important;border-color:#3d4e60!important;color:#b6cbe3!important}
+@media(max-width:480px){
+  body.chat-active .chat-settings .chat-side-panel{padding:14px 12px calc(20px + env(safe-area-inset-bottom))!important}
+  body.chat-active .chat-settings .chat-setting-group{padding:12px}
+}
+@media(prefers-reduced-motion:reduce){body.chat-active .chat-settings *{scroll-behavior:auto!important;transition:none!important}}
