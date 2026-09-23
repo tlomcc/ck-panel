@@ -64,11 +64,18 @@ body.chat-active .chat-settings .chat-time-preview>div{font-size:12px;color:var(
 body.chat-active .chat-settings .chat-cache-mode-actions{display:flex!important;flex-wrap:wrap;gap:8px!important;align-items:center}
 body.chat-active .chat-settings .chat-cache-save-status{flex:1 1 180px}
 body.chat-active .chat-settings .chat-wide-btn{min-height:40px!important;flex:none}
-body.chat-active .chat-settings textarea{max-height:260px!important;resize:vertical}
+body.chat-active .chat-settings textarea,
+body.chat-active .chat-settings :is(#chat-system,#chat-thinking-prompt,#chat-worldbook-content,#chat-daily-digest-pack,#chat-memory-pack){
+  min-height:clamp(300px,48dvh,520px)!important;height:clamp(300px,48dvh,520px)!important;
+  max-height:none!important;resize:vertical!important;flex:none!important;
+  font-size:14px!important;line-height:1.75!important;tab-size:2;
+}
+body .fact-detail-editor-wrap #fact-detail-editor{min-height:220px!important;max-height:none!important;resize:vertical!important}
+body .prov-row .prov-note-input{min-height:180px!important;max-height:none!important;resize:vertical!important}
 body.chat-active .chat-settings .chat-trim-state{border-left:3px solid var(--settings-window)!important;background:var(--settings-window-bg)!important}
 /* The tray keeps its two-row footprint; color ties related destinations together. */
 body.chat-active .chat-plus-grid [data-setting]>span{border-color:#dce4ec!important}
-body.chat-active .chat-plus-grid :is([data-setting="model"],[data-setting="thinking"],[data-setting="worldbook"],[data-setting="speech"])>span{color:#7854ad!important;background:#f5f0fc!important}
+body.chat-active .chat-plus-grid :is([data-setting="model"],[data-setting="thinking"],[data-setting="worldbook"])>span{color:#7854ad!important;background:#f5f0fc!important}
 body.chat-active .chat-plus-grid :is([data-setting="memory"],[data-setting="digest"],[data-setting="cache"])>span{color:#197b71!important;background:#edf8f4!important}
 body.chat-active .chat-plus-grid [data-setting="time"]>span{color:#aa671e!important;background:#fff6e9!important}
 body.chat-active .chat-plus-grid :is([data-setting="trim"],[data-setting="cleanup"],[data-setting="history"],[data-setting="gateway"])>span{color:#2563ab!important;background:#eef5ff!important}

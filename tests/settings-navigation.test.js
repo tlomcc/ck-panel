@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const {spawn}=require('child_process');
 const root=path.resolve(__dirname,'..');
-const out=path.resolve(root,'../0-工作间/20260923-settings-browser');
+const out=path.resolve(root,'../0-工作间/20260923-cleanup-browser');
 const chrome=process.env.CK_CHROME||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 if(!fs.existsSync(chrome)){console.log('settings browser: SKIP (Chrome unavailable)');process.exit(0)}
 fs.mkdirSync(out,{recursive:true});
@@ -15,7 +15,6 @@ try{
   const check=(ok,msg)=>{if(!ok)throw new Error(msg)};
   localStorage.clear(); window.fetch=async()=>{throw new Error('Offline browser test')};
   apiProvidersLoaded=true;chatInitialized=false;
-  chatLoadSpeechPreferences=()=>Promise.resolve();
   chatSessions=[{id:'window-a',title:'测试窗口 A',messages:[],transportMessages:[]},{id:'window-b',title:'测试窗口 B',messages:[],transportMessages:[]}];
   chatActiveSessionId='window-a';
   let cfg=chatLoadConfig();cfg.sessionId='window-a';cfg.autoTrimKeepRounds=60;
@@ -28,7 +27,7 @@ try{
   check(window.innerWidth===TEST_WIDTH,'Mobile viewport was not emulated');
   const allIds=[...document.querySelectorAll('[id]')].map(el=>el.id);
   check(allIds.length===new Set(allIds).size,'Duplicate DOM IDs');
-  const destinations={model:'chat-system',thinking:'chat-thinking-mode',worldbook:'chat-worldbook-content',speech:'chat-speech-preview',
+  const destinations={model:'chat-system',thinking:'chat-thinking-mode',worldbook:'chat-worldbook-content',
     gateway:'chat-window-api-editor',billing:'chat-cost-defaults',tools:'chat-use-mcp',memory:'chat-recall-enabled',time:'chat-time-injection-every-rounds',
     cache:'chat-cache-strategy',history:'chat-retain-current-time-history',cleanup:'chat-auto-clean-enabled',digest:'chat-daily-digest-pack',
     session:'chat-session-id',trim:'chat-window-trim-override',debug:'chat-debug'};
@@ -43,7 +42,15 @@ try{
     check(active[0].scrollWidth<=active[0].clientWidth+2,'Horizontal overflow '+key);
     geometry.push({key,height:active[0].clientHeight,scroll:active[0].scrollHeight});
   }
-  check(document.querySelectorAll('#chat-plus-grid>button').length===20,'Missing tray buttons');
+  check(document.querySelectorAll('#chat-plus-grid>button').length===19,'Missing tray buttons');
+  for(const key of ['model','thinking','worldbook','digest','memory']){
+    chatOpenSettingTab(key);
+    check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=300,'Text editor too small '+key);
+  }
+  document.getElementById('chat-system').value='完整提示词\n'+('编辑正文，不应截断。\n'.repeat(100));
+  const systemDraft=document.getElementById('chat-system').value;
+  chatSaveConfig(true);chatWriteForm(chatLoadConfig());
+  check(document.getElementById('chat-system').value===systemDraft,'Long prompt save lost text');
   check([...document.querySelectorAll('.chat-setting-help')].every(x=>!x.open),'Explanations must start collapsed');
   chatOpenSettingTab('trim');
   check(document.getElementById('chat-trim-default-section').hidden,'Defaults should be separate');
@@ -74,7 +81,32 @@ try{
   chatWriteForm(chatLoadConfig());
   check(document.getElementById('chat-time-injection-every-rounds').value==='7','Saved time not restored');
   check(document.getElementById('chat-daily-digest-retention-days').value==='3','Saved retention not restored');
-  chatOpenSettingTab(TEST_DESTINATION);
+  if(TEST_DESTINATION.indexOf('daily-')===0){
+    chatToggleSettings(false);
+    document.body.classList.remove('chat-active');
+    document.querySelectorAll('.panel-tab').forEach(el=>el.classList.toggle('active',el.id==='tab-status'));
+    const blocked=TEST_DESTINATION==='daily-blocked';
+    const fixture={today:'2026-09-23',now:'2026-09-23 20:00',fact_daily:{
+      status:blocked?'blocked':'running',target_date:'2026-09-22',last_success_date:'2026-09-21',
+      stage:'audit',stage_label:'质量审核',stage_position:3,stage_total:7,
+      provider_name:'示例供应商',provider_host:'api.example.com',model:'模型 A',
+      attempt:12,retry_rounds:3,retry_limit:8,running_seconds:3620,last_checkpoint_at:'2026-09-23 00:12:30',
+      last_error:blocked?'HTTP 429：请求过于频繁。请稍后补跑。':'',
+      stats:{candidates:128,audited:96,verified:84,final_facts:72,segments:18},
+      api_stats:{http_calls:48,http_ok:46,http_failed:2,input_tokens:123000,output_tokens:16000,seconds_total:186,
+        by_purpose:{提取候选:{calls:38,ok:36,failed:2,seconds:160}},by_error:{限流:2},
+        recent:[{at:'2026-09-23T00:12:30',purpose:'审核',ok:true,seconds:4}]}
+    }};
+    renderDailyStatus(fixture);
+    const statusBody=document.getElementById('daily-status-body');
+    check(statusBody.querySelectorAll('details[open]').length===0,'Diagnostics must start collapsed');
+    const api=statusBody.querySelector('[data-daily-detail="api"]');api.open=true;
+    renderDailyStatus(fixture);
+    check(statusBody.querySelector('[data-daily-detail="api"]').open,'Auto refresh closed an open section');
+    statusBody.querySelector('[data-daily-detail="api"]').open=false;
+    check(statusBody.scrollWidth<=statusBody.clientWidth+2,'Daily status horizontal overflow');
+    check(!!statusBody.querySelector('#daily-fact-retry')===blocked,'Retry visibility incorrect');
+  }else chatOpenSettingTab(TEST_DESTINATION);
   closeToast();
   if(TEST_DESTINATION==='trim')chatSelectTrimScope(TEST_DARK?'default':'window');
   document.querySelectorAll('*').forEach(el=>{el.style.setProperty('transition','none','important');el.style.setProperty('animation','none','important')});
@@ -97,7 +129,7 @@ try{
   socket.onmessage=e=>{const result=JSON.parse(e.data);const task=pending.get(result.id);if(task){pending.delete(result.id);result.error?task.reject(result.error):task.resolve(result.result)}};
   const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++counter;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}))});
   await send('Page.enable');
-for(const [width,dark,destination] of [[390,false,'trim'],[390,true,'trim'],[1280,false,'time'],[390,false,'digest']]){
+for(const [width,dark,destination] of [[390,false,'trim'],[390,true,'trim'],[1280,false,'time'],[390,false,'digest'],[390,false,'daily-running'],[390,true,'daily-blocked'],[1280,false,'daily-running']]){
   const tag=width+'-'+(dark?'dark':'light')+'-'+destination;
   const html=base.replace('</body>','<pre id="settings-result" hidden></pre><script src="runtime.js"></script><script>const TEST_WIDTH='+width+';const TEST_DARK='+dark+';const TEST_DESTINATION='+JSON.stringify(destination)+';'+probe+'</script></body>');
   const file=path.join(out,tag+'.html');fs.writeFileSync(file,html);
@@ -113,7 +145,7 @@ for(const [width,dark,destination] of [[390,false,'trim'],[390,true,'trim'],[128
   fs.writeFileSync(path.join(out,tag+'.png'),Buffer.from(screenshot.data,'base64'));
   assert(result.startsWith('SETTINGS_OK'),tag+': '+(result||'No browser output'));
   fs.writeFileSync(path.join(out,tag+'-result.txt'),result);
-  console.log('settings browser: '+tag+' PASS (16 destinations, scopes, persistence, overflow)');
+  console.log('settings browser: '+tag+' PASS (15 destinations, scopes, persistence, overflow)');
 }
 await send('Browser.close');
 }finally{if(socket)socket.close();browser.kill()}

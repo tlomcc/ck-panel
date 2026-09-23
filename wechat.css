@@ -2034,9 +2034,3 @@ body.chat-active .chat-worldbook-add-btn{width:100%!important;justify-content:ce
 body.chat-active #chat-side-worldbook .chat-worldbook-head{border-bottom:0!important;padding-bottom:0!important}
 /* 选择框自己已经是一个控件了，外面那层白卡边框纯属多余（原来是给列表用的）。 */
 body.chat-active #chat-side-worldbook .chat-worldbook-list{border-left:0!important;border-right:0!important;border-top:0!important;border-radius:0!important;background:transparent!important;padding-left:0!important;padding-right:0!important;padding-top:0!important}
-
-/* 措辞偏好预览不再自己开一层滚动条（外层 .chat-side-panel 已经能滚） */
-body.chat-active .chat-settings .chat-speech-preview{
-  max-height:none!important;
-  overflow:visible!important;
-}

@@ -159,10 +159,10 @@ function dailyStatusContext(){
   const memory=context.API_TABS.filter(t=>t.key==='memory')[0];
   assert(memory,'找不到记忆 tab');
   const keys=memory.groups.map(g=>g.key).join(',');
-  assert.strictEqual(keys,'fact_extract,speech_preference_extract,chat_digest');
-  const group=memory.groups[2];
+  assert.strictEqual(keys,'fact_extract,chat_digest');
+  const group=memory.groups.find(g=>g.key==='chat_digest');
   assert.strictEqual(group.label,'截断总结');
-  assert(group.info.includes('言语要求提取'),'说明里要写清没配时会回落到哪一组');
+  assert(group.info.includes('独立选择供应商和模型'),'总结需要独立配置');
   assert(context.allApiGroups().some(g=>g.key==='chat_digest'),'allApiGroups 里没有 chat_digest');
   // 网关 chat_digest.py 用的组名必须和面板这里一致，否则永远走回落链路。
   const gateway=path.join(root,'..','ck-gateway-code','chat_digest.py');

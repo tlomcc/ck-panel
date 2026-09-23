@@ -107,7 +107,7 @@ function testWiring(){
   const labels=Object.keys(ctx.CHAT_TIMING_STAGE_LABELS);
   ['intent_rewrite_ms','vector_search_ms','recall_refine_ms','message_assembly_ms',
    'upstream_ttft_ms','upstream_full_response_ms','end_to_end_total_ms',
-   'mcp_tools_load_ms','speech_preferences_ms','history_prepare_ms','tool_execution_ms',
+   'mcp_tools_load_ms','history_prepare_ms','tool_execution_ms',
    'post_response_persist_ms','canonical_injection_ms','upstream_discarded_attempts_ms']
     .forEach(key=>assert(labels.indexOf(key)>=0,'少了一步的中文名：'+key));
 }

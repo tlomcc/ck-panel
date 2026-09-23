@@ -23,8 +23,8 @@ assert(!/chat-plus-page/.test(html),'paged plus tray markup must be gone');
 assert(!/chat-plus-dots|chat-plus-dot"/.test(html),'plus pager dots must be gone');
 assert(!/chat-plus-arrow/.test(html),'plus pager arrows must be gone');
 const trayButtons=(html.match(/<div class="chat-plus-grid"[\s\S]*?<\/div>/)||[''])[0];
-assert((trayButtons.match(/<button/g)||[]).length===20,'all 20 plus entries must live in one grid');
-['相册','拍摄','上传文件','提示词','API 连接','世界书','Fact 召回','分条','截断','调试','清理','措辞偏好','思考','时间提醒','缓存策略','截断总结','历史保留','计费显示','工具','会话管理'].forEach(function(label){
+assert((trayButtons.match(/<button/g)||[]).length===19,'all 19 plus entries must live in one grid');
+['相册','拍摄','上传文件','提示词','API 连接','世界书','Fact 召回','分条','截断','调试','清理','思考','时间提醒','缓存策略','截断总结','历史保留','计费显示','工具','会话管理'].forEach(function(label){
   assert(trayButtons.includes('<b>'+label+'</b>'),'plus tray lost entry '+label);
 });
 ['chatPlusRenderPager','chatPlusSetPage','chatPlusPrevPage','chatPlusNextPage','chatPlusHandleTouchStart','chatPlusPager'].forEach(function(name){
@@ -85,7 +85,6 @@ assert(/\.chat-cache-mode-actions\{\s*grid-template-columns:auto/.test(css.wecha
 assert(/\.chat-cache-save-status\{[^}]*min-height/.test(css.wechat),'a wrapping status line must not change the row height');
 assert(/\.chat-trim-state\{[^}]*border-left/.test(css.wechat),'the state card must be told apart from description cards');
 assert(/#chat-side-worldbook \.chat-worldbook-list\{[^}]*border-bottom/.test(css.wechat),'worldbook list and editor need a divider');
-assert(/\.chat-speech-preview\{[^}]*max-height:none/.test(css.wechat),'the speech preview must not open a second scroll layer');
 assert(!/border:1px solid rgba\(18,140,76,\.16\)/.test(css.chat),'dead .chat-recall-switch declarations must be gone');
 
 // ── 面板内部顺序：说明卡紧贴它解释的控件；操作按钮分主次 ─────────────────
@@ -105,7 +104,7 @@ const worldbookRender=source.slice(source.indexOf('function chatRenderWorldbooks
 assert(/chat-worldbook-select[\s\S]{0,400}onchange="chatSelectWorldbook\(this\.value\)"/.test(worldbookRender),
   'the picker must be a <select> that still routes through chatSelectWorldbook (draft flush)');
 assert(!/class="chat-worldbook-row /.test(worldbookRender),'the one-row-per-entry list must be gone');
-const model=html.slice(html.indexOf('id="chat-side-thinking"'),html.indexOf('id="chat-side-speech"'));
+const model=html.slice(html.indexOf('id="chat-side-thinking"'),html.indexOf('id="chat-side-gateway"'));
 assert(model.indexOf('伪思考链</b>')<model.indexOf('chat-fake-thinking'),'the switch needs its explanation above it, not a hint below a later field');
 
 console.log('plus panel layout tests: OK');

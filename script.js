@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v235-settings-time-focus';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v236-remove-rules-daily-editors';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1285,8 +1285,8 @@ function renderDailyFactStatus(f){
     html+='<div class="ds-fact-banner ds-fact-banner-bad"><b>连续多个切片没有任何进展，任务已停下</b>'+
       '<span>说明流水线在原地打转，不是慢。看下面的阶段和自愈次数。</span></div>';
   }
-  html+='<div class="ds-fact-progress"><i style="width:'+progress+'%"></i></div>';
-  html+='<div class="ds-fact-stage"><b>'+esc(dailyFactStageLabel(f))+'</b><span>'+(total?(position+' / '+total+' 阶段'):'等待阶段进度')+'</span></div>';
+  html+='<div class="ds-phase-card"><span class="ds-section-label">当前阶段</span><div class="ds-fact-progress" role="progressbar" aria-label="阶段进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'"><i style="width:'+progress+'%"></i></div>';
+  html+='<div class="ds-fact-stage"><b>'+esc(dailyFactStageLabel(f).replace(/（[^）]+）$/,''))+'</b><span>'+(total?(position+' / '+total+' 阶段'):'等待阶段进度')+'</span></div></div>';
   html+='<div class="ds-fact-metrics">'+
     '<span><b>'+Number(stats.candidates||0)+'</b>候选</span>'+
     '<span><b>'+Number(stats.audited||0)+'</b>审计</span>'+
@@ -1295,12 +1295,21 @@ function renderDailyFactStatus(f){
     '</div>';
   var extra=DAILY_FACT_STAT_LABELS.filter(function(pair){return Number(stats[pair[0]]||0)>0||pair[0]==='segments'});
   if(extra.length){
-    html+='<div class="ds-fact-tags"><span>全部计数</span>'+extra.map(function(pair){
+    html+='<details class="ds-detail" data-daily-detail="counts"><summary>全部计数<span>分段、审核与入库明细</span></summary><div class="ds-fact-tags"><span>全部计数</span>'+extra.map(function(pair){
       return '<i>'+esc(pair[1])+' '+dsNum(stats[pair[0]])+'</i>';
-    }).join('')+'</div>';
+    }).join('')+'</div></details>';
   }
-  html+=dailyFactApiStatsHtml(f);
+  var api=f.api_stats||{};
+  html+='<section class="ds-api-summary"><h3>API 调用</h3><div class="ds-api-counts">'+
+    '<div><span>总调用</span><strong>'+dsNum(api.http_calls)+'</strong></div>'+
+    '<div><span>成功</span><strong>'+dsNum(api.http_ok)+'</strong></div>'+
+    '<div class="'+(Number(api.http_failed)>0?'has-errors':'')+'"><span>失败</span><strong>'+dsNum(api.http_failed)+'</strong></div></div>'+
+    '<p class="ds-api-provider">'+esc(provider||'尚未调用')+'</p></section>';
+  html+='<details class="ds-detail" data-daily-detail="api"><summary>调用明细<span>用途、错误与最近记录</span></summary>'+dailyFactApiStatsHtml(f)+'</details>';
+  html+='<div class="ds-run-summary"><div><span>已运行</span><b>'+esc(dsDuration(f.running_seconds))+'</b></div><div><span>最近进展</span><b>'+esc(dsText(f.last_checkpoint_at||f.updated_at))+'</b></div></div>';
+  html+='<details class="ds-detail" data-daily-detail="diagnostics"><summary>运行诊断<span>重试、断点与版本</span></summary>';
   html+='<div class="ds-fact-meta">';
+  html+='<div><span>阶段标识</span><b>'+esc(dailyFactStageLabel(f))+'</b></div>';
   html+='<div><span>来源快照</span><b>'+esc(dsText(f.source_sha_short))+(f.source_state?' · '+esc(f.source_state):'')+'</b></div>';
   html+='<div><span>当前 API</span><b>'+esc(provider||'尚未调用')+'</b></div>';
   // 「尝试 N 次」以前含义很模糊：它数的是租约切片（每片最多跑 5 分钟），
@@ -1314,6 +1323,7 @@ function renderDailyFactStatus(f){
   html+='<div><span>Commit</span><b>'+esc(dsText(f.commit_sha_short))+'</b></div>';
   html+='<div><span>流水线</span><b>'+esc(dsText(f.pipeline_version))+' · '+esc(String(f.pipeline_fingerprint||'').slice(0,12)||'-')+'</b></div>';
   html+='</div>';
+  html+='</details>';
   if(f.last_error)html+='<div class="ds-fact-error"><span>最近错误'+(f.last_error_code?'（'+esc(f.last_error_code)+'）':'')+'</span><b>'+esc(f.last_error)+(f.next_retry_at?' · 下次重试 '+esc(f.next_retry_at):'')+'</b></div>';
   html+='</section>';
   return html;
@@ -1340,21 +1350,19 @@ function renderDailyStatus(d){
   if(!body)return;
   d=d||{};
   var f=d.fact_daily||{};
+  var expanded={};
+  if(body.querySelectorAll)body.querySelectorAll('[data-daily-detail][open]').forEach(function(el){expanded[el.getAttribute('data-daily-detail')]=true});
   if(sub)sub.textContent='更新于 '+(d.now||'-');
   var todayTs=Date.parse(String(d.today||'')+'T00:00:00+08:00');
   var successTs=Date.parse(String(f.last_success_date||'')+'T00:00:00+08:00');
   var staleDays=isFinite(todayTs)&&isFinite(successTs)?Math.floor((todayTs-successTs)/86400000):0;
   var html=staleDays>2?'<div class="ds-stale-alert"><b>Fact 已 '+staleDays+' 天没有成功提取</b><span>最近成功：'+esc(f.last_success_date||'-')+'。可用下面的补跑按钮拉起断掉的那天。</span></div>':'';
   if(f.enabled===false)html+='<div class="ds-stale-alert"><b>每日 Fact 任务当前是关闭状态</b><span>网关侧没有启用自动提取，下面显示的是最后一次留下的记录。</span></div>';
+  html+='<div class="ds-overview"><div><span>本次处理日期</span><b>'+esc(f.target_date||d.yesterday||'-')+'</b></div><div><span>最近成功</span><b>'+esc(f.last_success_date||'尚无记录')+'</b></div></div>';
   html+=renderDailyFactStatus(f);
-  html+='<div class="ds-note">每日 Fact 任务读取前一天的原始聊天记录。'+
-    '<b>2026-08-26 起由定时器自己触发：过 00:00 之后第一个定时器 tick（最多 5 分钟内）就会把任务建出来，不再需要先发一条消息。</b><br>'+
-    '今天是 '+esc(d.today||'-')+'，上面显示的是 '+esc(f.target_date||d.yesterday||'-')+' 的处理结果；'+
-    '最近一次成功提取：'+esc(f.last_success_date||'尚无记录')+'。<br>'+
-    '「调度切片」数的是任务被定时器捡起来跑了几片（每片最多 5 分钟），和 API 调用次数不是一回事——'+
-    'API 的真实次数、成功/失败、按用途和按错误的分布都在上面「API 调用」那一块。<br>'+
-    '如果状态停在「未触发」而且今天已经过了 00:05，那就不是没聊天的问题，去看网关日志里的 <code>[FACT-DAILY] timer ensure</code>。</div>';
+  html+='<details class="ds-detail ds-note" data-daily-detail="help"><summary>任务如何运行<span>触发时间与计数说明</span></summary><p>每日 Fact 任务读取前一天的原始聊天记录，由定时器自己触发：午夜后最多 5 分钟内创建任务。</p><p>「调度切片」是定时器接续任务的次数，和 API 调用次数不是一回事。详细次数、错误和记录可在「调用明细」展开查看。</p><p>今天是 '+esc(d.today||'-')+'。若 00:05 后仍未触发，可补跑对应日期，再查看运行诊断。</p></details>';
   body.innerHTML=html;
+  if(body.querySelectorAll)body.querySelectorAll('[data-daily-detail]').forEach(function(el){el.open=!!expanded[el.getAttribute('data-daily-detail')]});
 }
 function startDailyStatusRealtime(){
   stopDailyStatusRealtime();
@@ -4001,15 +4009,6 @@ function chatNormalizeSession(s){
     messages:Array.isArray(s.messages)?s.messages.slice():[],
     transportMessages:Array.isArray(s.transportMessages)?s.transportMessages.slice():[],
     transportUpdated:Number(s.transportUpdated||0)||0,
-    speechPreferenceRevision:s.speechPreferenceRevision===undefined?'':s.speechPreferenceRevision,
-    speechPreferenceAppliedRevision:s.speechPreferenceAppliedRevision===undefined?'':s.speechPreferenceAppliedRevision,
-    speechPreferencePendingActivationId:String(s.speechPreferencePendingActivationId||''),
-    speechPreferencePendingTrimEventId:String(s.speechPreferencePendingTrimEventId||''),
-    speechPreferencePreparedThroughTs:Number(s.speechPreferencePreparedThroughTs||0)||0,
-    speechPreferencePendingThroughTs:Number(s.speechPreferencePendingThroughTs||0)||0,
-    speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
-    speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
-    speechPreferencePendingBoundaryReason:String(s.speechPreferencePendingBoundaryReason||''),
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
     apiProviderId:String(s.apiProviderId||'').trim(),
     apiModel:String(s.apiModel||'').trim(),
@@ -4635,577 +4634,11 @@ function chatSetFactRecallMode(value,auto){
   chatSetFactRecallModeField(value);
   return chatSaveFactRecallMode(auto);
 }
-function chatSpeechPreferencePrepareEndpoint(cfg){
-  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
-  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
-  return base+'/speech-preferences/prepare';
-}
-function chatSpeechPreferencesEndpoint(cfg){
-  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
-  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
-  return base+'/ck/speech-preferences';
-}
-var chatSpeechConsoleState={data:null,loading:false,saving:false,editorSnapshot:''};
-var chatTrimBusy=false;
-// 聊天抽屉里的措辞偏好只做纯预览：只显示条数和规则正文，
-// 不显示版本号、diff、标题栏或任何操作按钮组。修改、保存、发布、启停
-// 全部集中在独立的「规则管理」页，避免预览区堆满管理控件。
-function chatRenderSpeechPreferences(data,preserveEditor){
-  data=data&&typeof data==='object'?data:{};
-  chatSpeechConsoleState.data=data;
-  var rules=Array.isArray(data.rules)?data.rules:[];
-  var disabled=data.enabled===false;
-  var meta=document.getElementById('chat-speech-meta');
-  if(meta)meta.textContent='共 '+rules.length+' 条'+(disabled?'（已停用）':'');
-  var preview=document.getElementById('chat-speech-preview');
-  if(preview){
-    // 上面写着"共 9 条"，下面就必须能一条条数出来，所以每条都带编号。
-    preview.innerHTML=rules.length
-      ?rules.map(function(rule,index){
-          return '<div class="chat-speech-line"><b class="chat-speech-num">'+(index+1)+'</b>'+
-            '<span>'+esc(String((rule&&rule.instruction)||''))+'</span></div>';
-        }).join('')
-      :'<div class="chat-speech-empty">暂无生效规则</div>';
-  }
-  var status=document.getElementById('chat-speech-status');
-  if(status)status.textContent=data.warning?String(data.warning):(data.source==='github'?'已同步':'本地读取');
-  var stale=document.getElementById('chat-speech-stale-dot');
-  if(stale)stale.hidden=data.draft_stale!==true;
-}
-/* ---- 规则管理页 ---- */
-// 页面上不出现任何版本号：revision 只是后端的并发控制标识，对用户没有意义。
-// 用户要看的是「上次发布时间 / 这次发布时间 / 条数 / 激活状态」这四项。
-//
-// 每条规则只让用户写一句话。类别（称呼/语气/格式…）和强度（硬性/要求/普通）
-// 是后端的内部字段，用户看不懂也用不上，所以不在页面上出现；但要原样带回去，
-// 否则一次保存就会把老规则的强度全部抹平。
-var rulesPageState={data:null,loading:false,busy:false,dirty:false,diff:null};
-function chatSpeechPreferencesEnabledForTrim(){
-  return !!(rulesPageState&&rulesPageState.data&&rulesPageState.data.enabled!==false);
-}
-async function chatEnsureSpeechPreferenceState(){
-  if(rulesPageState&&rulesPageState.data)return chatSpeechPreferencesEnabledForTrim();
-  if(rulesPageState&&rulesPageState.loading)return false;
-  var loaded=await loadRulesPage(false);
-  return loaded===true&&chatSpeechPreferencesEnabledForTrim();
-}
-var RULES_DEFAULT_CATEGORY='other';
-var RULES_DEFAULT_PRIORITY='strong';
-var rulesRowSeq=0;
-var rulesFilterText='';
-function rulesNewKey(){rulesRowSeq++;return 'manual_'+Date.now().toString(36)+'_'+rulesRowSeq}
-// 已发布的那一份，按 key 索引。用来在每行右边标出「新增 / 改过」，
-// 让用户在按下发布之前就看清这一次到底会改动什么。
-function rulesPublishedMap(){
-  var data=rulesPageState.data||{};
-  var list=Array.isArray(data.rules)?data.rules:[];
-  var map=Object.create(null);
-  for(var i=0;i<list.length;i++){
-    var rule=list[i]||{};
-    var key=String(rule.key||'').trim();
-    if(key)map[key]=String(rule.instruction||'').trim();
-  }
-  return map;
-}
-// 排序按钮常显，不藏在 ⋮ 里：手机上一定点得到，规则多的时候也不用一层层展开。
-// 跨很远的移动交给菜单里的「移到最前/最后」，比连点十几次上移现实。
-function rulesRowHtml(rule){
-  rule=rule&&typeof rule==='object'?rule:{};
-  var key=String(rule.key||'').trim()||rulesNewKey();
-  return '<div class="rules-row" data-rule-key="'+escAttr(key)+'"'+
-      ' data-rule-category="'+escAttr(String(rule.category||RULES_DEFAULT_CATEGORY))+'"'+
-      ' data-rule-priority="'+escAttr(String(rule.priority||RULES_DEFAULT_PRIORITY))+'">'+
-    '<b class="rules-row-index" aria-hidden="true"></b>'+
-    '<textarea class="rules-row-text" rows="2" aria-label="规则内容" placeholder="用一句话写清楚，例如：不要叫我宝宝" oninput="rulesAutoGrow(this);rulesMarkDirty()">'+esc(String(rule.instruction||''))+'</textarea>'+
-    '<div class="rules-row-tools">'+
-      '<span class="rules-row-flag" hidden></span>'+
-      '<button class="rules-row-btn rules-row-move" type="button" title="上移" aria-label="上移" onclick="rulesMoveRow(this,-1)">↑</button>'+
-      '<button class="rules-row-btn rules-row-move" type="button" title="下移" aria-label="下移" onclick="rulesMoveRow(this,1)">↓</button>'+
-      '<details class="rules-row-menu"><summary title="更多操作" aria-label="更多操作">⋮</summary><div>'+
-        '<button type="button" onclick="rulesMoveRowEdge(this,-1)">移到最前</button>'+
-        '<button type="button" onclick="rulesMoveRowEdge(this,1)">移到最后</button>'+
-        '<button type="button" onclick="rulesDuplicateRow(this)">复制一条</button>'+
-        '<button class="danger" type="button" onclick="rulesDeleteRow(this)">删除</button>'+
-      '</div></details>'+
-    '</div>'+
-    '</div>';
-}
-// 规则往往两三行，固定高度会把后半句藏起来。让输入框跟着内容长高，一眼就能看全。
-function rulesAutoGrow(el){
-  if(!el||!el.style)return;
-  el.style.height='auto';
-  el.style.height=Math.max(44,el.scrollHeight)+'px';
-}
-// 换横竖屏、改窗口宽度后换行数会变，高度要重算一次，否则窄屏下仍会截半句。
-var rulesResizeBound=false;
-function rulesBindResize(){
-  if(rulesResizeBound)return;
-  if(typeof window==='undefined'||!window.addEventListener)return;
-  rulesResizeBound=true;
-  window.addEventListener('resize',function(){
-    if(document.getElementById('rules-table'))rulesRenumber();
-  });
-}
-// 增删之后重排编号，保证页面上的 1/2/3 永远和实际条数对得上。
-function rulesRenumber(){
-  rulesBindResize();
-  var rows=document.querySelectorAll('#rules-table .rules-row');
-  for(var i=0;i<rows.length;i++){
-    var badge=rows[i].querySelector('.rules-row-index');
-    if(badge)badge.textContent=String(i+1);
-    var text=rows[i].querySelector('.rules-row-text');
-    if(text)rulesAutoGrow(text);
-  }
-  var count=document.getElementById('rules-draft-count');
-  if(count)count.textContent=String(rows.length);
-  rulesRefreshFooter();
-}
-function rulesMarkDirty(){
-  rulesPageState.dirty=true;
-  rulesRefreshFooter();
-}
-// 行标记、成本提示、底部状态文案三处都依赖同一次统计，合到一起刷新，
-// 避免每次敲键盘把整张表扫三遍。
-function rulesRefreshFooter(){
-  rulesUpdateRowFlags();
-  rulesUpdateMetrics();
-  var hint=document.getElementById('rules-dirty-hint');
-  if(hint)hint.textContent=rulesStatusHintText();
-}
-// 每行标出相对「正在生效」的变化，同时统计删掉了几条 —— 底部行动条要靠这个
-// 数字说清楚「点一次发布会发生什么」。空行不算改动，用户新增一行还没填不该报警。
-function rulesUpdateRowFlags(){
-  var published=rulesPublishedMap();
-  var rows=document.querySelectorAll('#rules-table .rules-row');
-  var seen=Object.create(null),added=0,changed=0;
-  for(var i=0;i<rows.length;i++){
-    var key=String(rows[i].getAttribute('data-rule-key')||'').trim();
-    var textEl=rows[i].querySelector('.rules-row-text');
-    var instruction=String((textEl&&textEl.value)||'').trim();
-    var state='';
-    if(instruction){
-      if(!(key in published)){state='新增';added++}
-      else if(published[key]!==instruction){state='改过';changed++}
-    }
-    if(key)seen[key]=1;
-    var flag=rows[i].querySelector('.rules-row-flag');
-    if(flag){
-      flag.textContent=state;
-      flag.hidden=!state;
-      flag.className='rules-row-flag'+(state==='新增'?' add':(state==='改过'?' edit':''));
-    }
-  }
-  var removed=0;
-  for(var pk in published){if(!seen[pk])removed++}
-  rulesPageState.diff={added:added,changed:changed,removed:removed};
-  return rulesPageState.diff;
-}
-function rulesDiffText(diff){
-  diff=diff||rulesPageState.diff||{};
-  var parts=[];
-  if(diff.added)parts.push('新增 '+diff.added+' 条');
-  if(diff.changed)parts.push('改动 '+diff.changed+' 条');
-  if(diff.removed)parts.push('删除 '+diff.removed+' 条');
-  return parts.join(' · ');
-}
-function rulesStatusHintText(){
-  if(rulesPageState.busy)return '处理中…';
-  if(!rulesPageState.dirty)return '';
-  var text=rulesDiffText();
-  return text?('还没保存：'+text):'有改动还没保存';
-}
-function rulesUpdateMetrics(){
-  var rules=rulesCollect();
-  var chars=rules.reduce(function(total,rule){return total+String(rule.instruction||'').length},0);
-  var tokens=Math.ceil(chars/2);
-  var metrics=document.getElementById('rules-metrics');
-  if(metrics){
-    metrics.textContent=rules.length+' 条 · '+chars+' 字 · 每轮约 '+tokens+' tokens'+(chars>3000?' · 规则块偏大，会增加每轮成本':'');
-    if(metrics.classList)metrics.classList.toggle('warn',chars>3000);
-  }
-  var chip=document.getElementById('rules-diff-chip');
-  if(chip){
-    var diffText=rulesDiffText();
-    chip.textContent=diffText?('待发布 '+diffText):'';
-    chip.hidden=!diffText;
-  }
-}
-// 搜索只是把不相关的行藏起来，DOM 里一条都没少，所以保存/发布拿到的仍是全量。
-// 但列表这时不是完整顺序，上移下移会移错位置，排序按钮直接收起来。
-function rulesFilter(value){
-  rulesFilterText=String(value==null?'':value).trim().toLowerCase();
-  var rows=document.querySelectorAll('#rules-table .rules-row');
-  var shown=0;
-  for(var i=0;i<rows.length;i++){
-    var textEl=rows[i].querySelector('.rules-row-text');
-    var instruction=String((textEl&&textEl.value)||'').toLowerCase();
-    var hit=!rulesFilterText||instruction.indexOf(rulesFilterText)>=0;
-    rows[i].hidden=!hit;
-    if(hit)shown++;
-  }
-  var table=document.getElementById('rules-table');
-  if(table&&table.setAttribute)table.setAttribute('data-filtering',rulesFilterText?'1':'0');
-  var hint=document.getElementById('rules-filter-hint');
-  if(hint)hint.textContent=rulesFilterText?(shown?('命中 '+shown+' / '+rows.length+' 条，搜索时不能排序'):'没有匹配的规则'):'';
-  return shown;
-}
-// 搜索状态下新增会立刻被过滤掉、看起来像"没加上"，所以先把搜索清空再加。
-function rulesClearFilter(){
-  if(!rulesFilterText)return;
-  var input=document.getElementById('rules-search');
-  if(input)input.value='';
-  rulesFilter('');
-}
-function rulesAddRow(){
-  var table=document.getElementById('rules-table');
-  if(!table)return;
-  rulesClearFilter();
-  var empty=table.querySelector('.rules-empty');
-  if(empty)empty.remove();
-  var adder=table.querySelector('.rules-add-row');
-  if(adder)adder.insertAdjacentHTML('beforebegin',rulesRowHtml({}));
-  else table.insertAdjacentHTML('beforeend',rulesRowHtml({}));
-  rulesRenumber();
-  rulesMarkDirty();
-  var rows=table.querySelectorAll('.rules-row-text');
-  if(rows.length)rows[rows.length-1].focus();
-}
-function rulesCloseRowMenu(button){
-  var menu=button&&button.closest?button.closest('details'):null;
-  if(menu)menu.open=false;
-}
-function rulesDeleteRow(button){
-  var row=button&&button.closest?button.closest('.rules-row'):null;
-  if(!row)return;
-  var table=document.getElementById('rules-table');
-  rulesCloseRowMenu(button);
-  row.remove();
-  if(table&&!table.querySelectorAll('.rules-row').length){
-    var adder=table.querySelector('.rules-add-row');
-    var empty='<div class="rules-empty">规则已经清空。点「发布」会让助手不再受任何规则约束。</div>';
-    if(adder)adder.insertAdjacentHTML('beforebegin',empty);
-    else table.insertAdjacentHTML('beforeend',empty);
-  }
-  rulesRenumber();
-  rulesMarkDirty();
-}
-function rulesMoveRow(button,delta){
-  var row=button&&button.closest?button.closest('.rules-row'):null;
-  if(!row)return;
-  var sibling=delta<0?row.previousElementSibling:row.nextElementSibling;
-  if(!sibling||!sibling.classList||!sibling.classList.contains('rules-row'))return;
-  if(delta<0)row.parentNode.insertBefore(row,sibling);
-  else row.parentNode.insertBefore(sibling,row);
-  rulesRenumber();rulesMarkDirty();
-}
-// 规则多起来以后连点十几次上移不现实，给一个一步到位的入口。
-function rulesMoveRowEdge(button,delta){
-  var row=button&&button.closest?button.closest('.rules-row'):null;
-  if(!row||!row.parentNode)return;
-  rulesCloseRowMenu(button);
-  var table=row.parentNode;
-  var rows=table.querySelectorAll('.rules-row');
-  if(rows.length<2)return;
-  if(delta<0){
-    if(rows[0]!==row)table.insertBefore(row,rows[0]);
-  }else{
-    var last=rows[rows.length-1];
-    // last 后面就是「＋ 新增一条规则」那个按钮，插到它前面即为末位
-    if(last!==row)table.insertBefore(row,last.nextSibling);
-  }
-  rulesRenumber();rulesMarkDirty();
-}
-function rulesDuplicateRow(button){
-  var row=button&&button.closest?button.closest('.rules-row'):null;
-  if(!row)return;
-  rulesCloseRowMenu(button);
-  var textEl=row.querySelector('.rules-row-text');
-  // 复制出来的是一条新规则，不能沿用原 key，否则后端会报 rule keys must be unique
-  row.insertAdjacentHTML('afterend',rulesRowHtml({instruction:String((textEl&&textEl.value)||'')}));
-  rulesRenumber();rulesMarkDirty();
-}
-function rulesAddExample(text){
-  var table=document.getElementById('rules-table');if(!table)return;
-  rulesClearFilter();
-  var empty=table.querySelector('.rules-empty');if(empty)empty.remove();
-  var adder=table.querySelector('.rules-add-row');
-  if(adder)adder.insertAdjacentHTML('beforebegin',rulesRowHtml({instruction:text}));
-  rulesRenumber();rulesMarkDirty();
-}
-// 从页面收集规则。内容为空的行直接跳过而不是报错——用户新增了一行又没填，
-// 不应该因此卡住整个保存。类别和强度从 data-* 原样带回，页面上不展示。
-function rulesCollect(){
-  var rows=Array.prototype.slice.call(document.querySelectorAll('#rules-table .rules-row'));
-  var out=[],seen=Object.create(null);
-  for(var i=0;i<rows.length;i++){
-    var row=rows[i];
-    var textEl=row.querySelector('.rules-row-text');
-    var instruction=String((textEl&&textEl.value)||'').trim();
-    if(!instruction)continue;
-    var key=String(row.getAttribute('data-rule-key')||'').trim()||rulesNewKey();
-    while(seen[key])key=rulesNewKey();
-    seen[key]=1;
-    out.push({
-      key:key,
-      instruction:instruction,
-      category:String(row.getAttribute('data-rule-category')||RULES_DEFAULT_CATEGORY),
-      priority:String(row.getAttribute('data-rule-priority')||RULES_DEFAULT_PRIORITY)
-    });
-  }
-  return out;
-}
-function rulesDraftRules(){
-  var data=rulesPageState.data||{};
-  var draft=(data.draft&&typeof data.draft==='object')?data.draft:{};
-  return Array.isArray(draft.rules)?draft.rules:(Array.isArray(data.rules)?data.rules:[]);
-}
-function rulesUsePublishedDraft(){
-  var data=rulesPageState.data||{};
-  data.draft=Object.assign({},data.draft||{},{rules:(Array.isArray(data.rules)?data.rules:[]).map(function(rule){return Object.assign({},rule)})});
-  data.draft_stale=false;
-  rulesPageState.dirty=true;
-  renderRulesPage();
-  rulesMarkDirty();
-}
-function renderRulesPage(){
-  var body=document.getElementById('rules-page-body');
-  if(!body)return;
-  if(rulesPageState.loading&&!rulesPageState.data){
-    body.innerHTML='<div class="empty-state small">读取中...</div>';
-    return;
-  }
-  var data=rulesPageState.data||{};
-  var draftRules=rulesDraftRules();
-  var enabled=data.enabled!==false;
-  var publishedCount=Number(data.rule_count||(Array.isArray(data.rules)?data.rules.length:0))||0;
-  var busy=rulesPageState.busy?' disabled':'';
-  var html='<header class="rules-head">'+
-    '<div class="rules-head-main"><h2>规则管理</h2>'+
-      '<p>这里写的每一句话都会长期约束助手怎么说话。改完先「保存草稿」，确认无误再「发布」。</p></div>'+
-    '<div class="rules-head-side">'+
-      '<span class="rules-state '+(enabled?'on':'off')+'"><i aria-hidden="true"></i>'+(enabled?'已生效':'已停用')+'</span>'+
-      '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesReload()">刷新</button>'+
-    '</div></header>';
-  // 三项状态压成一行：卡片式的三宫格占掉大半屏高度，真正要看的规则被挤到下面去了。
-  html+='<div class="rules-statbar">'+
-    '<span class="rules-stat">正在生效 <b>'+publishedCount+'</b> 条</span>'+
-    '<span class="rules-stat">草稿 <b id="rules-draft-count">'+draftRules.length+'</b> 条</span>'+
-    '<span class="rules-stat">上次发布 <b>'+esc(rulesTimeText(data.updated_at))+'</b></span>'+
-    '<span class="rules-diff-chip" id="rules-diff-chip" hidden></span>'+
-    '</div>';
-  if(data.draft_stale){
-    html+='<div class="rules-stale"><div><b>草稿落后于正在生效的规则</b><span>助手当前生效 '+publishedCount+' 条，这份草稿只有 '+draftRules.length+' 条。</span></div><button class="btn btn-outline btn-sm" type="button" onclick="rulesUsePublishedDraft()">用生效规则覆盖草稿</button><small>也可以继续编辑，保留当前草稿。</small></div>';
-  }
-  if(!enabled){
-    html+='<div class="rules-notice">已停用：当前一条规则都不会发给助手。草稿和历史都还在，点「重新启用规则」就能恢复。</div>';
-  }
-  html+='<div class="rules-toolbar">';
-  if(draftRules.length>1||rulesFilterText){
-    html+='<label class="rules-search"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg></span>'+
-      '<input id="rules-search" type="search" value="'+escAttr(rulesFilterText)+'" placeholder="搜索规则内容" aria-label="搜索规则内容" autocomplete="off" oninput="rulesFilter(this.value)"></label>';
-  }
-  html+='<span class="rules-filter-hint" id="rules-filter-hint"></span>'+
-    '<button class="btn btn-outline btn-sm rules-toolbar-add" type="button" onclick="rulesAddRow()">＋ 新增一条</button>'+
-    '</div>';
-  html+='<div class="rules-table" id="rules-table" data-filtering="0">';
-  if(!draftRules.length){
-    html+='<div class="rules-empty"><b>还没有规则</b><span>从一句清楚、可执行的话开始。</span><div><button type="button" onclick="rulesAddExample(\'不要叫我宝宝\')">不要叫我宝宝</button><button type="button" onclick="rulesAddExample(\'回复使用自然段，不要堆列表\')">回复使用自然段</button></div></div>';
-  }else{
-    draftRules.forEach(function(rule){html+=rulesRowHtml(rule)});
-  }
-  html+='<button class="rules-add-row" type="button" onclick="rulesAddRow()">＋ 新增一条规则</button>';
-  html+='</div>';
-  html+='<div class="rules-actions">'+
-    '<div><span class="rules-dirty-hint" id="rules-dirty-hint">'+esc(rulesStatusHintText())+'</span><span class="rules-metrics" id="rules-metrics"></span></div>'+
-    '<button class="btn btn-outline btn-sm" type="button"'+busy+' onclick="rulesSaveDraft()">保存草稿</button>'+
-    '<button class="btn btn-blue btn-sm" type="button"'+busy+' onclick="rulesPublish()">发布并生效</button>'+
-    '<details class="rules-more"><summary title="更多操作" aria-label="更多操作">⋯</summary><div><button type="button" onclick="rulesToggleEnabled()">'+(enabled?'停用全部规则':'重新启用规则')+'</button><button type="button" onclick="loadRulesPage(true)">放弃改动并重新读取</button></div></details>'+
-    '</div>';
-  html+='<p class="rules-foot-note">保存草稿只是存起来，助手看不到；发布之后才会在下一次缓存边界生效。</p>';
-  if(data.warning)html+='<div class="rules-notice warn">'+esc(String(data.warning))+'</div>';
-  body.innerHTML=html;
-  rulesRenumber();
-  // 重渲染会重建整张表，之前的搜索词得重新套一遍，否则搜索框有字但列表是全量
-  if(rulesFilterText)rulesFilter(rulesFilterText);
-}
-// 刷新会丢掉页面上没保存的编辑，所以先问一句；⋯ 菜单里那条本来就叫「放弃改动」，
-// 语义已经写明，不再重复确认。
-function rulesReload(){
-  if(rulesPageState.dirty&&typeof confirm==='function'&&!confirm('页面上还有没保存的改动，重新读取会丢掉它们。确定继续吗？'))return Promise.resolve(false);
-  rulesFilterText='';
-  return loadRulesPage(true);
-}
-function rulesTimeText(value){
-  var text=String(value||'').trim();
-  if(!text)return '未发布过';
-  return text.replace('T',' ').replace(/\+\d{2}:\d{2}$/,'').slice(0,16);
-}
-function rulesEndpoint(){return chatSpeechPreferencesEndpoint(chatLoadConfig())}
-function loadRulesPage(force){
-  if(rulesPageState.loading)return Promise.resolve(false);
-  if(rulesPageState.data&&!force)return Promise.resolve(true);
-  rulesPageState.loading=true;
-  renderRulesPage();
-  return panelDataFetch(rulesEndpoint()+'?_t='+Date.now(),{cache:'no-store'},{label:'CK 网关面板 Key'})
-    .then(function(resp){return resp.json().then(function(data){
-      if(!resp.ok||data.ok===false)throw new Error(data.error||('HTTP '+resp.status));
-      return data;
-    },function(){throw new Error('网关返回的不是规则数据（HTTP '+resp.status+'）')})})
-    .then(function(data){
-      rulesPageState.data=data;
-      rulesPageState.dirty=false;
-      renderRulesPage();
-      // 聊天抽屉的预览和这里共用同一份数据，顺手刷新，避免两处显示不一致
-      chatRenderSpeechPreferences(data,false);
-      return true;
-    })
-    .catch(function(error){
-      var body=document.getElementById('rules-page-body');
-      if(body)body.innerHTML='<div class="entity-error">规则读取失败：'+esc(rulesErrorText(error))+'</div>'+
-        '<div class="api-error-actions"><button class="btn btn-outline btn-sm" type="button" onclick="loadRulesPage(true)">重新读取</button></div>';
-      return false;
-    })
-    .then(function(result){rulesPageState.loading=false;return result});
-}
-// fetch 在跨域/断网时抛的是内容为 "Failed to fetch" 的 TypeError，直接甩给用户
-// 完全看不懂。这里翻译成人话，同时保留服务端返回的真实原因。
-function rulesErrorText(error){
-  var text=String((error&&error.message)||error||'').trim();
-  if(!text)return '请稍后重试';
-  if(/failed to fetch|networkerror|load failed/i.test(text))return '连不上 CK 网关，请检查网络后重试';
-  return text;
-}
-function rulesSetBusy(busy){
-  rulesPageState.busy=!!busy;
-  // 页头的「刷新」也要一起锁：请求还在飞的时候重新读取会拿到中间状态
-  var actions=document.querySelectorAll('.rules-actions .btn,.rules-head-side .btn');
-  for(var i=0;i<actions.length;i++)actions[i].disabled=!!busy;
-  var hint=document.getElementById('rules-dirty-hint');
-  if(hint)hint.textContent=rulesStatusHintText();
-}
-function rulesRequest(action,payload,okMessage){
-  if(rulesPageState.busy)return Promise.resolve(false);
-  var data=rulesPageState.data||{};
-  var body=Object.assign({action:action,base_revision:data.current_revision||'r0'},payload||{});
-  // 停用/启用不带规则内容，但用户可能正在编辑；先把页面上的行留住，
-  // 请求回来后放回草稿，别让一次点击把没保存的编辑清空。
-  var keepRules=(action==='set_enabled'&&rulesPageState.dirty)?rulesCollect():null;
-  rulesSetBusy(true);
-  return panelDataFetch(rulesEndpoint(),{
-    method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(body)
-  },{label:'CK 网关面板 Key'})
-    .then(function(resp){return resp.json().then(
-      function(json){return {ok:resp.ok,status:resp.status,data:json}},
-      function(){return {ok:resp.ok,status:resp.status,data:{},notJson:true}}
-    )})
-    .then(function(result){
-      // 网关如果把请求转发出去了，会返回一段 HTML；状态码可能仍是 200，
-      // 不识别出来就会假装"保存成功"，比直接报错还危险。
-      if(result.notJson||!result.data||typeof result.data!=='object'){
-        throw new Error('网关没有返回规则数据，改动没有保存');
-      }
-      if(!result.ok||result.data.ok===false){
-        if(result.status===409){
-          // 冲突时保留用户正在编辑的内容，不静默覆盖
-          toast('规则已被其他页面更新，请点「放弃改动并重新读取」后再改一次',6000);
-          return false;
-        }
-        throw new Error(result.data.error||('HTTP '+result.status));
-      }
-      rulesPageState.data=result.data;
-      rulesPageState.dirty=false;
-      if(keepRules){
-        rulesPageState.data.draft=Object.assign({},result.data.draft||{},{rules:keepRules});
-        rulesPageState.dirty=true;
-      }
-      rulesSetBusy(false);
-      renderRulesPage();
-      chatRenderSpeechPreferences(result.data,false);
-      toast(okMessage,4000);
-      return true;
-    })
-    .catch(function(error){
-      toast('操作失败：'+rulesErrorText(error),6000,{type:'error',closable:true});
-      return false;
-    })
-    .then(function(result){rulesSetBusy(false);return result});
-}
-function rulesSaveDraft(){
-  return rulesRequest('save_draft',{rules:rulesCollect()},'草稿已保存，当前生效的规则没有变化');
-}
-function rulesPublish(){
-  var rules=rulesCollect();
-  var before=Number((rulesPageState.data||{}).rule_count||0)||0;
-  var message=rules.length?('已发布 '+rules.length+' 条规则'):'已发布：现在没有任何规则约束助手';
-  if(!rules.length&&before>0&&!confirm('确定要发布空规则吗？发布后助手将不再受任何措辞规则约束。'))return Promise.resolve(false);
-  return rulesRequest('publish',{rules:rules},message);
-}
-function rulesToggleEnabled(){
-  var enabled=(rulesPageState.data||{}).enabled!==false;
-  return rulesRequest('set_enabled',{enabled:!enabled},enabled?'已停用：规则不再发给助手':'已重新启用：规则会在下一次缓存边界生效');
-}
-function chatOpenSpeechPreferences(){
-  chatOpenSettingTab('speech');
-  chatLoadSpeechPreferences(false);
-}
-function chatLoadSpeechPreferences(preserveEditor){
-  if(chatSpeechConsoleState.loading)return Promise.resolve();
-  var cfg=chatLoadConfig();
-  var status=document.getElementById('chat-speech-status');
-  chatSpeechConsoleState.loading=true;
-  if(status)status.textContent='读取中';
-  return panelDataFetch(chatSpeechPreferencesEndpoint(cfg)+'?_t='+Date.now(),{cache:'no-store'},{label:'CK 网关面板 Key'})
-    .then(function(resp){return resp.json().then(function(data){return {ok:resp.ok,data:data}},function(){return {ok:resp.ok,data:{}}})})
-    .then(function(result){
-      if(!result.ok||result.data.ok===false)throw new Error(result.data.error||('HTTP '+(result.data.status||'')));
-      chatRenderSpeechPreferences(result.data,!!preserveEditor);
-    }).catch(function(error){
-      if(status)status.textContent='读取失败';
-      toast('措辞偏好读取失败：'+(error&&error.message?error.message:'请稍后重试'));
-    }).finally(function(){chatSpeechConsoleState.loading=false});
-}
-function chatPublishSpeechPreferences(){
-  if(chatSpeechConsoleState.saving)return;
-  var data=chatSpeechConsoleState.data;
-  var editor=document.getElementById('chat-speech-rules');
-  if(!data||!editor)return;
-  var rules;
-  try{rules=JSON.parse(editor.value||'[]')}catch(error){toast('规则内容必须是 JSON 数组');return}
-  if(!Array.isArray(rules)){toast('规则内容必须是 JSON 数组');return}
-  var button=document.getElementById('chat-speech-publish');
-  var status=document.getElementById('chat-speech-status');
-  chatSpeechConsoleState.saving=true;
-  if(button)button.disabled=true;
-  if(status)status.textContent='发布中';
-  var cfg=chatLoadConfig();
-  panelDataFetch(chatSpeechPreferencesEndpoint(cfg),{
-    method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({base_revision:data.current_revision||'r0',rules:rules})
-  },{label:'CK 网关面板 Key'}).then(function(resp){
-    return resp.json().then(function(body){return {ok:resp.ok,status:resp.status,data:body}},function(){return {ok:resp.ok,status:resp.status,data:{}}})
-  }).then(function(result){
-    if(!result.ok){
-      if(result.status===409){
-        toast('已有新版本，已重新读取');
-        return chatLoadSpeechPreferences(false);
-      }
-      throw new Error(result.data.error||('HTTP '+result.status));
-    }
-    chatRenderSpeechPreferences(result.data,false);
-    toast(result.data.no_op?'没有需要发布的变化':'措辞偏好已发布');
-  }).catch(function(error){
-    if(status)status.textContent='发布失败';
-    toast('措辞偏好发布失败：'+(error&&error.message?error.message:'请稍后重试'));
-  }).finally(function(){
-    chatSpeechConsoleState.saving=false;
-    if(button)button.disabled=false;
-  });
-}
 // 等待期间的真实进度。网关本来就在发 meta/memory/delta 事件，以前只记进调试日志，
 // 界面上从「正在请求网关」到「正在渲染回复」之间十几二十秒一个字都不变，看着像卡死。
 // 显示位置在标题栏右上角；中间那句「对方正在输入...」保持原样，一个字不加。
 // 文案必须短：右上角要和两颗图标按钮抢地方，手机上放不下长句子。
+var chatTrimBusy=false;
 var chatStreamProgress=null;
 var chatStreamProgressTimer=0;
 function chatStreamProgressStart(){
@@ -5655,7 +5088,7 @@ function chatDebugRecordTopic(record,text){
     if(data.cache_anchors||data.canonical_changes)return 'cache';
     if(data.fact_stats_queued||data.recall_error||data.recall_query||data.memory_chars!==undefined)return 'recall';
   }
-  if(text.indexOf('截断')>=0||text.indexOf('措辞偏好')>=0||text.indexOf('总结')>=0)return 'trim';
+  if(text.indexOf('截断')>=0||text.indexOf('总结')>=0)return 'trim';
   if(text.indexOf('缓存')>=0)return 'cache';
   if(text.indexOf('Fact')>=0||text.indexOf('召回')>=0)return 'recall';
   return 'other';
@@ -5860,7 +5293,7 @@ var CHAT_DIAG_TOKEN_LABELS={
   body:'正文/其他文本',native_thinking:'原生思考正文',pseudo_thinking:'伪思考',
   signature:'原生思考签名',redacted_thinking:'加密思考',recall:'召回',
   backend_switch:'后端切换通知',worldbook:'世界书',memory_pack:'固定记忆包',
-  daily_digest:'当日截断总结',session_anchor:'会话首条锚点',speech_preferences:'措辞偏好',
+  daily_digest:'当日截断总结',session_anchor:'会话首条锚点',
   thinking_instruction:'思考提示词',tool_call:'工具调用参数',tool_result:'工具返回结果',
   tools_schema:'工具定义',image:'图片',document:'文档',unknown_block:'其他非文本块'
 };
@@ -6191,14 +5624,6 @@ function chatFormatDebug(ev,data){
     if(data.ok===false)return '⚠️ 自动清理失败｜'+cleanLabel+'｜'+(data.error||'未知原因');
     return '🧽 自动清理｜'+cleanLabel+'｜清掉 '+(data.images||0)+' 张图片 / '+(data.recalls||0)+' 条召回';
   }
-  if(ev==='speech_preference_prepare'){
-    if(data.skipped)return '🗣 措辞偏好提取｜跳过：'+data.skipped;
-    if(data.ok===false)return '⚠️ 措辞偏好提取失败｜本批 '+(data.messages||0)+' 条｜丢弃 '+(data.dropped_rounds||0)+' 轮｜'+(data.duration_ms||0)+'ms｜'+(data.stopped?'已被停止｜':'')+(data.error||'未知原因');
-    return '🗣 措辞偏好提取｜本批 '+(data.messages||0)+' 条｜丢弃 '+(data.dropped_rounds||0)+' 轮｜版本 '+(data.speech_preference_revision||'-')+'（待生效 '+(data.speech_preference_pending_revision||'-')+' / 已生效 '+(data.speech_preference_applied_revision||'-')+'）｜'+(data.duration_ms||0)+'ms';
-  }
-  if(ev==='speech_preference_prepare_failed_nonblocking'){
-    return '⚠️ 措辞偏好提取失败（不阻塞截断）｜保留旧规则｜触发：'+(data.trim_trigger||'-')+'｜计划丢弃 '+(data.planned_dropped||0)+' 轮｜进重试队列 '+(data.queued_rows||0)+' 条｜'+(data.error||'未知原因');
-  }
   if(ev==='trim_gateway_sync'){
     if(data.ok===false)return '⚠️ 截断同步网关失败｜'+(data.error||'未知原因');
     return '✂️ 截断同步网关｜触发：'+(data.trigger||'-')+'｜丢弃 '+(data.dropped||0)+' 轮';
@@ -6264,7 +5689,6 @@ var CHAT_TIMING_STAGE_LABELS={
   config_resolve_ms:'解析配置与缓存策略',
   mcp_tools_load_ms:'加载 MCP 工具',
   history_prepare_ms:'整理历史',
-  speech_preferences_ms:'措辞偏好',
   intent_rewrite_ms:'意图改写',
   query_embedding_network_ms:'问题向量',
   embeddings_load_cache_ms:'读取 Fact 索引',
@@ -6513,12 +5937,11 @@ function chatRenderTrimState(cfg){
   var reference=chatCacheActivityReference(session,chatLastMessageTs());
   var referenceTs=reference.timestamp;
   var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
-  var speechHint=chatSpeechPreferencesEnabledForTrim();
   if(expired){
     if(count>trim.keep){
-      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前'+(speechHint?'先审阅措辞偏好，再':'')+'保留最近 '+trim.keep+' 个真实轮次。 '+roundLimitText;
+      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前'+'保留最近 '+trim.keep+' 个真实轮次。 '+roundLimitText;
     }else{
-      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前'+(speechHint?'更新措辞偏好；':'')+'真实轮次不足 '+trim.keep+'，不删除内容。 '+roundLimitText;
+      next.textContent='缓存已连续 1h 未读取或创建：下一次发送前'+'真实轮次不足 '+trim.keep+'，不删除内容。 '+roundLimitText;
     }
   }else{
     var remaining=referenceTs?Math.max(0,CHAT_AUTO_TRIM_IDLE_MS-(Date.now()-referenceTs)):CHAT_AUTO_TRIM_IDLE_MS;
@@ -6706,15 +6129,6 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       messages:chatLimitArray(s.messages,maxVisible),
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
       transportUpdated:Number(s.transportUpdated||0)||0,
-      speechPreferenceRevision:s.speechPreferenceRevision,
-      speechPreferenceAppliedRevision:s.speechPreferenceAppliedRevision,
-      speechPreferencePendingActivationId:s.speechPreferencePendingActivationId,
-      speechPreferencePendingTrimEventId:s.speechPreferencePendingTrimEventId,
-      speechPreferencePreparedThroughTs:s.speechPreferencePreparedThroughTs||0,
-      speechPreferencePendingThroughTs:s.speechPreferencePendingThroughTs||0,
-      speechPreferenceRetryAtBoundary:s.speechPreferenceRetryAtBoundary===true,
-      speechPreferenceRetryQueue:chatSpeechPreferenceNormalizeQueue(s.speechPreferenceRetryQueue),
-      speechPreferencePendingBoundaryReason:s.speechPreferencePendingBoundaryReason||'',
       dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
       apiProviderId:String(s.apiProviderId||'').trim(),
       apiModel:String(s.apiModel||'').trim(),
@@ -7208,24 +6622,6 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   var keptTransportMessages=shouldTrim&&canonicalTransport?transportPlan.keptMessages:transportMessages.slice();
   var drop=shouldTrim?(canonicalTransport?transportPlan.dropped:localPlan.dropped):0;
   var after=Math.max(0,historyRounds-drop);
-  var preparedThrough=Number(session&&session.speechPreferencePreparedThroughTs||0)||0;
-  var preferenceMessages=pendingBoundary?[]:working.filter(function(message){
-    if(!message||typeof message!=='object')return false;
-    if(message.role!=='user'&&message.role!=='pending_user'&&message.role!=='assistant')return false;
-    if(message.role==='assistant'&&message.stopped===true)return false;
-    var ts=Number(message.ts||0)||0;
-    return !preparedThrough||!ts||ts>preparedThrough;
-  });
-  var preferenceThroughTs=preferenceMessages.reduce(function(latest,message){
-    return message&&(message.role==='user'||message.role==='pending_user')
-      ?Math.max(latest,Number(message.ts||0)||0)
-      :latest;
-  },preparedThrough);
-  var requiredPreferenceThroughTs=droppedMessages.reduce(function(latest,message){
-    return message&&(message.role==='user'||message.role==='pending_user')
-      ?Math.max(latest,Number(message.ts||0)||0)
-      :latest;
-  },preparedThrough);
   return {
     boundary:true,
     cacheBoundary:true,
@@ -7259,324 +6655,8 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     localDropped:shouldTrim?localPlan.dropped:0,
     deferred:deferred,
     editingMessage:base.editingMessage,
-    preferenceMessages:preferenceMessages,
-    preferenceThroughTs:preferenceThroughTs,
-    requiredPreferenceThroughTs:requiredPreferenceThroughTs,
-    preparedThroughTs:preparedThrough,
     forceCacheRebuild:pendingBoundary||drop>0,
   };
-}
-function chatSpeechPreferenceMessageId(message,index){
-  if(!message||typeof message!=='object')return '';
-  if(!message.messageId){
-    message.messageId='msg-'+String(Number(message.ts||0)||Date.now())+'-'+String(index||0)+'-'+Math.random().toString(36).slice(2,7);
-  }
-  return String(message.messageId);
-}
-// 措辞偏好重试队列。
-// 截断不再等待偏好提取成功（见 chatCommitAutoTrimPlan），所以没来得及审阅的用户消息
-// 必须独立保存一份，否则聊天历史一裁掉就永远丢失、再也没机会提取。
-// 队列里存的是已经压缩过的 prepare 行，不是完整聊天消息；同时按条数和字符数双重封顶，
-// 避免偏好服务长期不可用时把 session 撑爆。
-var CHAT_SPEECH_QUEUE_MAX_ROWS=200;
-var CHAT_SPEECH_QUEUE_MAX_CHARS=40000;
-function chatSpeechPreferenceNormalizeQueue(list){
-  var out=[],seen=Object.create(null),chars=0;
-  (Array.isArray(list)?list:[]).forEach(function(row){
-    if(!row||typeof row!=='object')return;
-    if(out.length>=CHAT_SPEECH_QUEUE_MAX_ROWS)return;
-    var text=String(row.text||'').trim();
-    if(!text)return;
-    var id=String(row.message_id||'').trim();
-    if(id){
-      if(seen[id])return;
-      seen[id]=1;
-    }
-    var context=String(row.assistant_context||'');
-    var size=text.length+context.length+100;
-    if(out.length&&chars+size>CHAT_SPEECH_QUEUE_MAX_CHARS)return;
-    chars+=size;
-    out.push({
-      role:'user',
-      message_id:id,
-      turn_id:String(row.turn_id||''),
-      text:text.slice(0,2400),
-      assistant_context:context.slice(-600),
-      ts:Number(row.ts||0)||0
-    });
-  });
-  return out;
-}
-function chatSpeechPreferenceQueueRows(session){
-  return chatSpeechPreferenceNormalizeQueue(session&&session.speechPreferenceRetryQueue);
-}
-function chatSpeechPreferenceQueueCommit(session,prepared){
-  if(!session)return;
-  if(prepared&&prepared.skipSpeech===true)return;
-  if(prepared&&Array.isArray(prepared.retryRows)){
-    session.speechPreferenceRetryQueue=chatSpeechPreferenceNormalizeQueue(prepared.retryRows);
-    return;
-  }
-  if(prepared&&prepared.ok===true&&prepared.reviewComplete!==false){
-    session.speechPreferenceRetryQueue=[];
-  }
-}
-function chatSpeechPreferencePrepareBatch(list,queued){
-  list=Array.isArray(list)?list:[];
-  var candidates=[],seen=Object.create(null);
-  // 先放上一轮没审阅完的旧行，保证它们优先被消费，不会被新消息一直挤在后面。
-  chatSpeechPreferenceNormalizeQueue(queued).forEach(function(row){
-    var id=String(row.message_id||'').trim();
-    if(id){
-      if(seen[id])return;
-      seen[id]=1;
-    }
-    candidates.push(row);
-  });
-  var previousAssistant='';
-  list.forEach(function(message,index){
-    if(!message||typeof message!=='object')return;
-    if(message.role==='assistant'&&message.stopped!==true&&String(message.text||'').trim()){
-      previousAssistant=String(message.text||'').trim().slice(-600);
-      return;
-    }
-    if(message.role!=='user'&&message.role!=='pending_user')return;
-    var text=String(message.text||'').trim();
-    if(!text)return;
-    var messageId=chatSpeechPreferenceMessageId(message,index);
-    if(messageId){
-      if(seen[messageId])return;
-      seen[messageId]=1;
-    }
-    candidates.push({
-      role:'user',
-      message_id:messageId,
-      turn_id:String(message.turnId||''),
-      text:text.slice(0,2400),
-      assistant_context:previousAssistant,
-      ts:Number(message.ts||0)||0
-    });
-    previousAssistant='';
-  });
-  var messages=[];
-  var chars=0;
-  var maxChars=60000;
-  for(var i=0;i<candidates.length;i++){
-    var row=candidates[i];
-    var size=row.text.length+row.assistant_context.length+100;
-    if(messages.length&&chars+size>maxChars)break;
-    messages.push(row);
-    chars+=size;
-  }
-  var reviewedThroughTs=messages.reduce(function(latest,row){return Math.max(latest,Number(row.ts||0)||0)},0);
-  return {
-    messages:messages,
-    candidateMessages:candidates.length,
-    selectedMessages:messages.length,
-    chars:chars,
-    reviewedThroughTs:reviewedThroughTs,
-    complete:messages.length===candidates.length,
-    // 本次装不下、留到下一轮继续的行
-    leftoverRows:candidates.slice(messages.length)
-  };
-}
-function chatSpeechPreferencePrepareMessages(list,queued){
-  return chatSpeechPreferencePrepareBatch(list,queued).messages;
-}
-function chatSpeechPreferenceRevisionValue(value){
-  if(value===undefined||value===null||value==='')return '';
-  if(typeof value==='number'&&isFinite(value))return value;
-  var text=String(value).trim();
-  if(!text)return '';
-  if(/^\d+$/.test(text)){
-    var number=Number(text);
-    if(Number.isSafeInteger(number))return number;
-  }
-  return text;
-}
-function chatSpeechPreferenceResponseMeta(data){
-  data=data&&typeof data==='object'?data:{};
-  var nested=(data.speech_preference&&typeof data.speech_preference==='object')?data.speech_preference:
-    ((data.speech_preferences&&typeof data.speech_preferences==='object')?data.speech_preferences:{});
-  return {
-    revision:chatSpeechPreferenceRevisionValue(
-      data.speech_preference_current_revision!==undefined?data.speech_preference_current_revision:
-        (data.speech_preference_revision!==undefined?data.speech_preference_revision:
-          (data.active_revision!==undefined?data.active_revision:nested.current_revision!==undefined?nested.current_revision:nested.revision))
-    ),
-    pendingRevision:chatSpeechPreferenceRevisionValue(
-      data.speech_preference_pending_revision!==undefined?data.speech_preference_pending_revision:
-        (data.pending_revision!==undefined?data.pending_revision:nested.pending_revision)
-    ),
-    appliedRevision:chatSpeechPreferenceRevisionValue(data.speech_preference_applied_revision!==undefined?data.speech_preference_applied_revision:nested.applied_revision),
-    activationId:String(data.speech_preference_activation_id||data.activation_id||nested.activation_id||'').trim(),
-    activationStatus:String(data.speech_preference_activation_status||data.speech_preference_status||data.activation_status||nested.activation_status||nested.status||'').trim(),
-    activationError:String(data.speech_preference_activation_error||data.activation_error||nested.activation_error||'').trim(),
-    // 只有后端明确回报 activation_applied=true 才能清掉 pending。
-    // “active” 只表示当前版本存在，不代表本轮已应用，不能作为推断。
-    activationApplied:data.speech_preference_activation_applied===true||data.activation_applied===true||nested.activation_applied===true
-  };
-}
-function chatCaptureSpeechPreferenceRevisions(data,sessionId,opts){
-  opts=opts||{};
-  var meta=chatSpeechPreferenceResponseMeta(data);
-  if(meta.revision===''&&meta.appliedRevision===''&&!meta.activationApplied&&!meta.activationStatus&&!meta.activationError)return meta;
-  var session=chatSessions.find(function(item){return item&&String(item.id)===String(sessionId||'')});
-  if(!session&&String(chatActiveSessionId||'')===String(sessionId||''))session=chatCurrentSession();
-  if(!session)return meta;
-  var changed=false;
-  if(meta.revision!==''&&String(session.speechPreferenceRevision) !== String(meta.revision)){
-    session.speechPreferenceRevision=meta.revision;changed=true;
-  }
-  if(meta.appliedRevision!==''&&String(session.speechPreferenceAppliedRevision)!==String(meta.appliedRevision)){
-    session.speechPreferenceAppliedRevision=meta.appliedRevision;changed=true;
-  }
-  var pendingId=String(session.speechPreferencePendingActivationId||'');
-  var activationConfirmed=(meta.activationApplied||/stale_pending_discarded|superseded/i.test(meta.activationStatus))
-    &&(!meta.activationId||!pendingId||meta.activationId===pendingId);
-  if(opts.allowClear!==false&&pendingId&&activationConfirmed){
-    if(Number(session.speechPreferencePendingThroughTs||0)>Number(session.speechPreferencePreparedThroughTs||0)){
-      session.speechPreferencePreparedThroughTs=Number(session.speechPreferencePendingThroughTs||0)||0;
-    }
-    session.speechPreferencePendingActivationId='';
-    session.speechPreferencePendingTrimEventId='';
-    session.speechPreferencePendingThroughTs=0;
-    session.speechPreferencePendingBoundaryReason='';
-    session.speechPreferenceRetryAtBoundary=false;
-    session.cacheRebuildPending=false;
-    changed=true;
-  }else if(opts.allowClear!==false&&pendingId&&!meta.activationApplied&&(
-    !!meta.activationError||/failed|error|mismatch|pending_retry|no_pending/i.test(meta.activationStatus)
-  )){
-    // 明确激活失败后，不在普通下一轮继续改 system 前缀。保留候选，
-    // 只在下一次 1h 缓存边界或用户手动截断时重试。
-    if(session.speechPreferenceRetryAtBoundary!==true){
-      session.speechPreferenceRetryAtBoundary=true;
-      changed=true;
-    }
-    if(session.cacheRebuildPending===true){
-      session.cacheRebuildPending=false;
-      changed=true;
-    }
-  }
-  if(changed)chatSaveSessions();
-  return meta;
-}
-function chatSpeechPreferenceTrimEventId(cfg,plan){
-  return [
-    'speech-boundary',
-    String(plan&&plan.trigger||'trim'),
-    String(cfg&&cfg.sessionId||'session'),
-    Number(plan&&plan.lastActivityTs||0)||0,
-    Number(plan&&plan.preferenceThroughTs||0)||0,
-    Number(plan&&plan.dropped||0),
-  ].join('-');
-}
-// 措辞偏好采用 prepare -> cache-boundary/chat 两阶段：prepare 只写待激活草稿，
-// 直到 1h 自动边界或手动截断后的下一轮把 activation_id 带进 /ck/chat 才应用。
-// 网关为本次提取保留最多 60s；前端再留网络传输和 JSON 处理余量。
-// 超时只取消本次截断并保留完整历史，不会提交 pending activation。
-var CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS=75000;
-async function chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState){
-  var batch=chatSpeechPreferencePrepareBatch(
-    (plan&&plan.preferenceMessages)||(plan&&plan.droppedMessages),
-    chatSpeechPreferenceQueueRows(chatCurrentSession())
-  );
-  var messages=batch.messages;
-  var eventId=chatSpeechPreferenceTrimEventId(cfg,plan);
-  var started=Date.now();
-  chatSetStatus('正在请求网关：缓存重建前更新措辞偏好...');
-  var controller=null,timer=0,parentSignal=requestState&&requestState.controller?requestState.controller.signal:null,relay=null,timedOut=false;
-  try{
-    if(typeof AbortController!=='undefined'){
-      controller=new AbortController();
-      if(parentSignal){
-        relay=function(){try{controller.abort()}catch(e){}};
-        if(parentSignal.aborted)relay();
-        else if(parentSignal.addEventListener)parentSignal.addEventListener('abort',relay,{once:true});
-      }
-      timer=setTimeout(function(){timedOut=true;try{controller.abort()}catch(e){}},CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS);
-    }
-    var response=await fetch(chatSpeechPreferencePrepareEndpoint(cfg),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      signal:controller?controller.signal:parentSignal||undefined,
-      body:JSON.stringify({
-        key:cfg.panelKey,
-        session_id:cfg.sessionId,
-        event_id:eventId,
-        messages:messages,
-        reason:plan&&plan.manual?'trim':'auto_trim',
-        activate_on:'trim'
-      })
-    });
-    var data={};
-    try{data=await response.json()}catch(e){}
-    if(!response.ok||data.ok===false||(data.prepared!==undefined&&data.prepared!==true))throw new Error((data&&data.error)||('HTTP '+response.status));
-    var activationId=String(
-      (data&&data.speech_preference_activation_id)||
-      (data&&data.activation_id)||
-      (data&&data.prepared&&data.prepared.activation_id)||
-      (data&&data.result&&data.result.activation_id)||''
-    ).trim();
-    if(!activationId)throw new Error('prepare 未返回 activation_id');
-    var responseMeta=chatCaptureSpeechPreferenceRevisions(data,cfg.sessionId,{allowClear:false});
-    chatDebug('speech_preference_prepare',{
-      ok:true,event_id:eventId,activation_id:activationId,
-      speech_preference_revision:responseMeta.revision,
-      speech_preference_pending_revision:responseMeta.pendingRevision,
-      speech_preference_applied_revision:responseMeta.appliedRevision,
-      dropped_rounds:Number(plan&&plan.dropped||0),messages:messages.length,duration_ms:Date.now()-started
-    });
-    var hasBackendReviewed=Object.prototype.hasOwnProperty.call(data,'reviewed_through_ts')||
-      Object.prototype.hasOwnProperty.call(data,'speech_preference_reviewed_through_ts');
-    var backendReviewed=Number(
-      Object.prototype.hasOwnProperty.call(data,'reviewed_through_ts')
-        ?data.reviewed_through_ts:data.speech_preference_reviewed_through_ts
-    )||0;
-    var reviewedThroughTs=hasBackendReviewed?backendReviewed:(batch.reviewedThroughTs||0);
-    return {
-      ok:true,eventId:eventId,activationId:activationId,
-      revision:responseMeta.revision,pendingRevision:responseMeta.pendingRevision,appliedRevision:responseMeta.appliedRevision,
-      durationMs:Date.now()-started,reviewedThroughTs:reviewedThroughTs,
-      reviewComplete:data.review_complete!==false&&batch.complete,
-      candidateMessages:batch.candidateMessages,selectedMessages:batch.selectedMessages,inputChars:batch.chars,
-      // 本次没装下的行留到下一次边界继续，已发送的行不再重复排队。
-      retryRows:batch.leftoverRows
-    };
-  }catch(error){
-    var stopped=!!(requestState&&requestState.stopped);
-    if(timedOut&&!stopped)error=new Error('prepare 超时（'+Math.round(CHAT_SPEECH_PREFERENCE_PREPARE_TIMEOUT_MS/1000)+' 秒）');
-    var errorText=String((error&&error.message)||error).slice(0,300);
-    chatDebug('speech_preference_prepare',{
-      ok:false,event_id:eventId,dropped_rounds:Number(plan&&plan.dropped||0),messages:messages.length,
-      duration_ms:Date.now()-started,stopped:stopped,error:errorText
-    });
-    if(!stopped)toast(
-      plan&&plan.trimmed
-        ?'措辞偏好更新失败，已保留旧规则；历史仍按真实轮次截断'
-        :'措辞偏好更新失败，本轮继续使用旧版本',
-      5000
-    );
-    // 失败时把"已发送但没成功"的行和"没装下"的行一起排队，下一次边界重试。
-    return {
-      ok:false,eventId:eventId,error:errorText,stopped:stopped,
-      retryRows:batch.messages.concat(batch.leftoverRows||[])
-    };
-  }finally{
-    if(timer)clearTimeout(timer);
-    if(parentSignal&&relay&&parentSignal.removeEventListener)parentSignal.removeEventListener('abort',relay);
-  }
-}
-function chatDiscardPendingSpeechPreference(session){
-  if(!session)return false;
-  var changed=false;
-  ['speechPreferencePendingActivationId','speechPreferencePendingTrimEventId','speechPreferencePendingBoundaryReason'].forEach(function(key){
-    if(session[key]){session[key]='';changed=true}
-  });
-  if(Number(session.speechPreferencePendingThroughTs||0)){session.speechPreferencePendingThroughTs=0;changed=true}
-  if(session.speechPreferenceRetryAtBoundary===true){session.speechPreferenceRetryAtBoundary=false;changed=true}
-  return changed;
 }
 // ===== 按日期保留的截断总结 =====
 // 截断把最旧的完整真实轮次从上下文里删掉，这里负责让助手仍然记得刚才聊了什么、
@@ -8119,14 +7199,9 @@ async function chatDailyDigestRequest(cfg,job){
     if(timer)clearTimeout(timer);
   }
 }
-function chatCommitAutoTrimPlan(cfg,plan,prepared){
-  prepared=prepared||{};
+function chatCommitAutoTrimPlan(cfg,plan){
   var s=chatCurrentSession();
   var oldTransport=(s.transportMessages||[]).length;
-  var reviewedThroughTs=Number(prepared.reviewedThroughTs||0)||0;
-  // 历史清理独立于措辞偏好提取。偏好服务失败、超时，或本次只审阅了一部分消息时，
-  // 仍然提交这次截断；没审阅到的内容进入独立的偏好重试队列（见 chatSpeechPreferenceQueue*），
-  // 不再靠"保留完整聊天历史"来兜底，否则偏好服务一挂，截断功能就整体失效。
   var trimCommitted=!!plan.trimmed;
   if(trimCommitted){
     var dropSet=new Set(plan.droppedMessages||[]);
@@ -8140,18 +7215,7 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
       s.transportUpdated=0;
     }
   }
-  if(prepared&&prepared.activationId){
-    s.speechPreferencePendingActivationId=String(prepared.activationId);
-    s.speechPreferencePendingTrimEventId=String(prepared.eventId||'');
-    s.speechPreferencePendingBoundaryReason=String(plan.trigger||'trim');
-    s.speechPreferenceRetryAtBoundary=false;
-    s.speechPreferencePendingThroughTs=Math.max(
-      Number(s.speechPreferencePendingThroughTs||0)||0,
-      reviewedThroughTs
-    );
-  }
   if(plan.cacheBoundary)s.cacheRebuildPending=true;
-  chatSpeechPreferenceQueueCommit(s,prepared);
   chatResetSessionAnchorFromMessages(s);
   s.updated=Date.now();
   chatSaveSessions();
@@ -8169,7 +7233,6 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     trigger:String(plan.trigger||''),
     manual:!!plan.manual,
     trimmed:trimCommitted,
-    trimDeferredForSpeechReview:false,
     before:plan.before,
     after:trimCommitted?plan.after:plan.before,
     dropped:trimCommitted?plan.dropped:0,
@@ -8183,64 +7246,15 @@ function chatCommitAutoTrimPlan(cfg,plan,prepared){
     transportAfter:trimCommitted?(plan.transportAfter||0):(plan.transportBefore||0),
     localBefore:plan.localBefore||0,
     localAfter:trimCommitted?(plan.localAfter||0):(plan.localBefore||0),
-    speechPreferenceReviewedThroughTs:reviewedThroughTs,
-    speechPreferenceReviewComplete:prepared.reviewComplete!==false,
-    speechPreferenceActivationId:prepared.activationId||'',
-    speechPreferenceTrimEventId:prepared.eventId||'',
-    speechPreferencePrepareMs:prepared.durationMs||0
   };
 }
 async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestState,opts){
   var plan=chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
-  if(!plan.boundary){
+  if(!plan.boundary||(requestState&&requestState.stopped)){
     chatRenderTrimState(cfg);
-    return plan;
+    return Object.assign({},plan,{trimmed:false,dropped:0,after:plan.before});
   }
-  // 只截断时完全跳过规则管理；规则管理关闭时也不准备、不排队、不发送措辞偏好。
-  var skipSpeech=opts&&opts.skipSpeech===true;
-  var speechEnabled=skipSpeech?false:await chatEnsureSpeechPreferenceState();
-  if(!speechEnabled&&chatDiscardPendingSpeechPreference(chatCurrentSession()))chatSaveSessions();
-  skipSpeech=skipSpeech||!speechEnabled;
-  var queuedRows=chatSpeechPreferenceQueueRows(chatCurrentSession());
-  var prepareMessages=skipSpeech?[]:chatSpeechPreferencePrepareMessages(plan.preferenceMessages||plan.droppedMessages,queuedRows);
-  if(!prepareMessages.length||skipSpeech){
-    chatDebug('speech_preference_prepare',{ok:true,skipped:skipSpeech?'speech_disabled':'no_text',event_id:'',dropped_rounds:plan.dropped});
-    return await chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,{
-      ok:true,activationId:'',eventId:'',durationMs:0,
-      reviewedThroughTs:Number(plan.preferenceThroughTs||0)||0,reviewComplete:true,
-      skipSpeech:skipSpeech
-    }),requestState);
-  }
-  var prepared=await chatPrepareSpeechPreferencesForTrim(cfg,plan,requestState);
-  // 用户主动中止：尊重中止，不提交任何改动。
-  if(requestState&&requestState.stopped){
-    chatRenderTrimState(cfg);
-    return {
-      boundary:true,cacheBoundary:true,trigger:plan.trigger,manual:!!plan.manual,
-      trimmed:false,before:plan.before,after:plan.before,dropped:0,
-      plannedDropped:plan.dropped,prepareFailed:false,prepareStopped:true,
-      speechPreferenceTrimEventId:prepared.eventId||''
-    };
-  }
-  // 偏好服务失败不阻塞历史清理：保留旧规则，照常提交截断，未审阅内容进重试队列。
-  if(!prepared.ok){
-    chatDebug('speech_preference_prepare_failed_nonblocking',{
-      error:prepared.error||'unknown',
-      trim_trigger:plan.trigger,
-      planned_dropped:plan.dropped,
-      queued_rows:(prepared.retryRows||[]).length
-    });
-    var committedOnFailure=chatCommitAutoTrimPlan(cfg,plan,{
-      ok:false,activationId:'',eventId:prepared.eventId||'',durationMs:prepared.durationMs||0,
-      reviewedThroughTs:0,reviewComplete:false,retryRows:prepared.retryRows||[]
-    });
-    committedOnFailure.prepareFailed=true;
-    committedOnFailure.speechPreferencePrepareError=prepared.error||'';
-    return await chatAwaitTrimDigest(committedOnFailure,requestState);
-  }
-  // 截断那一轮在这里等总结：位置在请求体组装之前，等到的总结就能进本轮请求，
-  // 整段缓存重建只发生一次。等待有上限、失败和超时都不阻塞发送。
-  return await chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,prepared),requestState);
+  return await chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan),requestState);
 }
 async function chatManualTrimNow(){
   chatInit();
@@ -8267,7 +7281,7 @@ async function chatManualTrimNow(){
   var button=document.getElementById('chat-manual-trim-btn');
   if(button){button.disabled=true;button.textContent='正在截断...'}
   try{
-    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim',skipSpeech:true});
+    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim'});
     if(result&&result.trimmed){
       chatSaveLocalMessages();
       chatRenderMessages();
@@ -8320,7 +7334,6 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
         // 轮询开启时聊天用的是固定 session scope，这里必须同样标注，
         // 否则会清到另一个 scope，聊天侧历史根本不会被更新。
         chat_polling_enabled:chatPollingEnabledForConfig(cfg),
-        trim_event_id:String(result.speechPreferenceTrimEventId||''),
         trim_trigger:String(result.trigger||'')
       })
     });
@@ -9650,7 +8663,7 @@ function chatSelectTrimScope(scope){
   });
 }
 function chatSettingTitle(tab){
-  return ({"model": "提示词", "thinking": "思考", "speech": "措辞偏好", "gateway": "API 连接", "billing": "计费显示", "tools": "工具", "worldbook": "世界书", "memory": "Fact 召回", "time": "时间提醒", "cache": "缓存策略", "history": "历史保留", "cleanup": "清理", "digest": "截断总结", "session": "会话管理", "trim": "截断", "debug": "调试"})[tab]||'聊天设置';
+  return ({"model": "提示词", "thinking": "思考", "gateway": "API 连接", "billing": "计费显示", "tools": "工具", "worldbook": "世界书", "memory": "Fact 召回", "time": "时间提醒", "cache": "缓存策略", "history": "历史保留", "cleanup": "清理", "digest": "截断总结", "session": "会话管理", "trim": "截断", "debug": "调试"})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   chatTogglePlus(false);
@@ -9832,7 +8845,6 @@ function chatSwitchSideTab(tab,silent){
     chatRenderDebugRecords();
     chatScrollDebugBottom();
   }
-  if(tab==='speech'&&!silent)chatLoadSpeechPreferences(false);
   if(tab==='trim'){chatSelectTrimScope('window');chatRenderTrimState()}
   // 打开「记忆与缓存」时现算一遍：总结是异步落地的，光靠上一次渲染的快照会看到空框。
   if(tab==='digest'||tab==='cleanup'){
@@ -11249,26 +10261,8 @@ async function chatSubmitPendingMessages(options){
   var pollingView=chatPollingView();
   body.chat_polling_enabled=chatPollingEnabledForConfig(cfg);
   body.chat_polling_revision=String(pollingView.revision||'');
-  var speechBoundaryNow=!!(trimResult.cacheBoundary||currentSession.cacheRebuildPending);
-  var speechEnabledForRequest=chatSpeechPreferencesEnabledForTrim();
-  if(!speechEnabledForRequest&&chatDiscardPendingSpeechPreference(currentSession))chatSaveSessions();
-  var pendingSpeechActivationId='';
-  if(speechEnabledForRequest&&(!currentSession.speechPreferenceRetryAtBoundary||speechBoundaryNow)){
-    pendingSpeechActivationId=String(currentSession.speechPreferencePendingActivationId||'')||
-      String(trimResult.speechPreferenceActivationId||'');
-  }
-  if(pendingSpeechActivationId){
-    body.speech_preference_activation_id=pendingSpeechActivationId;
-    body.speech_preference_trimmed=true;
-    body.speech_preference_trim_event_id=String(currentSession.speechPreferencePendingTrimEventId||trimResult.speechPreferenceTrimEventId||'');
-  }
-  if(speechBoundaryNow){
-    body.cache_rebuild_boundary=String(
-      trimResult.trigger||currentSession.speechPreferencePendingBoundaryReason||'manual'
-    );
-  }
-  if(currentSession.speechPreferenceAppliedRevision!==undefined&&currentSession.speechPreferenceAppliedRevision!==''){
-    body.speech_preference_applied_revision=currentSession.speechPreferenceAppliedRevision;
+  if(trimResult.cacheBoundary||currentSession.cacheRebuildPending){
+    body.cache_rebuild_boundary=String(trimResult.trigger||'manual');
   }
   if(promptCacheTtl)body.prompt_cache_ttl=promptCacheTtl;
   var requestUpstreamFormat=chatRequestUpstreamFormat(cfg,cacheStrategy);
@@ -11438,7 +10432,6 @@ async function chatSubmitPendingMessages(options){
           if(data&&data.latency_probe&&typeof data.latency_probe==='object')latencyTrace.gateway_latency=data.latency_probe;
           if(ev==='usage')data=chatEnrichUsageRoute(data||{},cfg);
           if(ev==='done'&&data&&data.usage)data.usage=chatEnrichUsageRoute(data.usage,cfg);
-          if(ev==='meta'||ev==='done')chatCaptureSpeechPreferenceRevisions(data,cfg.sessionId,{allowClear:true});
           chatDebug(ev,data);
           if(ev==='tool'){
             chatStreamProgressSet('工具'+(data&&data.name?('：'+data.name):''));
@@ -11473,9 +10466,6 @@ async function chatSubmitPendingMessages(options){
             var completedSession=chatCurrentSession();
             if(completedSession.cacheRebuildPending===true){
               completedSession.cacheRebuildPending=false;
-              if(!completedSession.speechPreferencePendingActivationId){
-                completedSession.speechPreferencePendingBoundaryReason='';
-              }
               completedSession.updated=Date.now();
               chatSaveSessions();
             }
@@ -11572,10 +10562,6 @@ function switchPanelTab(tab,opts) {
     if(currentApiTab==='polling')apiPollingStartStatusRealtime();
   }else{
     apiPollingStopStatusRealtime();
-  }
-  if(tab==='rules'){
-    renderRulesPage();
-    loadRulesPage(false);
   }
   if(tab==='overview'){
     loadArchiveFactOverview(false);
@@ -11792,17 +10778,15 @@ function apiConfigErrorHtml(reason){
 
 /* ---- API 配置：供应商库 + 功能选择（新版） ---- */
 var API_PROVIDER_LIBRARY_KEY='provider_library';
-var SPEECH_PREFERENCE_DEFAULT_MODEL='gemini-3.1-pro-preview';
 var API_TABS=[
   {key:'providers',label:'供应商',kind:'providers',info:'在这里维护可复用的 API 供应商和模型缓存。各功能页也会完整显示并保存当前供应商的 Key、站点地址和模型。'},
   {key:'main',label:'主链路',info:'你跟 AI 聊天，话都先经过这里：你说的每句话从这儿发给 AI，AI 的回复也从这儿送回来。这一栏就是设置“用哪个 AI、用哪个模型”。',groups:[
     {key:'main_io',label:'输入与输出',info:'选择聊天主链路要使用的供应商和默认模型。供应商本身在“供应商”页维护。'}
   ]},
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。也可以勾「随机模式」不按顺序、每次在队列里摇一个用。只影响聊天、Fact 和召回配置。'},
-  {key:'memory',label:'记忆',info:'这一栏管 Fact 提取、言语要求提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
+  {key:'memory',label:'记忆',info:'这一栏管 Fact 提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'speech_preference_extract',label:'言语要求提取',info:'只在原生 1h 缓存过期后的第一条消息，或你手动截断时调用，提取并更新称呼、语气、禁忌和回复方式。结果会在同一次缓存重建边界交给助手；普通每轮聊天不会额外调用这个 API。'},
-    {key:'chat_digest',label:'截断总结',info:'截断时把被丢掉的完整轮次写成总结，同一天合成一段，跨日期批次单独一段，均标明完整日期和起止时间。保留范围可在「记忆与缓存」设为今天及过去 0–100 天，下一轮注入系统区。普通聊天不调用。这一组留空时自动退回「言语要求提取」的供应商和模型。'}
+    {key:'chat_digest',label:'截断总结',info:'截断时把被丢掉的完整轮次写成总结，同一天合成一段，跨日期批次单独一段，均标明完整日期和起止时间。保留范围可在「截断总结」设为今天及过去 0–100 天，下一轮注入系统区。普通聊天不调用。请为这一组独立选择供应商和模型。'}
   ]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
@@ -12339,28 +11323,6 @@ function normalizeApiProviders(raw){
     }
     if(factMatches.length===1)factSlot.current=factMatches[0].id;
     if(!factSlot.model&&factModel)factSlot.model=factModel;
-  }
-  var speechSlot=apiGroupSlot('speech_preference_extract');
-  if(!findLibraryProvider(speechSlot.current)){
-    var speechBase=normalizedProviderBase(apiDirectValue('SPEECH_PREFERENCE_EXTRACT_BASE'));
-    var speechModel=String(speechSlot.model||'').trim()||apiDirectValue('SPEECH_PREFERENCE_EXTRACT_MODEL').trim()||SPEECH_PREFERENCE_DEFAULT_MODEL;
-    var speechMatches=speechBase?providerLibraryList().filter(function(p){return normalizedProviderBase(p.url)===speechBase}):[];
-    if(speechMatches.length>1&&speechModel){
-      var speechModelMatches=speechMatches.filter(function(p){return cleanModelList(p.models,p.model).indexOf(speechModel)>=0});
-      if(speechModelMatches.length===1)speechMatches=speechModelMatches;
-    }
-    if(speechMatches.length===1)speechSlot.current=speechMatches[0].id;
-    if(!speechSlot.current&&speechModel===SPEECH_PREFERENCE_DEFAULT_MODEL){
-      var ggMatches=providerLibraryList().filter(function(p){return isGgGeminiProvider(p,SPEECH_PREFERENCE_DEFAULT_MODEL)});
-      if(ggMatches.length===1)speechSlot.current=ggMatches[0].id;
-      // 模型列表可能只是过期缓存。若库中明确只有一个 GG 供应商，
-      // 直接绑定现有 URL/Key，再使用用户指定的 3.1 Pro 模型名。
-      if(!speechSlot.current){
-        var allGgMatches=providerLibraryList().filter(isGgProvider);
-        if(allGgMatches.length===1)speechSlot.current=allGgMatches[0].id;
-      }
-    }
-    if(!speechSlot.model)speechSlot.model=speechModel;
   }
   providerAdoptLegacyPollingFields();
 }
@@ -13310,11 +12272,6 @@ function saveAssignment(btn){
   }
   if(d.group==='fact_extract'){
     updates.FACT_EXTRACT_MODEL=slot.model;updates.FACT_EXTRACT_BASE=p.url;updates.FACT_EXTRACT_API_KEY=p.key;
-  }
-  if(d.group==='speech_preference_extract'){
-    updates.SPEECH_PREFERENCE_EXTRACT_MODEL=slot.model;
-    updates.SPEECH_PREFERENCE_EXTRACT_BASE=p.url;
-    updates.SPEECH_PREFERENCE_EXTRACT_API_KEY=p.key;
   }
   keyCfgFetch({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:updates})})
     .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}},function(){return {ok:r.ok,j:{}}})})

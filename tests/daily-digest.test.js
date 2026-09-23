@@ -260,11 +260,11 @@ function testWaitWiring(){
     source.indexOf('async function chatApplyAutoTrimForPendingBatch'),
     source.indexOf('async function chatManualTrimNow'),
   );
-  assert.strictEqual((apply.match(/chatAwaitTrimDigest\(/g)||[]).length,3,
-    '三条提交路径（无可审阅内容 / 偏好失败 / 正常）都要等总结');
+  assert.strictEqual((apply.match(/chatAwaitTrimDigest\(/g)||[]).length,1,
+    '截断提交路径要等待总结');
   assert.ok(apply.indexOf('chatAwaitTrimDigest(')<apply.length,'等待必须发生在 apply 里，也就是请求体组装之前');
   // 停止分支在等待之前就返回，不该多等。
-  assert.ok(apply.indexOf('prepareStopped:true')<apply.indexOf('chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan,prepared)'),
+  assert.ok(apply.indexOf('requestState.stopped')<apply.indexOf('chatAwaitTrimDigest(chatCommitAutoTrimPlan(cfg,plan)'),
     '用户中止时直接返回，不进入等待');
 
   const wait=extractFunction('chatAwaitTrimDigest');

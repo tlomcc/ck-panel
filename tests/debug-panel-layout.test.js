@@ -68,7 +68,7 @@ assert(render.includes('chatDebugRecords[item.index],item.index'),'copy buttons 
 assert(chatCss.includes('.chat-debug-topic'),'topic headings need styling');
 
 // 原来落进「🔎 调试信息｜{原始 JSON}」的事件现在有中文标题，才能被正确归类。
-['🗣 措辞偏好提取','✂️ 截断同步网关','⚠️ 空闲自动截断失败','⏳ 截断总结等待'].forEach(function(title){
+['✂️ 截断同步网关','⚠️ 空闲自动截断失败','⏳ 截断总结等待'].forEach(function(title){
   assert(format.includes(title),'missing debug title '+title);
 });
 

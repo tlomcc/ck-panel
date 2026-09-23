@@ -93,22 +93,9 @@ function testPollingNoticeUsesActiveProvider(){
   assert.strictEqual(info.ttlMs,5*60*1000);
 }
 
-function testTrimDoesNotSyncSpeechPreferences(){
-  const apply=extractFunction('chatApplyAutoTrimForPendingBatch');
-  const manual=extractFunction('chatManualTrimNow');
-  const queueCommit=extractFunction('chatSpeechPreferenceQueueCommit');
-  assert(/opts&&opts\.skipSpeech===true/.test(apply),'trim must have an explicit skip-speech path');
-  assert(/skipSpeech:skipSpeech/.test(apply),'skip-speech commits must carry their mode');
-  assert(/skipSpeech:true/.test(manual),'the manual button must only truncate');
-  assert(!/chatPrepareSpeechPreferencesForTrim/.test(manual),'manual truncation must not prepare preferences');
-  assert(/prepared&&prepared\.skipSpeech===true\)return/.test(queueCommit),'skip-speech must preserve the retry queue');
-  assert(!source.includes('chatManualSyncSpeechPreferences'),'the removed sync-only action must stay removed');
-  assert(html.includes('>只截断</button>'),'the truncation action must be labelled only truncate');
-}
 
 testProviderTypeNormalization();
 testNativeCacheRestoresClaudeTransport();
 testCacheNoticeUsesProviderStrategy();
 testPollingNoticeUsesActiveProvider();
-testTrimDoesNotSyncSpeechPreferences();
 console.log('provider-api-cache-trim tests passed');

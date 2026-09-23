@@ -1,0 +1,85 @@
+/* A task overview first; logs and technical counters stay in named disclosures. */
+#tab-status{
+  --ds-paper:#f3f6fa;--ds-surface:#fff;--ds-ink:#24364b;--ds-muted:#64748b;
+  --ds-line:#dce4ec;--ds-blue:#2563ab;--ds-green:#197b71;--ds-amber:#9a641c;--ds-red:#a94442;
+  max-width:1000px;margin:0 auto;padding-bottom:32px;
+}
+#tab-status .tab-head{align-items:center;gap:16px;margin-bottom:20px}
+#tab-status .tab-head h2{font-family:"Microsoft YaHei","Segoe UI",sans-serif;letter-spacing:.02em;color:var(--ds-ink)!important}
+#tab-status #status-sub{font-size:12px;color:var(--ds-muted)}
+#daily-status-body{display:flex;flex-direction:column;gap:16px;min-width:0;color:var(--ds-ink)}
+#daily-status-body .ds-overview{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#daily-status-body .ds-overview>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border:1px solid var(--ds-line);border-radius:10px;background:var(--ds-surface)}
+#daily-status-body .ds-overview span{font-size:12px;color:var(--ds-muted)}
+#daily-status-body .ds-overview b{font:600 14px Consolas,"Microsoft YaHei",monospace;color:var(--ds-ink)}
+#daily-status-body .ds-fact{display:flex;flex-direction:column;gap:18px;margin:0;padding:24px;border:1px solid var(--ds-line);border-radius:14px;background:var(--ds-surface);box-shadow:0 4px 18px #24364b05}
+#daily-status-body .ds-fact-head{margin:0;gap:12px;flex-wrap:wrap}
+#daily-status-body .ds-fact-head>div{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+#daily-status-body .ds-fact-head span{font-size:16px;color:var(--ds-ink);font-weight:650}
+#daily-status-body .ds-fact-head b{padding:5px 10px;border-radius:6px;font-size:12px;color:var(--ds-blue);background:#edf4ff}
+#daily-status-body .ds-fact-published .ds-fact-head b{color:var(--ds-green);background:#edf8f4}
+#daily-status-body :is(.ds-fact-blocked,.ds-fact-unavailable) .ds-fact-head b{color:var(--ds-red);background:#fff0ef}
+#daily-status-body :is(.ds-fact-retry_wait,.ds-fact-superseded) .ds-fact-head b{color:var(--ds-amber);background:#fff6e8}
+#daily-status-body .ds-phase-card{display:grid;gap:12px;border:1px solid var(--ds-line);border-left:4px solid var(--ds-blue);border-radius:10px;padding:16px;background:var(--ds-paper)}
+#daily-status-body .ds-section-label{font-size:11px;font-weight:600;color:var(--ds-muted);letter-spacing:.04em}
+#daily-status-body .ds-fact-progress{height:6px;margin:0;background:var(--ds-line);border-radius:5px}
+#daily-status-body .ds-fact-progress i{background:var(--ds-blue)}
+#daily-status-body .ds-fact-stage{margin:0;align-items:center;gap:12px}
+#daily-status-body .ds-fact-stage b{color:var(--ds-ink);font-size:15px}
+#daily-status-body .ds-fact-stage span{color:var(--ds-muted);font-size:12px;white-space:nowrap}
+#daily-status-body .ds-fact-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0}
+#daily-status-body .ds-fact-metrics>span{display:flex;flex-direction:column;gap:6px;padding:14px 8px;background:var(--ds-paper);border:0;border-radius:8px;color:var(--ds-muted);font-size:12px;text-align:center}
+#daily-status-body .ds-fact-metrics b{font:600 25px Consolas,"Segoe UI",monospace;color:var(--ds-ink)}
+#daily-status-body .ds-detail{margin:0;border:1px solid var(--ds-line);border-radius:9px;background:var(--ds-surface);padding:0 14px;color:var(--ds-muted)}
+#daily-status-body .ds-detail summary{padding:13px 0;cursor:pointer;font-size:13px;font-weight:600;line-height:1.6;color:var(--ds-ink)}
+#daily-status-body .ds-detail summary span{font-size:11px;font-weight:400;color:var(--ds-muted);margin-left:12px}
+#daily-status-body .ds-detail[open]{padding-bottom:14px}
+#daily-status-body .ds-detail[open] summary{margin-bottom:10px;border-bottom:1px solid var(--ds-line)}
+#daily-status-body .ds-detail summary:focus-visible{outline:2px solid var(--ds-blue);outline-offset:3px}
+#daily-status-body .ds-api-summary{padding:0;margin:0}
+#daily-status-body .ds-api-summary h3{font-size:13px;margin:0 0 12px;color:var(--ds-ink)}
+#daily-status-body .ds-api-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+#daily-status-body .ds-api-counts>div{display:flex;flex-direction:column;gap:5px;border-left:2px solid var(--ds-line);padding-left:12px}
+#daily-status-body .ds-api-counts span{font-size:11px;color:var(--ds-muted)}
+#daily-status-body .ds-api-counts strong{font:600 21px Consolas,"Segoe UI",monospace;color:var(--ds-ink)}
+#daily-status-body .ds-api-counts>.has-errors{border-left-color:var(--ds-red)}
+#daily-status-body .has-errors strong{color:var(--ds-red)}
+#daily-status-body .ds-api-provider{margin:12px 0 0;font-size:12px;line-height:1.6;color:var(--ds-muted);overflow-wrap:anywhere}
+#daily-status-body .ds-run-summary{display:grid;grid-template-columns:minmax(90px,1fr) 2fr;gap:12px}
+#daily-status-body .ds-run-summary>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+#daily-status-body .ds-run-summary span{font-size:11px;color:var(--ds-muted)}
+#daily-status-body .ds-run-summary b{font-size:12px;font-weight:500;overflow-wrap:anywhere;color:var(--ds-ink)}
+#daily-status-body .ds-fact-meta{margin:0;padding:0;border:0;gap:10px}
+#daily-status-body .ds-fact-meta>div{display:flex;flex-direction:column;gap:5px;padding:10px 12px;background:var(--ds-paper);border:0;border-radius:6px;min-width:0}
+#daily-status-body .ds-fact-meta b{overflow-wrap:anywhere;word-break:normal;color:var(--ds-ink);font-size:12px}
+#daily-status-body .ds-fact-meta span{color:var(--ds-muted);font-size:11px}
+#daily-status-body .ds-fact-tags{margin:10px 0 0;gap:7px}
+#daily-status-body .ds-fact-tags>span{flex-basis:100%;font-size:11px;color:var(--ds-muted)}
+#daily-status-body .ds-fact-tags>i{padding:6px 9px;background:var(--ds-paper);border:0;border-radius:5px;color:var(--ds-ink);line-height:1.6;overflow-wrap:anywhere}
+#daily-status-body .ds-fact-sub{margin:0;color:var(--ds-muted)}
+#daily-status-body .ds-fact-sub b{display:block;margin-top:6px;line-height:1.8;color:var(--ds-ink);font-size:12px}
+#daily-status-body .ds-fact-log{max-height:300px;overflow:auto;margin-top:12px;border:1px solid var(--ds-line);background:var(--ds-paper);color:var(--ds-muted)}
+#daily-status-body .ds-fact-log>i{padding:7px 0;border-bottom:1px solid var(--ds-line);line-height:1.7}
+#daily-status-body :is(.ds-fact-banner,.ds-fact-error,.ds-stale-alert){margin:0;padding:14px 16px;border-radius:8px;font-size:12px;line-height:1.7}
+#daily-status-body .ds-fact-error{order:-1;border:1px solid #eed2ce;border-left:4px solid var(--ds-red);background:#fff6f4;color:var(--ds-red);overflow-wrap:anywhere}
+#daily-status-body .ds-fact-head{order:-3}
+#daily-status-body .ds-fact-banner{order:-2}
+#daily-status-body .ds-note{font-size:12px;line-height:1.75;background:var(--ds-paper)}
+#daily-status-body .ds-note p{margin:8px 0}
+body.dark #tab-status{--ds-paper:#172330;--ds-surface:#1d2936;--ds-ink:#e4edf5;--ds-muted:#a5b5c5;--ds-line:#354655;--ds-blue:#87b9f3;--ds-green:#83cdb7;--ds-amber:#e9bd7c;--ds-red:#eca6a0}
+body.dark #daily-status-body .ds-fact-head b{background:#243a52}
+body.dark #daily-status-body .ds-fact-published .ds-fact-head b{background:#203d35}
+body.dark #daily-status-body :is(.ds-fact-blocked,.ds-fact-unavailable) .ds-fact-head b{background:#442d32}
+body.dark #daily-status-body :is(.ds-fact-retry_wait,.ds-fact-superseded) .ds-fact-head b{background:#423b2d}
+body.dark #daily-status-body .ds-fact-error{background:#38282d;border-color:#72484b}
+@media(max-width:600px){
+  #daily-status-body .ds-fact{padding:16px;gap:16px}
+  #daily-status-body .ds-overview>div{align-items:flex-start;flex-direction:column;gap:7px;padding:12px}
+  #daily-status-body .ds-fact-head span{font-size:15px}
+  #daily-status-body .ds-fact-head>div{gap:8px}
+  #daily-status-body .ds-fact-metrics{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  #daily-status-body .ds-fact-metrics b{font-size:22px}
+  #daily-status-body .ds-detail summary span{display:block;margin:2px 0 0 15px}
+  #daily-status-body .ds-fact-stage{align-items:flex-start;flex-direction:column;gap:5px}
+}
+@media(prefers-reduced-motion:reduce){#daily-status-body *{transition:none!important}}

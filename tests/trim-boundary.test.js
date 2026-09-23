@@ -25,78 +25,11 @@ function load(context,names){
 }
 
 // ---------------------------------------------------------------------------
-// 措辞偏好重试队列：截断不再等待偏好提取成功，没审阅到的内容必须独立留存
 // ---------------------------------------------------------------------------
-function testSpeechQueueNormalization(){
-  const context=load({console,CHAT_SPEECH_QUEUE_MAX_ROWS:3,CHAT_SPEECH_QUEUE_MAX_CHARS:100000},
-    ['chatSpeechPreferenceNormalizeQueue']);
 
-  const rows=context.chatSpeechPreferenceNormalizeQueue([
-    {message_id:'a',text:'第一条',ts:10},
-    {message_id:'a',text:'重复的同一条',ts:11},
-    {message_id:'b',text:'   ',ts:12},
-    {message_id:'c',text:'第三条',ts:13},
-    {message_id:'d',text:'第四条',ts:14},
-    {message_id:'e',text:'超出条数上限',ts:15}
-  ]);
-  assert.strictEqual(rows.map(r=>r.message_id).join(','),'a,c,d','按 message_id 去重并按条数封顶');
-  assert.strictEqual(rows[0].text,'第一条','保留首次出现的内容');
-  assert.strictEqual(rows[0].role,'user');
 
-  const capped=load({console,CHAT_SPEECH_QUEUE_MAX_ROWS:500,CHAT_SPEECH_QUEUE_MAX_CHARS:400},
-    ['chatSpeechPreferenceNormalizeQueue']).chatSpeechPreferenceNormalizeQueue([
-      {message_id:'x',text:'x'.repeat(300),ts:1},
-      {message_id:'y',text:'y'.repeat(300),ts:2}
-    ]);
-  assert.strictEqual(capped.length,1,'超过字符上限后停止收集');
-
-  const empty=context.chatSpeechPreferenceNormalizeQueue(null);
-  assert.strictEqual(empty.length,0,'非数组输入返回空队列');
-}
-
-function testPrepareBatchConsumesQueueFirst(){
-  const context=load({
-    console,
-    CHAT_SPEECH_QUEUE_MAX_ROWS:200,
-    CHAT_SPEECH_QUEUE_MAX_CHARS:40000,
-    chatSpeechPreferenceMessageId:(message,index)=>String(message.messageId||('m'+index))
-  },['chatSpeechPreferenceNormalizeQueue','chatSpeechPreferencePrepareBatch']);
-
-  const batch=context.chatSpeechPreferencePrepareBatch(
-    [{role:'user',messageId:'new1',text:'新消息',ts:100}],
-    [{message_id:'old1',text:'上次没审阅完的',ts:1}]
-  );
-  assert.strictEqual(batch.messages.map(m=>m.message_id).join(','),'old1,new1','旧队列优先，不会被新消息一直挤后面');
-  assert.strictEqual(batch.complete,true);
-  assert.strictEqual(batch.leftoverRows.length,0);
-
-  const deduped=context.chatSpeechPreferencePrepareBatch(
-    [{role:'user',messageId:'same',text:'正文',ts:5}],
-    [{message_id:'same',text:'队列里的同一条',ts:5}]
-  );
-  assert.strictEqual(deduped.messages.length,1,'同一条消息不会因为在队列里又被重复发送');
-  assert.strictEqual(deduped.messages[0].text,'队列里的同一条');
-}
-
-function testQueueCommitSemantics(){
-  const context=load({console,CHAT_SPEECH_QUEUE_MAX_ROWS:200,CHAT_SPEECH_QUEUE_MAX_CHARS:40000},
-    ['chatSpeechPreferenceNormalizeQueue','chatSpeechPreferenceQueueCommit']);
-
-  const failed={speechPreferenceRetryQueue:[]};
-  context.chatSpeechPreferenceQueueCommit(failed,{ok:false,retryRows:[{message_id:'a',text:'待重试',ts:1}]});
-  assert.strictEqual(failed.speechPreferenceRetryQueue.length,1,'prepare 失败时把内容排队等下次');
-
-  const done={speechPreferenceRetryQueue:[{message_id:'a',text:'旧的',ts:1}]};
-  context.chatSpeechPreferenceQueueCommit(done,{ok:true,reviewComplete:true});
-  assert.strictEqual(done.speechPreferenceRetryQueue.length,0,'完整成功后清空队列');
-
-  const partial={speechPreferenceRetryQueue:[{message_id:'a',text:'旧的',ts:1}]};
-  context.chatSpeechPreferenceQueueCommit(partial,{ok:true,reviewComplete:false});
-  assert.strictEqual(partial.speechPreferenceRetryQueue.length,1,'只审阅了一部分时不能清空队列');
-}
 
 // ---------------------------------------------------------------------------
-// 截断提交不再被措辞偏好绑住
 // ---------------------------------------------------------------------------
 function commitContext(session){
   const digestCalls=[];
@@ -105,8 +38,6 @@ function commitContext(session){
     chatMessages:[],
     chatEditingIndex:-1,
     CHAT_MAX_TRANSPORT_MESSAGES:400,
-    CHAT_SPEECH_QUEUE_MAX_ROWS:200,
-    CHAT_SPEECH_QUEUE_MAX_CHARS:40000,
     chatCurrentSession:()=>session,
     chatLimitArray:(list,max)=>(list||[]).slice(-max),
     chatResetSessionAnchorFromMessages:()=>{},
@@ -116,13 +47,13 @@ function commitContext(session){
     // 当日截断总结在提交点挂钩；这里记录调用，供下面断言"只有真的丢历史才生成总结"。
     chatDailyDigestScheduleForTrim:(cfg,plan)=>{digestCalls.push(plan)}
   };
-  const loaded=load(context,['chatSpeechPreferenceNormalizeQueue','chatSpeechPreferenceQueueCommit','chatCommitAutoTrimPlan']);
+  const loaded=load(context,['chatCommitAutoTrimPlan']);
   loaded.digestCalls=digestCalls;
   return loaded;
 }
 
-function testTrimCommitsWhenPrepareFails(){
-  const session={messages:[],transportMessages:[{role:'user'},{role:'assistant'}],speechPreferenceRetryQueue:[]};
+function testTrimCommitsAndSchedulesDigest(){
+  const session={messages:[],transportMessages:[{role:'user'},{role:'assistant'}]};
   const context=commitContext(session);
   const plan={
     trimmed:true,canonicalTransport:true,cacheBoundary:true,trigger:'cache_1h',
@@ -140,18 +71,16 @@ function testTrimCommitsWhenPrepareFails(){
     retryRows:[{message_id:'a',text:'没审阅到的原话',ts:1}]
   });
 
-  assert.strictEqual(result.trimmed,true,'偏好提取失败时历史仍然要被截断');
+  assert.strictEqual(result.trimmed,true,'计划中的历史应被截断');
   assert.strictEqual(result.dropped,6,'截断数量按计划提交');
   assert.strictEqual(result.historyAfter,4);
-  assert.strictEqual(result.trimDeferredForSpeechReview,false,'不再存在"因偏好未审阅而推迟截断"的状态');
   assert.strictEqual(session.transportMessages.length,1,'canonical transport 同步裁剪');
   assert.strictEqual(session.cacheRebuildPending,true,'边界后标记重建缓存');
-  assert.strictEqual(session.speechPreferenceRetryQueue.length,1,'未审阅内容转入重试队列，不随历史一起丢失');
   assert.strictEqual(context.digestCalls.length,1,'真的丢掉历史时必须触发当日截断总结');
 }
 
 function testDigestIsNotScheduledWithoutARealTrim(){
-  const session={messages:[],transportMessages:[],speechPreferenceRetryQueue:[]};
+  const session={messages:[],transportMessages:[]};
   const context=commitContext(session);
   context.chatCommitAutoTrimPlan({},{
     trimmed:false,canonicalTransport:false,cacheBoundary:true,trigger:'pending_rebuild',
@@ -161,21 +90,6 @@ function testDigestIsNotScheduledWithoutARealTrim(){
   assert.strictEqual(context.digestCalls.length,0,'只标记缓存边界、没丢历史时不该白花一次总结');
 }
 
-function testTrimCommitsWhenReviewIncomplete(){
-  const session={messages:[],transportMessages:[],speechPreferenceRetryQueue:[]};
-  const context=commitContext(session);
-  // reviewedThroughTs 远小于 requiredPreferenceThroughTs：旧实现会因此拒绝截断
-  const result=context.chatCommitAutoTrimPlan({},{
-    trimmed:true,canonicalTransport:false,cacheBoundary:true,trigger:'manual_trim',manual:true,
-    keptMessages:[],deferred:[],keptTransportMessages:[],
-    before:8,after:3,dropped:5,historyBefore:8,historyAfter:3,keep:3,
-    requiredPreferenceThroughTs:99999
-  },{ok:true,reviewComplete:false,reviewedThroughTs:1,activationId:'act-1',eventId:'evt-1'});
-
-  assert.strictEqual(result.trimmed,true,'只审阅了一部分也要提交截断');
-  assert.strictEqual(result.dropped,5);
-  assert.strictEqual(session.speechPreferencePendingActivationId,'act-1','成功的 activation 仍然记录');
-}
 
 function testTrimCommitPreservesMessagesAppendedAfterPlanning(){
   const dropped={role:'user',text:'旧消息'};
@@ -184,7 +98,7 @@ function testTrimCommitPreservesMessagesAppendedAfterPlanning(){
   const transportDropped={role:'user',text:'旧 transport'};
   const transportKept={role:'assistant',text:'保留 transport'};
   const transportAppended={role:'user',text:'新 transport'};
-  const session={messages:[dropped,kept,appended],transportMessages:[transportDropped,transportKept,transportAppended],speechPreferenceRetryQueue:[]};
+  const session={messages:[dropped,kept,appended],transportMessages:[transportDropped,transportKept,transportAppended]};
   const context=commitContext(session);
   context.chatMessages=session.messages;
   context.chatCommitAutoTrimPlan({}, {
@@ -351,12 +265,8 @@ function testPrefixSilentConfigIsNormalizedWithoutDisablingTrim(){
   assert.ok(extractFunction('chatManualTrimNow').includes("toast("),'手动截断仍要正常通知');
 }
 
-testSpeechQueueNormalization();
-testPrepareBatchConsumesQueueFirst();
-testQueueCommitSemantics();
-testTrimCommitsWhenPrepareFails();
+testTrimCommitsAndSchedulesDigest();
 testDigestIsNotScheduledWithoutARealTrim();
-testTrimCommitsWhenReviewIncomplete();
 testTrimCommitPreservesMessagesAppendedAfterPlanning();
 testIdleBoundaryAppliesToEveryCacheStrategy();
 testIdleBoundaryDoesNotFireEarly();
