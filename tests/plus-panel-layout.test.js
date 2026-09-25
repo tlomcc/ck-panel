@@ -23,7 +23,7 @@ assert(!/chat-plus-page/.test(html),'paged plus tray markup must be gone');
 assert(!/chat-plus-dots|chat-plus-dot"/.test(html),'plus pager dots must be gone');
 assert(!/chat-plus-arrow/.test(html),'plus pager arrows must be gone');
 const trayButtons=(html.match(/<div class="chat-plus-grid"[\s\S]*?<\/div>/)||[''])[0];
-assert((trayButtons.match(/<button/g)||[]).length===19,'all 19 plus entries must live in one grid');
+assert((trayButtons.match(/<button/g)||[]).length===20,'all 20 plus entries must live in one grid');
 ['相册','拍摄','上传文件','提示词','API 连接','世界书','Fact 召回','分条','截断','调试','清理','思考','时间提醒','缓存策略','截断总结','历史保留','计费显示','工具','会话管理'].forEach(function(label){
   assert(trayButtons.includes('<b>'+label+'</b>'),'plus tray lost entry '+label);
 });
@@ -66,7 +66,7 @@ assert(/id="chat-side-model"/.test(html)&&/id="chat-side-debug"/.test(html),'sid
 // ── 聊天标题栏的 Fact B 快捷键 ───────────────────────────────────────
 assert((html.match(/id="chat-quick-fact-toggle"/g)||[]).length===1,'Fact B shortcut must render exactly once');
 const chatHead=html.slice(html.indexOf('<div class="chat-head-actions">'),html.indexOf('</div>',html.indexOf('<div class="chat-head-actions">'))+6);
-assert(chatHead.indexOf('chat-quick-fact-toggle')<chatHead.indexOf('chat-theme-toggle'),'Fact B shortcut must sit left of the moon button');
+assert(chatHead.indexOf('chat-search-toggle')<chatHead.indexOf('chat-quick-fact-toggle')&&!chatHead.includes('chat-theme-toggle'),'Search and Fact B occupy the header; theme lives in debug');
 assert(/chat-quick-fact-toggle[^>]*>\s*<svg/.test(chatHead),'Fact B shortcut should use an icon without visible text');
 
 // ── 供应商接口类型 ─────────────────────────────────────────────────

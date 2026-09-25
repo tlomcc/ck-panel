@@ -112,7 +112,7 @@ assert(gateway.indexOf('id="chat-billing-enabled"')<gateway.indexOf('chat-tick-l
 assert(gateway.indexOf('chat-tick-legend-card')<gateway.indexOf('id="chat-usage-stats-enabled"'),'√ 说明在用量统计开关之前');
 assert(gateway.indexOf('id="chat-usage-stats-enabled"')<gateway.indexOf('chat-usage-legend-card'),'符号说明跟在用量统计开关下面');
 assert(!debugPanel.includes('chat-tick-legend-card'),'调试记录页不再重复放一份 √ 说明');
-assert(/<details[^>]*chat-debug-saved-card[\s\S]*?id="chat-debug-cache-mode"/.test(debugPanel),'已保存的设置必须包在可折叠块里');
+assert(/<details[^>]*chat-debug-controls[\s\S]*?id="chat-debug-cache-mode"/.test(debugPanel),'已保存的设置必须包在可折叠块里');
 assert(!/chat-debug-saved-card[^>]*\sopen[\s>]/.test(debugPanel),'已保存的设置默认折叠');
 assert(debugPanel.indexOf('chat-debug-saved-card')<debugPanel.indexOf('id="chat-debug"'),'已保存的设置仍在调试记录之上');
 assert(source.includes('function chatRenderTickLegend'),'说明内容要用真勾号现造，别在 HTML 里另抄一份 SVG');

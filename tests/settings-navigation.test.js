@@ -42,7 +42,7 @@ try{
     check(active[0].scrollWidth<=active[0].clientWidth+2,'Horizontal overflow '+key);
     geometry.push({key,height:active[0].clientHeight,scroll:active[0].scrollHeight});
   }
-  check(document.querySelectorAll('#chat-plus-grid>button').length===19,'Missing tray buttons');
+  check(document.querySelectorAll('#chat-plus-grid>button').length===20,'Missing tray buttons');
   for(const key of ['model','thinking','worldbook','digest','memory']){
     chatOpenSettingTab(key);
     check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=300,'Text editor too small '+key);

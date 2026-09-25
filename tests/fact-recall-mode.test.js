@@ -31,7 +31,7 @@ assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSetFactRecallMo
 assert(/aria-label',factOn\?'关闭 Fact B 召回':'开启 Fact B 召回'/.test(script),
   'Fact B quick toggle needs explicit on/off labels');
 assert(/\.chat-quick-fact-toggle/.test(fs.readFileSync(path.join(root,'chat.css'),'utf8')),'quick controls need compact chat header styling');
-assert(/fact-quick-heart/.test(html)&&/fact-quick-cloud/.test(html),'quick control should use the soft memory-cloud icon');
+assert(/chat-quick-fact-toggle/.test(html)&&!/fact-quick-cloud/.test(html),'quick control uses the compact recall icon');
 assert(/小模型先判定/.test(script),'strict A description must explain the model gate');
 
 console.log('fact recall mode tests: OK');

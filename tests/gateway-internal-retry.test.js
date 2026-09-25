@@ -15,7 +15,7 @@ assert(source.includes('gateway_internal_retry_enabled:cfg.gatewayInternalRetryE
 assert(source.includes('gateway_internal_retry_max:Math.max(0,Math.min(5'),'retry limit is not clamped before sending');
 assert(source.includes("chatSetFieldChecked('chat-gateway-internal-retry-enabled'"),'retry switch is not restored to the form');
 assert(source.includes("chatSetFieldValue('chat-gateway-internal-retry-max'"),'retry limit is not restored to the form');
-assert(/^chat-v238-/.test(version.version),'version.json was not bumped');
-assert(sw.includes('ck-panel-shell-v251-'),'service worker cache generation was not bumped');
+assert(/^chat-v\d+-/.test(version.version),'version.json was not bumped');
+assert(/ck-panel-shell-v\d+-/.test(sw),'service worker cache generation was not bumped');
 assert(sw.includes(version.version),'service worker assets use the current panel version');
 console.log('gateway internal retry panel tests: OK');

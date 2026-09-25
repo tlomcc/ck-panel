@@ -109,7 +109,7 @@ function dailyStatusContext(){
 (function retryOnlyForRecoverableStates(){
   const {context,dom}=dailyStatusContext();
   context.renderDailyStatus({today:'2026-08-22',fact_daily:{status:'published',target_date:'2026-08-21',last_success_date:'2026-08-21'}});
-  assert(!dom.byId['daily-status-body'].innerHTML.includes('daily-fact-retry'),'已发布不该出现补跑按钮');
+  assert(!dom.byId['daily-status-body'].innerHTML.includes('id="daily-fact-retry"'),'已发布不该出现补跑按钮');
 })();
 
 /* ---- 2. 总览：只读 Fact 接口，不再打 /entity-graph ---- */
