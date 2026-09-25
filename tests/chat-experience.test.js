@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v239-browser-regression');
+const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v240-browser-regression');
 fs.mkdirSync(out,{recursive:true});
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -62,8 +62,8 @@ const server=http.createServer((req,res)=>{
       chatSetActionMode('high');check(box.querySelectorAll('.chat-msg-tools').length===rows().length,'High mode must show all actions');check(!box.querySelector('.chat-action-buddy'),'Buddy leaked in high mode');
       chatSetActionMode('medium');
       chatOpenSettingTab('display');check(document.querySelector('[data-action-mode="medium"]').getAttribute('aria-checked')==='true','Mode UI not restored');
-      chatOpenSettingTab('debug');check(!document.querySelector('.chat-debug-controls').open,'Debug defaults expanded');check(document.querySelectorAll('#chat-side-debug details').length===1,'Nested debug collapse');check(document.querySelector('#chat-side-debug .chat-theme-toggle'),'Theme not in debug');
-      document.getElementById('chat-debug-version').click();check(!document.getElementById('panel-version-notes').hidden,'Version notes not open');check(document.querySelectorAll('#panel-version-notes li').length===8,'Notes not current version');document.getElementById('chat-debug-version').click();check(document.getElementById('panel-version-notes').hidden,'Version notes toggle failed');document.getElementById('chat-debug-version').click();box.click();check(document.getElementById('panel-version-notes').hidden,'Outside click failed');
+      chatOpenSettingTab('debug');check(!document.querySelector('.chat-debug-controls').open,'Debug defaults expanded');check(document.querySelectorAll('#chat-side-debug details').length===1,'Nested debug collapse');check(document.querySelector('.chat-settings-head .chat-theme-toggle:not([hidden])'),'Theme must be visible in debug header');
+      document.getElementById('chat-debug-version').click();check(!document.getElementById('panel-version-notes').hidden,'Version notes not open');check(document.querySelectorAll('#panel-version-notes li').length===window.CK_PANEL_RELEASE_NOTES.length,'Notes not current version');document.getElementById('chat-debug-version').click();check(document.getElementById('panel-version-notes').hidden,'Version notes toggle failed');document.getElementById('chat-debug-version').click();box.click();check(document.getElementById('panel-version-notes').hidden,'Outside click failed');
       chatToggleSettings(false);chatFolders=[{id:'f',name:'我的分组'}];chatSessions[0].folderId='f';chatSessions[0].updated=now;chatSessionSearch='小克';chatToggleSessions(true);chatRenderSessions();await tick();
       const preview=document.querySelector('.chat-session-preview').getBoundingClientRect(),folder=document.querySelector('.chat-session-folder-label').getBoundingClientRect();check(folder.top>=preview.bottom-1,'Folder overlaps preview');chatToggleSessions(false);
       check(document.documentElement.scrollWidth<=innerWidth+1,'Horizontal overflow');

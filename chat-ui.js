@@ -113,7 +113,7 @@ function chatToggleTurnActions(index){
 }
 function chatActionBuddy(index){
   var expanded=chatActionOpenTurn===chatActionTurnKey(index);
-  return '<button class="chat-action-buddy" type="button" onclick="chatToggleTurnActions('+index+')" aria-label="'+(expanded?'收起':'展开')+'本轮操作" aria-expanded="'+expanded+'" title="本轮操作"><svg viewBox="0 0 28 24" aria-hidden="true"><path d="M5 8 4 3l6 3a13 13 0 0 1 8 0l6-3-1 5c4 9-1 13-9 13S1 17 5 8Z"/><path d="M9 12v1m10-1v1m-7 3q2 2 4 0"/></svg></button>';
+  return '<button class="chat-action-buddy" type="button" onclick="chatToggleTurnActions('+index+')" aria-label="'+(expanded?'收起':'展开')+'本轮操作" aria-expanded="'+expanded+'" title="本轮操作"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5c4.2 0 6.5 3.1 6.5 7S12 14.5 8 14.5s-6.5-2.1-6.5-6 2.3-7 6.5-7Z"/><path class="chat-buddy-face" d="M5.5 7v.5m5-.5v.5M6.5 10q1.5 1.5 3 0"/></svg></button>';
 }
 function chatCloseVersionNotes(){var el=document.getElementById('panel-version-notes');if(el)el.hidden=true;document.querySelectorAll('[data-version-notes]').forEach(function(b){b.setAttribute('aria-expanded','false')})}
 function chatToggleVersionNotes(event){

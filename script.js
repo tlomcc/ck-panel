@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v239-chat-experience-backfill-r2';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v240-chat-layout-polish';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8850,6 +8850,8 @@ function chatSwitchSideTab(tab,silent){
   if(title)title.textContent=chatSettingTitle(tab);
   var version=document.getElementById('chat-debug-version');
   if(version)version.classList.toggle('show',tab==='debug');
+  var themeToggle=document.getElementById('chat-debug-theme-toggle');
+  if(themeToggle)themeToggle.hidden=tab!=='debug';
   document.querySelectorAll('.chat-side-panel').forEach(function(p){p.classList.toggle('active',p.id==='chat-side-'+tab)});
   if(!silent){
     var cfg=chatMergeLiveToggleState(chatLoadConfig());

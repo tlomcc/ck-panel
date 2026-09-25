@@ -30,7 +30,7 @@ assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSetFactRecallMo
   'Fact B quick toggle must enable B or fully disable recall');
 assert(/aria-label',factOn\?'关闭 Fact B 召回':'开启 Fact B 召回'/.test(script),
   'Fact B quick toggle needs explicit on/off labels');
-assert(/\.chat-quick-fact-toggle/.test(fs.readFileSync(path.join(root,'chat.css'),'utf8')),'quick controls need compact chat header styling');
+assert(/\.chat-quick-fact-toggle/.test(fs.readFileSync(path.join(root,'chat-ui.css'),'utf8')),'quick controls need compact chat header styling');
 assert(/chat-quick-fact-toggle/.test(html)&&!/fact-quick-cloud/.test(html),'quick control uses the compact recall icon');
 assert(/小模型先判定/.test(script),'strict A description must explain the model gate');
 

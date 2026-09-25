@@ -56,65 +56,6 @@ body.chat-active .app-header h1{
 body.chat-active .app-header p,
 body.chat-active .install-app-btn{display:none!important}
 
-/* Fact 快捷键：一朵带爱心的小记忆云，和聊天标题栏的柔和气质保持一致。 */
-body.chat-active .chat-quick-fact-toggle{
-  width:32px!important;
-  height:32px!important;
-  min-width:32px!important;
-  padding:0!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  border:1px solid transparent!important;
-  border-radius:12px!important;
-  background:transparent!important;
-  transition:background .2s ease,border-color .2s ease,transform .2s ease!important;
-}
-body.chat-active .chat-quick-fact-toggle svg{
-  width:22px!important;
-  height:22px!important;
-  display:block!important;
-  overflow:visible!important;
-  transition:stroke .2s ease,opacity .2s ease,transform .2s ease!important;
-}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="false"]{
-  opacity:.58!important;
-  color:var(--chat5-faint)!important;
-}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="false"] svg{
-  stroke:currentColor!important;
-  stroke-width:1.45!important;
-}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] svg{
-  stroke:var(--chat5-green-line)!important;
-  stroke-width:1.65!important;
-}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .fact-quick-heart{
-  fill:var(--chat5-green)!important;
-  stroke:var(--chat5-green-line)!important;
-}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .fact-quick-spark{
-  fill:#f7c86a!important;
-  stroke:#e5a943!important;
-}
-body.chat-active .chat-quick-fact-toggle:hover{
-  opacity:1!important;
-  background:rgba(149,236,105,.14)!important;
-  border-color:rgba(126,217,87,.26)!important;
-  transform:translateY(-1px)!important;
-}
-body.chat-active .chat-quick-fact-toggle:hover svg{
-  stroke:var(--chat5-green-line)!important;
-  transform:rotate(-4deg)!important;
-}
-body.chat-active .chat-quick-fact-toggle:focus-visible{
-  outline:2px solid rgba(126,217,87,.6)!important;
-  outline-offset:1px!important;
-}
-body.dark.chat-active .chat-quick-fact-toggle:hover{
-  background:rgba(149,236,105,.12)!important;
-}
-
 body.chat-active .brand-mark{
   width:30px!important;
   height:30px!important;
