@@ -64,6 +64,10 @@ function chatToggleSearch(force){
   document.getElementById('chat-search-toggle').setAttribute('aria-expanded',String(open));
   if(open){document.getElementById('chat-search-input').focus({preventScroll:true});chatSearchMessages()}
 }
+function chatResetSearch(){
+  chatToggleSearch(false);chatSearchHits=[];chatSearchPosition=-1;
+  var input=document.getElementById('chat-search-input');if(input)input.value='';
+}
 function chatSearchMessages(){
   var query=document.getElementById('chat-search-input').value.trim().toLocaleLowerCase();
   chatSearchHits=[];chatSearchPosition=-1;

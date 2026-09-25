@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v239-chat-experience-backfill';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v239-chat-experience-backfill-r2';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6359,6 +6359,7 @@ async function chatDeleteSession(id,event){
 }
 function chatSelectSession(id){
   if(chatSending)return;
+  chatResetSearch();
   chatFlushAssistantRevealQueue();
   chatActiveSessionId=id;
   var cfg=chatLoadConfig();
@@ -9816,6 +9817,7 @@ function chatClearLocalMessages(){
   chatNewSession();
 }
 function chatNewSession(){
+  chatResetSearch();
   chatFlushAssistantRevealQueue();
   var cfg=chatReadForm();
   var previousSession=chatCurrentSession();

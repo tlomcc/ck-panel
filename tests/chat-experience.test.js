@@ -67,6 +67,10 @@ const server=http.createServer((req,res)=>{
       chatToggleSettings(false);chatFolders=[{id:'f',name:'我的分组'}];chatSessions[0].folderId='f';chatSessions[0].updated=now;chatSessionSearch='小克';chatToggleSessions(true);chatRenderSessions();await tick();
       const preview=document.querySelector('.chat-session-preview').getBoundingClientRect(),folder=document.querySelector('.chat-session-folder-label').getBoundingClientRect();check(folder.top>=preview.bottom-1,'Folder overlaps preview');chatToggleSessions(false);
       check(document.documentElement.scrollWidth<=innerWidth+1,'Horizontal overflow');
+      chatToggleSearch(true);document.getElementById('chat-search-input').value='问题 第4轮';chatSearchMessages();
+      chatSessions.push({id:'second',title:'另一个窗口',messages:[],transportMessages:[]});chatSelectSession('second');
+      check(document.getElementById('chat-search').hidden&&chatSearchHits.length===0&&!document.getElementById('chat-search-input').value,'Search leaked across windows');
+      chatSelectSession('fixture');await tick();
       return {rounds:120,rendered:rows().length,history:'50-round pages, anchor, edges and search passed',actions:'three modes and next-turn collapse passed',layout:'debug, version popover and folder overlap passed'};
     })()`);
     console.log(width+' '+dark,JSON.stringify(result));await pause(400);await shot(width+'-'+dark+'-chat');

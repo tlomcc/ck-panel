@@ -1,5 +1,5 @@
 {
-  "version": "chat-v239-chat-experience-backfill",
+  "version": "chat-v239-chat-experience-backfill-r2",
   "notes": [
     "缓存状态使用 Telegram 风格细线单勾 / 双勾；新窗口继承「小克」保留范围内的所有总结。",
     "修复供应商拉取模型后的页面跳动，以及对话搜索结果中摘要和分组重叠。",
