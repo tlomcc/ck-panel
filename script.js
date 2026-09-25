@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v237-fourth-cache-breakpoint-toggle';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v238-gateway-internal-retry';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2450,6 +2450,8 @@ function chatDefaultConfig(){
     mcpUrl:API_BASE,
     cacheStrategy:'single_5m',
     allowFourthCacheBreakpoint:false,
+    gatewayInternalRetryEnabled:false,
+    gatewayInternalRetryMax:1,
     recallHistoryRetentionSeconds:300,
     promptCacheTtl:'5m',
     splitAssistantReplies:true,
@@ -3213,6 +3215,8 @@ function chatLoadConfig(){
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
   cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
+  cfg.gatewayInternalRetryEnabled=cfg.gatewayInternalRetryEnabled===true;
+  cfg.gatewayInternalRetryMax=Math.max(0,Math.min(5,Math.round(Number(cfg.gatewayInternalRetryMax)||0)));
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   cfg.costPricingDefaults=chatNormalizeCostDefaults(cfg.costPricingDefaults);
   cfg.recallBoxVisible=cfg.recallBoxVisible!==false;
@@ -3296,6 +3300,8 @@ function chatSaveConfigObject(cfg){
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.allowFourthCacheBreakpoint=cfg.allowFourthCacheBreakpoint===true;
+  cfg.gatewayInternalRetryEnabled=cfg.gatewayInternalRetryEnabled===true;
+  cfg.gatewayInternalRetryMax=Math.max(0,Math.min(5,Math.round(Number(cfg.gatewayInternalRetryMax)||0)));
   cfg.costPricing=chatNormalizeCostPricing(cfg.costPricing);
   cfg.costPricingDefaults=chatNormalizeCostDefaults(cfg.costPricingDefaults);
   cfg.recallBoxVisible=cfg.recallBoxVisible!==false;
@@ -4206,6 +4212,8 @@ function chatReadForm(){
     mcpUrl:API_BASE,
     cacheStrategy:cacheStrategyValue,
     allowFourthCacheBreakpoint:chatFieldChecked('chat-allow-fourth-cache-breakpoint',saved.allowFourthCacheBreakpoint===true),
+    gatewayInternalRetryEnabled:chatFieldChecked('chat-gateway-internal-retry-enabled',saved.gatewayInternalRetryEnabled===true),
+    gatewayInternalRetryMax:Math.max(0,Math.min(5,Math.round(Number(chatFieldValue('chat-gateway-internal-retry-max',saved.gatewayInternalRetryMax===undefined?1:saved.gatewayInternalRetryMax))||0))),
     recallHistoryRetentionSeconds:cacheMeta.retentionSeconds,
     promptCacheTtl:cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl,
     splitAssistantReplies:saved.splitAssistantReplies!==false,
@@ -4276,6 +4284,8 @@ function chatWriteForm(cfg){
   var cacheMeta=chatCacheStrategyMeta(cfg.cacheStrategy);
   if(document.getElementById('chat-cache-strategy'))document.getElementById('chat-cache-strategy').value=cacheMeta.value;
   chatSetFieldChecked('chat-allow-fourth-cache-breakpoint',cfg.allowFourthCacheBreakpoint===true);
+  chatSetFieldChecked('chat-gateway-internal-retry-enabled',cfg.gatewayInternalRetryEnabled===true);
+  chatSetFieldValue('chat-gateway-internal-retry-max',Math.max(0,Math.min(5,Math.round(Number(cfg.gatewayInternalRetryMax)||0))));
   if(document.getElementById('chat-recall-retention-seconds'))document.getElementById('chat-recall-retention-seconds').value=String(cacheMeta.retentionSeconds);
   var defaultTrim=chatNormalizeAutoTrimConfig({
     enabled:cfg.autoTrimEnabled!==false,
@@ -10245,6 +10255,8 @@ async function chatSubmitPendingMessages(options){
     use_mcp:cfg.useMcp===true,
     cache_strategy:cacheStrategy,
     allow_fourth_cache_breakpoint:cfg.allowFourthCacheBreakpoint===true,
+    gateway_internal_retry_enabled:cfg.gatewayInternalRetryEnabled===true,
+    gateway_internal_retry_max:Math.max(0,Math.min(5,Math.round(Number(cfg.gatewayInternalRetryMax)||0))),
     recall_history_retention_seconds:recallRetention,
     session_anchor:{
       first_user_text:anchorText,
