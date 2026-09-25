@@ -14,17 +14,17 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v2-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v2.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="style.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="polish.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="chat.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="wechat.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="shell.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="components.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="daily-status.css?v=chat-v236-remove-rules-daily-editors">
-<link rel="stylesheet" href="settings.css?v=chat-v236-remove-rules-daily-editors">
-<script>window.CK_PANEL_VERSION='chat-v236-remove-rules-daily-editors';</script>
+<link rel="stylesheet" href="tokens.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="style.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="polish.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="chat.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="wechat.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="shell.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="components.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="daily-status.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<link rel="stylesheet" href="settings.css?v=chat-v237-fourth-cache-breakpoint-toggle">
+<script>window.CK_PANEL_VERSION='chat-v237-fourth-cache-breakpoint-toggle';</script>
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><span>CK</span></div><div class="startup-name">此刻</div><div class="startup-subtitle">让记忆自然流动</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -33,7 +33,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><svg class="ck-mark" viewBox="0 0 36 36" aria-hidden="true"><path class="ck-mark-c" d="M22.6 11.4a8.2 8.2 0 1 0 0 13.2"/><path class="ck-mark-k1" d="M25.4 9.5v17"/><path class="ck-mark-k2" d="M32.8 11.2 25.6 18l7.2 6.8"/><circle class="ck-mark-node" cx="25.5" cy="18" r="1.7"/></svg></button><div><h1>此刻记忆库</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<span class="panel-version-badge" id="panel-version-badge" data-short-version="v236">chat-v236-remove-rules-daily-editors</span>
+<span class="panel-version-badge" id="panel-version-badge" data-short-version="v237">chat-v237-fourth-cache-breakpoint-toggle</span>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -204,7 +204,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v236-remove-rules-daily-editors">v236</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><span class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v237-fourth-cache-breakpoint-toggle">v237</span></div><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="time">时间提醒</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option><option value="cleanup">清理</option><option value="history">历史保留</option><option value="gateway">API 连接</option></optgroup><optgroup label="显示与管理"><option value="billing">计费显示</option><option value="tools">工具</option><option value="debug">调试</option><option value="session">会话管理</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model">
 <div class="chat-scope-heading" data-scope="global"><span class="chat-scope-badge">所有窗口</span><div><b>系统提示词</b></div></div><section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
@@ -273,6 +273,7 @@
 <div class="chat-scope-heading" data-scope="global"><span class="chat-scope-badge">所有窗口</span><div><b>时间提醒</b><p>帮助助手区分此刻与历史对话。</p></div></div><div class="chat-time-preview"><span>助手收到的时间提醒</span><b>此刻 · 北京时间</b><p>完整日期 / 星期 / 时段</p><div>间隔 ≥ 30 分钟：重点提示时间断层</div></div><div class="chat-memory-card chat-recall-mode-card"><b>时间注入频率</b><details class="chat-setting-help"><summary>说明与用法</summary><p>按设定轮数提醒当前北京时间。间隔达到 30 分钟时，另行强调当前时间、经过时长和跨日关系。</p></details><label class="chat-switch chat-recall-switch"><input id="chat-nc-context-injection" type="checkbox" checked onchange="chatSaveNcContextInjection(true)"><span>定期提醒当前时间</span></label><label class="chat-recall-recent"><span>每多少轮注入一次</span><input id="chat-time-injection-every-rounds" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" onchange="chatSaveNcContextInjection(true)"><small>1–1000 轮；第 n、2n、3n 轮注入</small></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveNcContextInjection()">保存时间设置</button><span class="chat-cache-save-status" id="chat-nc-context-save-status">切换后会立即保存。</span></div></div><details class="chat-setting-help"><summary>提醒如何生效</summary><p>定期提醒开关只控制频率提醒；长间隔提醒独立生效。助手需先校准“现在、昨天、明天”等表述，再接续对话。</p><p>时间随本轮消息附加在缓存断点之后；不会为了刷新时间改写系统提示词或已有历史。</p></details>
 </div>
 <div class="chat-side-panel" id="chat-side-cache">
+<div class="chat-memory-card chat-cache-mode-card"><b>第 4 个缓存断点</b><label class="chat-switch chat-recall-switch"><input id="chat-allow-fourth-cache-breakpoint" type="checkbox" onchange="chatSaveConfig(true)"><span>开启第 4 个缓存断点</span></label><p class="chat-field-hint">关闭时只保留最终请求中的前三个断点，并删除最后一个；开启后保留缓存策略生成的第 4 个断点。</p></div>
 <div class="chat-scope-heading" data-scope="global"><span class="chat-scope-badge">所有窗口</span><div><b>缓存策略</b></div></div><div class="chat-memory-card chat-cache-mode-card"><b>缓存策略</b><details class="chat-setting-help"><summary>说明与用法</summary><p>独立控制上游提示缓存断点，与时间上下文、记忆召回开关互不控制。选择后会单独保存，不会被聊天配置覆盖。</p></details><div class="chat-cache-saved" id="chat-cache-saved-mode">已保存：读取中</div><div class="chat-cache-strategy-select-row"><label for="chat-cache-strategy">选择策略</label><select id="chat-cache-strategy" class="chat-cache-strategy-select" onchange="chatSyncCacheStrategyFields()"><option value="single_5m">5min｜用户断点</option><option value="native_5m">原生5min｜Claude /messages</option><option value="native_stable">原生稳定1h｜Claude /messages</option><option value="native_tiered">分层省钱｜1h 兜底 + 5m 尾部</option><option value="assistant_latest">助手｜最新助手断点</option><option value="prefix_24h">共同前缀｜上游自动</option></select></div><details class="chat-setting-help"><summary>策略说明</summary><div id="chat-cache-mode-detail" class="chat-cache-mode-detail"></div></details><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveCacheStrategy()">保存缓存策略</button><span class="chat-cache-save-status" id="chat-cache-save-status">选择后会立即单独保存，也可点按钮确认。</span></div></div>
 </div>
 <div class="chat-side-panel" id="chat-side-history">
@@ -339,9 +340,9 @@
 </section></div>
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
-<script src="chat-history.js?v=chat-v236-remove-rules-daily-editors"></script>
-<script src="script.js?v=chat-v236-remove-rules-daily-editors"></script>
-<script src="script-extra.js?v=chat-v236-remove-rules-daily-editors"></script>
-<script src="pwa.js?v=chat-v236-remove-rules-daily-editors"></script>
+<script src="chat-history.js?v=chat-v237-fourth-cache-breakpoint-toggle"></script>
+<script src="script.js?v=chat-v237-fourth-cache-breakpoint-toggle"></script>
+<script src="script-extra.js?v=chat-v237-fourth-cache-breakpoint-toggle"></script>
+<script src="pwa.js?v=chat-v237-fourth-cache-breakpoint-toggle"></script>
 </body>
 </html>
