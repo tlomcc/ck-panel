@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v243-notebook-and-cache-colors';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v244-gateway-panel-audit';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -264,8 +264,8 @@ function ckPanelClearUpdateCaches(){
       return Promise.all((regs||[]).map(function(reg){
         try{
           var scopePath=new URL(reg.scope).pathname;
-          if(appScope&&scopePath.indexOf(appScope)!==0&&appScope.indexOf(scopePath)!==0)return null;
-        }catch(e){}
+          if(!appScope||scopePath!==appScope)return null;
+        }catch(e){return null;}
         return reg.unregister().catch(function(){});
       }));
     }).catch(function(){}));
@@ -274,7 +274,7 @@ function ckPanelClearUpdateCaches(){
     jobs.push(caches.keys().then(function(keys){
       return Promise.all((keys||[]).map(function(key){
         key=String(key||'');
-        if(key.indexOf('ck-panel')>=0)return caches.delete(key).catch(function(){});
+        if(key.indexOf('ck-panel-shell-')===0)return caches.delete(key).catch(function(){});
         return null;
       }));
     }));
@@ -1554,6 +1554,7 @@ var chatSessions=[];
 var chatFolders=[];
 var chatSessionSearch='';
 var chatActiveSessionId='';
+var chatAttachmentSessionEpoch=0;
 var chatDebugRecords=[];
 var chatCacheTimer=null;
 var chatScrollJumpTimer=null;
@@ -3676,7 +3677,7 @@ function chatRenderDraftImages(){
   var wrap=document.getElementById('chat-draft-images');
   if(!wrap)return;
   var images=chatNormalizeImageList(chatDraftImages);
-  chatDraftImages=images;
+  chatDraftImages.splice.apply(chatDraftImages,[0,chatDraftImages.length].concat(images));
   if(!images.length){
     wrap.hidden=true;
     wrap.innerHTML='';
@@ -3695,7 +3696,7 @@ function chatRenderEditImages(){
   var wrap=document.getElementById('chat-edit-images');
   if(!wrap)return;
   var images=chatNormalizeImageList(chatEditingImages);
-  chatEditingImages=images;
+  chatEditingImages.splice.apply(chatEditingImages,[0,chatEditingImages.length].concat(images));
   if(chatEditingIndex<0||!images.length){
     wrap.hidden=true;
     wrap.innerHTML='';
@@ -3830,7 +3831,7 @@ function chatRenderDraftFiles(){
   var wrap=document.getElementById('chat-draft-files');
   if(!wrap)return;
   var files=chatNormalizeFileList(chatDraftFiles);
-  chatDraftFiles=files;
+  chatDraftFiles.splice.apply(chatDraftFiles,[0,chatDraftFiles.length].concat(files));
   if(!files.length){
     wrap.hidden=true;
     wrap.innerHTML='';
@@ -3894,12 +3895,14 @@ async function chatOnFilesSelected(e){
   if(input)input.value='';
   if(!files.length)return;
   chatFileReadingCount+=1;
+  var targetFiles=chatDraftFiles,sessionContext=chatActiveSessionId,sessionEpoch=chatAttachmentSessionEpoch;
   chatSetStatus('正在读取文件...');
-  var added=0,oversized=0,rejected=[];
+  var added=0,oversized=0,dropped=0,rejected=[];
   for(var i=0;i<files.length;i++){
     try{
       var file=await chatReadTextFile(files[i]);
       if(!file)continue;
+      if(chatActiveSessionId!==sessionContext||chatAttachmentSessionEpoch!==sessionEpoch||chatDraftFiles!==targetFiles){dropped+=1;continue;}
       chatDraftFiles.push(file);
       added+=1;
       if(file.size>CHAT_FILE_WARNING_BYTES)oversized+=1;
@@ -3915,6 +3918,7 @@ async function chatOnFilesSelected(e){
     var rejectedLabel=rejected.slice(0,3).join('、')+(rejected.length>3?' 等 '+rejected.length+' 个文件':'');
     toast(rejectedLabel+'：不支持该文件格式'+(oversized?'\n文件过大，建议精简后再上传':''),5000);
   }
+  else if(dropped)toast(dropped+' 个文件因切换窗口或清空附件已取消');
   else if(oversized)toast('文件过大，建议精简后再上传');
   else if(added)toast('已添加 '+added+' 个文件');
 }
@@ -3923,6 +3927,7 @@ function chatReadFileAsDataUrl(file){
     var reader=new FileReader();
     reader.onload=function(){resolve(String(reader.result||''))};
     reader.onerror=function(){reject(reader.error||new Error('读取图片失败'))};
+    reader.onabort=function(){reject(new Error('图片读取已取消'))};
     reader.readAsDataURL(file);
   });
 }
@@ -4001,6 +4006,7 @@ async function chatOnImageFilesSelected(e){
   if(!files.length)return;
   var editing=chatEditingIndex>=0;
   var editContext=editing?chatEditingIndex:-1;
+  var sessionContext=chatActiveSessionId,sessionEpoch=chatAttachmentSessionEpoch;
   var targetImages=editing?chatEditingImages:chatDraftImages;
   var room=CHAT_IMAGE_MAX_COUNT-chatNormalizeImageList(targetImages).length;
   if(room<=0){
@@ -4021,8 +4027,10 @@ async function chatOnImageFilesSelected(e){
       if(!img)continue;
       // 编码是异步的：编码完成时用户可能已退出/切换编辑上下文，避免把图片塞进错误的目标。
       var stillEditing=chatEditingIndex>=0&&chatEditingIndex===editContext;
+      if(chatActiveSessionId!==sessionContext||chatAttachmentSessionEpoch!==sessionEpoch||targetImages!==(editing?chatEditingImages:chatDraftImages)){dropped+=1;continue;}
       if(editing&&!stillEditing){dropped+=1;continue;}
       if(!editing&&chatEditingIndex>=0){dropped+=1;continue;}
+      if(targetImages.length>=CHAT_IMAGE_MAX_COUNT){dropped+=1;continue;}
       if(editing)chatEditingImages.push(img);
       else chatDraftImages.push(img);
       added+=1;
@@ -4169,6 +4177,8 @@ function chatSaveSessionsToIndexedDb(snapshot,partial){
   }).catch(function(e){
     chatIndexedDbFailed=true;
     if(window.console&&console.warn)console.warn('[CK chat] IndexedDB save failed:',e);
+    chatNotifyPersistenceDegraded();
+    chatSaveSessions();
   });
 }
 function chatFieldValue(id,fallback){
@@ -4819,6 +4829,7 @@ function chatRenderWorldbooks(cfg){
 }
 async function chatLoadWorldbooksRemote(silent){
   var cfg=chatLoadConfig();
+  var startingBooks=JSON.stringify(chatNormalizeWorldbooks(cfg.worldbooks));
   if(!cfg.panelKey){
     if(!silent)toast('先填写面板 Key 才能同步世界书');
     return false;
@@ -4829,13 +4840,17 @@ async function chatLoadWorldbooksRemote(silent){
     });
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var data=await resp.json();
+    if(!data||data.ok===false||!Array.isArray(data.worldbooks))throw new Error('世界书数据格式不正确');
     var remote=chatNormalizeWorldbooks(data.worldbooks);
-    var local=chatNormalizeWorldbooks(cfg.worldbooks);
-    if(!remote.length&&local.length){
-      await chatSaveWorldbooksRemote(local,true);
-      return true;
-    }
     var fresh=chatLoadConfig();
+    if(fresh.panelKey!==cfg.panelKey||chatWorldbooksEndpoint(fresh)!==chatWorldbooksEndpoint(cfg)||JSON.stringify(chatNormalizeWorldbooks(fresh.worldbooks))!==startingBooks){
+      if(!silent)toast('同步期间内容或账号已修改，已保留本机内容');
+      return false;
+    }
+    var local=chatNormalizeWorldbooks(fresh.worldbooks);
+    if(!remote.length&&local.length){
+      return await chatSaveWorldbooksRemote(local,true);
+    }
     fresh.worldbooks=remote;
     chatSaveConfigObject(fresh);
     chatRenderWorldbooks(fresh);
@@ -6419,6 +6434,7 @@ async function chatDeleteSession(id,event){
 }
 function chatSelectSession(id){
   if(chatSending)return;
+  if(chatActiveSessionId!==id)chatAttachmentSessionEpoch++;
   chatResetSearch();
   chatFlushAssistantRevealQueue();
   chatActiveSessionId=id;
@@ -9967,11 +9983,14 @@ function chatParseSse(buffer,onEvent){
     if(data.trim()){
       if(data.trim()==='[DONE]')onEvent('done_marker',null);
       else{
-        try{onEvent(ev,JSON.parse(data))}
+        var parsed;
+        try{parsed=JSON.parse(data)}
         catch(e){
           if(ev==='delta'||ev==='message')onEvent('delta',data);
           else onEvent('error',{error:String(e),raw:data});
+          continue;
         }
+        onEvent(ev,parsed);
       }
     }
   }
@@ -10505,24 +10524,30 @@ async function chatSubmitPendingMessages(options){
       signal:requestSignal
     },async function(resp,attemptState){
       latencyTrace.panel_response_headers_ms=Date.now();
+      var bufferedSse='';
       if(!resp.body){
         var plain;
         try{plain=await resp.text()}
         catch(readError){throw chatMarkNetworkFailure(readError)}
         if(chatContainsPlatformExitError(plain))throw chatCreateRequestFailure(plain,true);
-        if(plain)attemptState.receivedValidContent=true;
+        if(!String(plain||'').trim())throw chatCreateRequestFailure('上游返回了空回复',false);
+        if(/text\/event-stream/i.test(resp.headers.get('Content-Type')||''))bufferedSse=plain;
+        else{
+        attemptState.receivedValidContent=true;
         latencyTrace.panel_first_chunk_ms=latencyTrace.panel_response_headers_ms;
         latencyTrace.panel_first_delta_ms=latencyTrace.panel_response_headers_ms;
         latencyTrace.panel_stream_done_ms=Date.now();
         assistantText=plain;
         markFirstReplyTs();
         return;
+        }
       }
-      var reader=resp.body.getReader();
+      var reader=resp.body?resp.body.getReader():null;
       var decoder=new TextDecoder();
-      var buffer='';
+      var buffer=bufferedSse;
       var beforeContentRaw='';
       var streamError=null;
+      var streamCompleted=false;
       function handleStreamEvent(ev,data){
         if(streamError||(requestState&&requestState.stopped))return;
         if(ev==='error'){
@@ -10538,6 +10563,7 @@ async function chatSubmitPendingMessages(options){
           return;
         }
         attemptState.receivedValidContent=true;
+        if(ev==='done'||ev==='done_marker')streamCompleted=true;
         if(ev==='delta'){
           var deltaText=typeof data==='string'?data:String((data&&data.text)||'');
           recordFirstDeltaLatency(data&&typeof data==='object'?data:null);
@@ -10614,7 +10640,8 @@ async function chatSubmitPendingMessages(options){
           }
         }
       }
-      while(true){
+      try{
+      while(reader){
         if(requestState&&requestState.stopped)throw chatCreateAbortError();
         var r;
         try{r=await reader.read()}
@@ -10640,7 +10667,15 @@ async function chatSubmitPendingMessages(options){
       if(!attemptState.receivedValidContent&&chatContainsPlatformExitError(beforeContentRaw)){
         throw chatCreateRequestFailure(CHAT_PLATFORM_EXIT_ERROR,true);
       }
+      if(!streamCompleted)throw chatCreateRequestFailure('回复连接提前中断，请重试',false);
+      if(!assistantText.trim()&&!nativeThinkingText.trim()&&!toolEvents.length)throw chatCreateRequestFailure('上游返回了空回复',false);
       latencyTrace.panel_stream_done_ms=Date.now();
+      }finally{
+        if(reader){
+          if(!streamCompleted||streamError){try{await reader.cancel()}catch(e){}}
+          try{reader.releaseLock()}catch(e){}
+        }
+      }
     });
     if(requestState&&requestState.stopped)return;
     stopStreamRender();

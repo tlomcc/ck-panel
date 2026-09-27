@@ -1,26 +1,26 @@
-const CACHE_NAME = 'ck-panel-shell-v257-chat-v243-notebook-and-cache-colors';
+const CACHE_NAME = 'ck-panel-shell-v258-chat-v244-gateway-panel-audit';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './version.json',
-  './notebook.css?v=chat-v243-notebook-and-cache-colors',
-  './tokens.css?v=chat-v243-notebook-and-cache-colors',
-  './style.css?v=chat-v243-notebook-and-cache-colors',
-  './polish.css?v=chat-v243-notebook-and-cache-colors',
-  './chat.css?v=chat-v243-notebook-and-cache-colors',
-  './wechat.css?v=chat-v243-notebook-and-cache-colors',
-  './visual-overrides.css?v=chat-v243-notebook-and-cache-colors',
-  './shell.css?v=chat-v243-notebook-and-cache-colors',
-  './daily-status.css?v=chat-v243-notebook-and-cache-colors',
-  './settings.css?v=chat-v243-notebook-and-cache-colors',
-  './components.css?v=chat-v243-notebook-and-cache-colors',
-  './chat-ui.js?v=chat-v243-notebook-and-cache-colors',
-  './chat-ui.css?v=chat-v243-notebook-and-cache-colors',
+  './notebook.css?v=chat-v244-gateway-panel-audit',
+  './tokens.css?v=chat-v244-gateway-panel-audit',
+  './style.css?v=chat-v244-gateway-panel-audit',
+  './polish.css?v=chat-v244-gateway-panel-audit',
+  './chat.css?v=chat-v244-gateway-panel-audit',
+  './wechat.css?v=chat-v244-gateway-panel-audit',
+  './visual-overrides.css?v=chat-v244-gateway-panel-audit',
+  './shell.css?v=chat-v244-gateway-panel-audit',
+  './daily-status.css?v=chat-v244-gateway-panel-audit',
+  './settings.css?v=chat-v244-gateway-panel-audit',
+  './components.css?v=chat-v244-gateway-panel-audit',
+  './chat-ui.js?v=chat-v244-gateway-panel-audit',
+  './chat-ui.css?v=chat-v244-gateway-panel-audit',
   './icons/app-icon-v4.svg',
-  './chat-history.js?v=chat-v243-notebook-and-cache-colors',
-  './script.js?v=chat-v243-notebook-and-cache-colors',
-  './script-extra.js?v=chat-v243-notebook-and-cache-colors',
-  './pwa.js?v=chat-v243-notebook-and-cache-colors',
+  './chat-history.js?v=chat-v244-gateway-panel-audit',
+  './script.js?v=chat-v244-gateway-panel-audit',
+  './script-extra.js?v=chat-v244-gateway-panel-audit',
+  './pwa.js?v=chat-v244-gateway-panel-audit',
   './manifest.webmanifest',
   './icons/app-icon-v4-192.png',
   './icons/app-icon-v4-maskable-192.png',
@@ -29,84 +29,58 @@ const SHELL_ASSETS = [
   './icons/apple-touch-icon-v4.png'
 ];
 
+// Limit maintenance and fallback to this app's shell.
 self.addEventListener('install', function(event) {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(SHELL_ASSETS);
-    })
-  );
-  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE_NAME).then(function(cache) {
+    return cache.addAll(SHELL_ASSETS);
+  }).then(function() { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function(event) {
-  event.waitUntil(
-    caches.keys().then(function(keys) {
-      return Promise.all(keys.map(function(key) {
-        if (key !== CACHE_NAME) return caches.delete(key);
-        return null;
-      }));
-    })
-  );
-  self.clients.claim();
+  event.waitUntil(caches.keys().then(function(keys) {
+    return Promise.all(keys.filter(function(key) {
+      return key.indexOf('ck-panel-shell-') === 0 && key !== CACHE_NAME;
+    }).map(function(key) { return caches.delete(key); }));
+  }).then(function() { return self.clients.claim(); }));
 });
+
+async function shellFallback(key) {
+  try {
+    var cache = await caches.open(CACHE_NAME);
+    return await cache.match(key) || Response.error();
+  } catch (error) { return Response.error(); }
+}
+
+async function shellFetch(request, key, reload, navigation) {
+  var response;
+  try { response = await fetch(request, reload ? { cache: 'reload' } : undefined); }
+  catch (error) { return shellFallback(key); }
+  if (response.status >= 500) {
+    var fallback = await shellFallback(key);
+    if (fallback.type !== 'error') return fallback;
+  }
+  if (response.ok && (!navigation || /text\/html/i.test(response.headers.get('Content-Type') || ''))) {
+    try {
+      var cache = await caches.open(CACHE_NAME);
+      await cache.put(key, response.clone());
+    } catch (error) { /* Storage failure must not discard a usable network response. */ }
+  }
+  return response;
+}
 
 self.addEventListener('fetch', function(event) {
   var request = event.request;
   var url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-
-  var isVersionCheck = url.pathname.endsWith('/version.json') ||
-    url.searchParams.has('__ck_version_check') ||
-    url.searchParams.has('__ck_sw_version_check') ||
-    url.searchParams.has('ck_reload');
-
-  if (isVersionCheck) {
-    event.respondWith(
-      fetch(request, { cache: 'reload' }).then(function(response) {
-        if (!response || response.status !== 200) return response;
-        if (url.pathname.endsWith('/version.json')) {
-          var copy = response.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put('./version.json', copy);
-          });
-        }
-        return response;
-      }).catch(function() {
-        if (url.pathname.endsWith('/version.json')) return caches.match('./version.json');
-        return Response.error();
-      })
-    );
-    return;
-  }
-
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request, { cache: 'reload' }).then(function(response) {
-        var copy = response.clone();
-        caches.open(CACHE_NAME).then(function(cache) {
-          cache.put('./index.html', copy);
-        });
-        return response;
-      }).catch(function() {
-        return caches.match('./index.html');
-      })
-    );
-    return;
-  }
-
-  event.respondWith(
-    fetch(request).then(function(response) {
-      if (!response || response.status !== 200) return response;
-      var copy = response.clone();
-      caches.open(CACHE_NAME).then(function(cache) {
-        cache.put(request, copy);
-      });
-      return response;
-    }).catch(function() {
-      return caches.match(request).then(function(cached) {
-        if (cached) return cached;
-        return Response.error();
-      });
-    })
-  );
+  var base = new URL('./', self.location.href);
+  var shellPath = SHELL_ASSETS.some(function(asset) { return new URL(asset, base).pathname === url.pathname; });
+  if (!shellPath) return;
+  var navigation = request.mode === 'navigate';
+  if (navigation && url.pathname !== base.pathname && url.pathname !== new URL('index.html', base).pathname) return;
+  var version = url.pathname === new URL('version.json', base).pathname;
+  var reload = navigation || version || url.searchParams.has('__ck_version_check') ||
+    url.searchParams.has('__ck_sw_version_check') || url.searchParams.has('ck_reload');
+  var key = navigation ? './index.html' : version ? './version.json' : request;
+  // respondWith owns the full cache-write lifetime; no detached put promises.
+  event.respondWith(shellFetch(request, key, reload, navigation));
 });

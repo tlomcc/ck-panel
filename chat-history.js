@@ -74,7 +74,7 @@
     keep=Math.max(0,Math.floor(Number(keep)||0));
     var groups=localTurnGroups(messages,options);
     var drop=Math.max(0,groups.length-keep);
-    var cutIndex=drop>0?groups[drop].startIndex:0;
+    var cutIndex=drop>0?(drop===groups.length?messages.length:groups[drop].startIndex):0;
     return {
       before:groups.length,
       after:groups.length-drop,
@@ -118,7 +118,7 @@
     keep=Math.max(0,Math.floor(Number(keep)||0));
     var groups=transportTurnGroups(messages);
     var drop=Math.max(0,groups.length-keep);
-    var cutIndex=drop>0?groups[drop].startIndex:0;
+    var cutIndex=drop>0?(drop===groups.length?messages.length:groups[drop].startIndex):0;
     return {
       before:groups.length,
       after:groups.length-drop,
