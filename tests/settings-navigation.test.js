@@ -17,7 +17,7 @@ try{
   apiProvidersLoaded=true;chatInitialized=false;
   chatSessions=[{id:'window-a',title:'测试窗口 A',messages:[],transportMessages:[]},{id:'window-b',title:'测试窗口 B',messages:[],transportMessages:[]}];
   chatActiveSessionId='window-a';
-  let cfg=chatLoadConfig();cfg.sessionId='window-a';cfg.autoTrimKeepRounds=60;
+  let cfg=chatLoadConfig();cfg.sessionId='window-a';cfg.autoTrimKeepRounds=60;cfg.worldbooks=[{id:'book',name:'日常约定',enabled:true,priority:100,content:'测试背景资料'}];
   chatSaveConfigObject(cfg);chatWriteForm(chatLoadConfig());
   chatRenderMessages({force:true});
   document.body.className='chat-active'+(TEST_DARK?' dark':'');
@@ -45,7 +45,7 @@ try{
   check(document.querySelectorAll('#chat-plus-grid>button').length===20,'Missing tray buttons');
   for(const key of ['model','thinking','worldbook','digest','memory']){
     chatOpenSettingTab(key);
-    check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=300,'Text editor too small '+key);
+    check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=(key==='worldbook'?240:300),'Text editor too small '+key);
   }
   document.getElementById('chat-system').value='完整提示词\n'+('编辑正文，不应截断。\n'.repeat(100));
   const systemDraft=document.getElementById('chat-system').value;

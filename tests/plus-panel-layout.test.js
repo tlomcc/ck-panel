@@ -94,12 +94,12 @@ assert(trim.indexOf('通知方式</b>')<trim.indexOf('chat-auto-trim-prefix-sile
 assert((trim.match(/chat-wide-btn/g)||[]).length===1,'only one primary button per panel');
 assert(/chat-manual-trim-btn[^>]*>/.test(trim)&&/btn-outline/.test(trim),'manual actions must be secondary buttons');
 const worldbook=html.slice(html.indexOf('id="chat-side-worldbook"'),html.indexOf('id="chat-side-memory"'));
-assert(/btn-red/.test(worldbook),'deleting a worldbook entry must read as destructive');
-assert(worldbook.indexOf('当前这一条')<worldbook.indexOf('chat-worldbook-name'),'the editor needs a heading that separates it from the list');
+assert(/chat-worldbook-delete/.test(worldbook),'deleting a worldbook entry must read as destructive');
+assert(worldbook.indexOf('chat-worldbook-editor-heading')<worldbook.indexOf('chat-worldbook-name'),'the editor needs a heading that separates it from the list');
 // 世界书改成下拉选择：维护 100 条也只占一行，选择框一栏、新增一栏。
 assert(/id="chat-worldbook-list"/.test(worldbook),'the picker container must stay (wechat.css targets it)');
-assert(/chat-worldbook-add-btn[\s\S]*?新增世界书/.test(worldbook),'新增世界书 must sit in its own row under the picker');
-assert(worldbook.indexOf('chat-worldbook-list')<worldbook.indexOf('chat-worldbook-add'),'选择框在上，新增在下');
+assert(/chat-worldbook-add-btn/.test(worldbook),'Catalog needs an add action');
+assert(worldbook.indexOf('chat-worldbook-catalog')<worldbook.indexOf('chat-worldbook-editor'),'Catalog must precede editor');
 const worldbookRender=source.slice(source.indexOf('function chatRenderWorldbooks('));
 assert(/chat-worldbook-select[\s\S]{0,400}onchange="chatSelectWorldbook\(this\.value\)"/.test(worldbookRender),
   'the picker must be a <select> that still routes through chatSelectWorldbook (draft flush)');

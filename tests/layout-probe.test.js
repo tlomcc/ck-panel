@@ -77,7 +77,7 @@ const out={
   usage:rect(document.querySelector('.chat-msg-usage')),
   wbList:rect(document.getElementById('chat-worldbook-list')),
   wbSelect:rect(document.getElementById('chat-worldbook-select')),
-  wbAdd:rect(document.querySelector('.chat-worldbook-add')),
+  wbAdd:rect(document.querySelector('.chat-worldbook-add-btn')),
   legendOpen:!!(document.querySelector('.chat-tick-legend-card')||{}).open,
   usageLegendOpen:!!(document.querySelector('.chat-usage-legend-card')||{}).open,
   legendInGateway:!!document.querySelector('#chat-side-billing .chat-tick-legend-card'),
@@ -155,7 +155,7 @@ if(m.time&&m.usage){
 // ── 世界书 ──────────────────────────────────────────────────────────
 if(m.wbList&&m.wbSelect&&m.wbAdd){
   check(m.wbList.h<90,'100 条世界书也只该占一行（下拉框），不能把页面撑长',m.wbList.h);
-  check(m.wbAdd.top>=m.wbList.bottom-2,'「新增世界书」在选择框下面一栏',{list:m.wbList,add:m.wbAdd});
+  check(m.wbAdd.bottom<=m.wbList.top+2,'新增按钮应位于目录标题行',{list:m.wbList,add:m.wbAdd});
   check(m.wbSelect.w>120,'下拉框要占满这一行',m.wbSelect.w);
 }else{
   check(false,'世界书那一页没渲染出来',{list:m.wbList,select:m.wbSelect,add:m.wbAdd});

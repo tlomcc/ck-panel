@@ -120,10 +120,11 @@ function testDailyDigestInheritance(){
   const context=load({
     console,
     CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE:'小克',
+    chatSessions:[{id:'source',title:'小克',dailyDigests:kept}],
     chatLoadConfig:()=>({newSessionDigestSyncEnabled:true}),
     chatDailyDigestDayKey:()=> '2026-09-20',
-    chatDailyDigestEntries:(session,day,cfg)=>day==='2026-09-20'?session.dailyDigests:[],
-  },['chatNewSessionDailyDigests']);
+    chatDailyDigestEntries:session=>session.dailyDigests,
+  },['chatNewSessionDigestSource','chatNewSessionDailyDigests']);
 
   let result=context.chatNewSessionDailyDigests({newSessionDigestSyncEnabled:true},{title:'小克',dailyDigests:kept});
   assert.strictEqual(result.length,2);
@@ -131,7 +132,7 @@ function testDailyDigestInheritance(){
   assert.strictEqual(kept[1].nested.value,1);
   assert.notStrictEqual(result[0],kept[0],'the new window must receive a copy, not share the source object');
   assert.strictEqual(context.chatNewSessionDailyDigests({newSessionDigestSyncEnabled:false},{title:'小克',dailyDigests:kept}).length,0);
-  assert.strictEqual(context.chatNewSessionDailyDigests({newSessionDigestSyncEnabled:true},{title:'Other',dailyDigests:kept}).length,0);
+  assert.strictEqual(context.chatNewSessionDailyDigests({newSessionDigestSyncEnabled:true},{title:'Other',dailyDigests:kept}).length,2);
 }
 
 function testWiring(){

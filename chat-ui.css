@@ -1,7 +1,8 @@
 /* CK: river jade, ink and a small folded conversation. */
 :root{--ck-ui-jade:#357b70;--ck-ui-ink:#254943;--ck-ui-mist:#eef5f2;--ck-ui-line:#d8e5df;--ck-ui-blue:#43a6d5}
 body.chat-active .chat-cache-tick,body.chat-active .chat-cache-tick:is(.created,.below_minimum,.miss){color:#97a2a5!important}
-body.chat-active .chat-cache-tick:is(.hit,.partial){color:var(--ck-ui-blue)!important}
+body.chat-active .chat-cache-tick.full{color:#2685bd!important}
+body.chat-active .chat-cache-tick.partial{color:#bc842d!important}
 body.chat-active .chat-cache-tick path{stroke-width:1.25!important;vector-effect:none!important}
 body.chat-active .chat-msg-tools button{display:inline-grid!important;place-items:center!important;width:28px!important;height:26px!important;padding:5px!important;border:0!important;background:transparent!important;color:#899995!important}
 body.chat-active .chat-msg-tools svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
@@ -25,6 +26,17 @@ body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]
 body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .chat-recall-bookmark{fill:#c3ded1}
 body.dark.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]{background:#304a3f!important;color:#a2ceba!important}
 body.dark.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .chat-recall-bookmark{fill:#426453}
+/* Pointer focus and sticky touch hover must never resemble an enabled toggle. */
+body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"],
+body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"]:is(:hover,:focus,:active){background:transparent!important;color:#84948b!important;box-shadow:none!important;filter:none!important;transform:none!important;transition:none!important;outline:none!important;-webkit-tap-highlight-color:transparent}
+body.chat-active .chat-quick-fact-toggle[aria-pressed="false"] .chat-recall-bookmark{fill:none!important}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
+body.chat-active .chat-msg-usage .chat-usage-read{color:#267eaa!important;font-weight:600!important}
+body.chat-active .chat-msg-usage .chat-usage-create{color:#9a752f!important}
+body.dark.chat-active .chat-msg-usage .chat-usage-read{color:#7fc2e2!important}
+body.dark.chat-active .chat-msg-usage .chat-usage-create{color:#d4b674!important}
+body.dark.chat-active .chat-cache-tick.full{color:#7fc2e2!important}
+body.dark.chat-active .chat-cache-tick.partial{color:#d4b674!important}
 /* Each piece owns a grid cell; metadata must never float over the preview. */
 body.chat-active .chat-session-item{grid-template-columns:minmax(0,1fr) auto!important;grid-template-rows:auto auto!important;grid-auto-rows:auto!important;height:auto!important;row-gap:4px!important;column-gap:8px!important;align-items:center!important}
 body.chat-active .chat-session-item .chat-session-title{grid-area:1 / 1!important;max-width:100%!important}
@@ -74,3 +86,52 @@ body.dark.chat-active .chat-action-buddy{color:#9ab6aa}
 body.dark.chat-active .chat-action-buddy[aria-expanded="true"] svg{fill:#426453}
 @media(max-width:600px){.panel-version-notes{top:62px;right:16px}.chat-search{gap:3px!important;padding-inline:9px!important}}
 @media(prefers-reduced-motion:reduce){body.chat-active .loading-bar-wrap.done{transition:none!important}}
+
+/* The worldbook is a small reference notebook: catalog, settings, then one page. */
+body.chat-active #chat-side-worldbook{--book-paper:#fbfdf9;--book-tint:#eff6ec;--book-line:#dce8d7;--book-ink:#345442;--book-muted:#748676;gap:16px!important;padding:18px 4px 24px!important;color:var(--book-ink)}
+#chat-side-worldbook>*{flex-shrink:0;min-width:0}
+#chat-side-worldbook .chat-worldbook-intro{display:flex;align-items:center;gap:12px;padding:0 2px 4px}
+#chat-side-worldbook .chat-worldbook-leaf{font:40px/1 Georgia,serif;color:#82a978}
+#chat-side-worldbook .chat-worldbook-intro>div{min-width:0;flex:1}
+#chat-side-worldbook h2{margin:0;color:var(--book-ink);font:600 23px/1.4 "Microsoft YaHei UI",sans-serif;letter-spacing:2px}
+#chat-side-worldbook .chat-worldbook-intro p{margin:4px 0 0;color:var(--book-muted);font-size:11px;line-height:1.7}
+#chat-side-worldbook .chat-scope-badge{white-space:nowrap;background:var(--book-tint);color:var(--book-muted);border:0}
+#chat-side-worldbook .chat-worldbook-catalog{padding:14px;border:1px solid var(--book-line);border-radius:14px;background:var(--book-tint)}
+body.chat-active #chat-side-worldbook .chat-worldbook-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px!important}
+body.chat-active #chat-side-worldbook .chat-worldbook-head b{color:var(--book-ink);font-size:12px;font-weight:500;white-space:nowrap}
+body.chat-active #chat-side-worldbook .chat-worldbook-head button{width:auto!important;flex:0 0 auto!important;margin:0!important;min-height:30px;background:var(--book-paper)!important;border:1px solid var(--book-line)!important;border-radius:8px!important;color:var(--book-ink)!important;padding:5px 10px!important}
+body.chat-active #chat-side-worldbook .chat-worldbook-list{display:block!important;max-height:none!important;margin:0!important;padding:0!important}
+#chat-side-worldbook .chat-worldbook-select-row{display:flex;align-items:center;gap:10px;min-width:0}
+body.chat-active #chat-side-worldbook .chat-worldbook-select-row>label{flex:none;margin:0!important;font-size:11px!important}
+body.chat-active #chat-side-worldbook select{min-width:0;width:100%;max-width:100%;height:38px!important;padding:6px 30px 6px 10px!important;white-space:nowrap;text-overflow:ellipsis;border:1px solid var(--book-line)!important;border-radius:8px!important;background-color:var(--book-paper)!important;color:var(--book-ink)!important;font:12px/1.5 "Microsoft YaHei UI",sans-serif}
+#chat-side-worldbook .chat-worldbook-empty{font-size:12px;line-height:1.8;color:var(--book-muted)}
+#chat-side-worldbook .chat-worldbook-options{padding:0 3px;color:var(--book-muted);font-size:12px}
+#chat-side-worldbook .chat-worldbook-options summary{cursor:pointer;padding:2px 0 8px}
+#chat-side-worldbook .chat-worldbook-options p{font-size:11px;line-height:1.8;margin:8px 0 0}
+#chat-side-worldbook .chat-worldbook-editor{display:flex;flex-direction:column;gap:15px;padding:18px 16px;border:1px solid var(--book-line);border-radius:14px;background:var(--book-paper)}
+#chat-side-worldbook .chat-worldbook-editor[hidden]{display:none!important}
+#chat-side-worldbook .chat-worldbook-editor-heading{display:flex;gap:12px;justify-content:space-between;align-items:baseline;padding-bottom:12px;border-bottom:1px solid var(--book-line)}
+#chat-side-worldbook .chat-worldbook-editor-heading b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;color:var(--book-ink)}
+#chat-side-worldbook #chat-worldbook-chars{flex:none;font:11px/1.5 Consolas,monospace;color:var(--book-muted)}
+body.chat-active #chat-side-worldbook label{margin:0!important;font-size:11px!important;color:var(--book-muted)!important}
+body.chat-active #chat-side-worldbook input:not([type="checkbox"]){height:38px!important;border:1px solid var(--book-line)!important;border-radius:8px!important;background:var(--book-paper)!important;color:var(--book-ink)!important;padding:8px 10px!important;font-size:13px!important;box-shadow:none!important}
+#chat-side-worldbook .chat-worldbook-properties{display:flex;align-items:center;justify-content:space-between;gap:16px}
+body.chat-active #chat-side-worldbook .chat-worldbook-properties label{display:flex!important;flex-direction:row!important;align-items:center!important;gap:8px!important;white-space:nowrap}
+body.chat-active #chat-side-worldbook #chat-worldbook-priority{width:70px!important;height:32px!important}
+body.chat-active #chat-side-worldbook #chat-worldbook-content{min-height:240px!important;height:30vh!important;max-height:480px!important;padding:12px!important;border:1px solid var(--book-line)!important;border-radius:8px!important;background:var(--book-paper)!important;color:var(--book-ink)!important;line-height:1.9!important;font-size:13px!important;resize:vertical;box-shadow:none!important}
+#chat-side-worldbook .chat-worldbook-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}
+#chat-side-worldbook .chat-worldbook-delete{border:0;background:transparent;color:#a17772;font:11px/1.5 inherit;cursor:pointer;padding:8px 0}
+body.chat-active #chat-side-worldbook .chat-worldbook-footer .chat-cache-save-btn{width:auto!important;padding:9px 18px!important;border:0!important;border-radius:9px!important;background:#537e5a!important;color:#fff!important;font-size:12px!important}
+body.chat-active #chat-side-worldbook :is(input,textarea,select,button):focus-visible{outline:2px solid #8eb68e!important;outline-offset:2px!important}
+body.dark.chat-active #chat-side-worldbook{--book-paper:#26342d;--book-tint:#2d3f32;--book-line:#3c5142;--book-ink:#d1e3d2;--book-muted:#a0b5a3}
+
+/* A quiet mint welcome, with the same little sprout cat as the installed app. */
+body.chat-active #loading-wrap{inset:0!important;transform:none!important;width:100%!important;height:100%!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;padding:28px!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:radial-gradient(ellipse at 50% 40%,#fafff6 0,#edf8f0 65%,#e3f2e5 100%)!important;z-index:20000!important}
+body.chat-active #loading-wrap .startup-icon{width:160px!important;height:160px!important;border-radius:38px!important;box-shadow:0 16px 45px #71967712!important;overflow:hidden;animation:none!important}
+body.chat-active #loading-wrap .startup-name{font:700 30px/1.3 "Trebuchet MS","Microsoft YaHei UI",sans-serif!important;letter-spacing:3px!important;padding-left:3px!important;margin-top:24px!important;color:#486c4f!important}
+body.chat-active #loading-wrap .startup-subtitle{font:12px/1.7 "Microsoft YaHei UI",sans-serif!important;letter-spacing:2px!important;color:#869d85!important;margin-top:9px!important}
+body.chat-active #loading-wrap .loading-bar{width:104px!important;height:3px!important;border-radius:4px!important;margin-top:30px!important;background:#d9e9d6!important;overflow:hidden}
+body.chat-active #loading-wrap .loading-bar-inner{background:#8fb486!important;box-shadow:none!important}
+body.chat-active #loading-wrap .loading-text{font-size:10px!important;letter-spacing:1px;color:#8ba189!important;margin-top:12px!important}
+body.chat-active #loading-wrap.done{opacity:0!important;pointer-events:none!important;visibility:hidden;transition:opacity .25s ease,visibility .25s!important}
+@media(prefers-reduced-motion:reduce){body.chat-active #loading-wrap.done{transition:none!important}}
