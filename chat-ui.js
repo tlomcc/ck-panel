@@ -45,6 +45,7 @@ function chatHistorySentinels(box){
 }
 function chatLocateMessage(index){
   if(!chatMessages[index])return;
+  var locatingSession=chatActiveSessionId,locatingMessage=chatMessages[index];
   var groups=chatHistoryGroups(),group=groups.findIndex(function(g){return index>=g.startIndex&&index<g.endIndex});
   var first=Math.max(0,group-20),last=Math.min(groups.length,first+CHAT_HISTORY_PAGE_ROUNDS);
   chatHistoryReset();
@@ -53,35 +54,80 @@ function chatLocateMessage(index){
   chatHistoryView.follow=chatHistoryView.end===chatMessages.length;
   chatRenderMessages({respectUserScroll:true,preservePosition:true});
   requestAnimationFrame(function(){
+    if(chatActiveSessionId!==locatingSession||chatMessages[index]!==locatingMessage)return;
     var row=chatMessagesBox().querySelector('[data-chat-index="'+index+'"]');
     if(row){row.scrollIntoView({block:'center',behavior:'auto'});row.classList.add('chat-search-match');setTimeout(function(){row.classList.remove('chat-search-match')},2400)}
   });
 }
+var chatSearchTimer=0,chatSearchGeneration=0,chatSearchTextCache=new WeakMap();
 function chatToggleSearch(force){
   var box=document.getElementById('chat-search');if(!box)return;
   var open=typeof force==='boolean'?force:box.hidden;
   box.hidden=!open;
   document.getElementById('chat-search-toggle').setAttribute('aria-expanded',String(open));
   if(open){document.getElementById('chat-search-input').focus({preventScroll:true});chatSearchMessages()}
+  else{clearTimeout(chatSearchTimer);chatSearchGeneration++;document.querySelectorAll('.chat-search-match').forEach(function(row){row.classList.remove('chat-search-match')})}
 }
 function chatResetSearch(){
   chatToggleSearch(false);chatSearchHits=[];chatSearchPosition=-1;
   var input=document.getElementById('chat-search-input');if(input)input.value='';
 }
+function chatScheduleSearch(event){
+  clearTimeout(chatSearchTimer);
+  chatSearchGeneration++;
+  if(event&&event.isComposing)return;
+  chatSearchTimer=setTimeout(chatSearchMessages,140);
+}
+function chatSearchText(message){
+  var saved=chatSearchTextCache.get(message);
+  if(saved&&saved.raw===message.text)return saved;
+  var text=chatMessageCopyText(message),entry={raw:message.text,text:text,lower:text.toLocaleLowerCase()};
+  chatSearchTextCache.set(message,entry);return entry;
+}
 function chatSearchMessages(){
+  clearTimeout(chatSearchTimer);
   var query=document.getElementById('chat-search-input').value.trim().toLocaleLowerCase();
+  var generation=++chatSearchGeneration,session=chatActiveSessionId,messages=chatMessages,offset=0,hits=[];
   chatSearchHits=[];chatSearchPosition=-1;
-  if(query)chatMessages.forEach(function(m,i){if((m.role==='user'||m.role==='assistant')&&chatMessageCopyText(m).toLocaleLowerCase().includes(query))chatSearchHits.push(i)});
-  chatSearchPosition=chatSearchHits.length-1;
-  chatUpdateSearchResult();
+  if(!query){chatUpdateSearchResult();return Promise.resolve()}
+  document.getElementById('chat-search-count').textContent='正在找…';
+  return new Promise(function(resolve){
+    function scan(){
+      if(generation!==chatSearchGeneration||session!==chatActiveSessionId){resolve();return}
+      var start=performance.now();
+      while(offset<messages.length){
+        var message=messages[offset];
+        if((message.role==='user'||message.role==='assistant')&&chatSearchText(message).lower.includes(query))hits.push(offset);
+        offset++;
+        if(offset%100===0&&performance.now()-start>6)break;
+      }
+      if(offset<messages.length){setTimeout(scan,0);return}
+      chatSearchHits=hits;chatSearchPosition=hits.length-1;chatUpdateSearchResult();resolve();
+    }
+    scan();
+  });
+}
+function chatSearchSnippet(message,query){
+  var text=chatSearchText(message).text,at=text.toLocaleLowerCase().indexOf(query),start=Math.max(0,at-22),end=Math.min(text.length,Math.max(at,0)+query.length+55);
+  return (start?'…':'')+esc(text.slice(start,Math.max(start,at)))+(at>=0?'<mark>'+esc(text.slice(at,at+query.length))+'</mark>':'')+esc(text.slice(Math.max(start,at+query.length),end))+(end<text.length?'…':'');
 }
 function chatUpdateSearchResult(){
-  var count=document.getElementById('chat-search-count');
-  count.textContent=chatSearchHits.length?(chatSearchPosition+1)+' / '+chatSearchHits.length:'无匹配';
+  var query=document.getElementById('chat-search-input').value.trim().toLocaleLowerCase();
+  var count=document.getElementById('chat-search-count'),results=document.getElementById('chat-search-results');
+  count.textContent=chatSearchHits.length?(chatSearchPosition+1)+' / '+chatSearchHits.length+' 条':query?'没有找到':'搜索当前对话';
   document.querySelectorAll('[data-chat-search-step]').forEach(function(b){b.disabled=chatSearchHits.length===0});
+  if(results){
+    var first=Math.max(0,Math.min(chatSearchPosition-1,chatSearchHits.length-3));
+    results.innerHTML=chatSearchHits.length?chatSearchHits.slice(first,first+3).map(function(index,j){
+      var m=chatMessages[index],position=first+j;
+      return '<button class="chat-search-result'+(position===chatSearchPosition?' is-current':'')+'" type="button" onclick="chatSearchPick('+position+')" aria-current="'+(position===chatSearchPosition?'true':'false')+'"><span class="chat-search-result-meta"><b>'+(m.role==='user'?'我':'CK')+'</b><time>'+esc(chatFullTimeLabel(m.ts))+'</time></span><span class="chat-search-result-copy">'+chatSearchSnippet(m,query)+'</span></button>';
+    }).join(''):'<p class="chat-search-empty">'+(query?'换个词试试，或只输入记得的几个字。':'输入一句话，找回聊天里的小片段。')+'</p>';
+  }
   if(chatSearchPosition>=0)chatLocateMessage(chatSearchHits[chatSearchPosition]);
 }
+function chatSearchPick(position){chatSearchPosition=position;chatUpdateSearchResult()}
 function chatSearchStep(step){if(!chatSearchHits.length)return;chatSearchPosition=(chatSearchPosition+step+chatSearchHits.length)%chatSearchHits.length;chatUpdateSearchResult()}
+function chatClearSearch(){var input=document.getElementById('chat-search-input');input.value='';input.focus({preventScroll:true});chatSearchMessages()}
 function chatActionMode(){
   if(!chatActionModeCache){try{chatActionModeCache=localStorage.getItem('ck_chat_action_mode')||'medium'}catch(e){chatActionModeCache='medium'}}
   return ['low','medium','high'].includes(chatActionModeCache)?chatActionModeCache:'medium';

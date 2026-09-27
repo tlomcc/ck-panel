@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v241-ck-sprout-and-memory';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v242-search-and-smooth-chat';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1549,6 +1549,7 @@ var chatActiveRequest=null;
 var chatRequestSeq=0;
 var chatRecoverInFlightBusy=false;
 var chatDeferredSaveHandle=0;
+var chatDeferredSaveUsesIdle=false;
 var chatSessions=[];
 var chatFolders=[];
 var chatSessionSearch='';
@@ -1699,6 +1700,8 @@ async function chatCleanHistoryCore(cfg){
     }
     var stripTarget=stillActive?chatMessages:(targetSession.messages||[]);
     var localStats=chatStripLocalHistoryMediaAndRecall(stripTarget);
+    targetSession.latestRecall=null;
+    if(stillActive)chatRenderSessionRecall();
     if(stillActive)targetSession.messages=chatMessages;
     targetSession.updated=Date.now();
     chatSaveSessions();
@@ -2762,7 +2765,7 @@ function chatStoreSessionRecall(sessionId,recall,userTs,turnId){
   var session=chatSessions.find(function(row){return row.id===sessionId});
   if(!session)return;
   session.latestRecall=Object.assign({},recall,{userTs:userTs,turnId:turnId||''});
-  chatSaveSessions();
+  chatScheduleSessionSave(sessionId);
   if(sessionId===chatActiveSessionId)chatRenderSessionRecall();
 }
 function chatRenderQuickRecallControls(cfg){
@@ -4135,7 +4138,7 @@ function chatLoadSessionsFromIndexedDb(){
     });
   });
 }
-function chatSaveSessionsToIndexedDb(snapshot){
+function chatSaveSessionsToIndexedDb(snapshot,partial){
   if(!chatIndexedDbSupported()||chatIndexedDbFailed)return;
   // 权威存储写入门闩：全量加载完成前禁止写 IndexedDB，
   // 否则启动 race 窗口内的自动保存会用 localStorage 40 条摘要覆盖并删除全量历史。
@@ -4144,19 +4147,21 @@ function chatSaveSessionsToIndexedDb(snapshot){
     return;
   }
   snapshot=(snapshot||chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES)).map(chatNormalizeSession);
-  chatOpenIndexedDb().then(function(db){
+  return chatOpenIndexedDb().then(function(db){
     return new Promise(function(resolve,reject){
       var keep={};
       snapshot.forEach(function(s){keep[s.id]=true});
       var tx=db.transaction(CHAT_INDEXEDDB_SESSION_STORE,'readwrite');
       var store=tx.objectStore(CHAT_INDEXEDDB_SESSION_STORE);
       snapshot.forEach(function(s){store.put(s)});
+      if(!partial){
       var keysReq=store.getAllKeys();
       keysReq.onsuccess=function(){
         (keysReq.result||[]).forEach(function(id){
           if(!keep[id])store.delete(id);
         });
       };
+      }
       tx.oncomplete=function(){resolve()};
       tx.onerror=function(){reject(tx.error||new Error('IndexedDB write failed'))};
       tx.onabort=function(){reject(tx.error||new Error('IndexedDB write aborted'))};
@@ -5829,6 +5834,13 @@ function chatDebugSafeData(ev,data){
   }
   try{return JSON.parse(JSON.stringify(data));}catch(e){return {value:String(data)}}
 }
+var chatDebugSaveTimer=0;
+function chatFlushDebugSave(){
+  if(!chatDebugSaveTimer)return;
+  clearTimeout(chatDebugSaveTimer);chatDebugSaveTimer=0;
+  chatSaveDebugRecords();
+  if(document.querySelector('.chat-settings.open #chat-side-debug.active'))chatRenderDebugRecords();
+}
 function chatDebug(ev,data){
   if(arguments.length===1){data=ev;ev='debug'}
   try{
@@ -5840,8 +5852,7 @@ function chatDebug(ev,data){
     try{text=chatFormatDebug(ev,data)}catch(fmtErr){text='调试记录格式化失败：'+String((fmtErr&&fmtErr.message)||fmtErr)}
     var record={ts:Date.now(),event:ev||'debug',text:text,data:chatDebugSafeData(ev,data)};
     chatDebugRecords.push(record);
-    chatSaveDebugRecords();
-    chatRenderDebugRecords();
+    if(!chatDebugSaveTimer)chatDebugSaveTimer=setTimeout(chatFlushDebugSave,120);
   }catch(e){
     if(window.console&&console.warn)console.warn('[CK chat] chatDebug failed:',e);
   }
@@ -6029,20 +6040,8 @@ function chatCircledValue(ch){
   return nums[ch]||0;
 }
 function chatDefaultWindowTitle(){
-  var day=chatTitleDate(Date.now());
-  var max=0;
-  (chatSessions||[]).forEach(function(s){
-    var title=String((s&&s.title)||'');
-    if(title.indexOf('号窗口'+day)<0)return;
-    var m=title.match(/^([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\d+)号窗口/);
-    if(!m)return;
-    var n=/^\d+$/.test(m[1])?Number(m[1]):chatCircledValue(m[1]);
-    if(n>max)max=n;
-  });
-  if(!max){
-    max=(chatSessions||[]).filter(function(s){return chatTitleDate((s&&s.created)||0)===day}).length;
-  }
-  return chatCircledNumber(max+1)+'号窗口'+day;
+  var route=chatMainRouteConfig();
+  return [route.providerName,route.model].filter(Boolean).join(' + ').slice(0,80)||'新对话';
 }
 function chatLoadSessions(){
   chatLoadFolders();
@@ -6190,7 +6189,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
       transportUpdated:Number(s.transportUpdated||0)||0,
       dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
-    latestRecall:s.latestRecall&&typeof s.latestRecall==='object'?JSON.parse(JSON.stringify(s.latestRecall)):null,
+      latestRecall:s.latestRecall&&typeof s.latestRecall==='object'?JSON.parse(JSON.stringify(s.latestRecall)):null,
       apiProviderId:String(s.apiProviderId||'').trim(),
       apiModel:String(s.apiModel||'').trim(),
       trimOverrideEnabled:s.trimOverrideEnabled===true,
@@ -6208,9 +6207,10 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     };
   });
 }
-function chatSaveSessions(){
-  var fullData=chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES);
-  chatSaveSessionsToIndexedDb(fullData);
+function chatSaveSessions(options){
+  var ids=options&&options.sessionIds;
+  var fullData=ids?chatSessions.filter(function(session){return ids.indexOf(session.id)>=0}).map(chatNormalizeSession):chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES);
+  chatSaveSessionsToIndexedDb(fullData,!!ids);
   var visibleLimit=(chatIndexedDbSupported()&&!chatIndexedDbFailed)?CHAT_LOCAL_SUMMARY_VISIBLE_MESSAGES:CHAT_MAX_VISIBLE_MESSAGES;
   var transportLimit=(chatIndexedDbSupported()&&!chatIndexedDbFailed)?CHAT_LOCAL_SUMMARY_TRANSPORT_MESSAGES:CHAT_MAX_TRANSPORT_MESSAGES;
   var data=chatSessionStorageData(CHAT_MAX_SESSIONS,visibleLimit,transportLimit);
@@ -6427,19 +6427,33 @@ function chatSaveLocalMessages(){
   chatRenderSessions();
   chatRenderTrimState();
 }
+var chatDeferredSessionIds={};
+function chatFlushDeferredSessionSave(){
+  if(chatDeferredSaveHandle){
+    if(chatDeferredSaveUsesIdle)cancelIdleCallback(chatDeferredSaveHandle);
+    else clearTimeout(chatDeferredSaveHandle);
+    chatDeferredSaveHandle=0;
+  }
+  var ids=Object.keys(chatDeferredSessionIds);chatDeferredSessionIds={};
+  if(!ids.length)return;
+  chatSaveSessions({sessionIds:ids});
+  var shell=document.querySelector('.chat-shell');
+  if(shell&&shell.classList.contains('chat-sessions-open'))chatRenderSessions();
+  chatRenderTrimState();
+}
+function chatScheduleSessionSave(sessionId){
+  if(!sessionId)return;
+  chatDeferredSessionIds[sessionId]=true;
+  if(chatDeferredSaveHandle)return;
+  chatDeferredSaveUsesIdle=typeof requestIdleCallback==='function'&&typeof cancelIdleCallback==='function';
+  if(chatDeferredSaveUsesIdle)chatDeferredSaveHandle=requestIdleCallback(chatFlushDeferredSessionSave,{timeout:800});
+  else chatDeferredSaveHandle=setTimeout(chatFlushDeferredSessionSave,40);
+}
 function chatSaveLocalMessagesDeferred(){
   var s=chatCurrentSession();
   s.messages=chatLimitArray(chatMessages,CHAT_MAX_VISIBLE_MESSAGES);
   s.updated=Date.now();
-  if(chatDeferredSaveHandle)return;
-  var persist=function(){
-    chatDeferredSaveHandle=0;
-    chatSaveSessions();
-    chatRenderSessions();
-    chatRenderTrimState();
-  };
-  if(typeof requestIdleCallback==='function')chatDeferredSaveHandle=requestIdleCallback(persist,{timeout:800});
-  else chatDeferredSaveHandle=setTimeout(persist,32);
+  chatScheduleSessionSave(s.id);
 }
 function chatInsertRenderedMessageRow(box,html,index){
   if(!box)return;
@@ -8590,7 +8604,7 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   }
   chatMarkStaggeredMessageFresh(messages[0]);
   chatRecordFirstRenderedLatency(opts.latency);
-  chatSaveLocalMessages();
+  chatSaveLocalMessagesDeferred();
   chatRenderPendingBar();
   chatRenderMessages({respectUserScroll:true,newMessage:true,removeEphemeral:true});
   if(chatAssistantRevealQueue.hidden.size)chatScheduleAssistantReveal();
@@ -9088,7 +9102,9 @@ document.addEventListener('keydown',function(e){
   chatToggleSessions(false,true);
   chatTogglePlus(false);
 });
+window.addEventListener('pagehide',function(){chatFlushDeferredSessionSave();chatFlushDebugSave()});
 document.addEventListener('visibilitychange',function(){
+  if(document.hidden){chatFlushDeferredSessionSave();chatFlushDebugSave()}
   if(!document.hidden&&currentPanelTab==='chat'){
     chatUpdateCacheExpiryHint(true);
     // 回到前台就检查有没有"发出去了却没收到回复"的那一轮：
@@ -9209,7 +9225,7 @@ function chatRenderMessages(opts){
     return;
   }
   chatEnsureCacheExpiryNotice();
-  if(!respectUserScroll&&opts.preservePosition!==true)chatHistoryReset();
+  if((!respectUserScroll||opts.newMessage&&shouldStick)&&opts.preservePosition!==true)chatHistoryReset();
   var visible=chatHistoryRange();
   chatActionSyncTurn();
   var existing=Array.prototype.slice.call(box.children).filter(function(el){return el.classList&&el.classList.contains('chat-msg-row')});
@@ -9874,7 +9890,7 @@ async function chatNewSession(){
   if(chatSending||chatNewSessionPending)return;
   chatNewSessionPending=true;
   try{
-  await chatEnsureSessionsReady();
+  await Promise.all([chatEnsureSessionsReady(),chatEnsureMainRouteReady()]);
   if(chatLoadConfig().newSessionDigestSyncEnabled!==false)await chatDailyDigestChain.catch(function(){});
   chatResetSearch();
   chatFlushAssistantRevealQueue();
@@ -10530,7 +10546,7 @@ async function chatSubmitPendingMessages(options){
             ts.transportMessages=chatLimitArray(data.messages,CHAT_MAX_TRANSPORT_MESSAGES);
             ts.transportUpdated=Date.now();
             ts.updated=Date.now();
-            chatSaveSessions();
+            chatScheduleSessionSave(cfg.sessionId);
           }
         }else if(ev==='meta'||ev==='debug'||ev==='usage'||ev==='done'||ev==='tool'){
           if(ev==='meta')chatStreamProgressSet('翻记忆');
@@ -10568,13 +10584,13 @@ async function chatSubmitPendingMessages(options){
               s.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
               s.transportUpdated=Date.now();
               s.updated=Date.now();
-              chatSaveSessions();
+              chatScheduleSessionSave(cfg.sessionId);
             }
             var completedSession=chatCurrentSession();
             if(completedSession.cacheRebuildPending===true){
               completedSession.cacheRebuildPending=false;
               completedSession.updated=Date.now();
-              chatSaveSessions();
+              chatScheduleSessionSave(cfg.sessionId);
             }
             chatSetStatus('完成');
           }
@@ -11661,9 +11677,40 @@ function toggleProviderCategory(button){
   var section=button&&button.closest?button.closest('.prov-category'):null;if(!section)return;
   var category=section.getAttribute('data-category')||'';
   var collapsed=!section.classList.contains('collapsed');
-  section.classList.toggle('collapsed',collapsed);
-  var view=providerCategoryView();view[category]=collapsed;
+  var view=providerCategoryView();
+  document.querySelectorAll('.api-provider-list .prov-category').forEach(function(folder){
+    var close=folder===section?collapsed:true;
+    folder.classList.toggle('collapsed',close);
+    var trigger=folder.querySelector('.prov-category-head>button');
+    if(trigger)trigger.setAttribute('aria-expanded',close?'false':'true');
+    view[folder.getAttribute('data-category')||'']=close;
+  });
   try{localStorage.setItem(API_PROVIDER_CATEGORY_VIEW_KEY,JSON.stringify(view))}catch(e){}
+}
+var providerLibrarySearchTerm='';
+function filterProviderLibrary(value){
+  providerLibrarySearchTerm=String(value||'');
+  var words=providerLibrarySearchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  var list=document.querySelector('.api-provider-list');
+  if(!list)return;
+  list.classList.toggle('is-searching',words.length>0);
+  var count=0,providers=providerLibraryList();
+  list.querySelectorAll('.prov-card').forEach(function(card){
+    var provider=providers.find(function(p){return String(p.id)===card.getAttribute('data-id')})||{};
+    var text=[provider.name,provider.category,provider.url,provider.note,provider.model].concat(provider.models||[]);
+    ['.prov-name-input','.prov-category-input','.prov-note-input','.prov-url','.prov-model'].forEach(function(selector){var input=card.querySelector(selector);if(input)text.push(input.value)});
+    var haystack=text.join(' ').toLowerCase();
+    card.hidden=!words.every(function(word){return haystack.indexOf(word)>=0});
+    if(!card.hidden)count++;
+  });
+  list.querySelectorAll('.prov-category,.prov-loose').forEach(function(folder){folder.hidden=!folder.querySelector('.prov-card:not([hidden])')});
+  var status=document.getElementById('provider-library-search-status');
+  if(status)status.textContent=words.length?(count?'找到 '+count+' 个供应商':'没有匹配的供应商'):'共 '+providers.length+' 个供应商';
+  var clear=document.getElementById('provider-library-search-clear');if(clear)clear.hidden=!words.length;
+}
+function clearProviderLibrarySearch(){
+  var input=document.getElementById('provider-library-search');if(input){input.value='';input.focus()}
+  filterProviderLibrary('');
 }
 function setProviderCategoryChip(button){
   var card=button&&button.closest?button.closest('.prov-card'):null;
@@ -11712,6 +11759,7 @@ function renderApiConfig(){
     ?renderProviderLibrary()
     :(tab.kind==='polling'?renderApiPolling():renderApiAssignments(tab));
   body.scrollTop=0;
+  if(tab.kind==='providers')filterProviderLibrary(providerLibrarySearchTerm);
   chatRenderMainRouteSummary();
   chatUpdateRuntime(chatLoadConfig());
   // 状态读取放在 innerHTML 之后、且只写单个节点，绝不在渲染里再触发整页重渲染。
@@ -12146,6 +12194,7 @@ function renderProviderLibrary(){
   var tab=findApiTab('providers'),list=providerLibraryList();
   var html=apiPageHeadHtml('供应商库','维护 API URL / Key 和模型列表。','<button class="prov-add compact" type="button" onclick="addProvider()">添加供应商</button>');
   html+=renderApiIntro(tab);
+  html+='<div class="provider-library-search"><label for="provider-library-search">搜索供应商</label><div><input id="provider-library-search" type="search" autocomplete="off" placeholder="名称、网址、模型或备注" value="'+escAttr(providerLibrarySearchTerm)+'" oninput="filterProviderLibrary(this.value)"><button id="provider-library-search-clear" type="button" onclick="clearProviderLibrarySearch()" aria-label="清空供应商搜索" hidden>×</button></div><small id="provider-library-search-status" role="status"></small></div>';
   if(!list.length){
     html+='<div class="api-empty-callout"><b>还没有供应商</b><p>先添加一个供应商，再到主链路、记忆或召回页选择它。</p><button class="prov-add" type="button" onclick="addProvider()">添加供应商</button></div>';
   }else{
@@ -12156,9 +12205,11 @@ function renderProviderLibrary(){
       if(!category){loose.push(p);return}
       (categories[category]||(categories[category]=[])).push(p);
     });
-    var view=providerCategoryView(),collapseDefault=list.length>8;
+    var view=providerCategoryView(),collapseDefault=list.length>8,opened=false;
     Object.keys(categories).sort(function(a,b){return a.localeCompare(b,'zh-CN')}).forEach(function(category){
       var collapsed=Object.prototype.hasOwnProperty.call(view,category)?view[category]===true:collapseDefault;
+      if(!collapsed&&opened)collapsed=true;
+      if(!collapsed)opened=true;
       html+='<section class="prov-category'+(collapsed?' collapsed':'')+'" data-category="'+escAttr(category)+'"><div class="prov-category-head"><button type="button" onclick="toggleProviderCategory(this)" aria-expanded="'+(collapsed?'false':'true')+'"><span class="prov-category-chevron">⌄</span><b>'+esc(category)+'</b><small>'+categories[category].length+' 个供应商</small></button><button class="prov-category-rename" type="button" onclick="renameProviderCategory(this)" title="重命名文件夹" aria-label="重命名文件夹 '+escAttr(category)+'">改名</button></div><div class="prov-category-body">';
       categories[category].forEach(function(p){html+=providerCardHtml(p)});
       html+='</div></section>';

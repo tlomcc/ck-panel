@@ -1657,6 +1657,16 @@ body.dark .ds-fact-error{background:#30271c;color:#dfbd83;border-color:#c68b42}
 .prov-category.collapsed .prov-category-chevron{transform:rotate(-90deg)}
 .prov-category-body{display:grid;gap:10px;padding:0 0 12px 12px}
 .prov-category.collapsed .prov-category-body{display:none}
+.provider-library-search{display:grid;grid-template-columns:1fr auto;gap:7px 12px;margin:14px 0 18px}
+.provider-library-search>label{font-size:12px;color:var(--ck-text-soft)}
+.provider-library-search>div{position:relative;grid-column:1 / -1}
+.provider-library-search input{width:100%;min-height:40px;padding:9px 38px 9px 12px;border:1px solid var(--ck-line);border-radius:10px;background:var(--ck-surface);color:var(--ck-text);font:13px/1.5 inherit}
+.provider-library-search input:focus-visible{outline:2px solid var(--ck-accent);outline-offset:2px}
+.provider-library-search button{position:absolute;right:5px;top:4px;width:32px;height:32px;border:0;border-radius:6px;background:transparent;color:var(--ck-text-soft);font-size:20px;cursor:pointer}
+.provider-library-search>small{grid-column:2;grid-row:1;font-size:11px;color:var(--ck-muted)}
+.api-provider-list .prov-card[hidden],.api-provider-list .prov-category[hidden],.api-provider-list .prov-loose[hidden],.provider-library-search button[hidden]{display:none!important}
+.api-provider-list.is-searching .prov-category-head{display:none}
+.api-provider-list.is-searching .prov-category-body{display:grid;padding-left:0}
 .api-assign-card{
   position:relative;overflow:hidden;min-width:0;
   background:var(--ck-surface);border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);
