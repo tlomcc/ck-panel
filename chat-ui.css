@@ -1,8 +1,5 @@
 /* CK: river jade, ink and a small folded conversation. */
 :root{--ck-ui-jade:#357b70;--ck-ui-ink:#254943;--ck-ui-mist:#eef5f2;--ck-ui-line:#d8e5df;--ck-ui-blue:#43a6d5}
-body.chat-active .chat-cache-tick,body.chat-active .chat-cache-tick:is(.created,.below_minimum,.miss){color:#97a2a5!important}
-body.chat-active .chat-cache-tick.full{color:#2685bd!important}
-body.chat-active .chat-cache-tick.partial{color:#bc842d!important}
 body.chat-active .chat-cache-tick path{stroke-width:1.25!important;vector-effect:none!important}
 body.chat-active .chat-msg-tools button{display:inline-grid!important;place-items:center!important;width:28px!important;height:26px!important;padding:5px!important;border:0!important;background:transparent!important;color:#899995!important}
 body.chat-active .chat-msg-tools svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
@@ -35,8 +32,6 @@ body.chat-active .chat-msg-usage .chat-usage-read{color:#267eaa!important;font-w
 body.chat-active .chat-msg-usage .chat-usage-create{color:#9a752f!important}
 body.dark.chat-active .chat-msg-usage .chat-usage-read{color:#7fc2e2!important}
 body.dark.chat-active .chat-msg-usage .chat-usage-create{color:#d4b674!important}
-body.dark.chat-active .chat-cache-tick.full{color:#7fc2e2!important}
-body.dark.chat-active .chat-cache-tick.partial{color:#d4b674!important}
 /* Each piece owns a grid cell; metadata must never float over the preview. */
 body.chat-active .chat-session-item{grid-template-columns:minmax(0,1fr) auto!important;grid-template-rows:auto auto!important;grid-auto-rows:auto!important;height:auto!important;row-gap:4px!important;column-gap:8px!important;align-items:center!important}
 body.chat-active .chat-session-item .chat-session-title{grid-area:1 / 1!important;max-width:100%!important}

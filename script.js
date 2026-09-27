@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v242-search-and-smooth-chat';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v243-notebook-and-cache-colors';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4604,12 +4604,30 @@ function chatSaveCostDefaults(){
 // √ 的颜色说明。故意用 chatCacheTickHtml 现造真勾号，而不是在 HTML 里另抄一份 SVG——
 // 抄一份就会出现"说明里的颜色和消息上的颜色不一样"这种最难查的偏差。
 var CHAT_TICK_LEGEND_ROWS=[
-  ['full','高比例缓存命中：这一轮几乎整段前缀都是从缓存里读的，最省钱。'],
-  ['partial','部分缓存命中：读到了缓存，但同时又创建了不少新缓存。'],
-  ['created','已创建缓存：这一轮没读到缓存，但缓存已经建好，下一轮就能读了。'],
-  ['below_minimum','没到门槛：可缓存的前缀不足约 4096 tokens，上游不给建缓存。'],
-  ['miss','未读取缓存：前缀变了或者缓存已过期，这一轮整段重算。'],
-  ['sent','已发送：这一轮没拿到缓存数据（比如轮询模式下的某些上游不回用量）。']
+  [
+    'full',
+    '湖蓝 · 双对号｜缓存命中，新建缓存较少。'
+  ],
+  [
+    'partial',
+    '青绿 · 双对号｜部分命中，同时新建了较多缓存。'
+  ],
+  [
+    'created',
+    '藤紫 · 单对号｜已创建缓存，本轮未读取；后续符合条件时可复用。'
+  ],
+  [
+    'below_minimum',
+    '琥珀 · 单对号｜输入不足约 4096 tokens，可能未达到缓存门槛。'
+  ],
+  [
+    'miss',
+    '莓红 · 单对号｜本轮未读取，也未创建缓存。'
+  ],
+  [
+    'sent',
+    '雾灰 · 单对号｜暂无缓存数据，尚不能判断是否命中。'
+  ]
 ];
 function chatRenderTickLegend(){
   var box=document.getElementById('chat-tick-legend');
@@ -4620,7 +4638,7 @@ function chatRenderTickLegend(){
       chatCacheTickHtml({cacheState:row[0],cacheHit:hit,cacheRead:hit?1:0})+
       '<span>'+esc(row[1])+'</span></div>';
   }).join('')+
-  '<p class="chat-tick-legend-note">勾号只跟"这一轮用没用上缓存"有关，和消息有没有发成功无关。'+
+  '<p class="chat-tick-legend-note">双对号表示本轮读到了缓存；单对号请按颜色区分创建、门槛、未命中或未知。颜色只说明缓存，不表示发送成功与否。'+
   '开启轮询后默认不显示，要看就去「聊天轮询」页勾上「显示 √」。</p>';
 }
 // 用量统计那一行的符号说明。符号本身取 CHAT_USAGE_SYMBOL_ROWS，
@@ -9670,12 +9688,12 @@ function chatCacheTickHtml(m){
   var total=Math.max(0,Number(m&&m.cacheInputTotal)||0);
   var ratio=Math.max(0,Math.min(100,Number(m&&m.cacheRatio)||0));
   var titles={
-    full:'高比例缓存命中',
-    partial:'部分缓存命中',
-    created:'已创建缓存，下一条可读取',
-    below_minimum:'未达到约 4096 tokens 缓存门槛',
-    miss:'未读取缓存（可缓存前缀可能尚未达到门槛）',
-    sent:'未创建缓存'
+    full:'湖蓝双对号：缓存命中，新建较少',
+    partial:'青绿双对号：部分缓存命中，新建较多',
+    created:'藤紫单对号：已创建缓存，后续符合条件时可复用',
+    below_minimum:'琥珀单对号：输入不足约 4096 tokens，可能未达到缓存门槛',
+    miss:'莓红单对号：本轮未读取，也未创建缓存',
+    sent:'雾灰单对号：暂无缓存数据'
   };
   var title=titles[state]||titles.sent;
   if(hit)title+='｜读取 '+Math.round(read)+'｜创建 '+Math.round(create)+'｜读取占比 '+Math.round(ratio)+'%';
@@ -11497,7 +11515,7 @@ function apiConfigStats(){
 }
 function apiPageHeadHtml(title,subtitle,actionHtml){
   var s=apiConfigStats();
-  return '<div class="api-page-head"><div class="api-page-title"><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p><div class="api-page-stats">'+
+  return '<div class="api-page-head"><span class="ck-page-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0Zm6 10v4M9 12v1m6-1v1"/></svg></span><div class="api-page-title"><h2>'+esc(title)+'</h2><p>'+esc(subtitle)+'</p><div class="api-page-stats">'+
     '<span>'+s.providers+' 供应商</span><span>'+s.configured+'/'+s.total+' 已绑定</span><span>'+s.models+' 模型</span>'+
     '</div></div><div class="api-page-actions">'+(actionHtml||'')+'</div></div>';
 }

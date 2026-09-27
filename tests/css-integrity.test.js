@@ -3,7 +3,7 @@ const fs=require('fs');
 const path=require('path');
 
 const root=path.resolve(__dirname,'..');
-const files=['tokens.css','style.css','polish.css','chat.css','wechat.css','visual-overrides.css','shell.css','components.css'];
+const files=['tokens.css','style.css','polish.css','chat.css','wechat.css','visual-overrides.css','shell.css','components.css','settings.css','daily-status.css','chat-ui.css','notebook.css'];
 const raw={};
 files.forEach(function(f){raw[f]=fs.readFileSync(path.join(root,f),'utf8')});
 
