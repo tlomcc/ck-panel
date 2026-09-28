@@ -249,6 +249,9 @@ body .ck-provider-picker .ck-action-choices{flex:1!important;max-height:none!imp
 body.dark .ck-action-dialog .ck-action-choice.active{background:var(--nb-sage)!important}
 
 /* Conversation notebook: a quiet index with a small book stamp. */
+body.chat-active .chat-drawer,body.chat-active .chat-drawer .chat-session-list{touch-action:pan-y pinch-zoom}
+body.chat-active .chat-drawer input{touch-action:auto}
+body.chat-active .chat-drawer.chat-drawer-dragging{user-select:none;-webkit-user-select:none}
 body.chat-active .chat-shell .chat-drawer{width:352px!important;max-width:calc(100vw - 24px)!important;border:1px solid var(--nb-line)!important;border-radius:23px!important;background:var(--nb-paper)!important;box-shadow:0 14px 48px #172c2529!important;color:var(--nb-ink)!important}
 body.chat-active .chat-drawer .chat-drawer-head{height:auto!important;min-height:94px!important;padding:22px 18px 16px!important;border:0!important;background:transparent!important;gap:10px!important;flex:none!important}
 body.chat-active .chat-drawer .chat-drawer-heading{gap:13px!important;min-width:0}

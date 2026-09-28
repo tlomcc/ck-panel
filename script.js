@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v247-long-image-composer';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v248-drawer-swipe';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8907,17 +8907,92 @@ function chatToggleDebugSettings(){
 function chatToggleSessions(force,silent){
   var shell=document.querySelector('.chat-shell');
   if(!shell)return;
+  chatAttachDrawerDismiss();
+  var drawer=shell.querySelector('.chat-drawer');
+  if(drawer&&drawer.__ckDismissReset)drawer.__ckDismissReset();
   var open=typeof force==='boolean'?force:!shell.classList.contains('chat-sessions-open');
   if(open){
     chatToggleSettings(false,true);
     closeSidebar();
   }
   shell.classList.toggle('chat-sessions-open',open);
-  var drawer=shell.querySelector('.chat-drawer');
-  if(drawer)drawer.setAttribute('aria-hidden',open?'false':'true');
+  if(drawer){drawer.setAttribute('aria-hidden',open?'false':'true');drawer.inert=!open;}
   var trigger=document.getElementById('chat-session-nav');
   if(trigger)trigger.setAttribute('aria-expanded',open?'true':'false');
   if(open)chatRenderSessions();
+}
+function chatAttachDrawerDismiss(){
+  var drawer=document.querySelector('.chat-drawer');
+  if(!drawer||drawer.__ckDismissReset)return;
+  var shell=drawer.closest('.chat-shell'),mask=shell.querySelector('.chat-drawer-mask');
+  var gesture=null,suppressClickUntil=0;
+  function reset(){
+    var old=gesture;gesture=null;
+    if(old&&old.committed)suppressClickUntil=Date.now()+400;
+    drawer.style.removeProperty('transition');
+    drawer.style.removeProperty('transform');
+    drawer.classList.remove('chat-drawer-dragging');
+    if(mask)mask.style.removeProperty('opacity');
+    if(old&&old.pointerId!==undefined&&drawer.hasPointerCapture&&drawer.hasPointerCapture(old.pointerId))drawer.releasePointerCapture(old.pointerId);
+  }
+  drawer.__ckDismissReset=reset;
+  drawer.inert=!shell.classList.contains('chat-sessions-open');
+  function start(e,point){
+    if(gesture)finish(true);
+    if(!shell.classList.contains('chat-sessions-open')||!point)return;
+    if(e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+    if(e.pointerType==='mouse'&&e.button!==0)return;
+    if(e.isPrimary===false)return;
+    gesture={x:point.clientX,y:point.clientY,dx:0,lastX:point.clientX,lastAt:Date.now(),velocity:0,width:drawer.getBoundingClientRect().width,committed:false,pointerId:e.pointerId};
+  }
+  function move(e,point){
+    var g=gesture;
+    if(!g||!point||(e.pointerId!==undefined&&e.pointerId!==g.pointerId))return;
+    var dx=point.clientX-g.x,dy=point.clientY-g.y;
+    if(!g.committed){
+      if(Math.max(Math.abs(dx),Math.abs(dy))<8)return;
+      // Lock to the first clear direction so vertical list scrolling stays native.
+      if(dx>=0||Math.abs(dx)<=Math.abs(dy)*1.2){reset();return;}
+      if(!e.cancelable){reset();return;}
+      g.committed=true;
+      drawer.classList.add('chat-drawer-dragging');
+      drawer.style.setProperty('transition','none','important');
+      if(g.pointerId!==undefined&&drawer.setPointerCapture){try{drawer.setPointerCapture(g.pointerId)}catch(_e){}}
+    }
+    var now=Date.now(),elapsed=now-g.lastAt;
+    if(elapsed>0)g.velocity=(point.clientX-g.lastX)/elapsed;
+    g.lastX=point.clientX;g.lastAt=now;
+    g.dx=Math.max(-g.width-24,Math.min(0,dx));
+    drawer.style.setProperty('transform','translateX('+g.dx+'px)','important');
+    if(mask)mask.style.setProperty('opacity',String(Math.max(0,1+g.dx/(g.width+24))));
+    if(e.cancelable)e.preventDefault();
+  }
+  function finish(cancelled){
+    var g=gesture;if(!g)return;
+    var distance=-g.dx;
+    var close=!cancelled&&g.committed&&(distance>=Math.min(100,g.width*.3)||(distance>=24&&g.velocity<-.5&&Date.now()-g.lastAt<100));
+    if(g.committed)suppressClickUntil=Date.now()+400;
+    if(close)chatToggleSessions(false,true);
+    else reset();
+  }
+  if(window.PointerEvent){
+    drawer.addEventListener('pointerdown',function(e){start(e,e)},{passive:true});
+    window.addEventListener('pointermove',function(e){move(e,e)},{passive:false});
+    window.addEventListener('pointerup',function(e){if(gesture&&e.pointerId===gesture.pointerId)finish(false)},{passive:true});
+    window.addEventListener('pointercancel',function(e){if(gesture&&e.pointerId===gesture.pointerId)finish(true)},{passive:true});
+    drawer.addEventListener('lostpointercapture',function(e){if(e.target===drawer)finish(true)},{passive:true});
+  }else{
+    drawer.addEventListener('touchstart',function(e){if(e.touches.length===1)start(e,e.touches[0]);else finish(true)},{passive:true});
+    drawer.addEventListener('touchmove',function(e){if(e.touches.length===1)move(e,e.touches[0]);else finish(true)},{passive:false});
+    drawer.addEventListener('touchend',function(){finish(false)},{passive:true});
+    drawer.addEventListener('touchcancel',function(){finish(true)},{passive:true});
+  }
+  drawer.addEventListener('click',function(e){
+    if(Date.now()>suppressClickUntil)return;
+    e.preventDefault();e.stopImmediatePropagation();
+  },true);
+  window.addEventListener('blur',function(){finish(true)});
+  window.addEventListener('resize',function(){finish(true)});
 }
 function chatToggleSettings(force,silent){
   var el=document.querySelector('.chat-settings');
