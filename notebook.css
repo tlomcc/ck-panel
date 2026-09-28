@@ -231,6 +231,11 @@ body.chat-active .chat-debug-sheet-chip span{overflow-wrap:anywhere!important;wh
 }
 
 /* Provider navigation stays in one sheet, with one scroll region. */
+/* Draft attachments must leave room for the composer actions, even for long screenshots. */
+body.chat-active .chat-compose .chat-draft-images{flex:0 1 76px!important;min-height:0!important;max-height:76px!important;overflow:hidden!important;padding:0!important}
+body.chat-active .chat-compose .chat-draft-images .chat-image-grid{display:flex!important;flex-wrap:nowrap!important;gap:8px!important;width:100%!important;max-width:none!important;height:100%!important;max-height:76px!important;overflow-x:auto!important;overflow-y:hidden!important;overscroll-behavior:contain;scrollbar-width:thin}
+body.chat-active .chat-compose .chat-draft-images .chat-image-thumb{flex:0 0 64px!important;width:64px!important;height:64px!important;min-height:0!important;max-height:64px!important;aspect-ratio:1!important}
+body.chat-active .chat-compose .chat-draft-images .chat-image-thumb img{width:100%!important;height:100%!important;max-height:64px!important;object-fit:contain!important}
 body.chat-active .chat-current-thinking{min-width:0;border:1px solid var(--nb-line);border-radius:15px;background:var(--nb-paper);overflow:hidden}
 body.chat-active .chat-current-thinking[hidden]{display:none!important}
 body.chat-active .chat-current-thinking>header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 15px;border-bottom:1px solid var(--nb-line);color:var(--nb-ink);font-size:13px}
