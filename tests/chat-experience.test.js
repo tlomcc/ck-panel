@@ -54,12 +54,13 @@ const server=http.createServer((req,res)=>{
       chatToggleSearch(true);document.getElementById('chat-search-input').value='问题 第4轮';chatSearchMessages();await tick();
       let match=box.querySelector('[data-chat-index="12"]');check(match&&match.getBoundingClientRect().top>=box.getBoundingClientRect().top&&match.getBoundingClientRect().bottom<=box.getBoundingClientRect().bottom,'Search failed to locate unloaded history');check(rows().length<=150,'Search rendered all history');
       chatToggleSearch(false);chatJumpToEdge('bottom');await tick();
-      chatSetActionMode('low');check(!box.querySelector('.chat-msg-tools,.chat-action-buddy'),'Low mode leaked actions');
-      chatSetActionMode('medium');check(!box.querySelector('.chat-msg-tools')&&box.querySelector('.chat-action-buddy'),'Medium defaults wrong');
+      chatSetActionMode('low');check(!box.querySelector('.chat-msg-tools,.chat-action-buddy')&&document.getElementById('chat-quick-actions-toggle').hidden,'Low mode leaked actions');
+      chatSetActionMode('medium');check(!box.querySelector('.chat-msg-tools,.chat-action-buddy')&&!document.getElementById('chat-quick-actions-toggle').hidden,'Medium header toggle defaults wrong');
+      document.getElementById('chat-quick-actions-toggle').click();check(box.querySelectorAll('.chat-msg-tools').length===rows().length,'Header toggle must expose all visible message operations');check(document.getElementById('chat-quick-actions-toggle').getAttribute('aria-pressed')==='true','Header toggle state');document.getElementById('chat-quick-actions-toggle').click();check(!box.querySelector('.chat-msg-tools'),'Header toggle must close operations');
       chatToggleTurnActions(358);check(box.querySelectorAll('.chat-msg-tools').length===3,'Must expand just one full turn');
       chatMessages.push({role:'user',text:'下一轮',turnId:'new-turn',ts:now},{role:'assistant',text:'新回答',turnId:'new-turn',ts:now+1});chatRenderMessages();await tick();
       check(!box.querySelector('.chat-msg-tools'),'Old actions must collapse on next turn');
-      chatSetActionMode('high');check(box.querySelectorAll('.chat-msg-tools').length===rows().length,'High mode must show all actions');check(!box.querySelector('.chat-action-buddy'),'Buddy leaked in high mode');
+      chatSetActionMode('high');check(box.querySelectorAll('.chat-msg-tools').length===rows().length,'High mode must show all actions');check(!box.querySelector('.chat-action-buddy')&&document.getElementById('chat-quick-actions-toggle').hidden,'Header toggle leaked in high mode');
       chatSetActionMode('medium');
       chatOpenSettingTab('display');check(document.querySelector('[data-action-mode="medium"]').getAttribute('aria-checked')==='true','Mode UI not restored');
       chatOpenSettingTab('debug');check(!document.querySelector('.chat-debug-controls').open,'Debug defaults expanded');check(document.querySelectorAll('#chat-side-debug details').length===1,'Nested debug collapse');check(document.querySelector('.chat-settings-head .chat-theme-toggle:not([hidden])'),'Theme must be visible in debug header');
@@ -90,6 +91,6 @@ const server=http.createServer((req,res)=>{
       })()`);console.log(width,provider);await shot(width+'-providers');
     }
   }
-  await send('Browser.close');
+  await Promise.race([send('Browser.close'),pause(500)]);
  }finally{socket?.close();browser.kill();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1;server.close()});

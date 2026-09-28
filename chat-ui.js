@@ -141,7 +141,15 @@ function chatSetActionMode(mode){
 function chatSyncActionControls(){
   var mode=chatActionMode();
   document.querySelectorAll('[data-action-mode]').forEach(function(b){b.setAttribute('aria-checked',String(b.dataset.actionMode===mode))});
-  var label=document.getElementById('chat-action-mode-hint');if(label)label.textContent=({low:'低档 · 隐藏复制和重新生成',medium:'中档 · 点小伙伴，展开本轮操作',high:'高档 · 始终显示操作按钮'})[mode];
+  var label=document.getElementById('chat-action-mode-hint');if(label)label.textContent=({low:'低档 · 隐藏复制和重新生成',medium:'中档 · 点顶部双页图标，展开或收起消息操作；新一轮自动收起',high:'高档 · 始终显示操作按钮'})[mode];
+  var button=document.getElementById('chat-quick-actions-toggle');
+  if(button){
+    var expanded=mode==='medium'&&chatActionOpenTurn==='all';
+    button.hidden=mode!=='medium';
+    button.setAttribute('aria-pressed',String(expanded));
+    button.setAttribute('aria-label',expanded?'收起消息操作':'展开消息操作');
+    button.title=expanded?'收起消息操作':'展开消息操作';
+  }
 }
 function chatActionTurnKey(index){
   var m=chatMessages[index];if(!m)return '';
@@ -152,14 +160,17 @@ function chatActionTurnKey(index){
 function chatActionSyncTurn(){
   var key=chatActionTurnKey(chatMessages.length-1);
   if(key!==chatActionLastTurn){chatActionLastTurn=key;chatActionOpenTurn=''}
+  chatSyncActionControls();
 }
 function chatToggleTurnActions(index){
   var key=chatActionTurnKey(index);chatActionOpenTurn=chatActionOpenTurn===key?'':key;
   chatRenderMessages({respectUserScroll:true,preservePosition:true});
 }
-function chatActionBuddy(index){
-  var expanded=chatActionOpenTurn===chatActionTurnKey(index);
-  return '<button class="chat-action-buddy" type="button" onclick="chatToggleTurnActions('+index+')" aria-label="'+(expanded?'收起':'展开')+'本轮操作" aria-expanded="'+expanded+'" title="本轮操作"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5c4.2 0 6.5 3.1 6.5 7S12 14.5 8 14.5s-6.5-2.1-6.5-6 2.3-7 6.5-7Z"/><path class="chat-buddy-face" d="M5.5 7v.5m5-.5v.5M6.5 10q1.5 1.5 3 0"/></svg></button>';
+function chatToggleMessageActions(){
+  if(chatActionMode()!=='medium')return;
+  chatActionOpenTurn=chatActionOpenTurn==='all'?'':'all';
+  chatSyncActionControls();
+  chatRenderMessages({respectUserScroll:true,preservePosition:true});
 }
 function chatCloseVersionNotes(){var el=document.getElementById('panel-version-notes');if(el)el.hidden=true;document.querySelectorAll('[data-version-notes]').forEach(function(b){b.setAttribute('aria-expanded','false')})}
 function chatToggleVersionNotes(event){

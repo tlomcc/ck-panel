@@ -76,7 +76,7 @@ function testTrimCommitsAndSchedulesDigest(){
   assert.strictEqual(result.historyAfter,4);
   assert.strictEqual(session.transportMessages.length,1,'canonical transport 同步裁剪');
   assert.strictEqual(session.cacheRebuildPending,true,'边界后标记重建缓存');
-  assert.strictEqual(context.digestCalls.length,1,'真的丢掉历史时必须触发当日截断总结');
+  assert.strictEqual(context.digestCalls.length,0,'提交阶段不能再启动后台总结');
 }
 
 function testDigestIsNotScheduledWithoutARealTrim(){

@@ -30,7 +30,7 @@ const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect();const s=ge
   return {top:+r.top.toFixed(1),right:+r.right.toFixed(1),bottom:+r.bottom.toFixed(1),
     left:+r.left.toFixed(1),h:+r.height.toFixed(1),w:+r.width.toFixed(1),display:s.display};};
 const actions=document.querySelector('.chat-head-actions');
-const buttons=actions?[...actions.querySelectorAll('button')]:[];
+const buttons=actions?[...actions.querySelectorAll('button')].filter(button=>!button.hidden):[];
 const out={
   viewport:{w:window.innerWidth,h:window.innerHeight},
   progress:rect(document.getElementById('chat-head-progress')),

@@ -42,6 +42,7 @@ const server=http.createServer((req,res)=>{
     }
   }
 
-  await send('Browser.close');
+  // Chrome may close the socket before acknowledging Browser.close.
+  await Promise.race([send('Browser.close'),pause(500)]);
  }finally{socket?.close();browser.kill();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1;server.close()});

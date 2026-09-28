@@ -185,3 +185,47 @@ body .ck-brand-tenets>div{background:var(--nb-sage)!important;border-color:var(-
   body .prov-category-body{padding:9px!important}
 }
 @media(prefers-reduced-motion:reduce){body .ck-notebook-stamp,body .ck-page-stamp{transform:none}}
+/* Choice slips share the notebook's paper, ink and mint selection mark. */
+body select[data-ck-select]{display:none!important}
+body .ck-select-button{
+  display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;
+  width:100%;min-width:0;max-width:100%;min-height:42px;padding:10px 13px!important;
+  border:1px solid var(--nb-line,#d7e3dc)!important;border-radius:12px!important;
+  background:var(--nb-paper,#fff)!important;color:var(--nb-ink,#334c40)!important;
+  font:inherit!important;font-size:13px!important;line-height:1.5!important;text-align:left!important;cursor:pointer;
+}
+body .ck-select-button[hidden]{display:none!important}
+body .ck-select-button span{min-width:0;overflow-wrap:anywhere}
+body .ck-select-button svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6}
+body .ck-select-button:hover{border-color:#80ab92!important;background:var(--nb-soft,#f3f8f4)!important}
+body .ck-select-button:focus-visible{outline:3px solid #9dcbb4!important;outline-offset:2px}
+body .ck-select-button:disabled{opacity:.5;cursor:default}
+body .ck-action-dialog{padding:23px!important;border-radius:23px!important;max-height:min(84dvh,760px)!important;display:flex!important;flex-direction:column!important;gap:12px!important}
+body .ck-action-dialog #ck-action-title{margin:0!important;padding:0 0 0 12px!important;border-left:4px solid #83ad93!important;line-height:1.5!important;font-size:18px!important}
+body .ck-action-dialog .ck-action-message{margin:0!important;font-size:12px!important;line-height:1.65!important}
+body .ck-action-dialog .ck-action-choices{min-height:0!important;max-height:55dvh!important;overflow-y:auto!important;overscroll-behavior:contain;display:flex!important;flex-direction:column!important;gap:8px!important;padding:2px!important}
+body .ck-action-dialog .ck-action-choices[hidden],body .ck-action-dialog [hidden]{display:none!important}
+body .ck-action-dialog .ck-action-choice{position:relative!important;flex-shrink:0!important;padding:12px 40px 12px 14px!important;border:1px solid var(--nb-line,#d7e3dc)!important;border-radius:13px!important;background:var(--nb-paper,#fff)!important;line-height:1.55!important;text-align:left!important;min-height:46px!important}
+body .ck-action-dialog .ck-action-choice.active{background:var(--nb-soft,#edf6ef)!important;border-color:#8db49b!important;box-shadow:inset 3px 0 #8db49b!important}
+body .ck-action-dialog .ck-action-choice.active::after{content:'✓';position:absolute;right:14px;top:12px;color:#518264;font-size:18px;font-weight:700}
+body .ck-action-dialog .ck-action-choice:focus-visible{outline:2px solid #83ad93!important;outline-offset:1px}
+body .ck-action-dialog .ck-action-choice:disabled{opacity:.45;cursor:default}
+body .ck-action-dialog .ck-action-choice-label{overflow-wrap:anywhere!important;line-height:1.55!important}
+body .ck-action-dialog .ck-action-choice small{margin-top:4px!important;line-height:1.5!important;overflow-wrap:anywhere!important}
+body .ck-action-dialog .ck-choice-search{flex:none;min-height:42px;padding:10px 13px!important;border:1px solid var(--nb-line,#d7e3dc)!important;border-radius:12px!important;background:var(--nb-paper,#fff)!important;color:var(--nb-ink,#334c40)!important}
+body .ck-action-dialog .modal-btns{margin-top:3px!important;flex-shrink:0}
+/* Values can be strategy labels, fingerprints or token counts; never force nowrap. */
+body.chat-active .chat-debug-sheet{min-width:0!important;white-space:normal!important}
+body.chat-active .chat-debug-sheet-table{min-width:0!important;font-size:12px!important;line-height:1.6!important}
+body.chat-active .chat-debug-sheet-table th,body.chat-active .chat-debug-sheet-table td{position:static!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;line-height:1.65!important;padding:9px 10px!important}
+body.chat-active .chat-debug-sheet-table td.chat-debug-sheet-token{text-align:left!important;font-weight:600!important;font-size:12px!important;white-space:normal!important;overflow-wrap:anywhere!important}
+body.chat-active .chat-debug-sheet-chip{min-width:0!important;max-width:100%!important;line-height:1.6!important}
+body.chat-active .chat-debug-sheet-chip span{overflow-wrap:anywhere!important;white-space:normal!important}
+@media(max-width:700px){
+  body.chat-active .chat-debug-sheet-table,body.chat-active .chat-debug-sheet-table tbody{display:block!important;width:100%!important;min-width:0!important}
+  body.chat-active .chat-debug-sheet-table thead{display:none!important}
+  body.chat-active .chat-debug-sheet-table tr{display:block!important;padding:9px!important;border-bottom:1px solid var(--nb-line,#d7e3dc)!important}
+  body.chat-active .chat-debug-sheet-table tr td:nth-child(n){display:grid!important;grid-template-columns:76px minmax(0,1fr)!important;gap:8px!important;width:auto!important;border:0!important;padding:4px!important;min-width:0!important}
+  body.chat-active .chat-debug-sheet-table td::before{content:attr(data-label);color:var(--nb-muted,#718079);font:500 11px/1.65 inherit}
+  body .ck-action-dialog{padding:18px!important;width:calc(100vw - 28px)!important}
+}
