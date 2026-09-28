@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v245-focus-and-atomic-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v246-thinking-and-navigation';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -15,7 +15,7 @@ function ckOpenDialog(opts){
   var returnFocus=ckDialogState.resolve?ckDialogState.returnFocus:document.activeElement;
   if(ckDialogState.resolve)ckDialogState.resolve(ckDialogEmptyValue(ckDialogState.mode));
   var mode=opts.mode==='prompt'?'prompt':(opts.mode==='choose'?'choose':'confirm');
-  ckDialogState={resolve:null,mode:mode,defaultValue:String(opts.value||''),required:opts.required===true,cancelable:opts.cancelable!==false,returnFocus:returnFocus};
+  ckDialogState={resolve:null,mode:mode,defaultValue:String(opts.value||''),required:opts.required===true,cancelable:opts.cancelable!==false,returnFocus:returnFocus,navigationValues:opts.navigationValues||[]};
   var title=document.getElementById('ck-action-title');
   var message=document.getElementById('ck-action-message');
   var input=document.getElementById('ck-action-input');
@@ -33,6 +33,7 @@ function ckOpenDialog(opts){
   var search=document.getElementById('ck-choice-search');
   if(search){search.hidden=mode!=='choose'||!opts.searchable;search.value=''}
   if(choices){
+    choices.scrollTop=0;
     choices.hidden=mode!=='choose';
     choices.innerHTML=mode==='choose'?(opts.choices||[]).map(function(choice){
       var cls='ck-action-choice'+(choice.active?' active':'')+(choice.danger?' danger':'');
@@ -48,12 +49,16 @@ function ckOpenDialog(opts){
   }
   if(cancel){cancel.textContent=opts.cancelText||'取消';cancel.hidden=!ckDialogState.cancelable}
   modal.classList.toggle('panel-auth-gate',opts.authGate===true);
+  modal.classList.toggle('ck-provider-picker',opts.providerPicker===true);
   modal.classList.add('show');
   modal.setAttribute('aria-hidden','false');
   return new Promise(function(resolve){
     ckDialogState.resolve=resolve;
     setTimeout(function(){
-      var target=mode==='prompt'?input:(mode==='choose'?(search&&!search.hidden?search:(choices&&choices.querySelector('.ck-action-choice.active:not(:disabled), .ck-action-choice:not(:disabled)'))):confirm);
+      if(ckDialogState.resolve!==resolve||!modal.classList.contains('show'))return;
+      // A choice list never requests text entry. Keep an explicit tap on search intact.
+      if(modal.contains(document.activeElement)&&document.activeElement.offsetParent!==null)return;
+      var target=mode==='prompt'?input:(mode==='choose'?((choices&&(choices.querySelector('.ck-action-choice.active:not(:disabled)')||choices.querySelector('.ck-action-choice:not(:disabled)')))||cancel):confirm);
       if(!target)return;
       try{target.focus({preventScroll:true})}catch(e){try{target.focus()}catch(_e){}}
       if(target===input)try{input.select()}catch(e){}
@@ -84,14 +89,20 @@ function ckCloseDialog(value){
   ckDialogState.resolve=null;
   if(resolve)resolve(value);
   if(returnFocus&&returnFocus.focus&&document.contains(returnFocus)){
-    setTimeout(function(){try{returnFocus.focus({preventScroll:true})}catch(e){try{returnFocus.focus()}catch(_e){}}},0);
+    setTimeout(function(){if(ckDialogState.resolve||!document.contains(returnFocus))return;try{returnFocus.focus({preventScroll:true})}catch(e){try{returnFocus.focus()}catch(_e){}}},0);
   }
 }
 function ckDialogEmptyValue(mode){return (mode==='prompt'||mode==='choose')?null:false}
 function ckDialogCancel(){if(!ckDialogState.cancelable)return;ckCloseDialog(ckDialogEmptyValue(ckDialogState.mode))}
 function ckDialogChoose(button){
   if(ckDialogState.mode!=='choose'||!button||button.disabled)return;
-  ckCloseDialog(String(button.getAttribute('data-value')||''));
+  var value=String(button.getAttribute('data-value')||'');
+  if((ckDialogState.navigationValues||[]).indexOf(value)>=0){
+    // Resolve this page without closing the sheet or returning focus to the page behind it.
+    if(ckDialogState.resolve)ckDialogState.resolve(value);
+    return;
+  }
+  ckCloseDialog(value);
 }
 function ckDialogSubmit(){
   if(ckDialogState.mode==='choose')return;
@@ -2467,6 +2478,7 @@ function chatDefaultConfig(){
     nativeThinkingVisible:true,
     retainNativeThinkingHistory:true,
     retainPseudoThinkingHistory:true,
+    retainImageTurnThinking:false,
     retainRecallHistory:true,
     retainCurrentTimeHistory:true,
     retainTimeGapHistory:true,
@@ -2550,6 +2562,8 @@ function chatRenderThinkingControls(cfg){
   var nativeVisible=document.getElementById('chat-native-thinking-visible');
   // This is a display preference, including already saved replies in any mode.
   if(nativeVisible){nativeVisible.checked=cfg.nativeThinkingVisible!==false;nativeVisible.disabled=false;}
+  chatSetFieldChecked('chat-retain-image-turn-thinking',cfg.retainImageTurnThinking===true);
+  chatRenderCurrentThinking();
   var prompt=document.getElementById('chat-thinking-prompt');
   if(prompt)prompt.disabled=mode==='off';
   var position=document.getElementById('chat-thinking-injection-position');
@@ -2575,6 +2589,30 @@ function chatSaveThinkingDisplay(){
   chatRenderMessages({respectUserScroll:true});
   toast('原生思考块已'+(cfg.nativeThinkingVisible!==false?'显示':'隐藏'));
   return cfg;
+}
+var chatThinkingPreviewLive=null;
+function chatRenderCurrentThinking(live){
+  var box=document.getElementById('chat-current-thinking');
+  var output=document.getElementById('chat-current-thinking-text');
+  if(!box||!output)return;
+  if(live)chatThinkingPreviewLive=live;
+  box.hidden=chatShouldShowNativeThinking();
+  if(box.hidden)return;
+  var start=-1;
+  for(var i=chatMessages.length-1;i>=0;i--){if(chatMessages[i]&&chatMessages[i].role==='user'){start=i;break}}
+  var text='';
+  if(start>=0){
+    var user=chatMessages[start];
+    if(user.turnId&&chatThinkingPreviewLive&&chatThinkingPreviewLive.sessionId===chatActiveSessionId&&chatThinkingPreviewLive.turnId===user.turnId){
+      text=chatThinkingPreviewLive.text||'';
+    }else{
+      text=chatMessages.slice(start+1).filter(function(message){return message&&message.role==='assistant'}).map(chatMessageThinkingText).filter(Boolean).join('\n\n');
+    }
+  }
+  var stick=output.scrollHeight-output.scrollTop-output.clientHeight<32;
+  var value=text||'本轮暂未返回思考内容。';
+  if(output.textContent!==value){output.textContent=value;if(stick)output.scrollTop=output.scrollHeight}
+  box.classList.toggle('is-empty',!text);
 }
 function chatNormalizeCacheStrategy(value){
   var raw=String(value||'').trim().toLowerCase().replace(/-/g,'_');
@@ -3259,6 +3297,7 @@ function chatLoadConfig(){
   cfg.nativeThinkingVisible=cfg.nativeThinkingVisible!==false;
   cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
   cfg.retainPseudoThinkingHistory=cfg.retainPseudoThinkingHistory!==false;
+  cfg.retainImageTurnThinking=cfg.retainImageTurnThinking===true;
   cfg.retainRecallHistory=cfg.retainRecallHistory!==false;
   cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
   cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
@@ -3295,6 +3334,7 @@ function chatLoadConfig(){
   cfg.nativeThinkingVisible=cfg.nativeThinkingVisible!==false;
   cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
   cfg.retainPseudoThinkingHistory=cfg.retainPseudoThinkingHistory!==false;
+  cfg.retainImageTurnThinking=cfg.retainImageTurnThinking===true;
   cfg.retainRecallHistory=cfg.retainRecallHistory!==false;
   cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
   cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
@@ -3334,6 +3374,7 @@ function chatSaveConfigObject(cfg){
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
   cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
   cfg.retainPseudoThinkingHistory=cfg.retainPseudoThinkingHistory!==false;
+  cfg.retainImageTurnThinking=cfg.retainImageTurnThinking===true;
   cfg.retainRecallHistory=cfg.retainRecallHistory!==false;
   cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
   cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
@@ -4271,6 +4312,7 @@ function chatReadForm(){
     nativeThinkingVisible:chatFieldChecked('chat-native-thinking-visible',saved.nativeThinkingVisible!==false),
     retainNativeThinkingHistory:chatFieldChecked('chat-retain-native-thinking-history',saved.retainNativeThinkingHistory!==false),
     retainPseudoThinkingHistory:chatFieldChecked('chat-retain-pseudo-thinking-history',saved.retainPseudoThinkingHistory!==false),
+    retainImageTurnThinking:chatFieldChecked('chat-retain-image-turn-thinking',saved.retainImageTurnThinking===true),
     retainRecallHistory:chatFieldChecked('chat-retain-recall-history',saved.retainRecallHistory!==false),
     retainCurrentTimeHistory:chatFieldChecked('chat-retain-current-time-history',saved.retainCurrentTimeHistory!==false),
     retainTimeGapHistory:chatFieldChecked('chat-retain-time-gap-history',saved.retainTimeGapHistory!==false),
@@ -4343,6 +4385,7 @@ function chatWriteForm(cfg){
   if(document.getElementById('chat-native-thinking-visible'))document.getElementById('chat-native-thinking-visible').checked=cfg.nativeThinkingVisible!==false;
   chatSetFieldChecked('chat-retain-native-thinking-history',cfg.retainNativeThinkingHistory!==false);
   chatSetFieldChecked('chat-retain-pseudo-thinking-history',cfg.retainPseudoThinkingHistory!==false);
+  chatSetFieldChecked('chat-retain-image-turn-thinking',cfg.retainImageTurnThinking===true);
   chatSetFieldChecked('chat-retain-recall-history',cfg.retainRecallHistory!==false);
   chatSetFieldChecked('chat-retain-current-time-history',cfg.retainCurrentTimeHistory!==false);
   chatSetFieldChecked('chat-retain-time-gap-history',cfg.retainTimeGapHistory!==false);
@@ -6384,7 +6427,18 @@ function chatSessionMeta(s){
   return (n?n+' 轮':'新会话')+(s.updated?' · '+chatTimeLabel(s.updated):'');
 }
 function chatSessionRowHtml(s,folderName){
-  return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button" onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><i></i><span class="chat-session-title">'+esc(s.title||'未命名对话')+'</span><small class="chat-session-preview">'+esc(chatSessionPreview(s))+'</small><em class="chat-session-meta">'+esc(chatSessionMeta(s))+'</em>'+(folderName?'<small class="chat-session-folder-label">'+esc(folderName)+'</small>':'')+'</button><div class="chat-session-actions"><button class="chat-session-move" type="button" onclick="chatMoveSession(\''+escAttr(s.id)+'\',event)" title="移动到文件夹" aria-label="移动到文件夹">▱</button><button class="chat-session-del" type="button" onclick="chatDeleteSession(\''+escAttr(s.id)+'\',event)" title="删除对话" aria-label="删除对话">×</button></div></div>';
+  return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button"'+(s.id===chatActiveSessionId?' aria-current="true"':'')+' onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><span class="chat-session-title">'+esc(s.title||'未命名对话')+'</span><small class="chat-session-preview">'+esc(chatSessionPreview(s))+'</small><em class="chat-session-meta">'+esc(chatSessionMeta(s))+'</em>'+(folderName?'<small class="chat-session-folder-label">'+esc(folderName)+'</small>':'')+'</button><button class="chat-session-more" type="button" onclick="chatSessionMenu(\''+escAttr(s.id)+'\',event)" title="对话操作" aria-label="对话操作：'+escAttr(s.title||'未命名对话')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button></div>';
+}
+async function chatSessionMenu(id,event){
+  if(event){event.preventDefault();event.stopPropagation()}
+  var session=chatSessions.find(function(item){return item.id===id});
+  if(!session)return;
+  var answer=await ckChooseDialog(session.title||'对话操作',[
+    {value:'move',label:'移动到文件夹'},
+    {value:'delete',label:'删除对话',danger:true}
+  ]);
+  if(answer==='move')return chatMoveSession(id);
+  if(answer==='delete')return chatDeleteSession(id);
 }
 function chatRenderSessions(){
   var list=document.getElementById('chat-session-list');
@@ -6404,14 +6458,14 @@ function chatRenderSessions(){
   }else{
     chatFolders.forEach(function(folder){
       var sessions=filtered.filter(function(session){return session.folderId===folder.id});
-      var body=sessions.length?sessions.map(function(session){return chatSessionRowHtml(session,'')}).join(''):'<div class="chat-folder-empty">还没有对话。点对话右边的 ▱ 就能移进来。</div>';
+      var body=sessions.length?sessions.map(function(session){return chatSessionRowHtml(session,'')}).join(''):'<div class="chat-folder-empty">还没有对话。在对话右侧菜单中选择“移动到文件夹”。</div>';
       rows+='<section class="chat-folder'+(folder.collapsed?' collapsed':'')+'"><div class="chat-folder-head"><button type="button" onclick="chatToggleFolder(\''+escAttr(folder.id)+'\')" aria-expanded="'+(folder.collapsed?'false':'true')+'"><span class="chat-folder-chevron">⌄</span><b>'+esc(folder.name)+'</b><small>'+sessions.length+'</small></button><button class="chat-folder-menu" type="button" onclick="chatFolderMenu(\''+escAttr(folder.id)+'\',event)" title="重命名或删除文件夹" aria-label="重命名或删除文件夹">⋯</button></div><div class="chat-folder-body">'+body+'</div></section>';
     });
     var ungrouped=filtered.filter(function(session){return !session.folderId||!validFolderIds[session.folderId]});
     if(ungrouped.length||!chatFolders.length)rows+='<section class="chat-folder chat-folder-ungrouped"><div class="chat-folder-divider"><span>未分组</span><small>'+ungrouped.length+'</small></div><div class="chat-folder-body">'+ungrouped.map(function(session){return chatSessionRowHtml(session,'')}).join('')+'</div></section>';
   }
-  if(chatSessions.length<=3&&!chatSessionSearch){
-    rows+='<button class="chat-session-empty-hint" type="button" onclick="chatNewSession()"><span class="chat-session-empty-plus" aria-hidden="true">+</span><span>点击 + 开始新对话</span></button>';
+  if(!chatSessions.length&&!chatSessionSearch){
+    rows+='<div class="chat-session-search-empty">还没有对话，点上方“新对话”开始。</div>';
   }
   list.innerHTML=rows;
 }
@@ -6517,6 +6571,7 @@ function chatInsertRenderedMessageRow(box,html,index){
   else box.insertAdjacentHTML('beforeend',html);
 }
 function chatUpdateMessageRowOnly(index){
+  chatRenderCurrentThinking();
   var box=chatMessagesBox();
   var message=chatMessages[index];
   if(!box||!message||index<0)return null;
@@ -9289,6 +9344,7 @@ function chatRestoreOpenAuxBlocks(box,state){
 }
 function chatRenderMessages(opts){
   opts=opts||{};
+  chatRenderCurrentThinking();
   var box=chatMessagesBox();
   if(!box)return;
   chatAttachPendingGestures();
@@ -10436,6 +10492,7 @@ async function chatSubmitPendingMessages(options){
     backend_switch_notification:cfg.backendSwitchNotification!==false,
     retain_native_thinking_history:cfg.retainNativeThinkingHistory!==false,
     retain_pseudo_thinking_history:cfg.retainPseudoThinkingHistory!==false,
+    retain_image_turn_thinking:cfg.retainImageTurnThinking===true,
     retain_recall_history:cfg.retainRecallHistory!==false,
     retain_current_time_history:cfg.retainCurrentTimeHistory!==false,
     retain_time_gap_history:cfg.retainTimeGapHistory!==false,
@@ -10543,6 +10600,7 @@ async function chatSubmitPendingMessages(options){
   function flushStreamRender(){
     if(streamRenderStopped)return;
     streamRenderDirty=false;
+    chatRenderCurrentThinking({sessionId:cfg.sessionId,turnId:requestTurnId,text:[nativeThinkingText,chatSplitThinkingText(assistantText).thinking].filter(Boolean).join('\n\n')});
     if(!out||(!toolEvents.length&&!nativeThinkingText))return;
     var shouldStick=chatIsMessagesNearBottom();
     out.classList.remove('streaming-empty');
@@ -10565,6 +10623,7 @@ async function chatSubmitPendingMessages(options){
   }
   function stopStreamRender(){
     streamRenderStopped=true;
+    if(chatThinkingPreviewLive&&chatThinkingPreviewLive.turnId===requestTurnId)chatThinkingPreviewLive=null;
     if(streamRenderRaf){cancelAnimationFrame(streamRenderRaf);streamRenderRaf=0;}
     streamRenderDirty=false;
   }
@@ -10761,6 +10820,7 @@ async function chatSubmitPendingMessages(options){
     }
   }finally{
     stopStreamRender();
+    chatRenderCurrentThinking();
     chatStreamProgressStop();
     if(out&&out.parentNode)out.parentNode.remove();
     chatReleaseSendingUi(requestState);
@@ -11726,7 +11786,8 @@ async function providerPickerChoose(list,current,opts){
       folders.push({value:'all',label:'📋 全部（'+list.length+' 个）',hint:'不分文件夹，平铺列出'});
       if(opts.allowEmpty)folders.push({value:'none',label:'不选择',hint:'清空这一项',danger:true});
       var folderAnswer=await ckChooseDialog(opts.title||'选择供应商',folders,{
-        message:'先点文件夹，再点里面的供应商。文件夹在「供应商」页每张卡片的「归类」里维护。'
+        message:'选择文件夹，查看里面的供应商。',providerPicker:true,
+        navigationValues:folders.filter(function(choice){return choice.value!=='none'}).map(function(choice){return choice.value})
       });
       if(folderAnswer===null||folderAnswer===undefined||folderAnswer==='')return null;
       if(folderAnswer==='none')return '';
@@ -11746,7 +11807,7 @@ async function providerPickerChoose(list,current,opts){
     });
     if(multi)choices.unshift({value:'back',label:'⬅ 返回文件夹',hint:'重新选一个文件夹'});
     if(opts.allowEmpty)choices.push({value:'none',label:'不选择',hint:'清空这一项',danger:true});
-    var pick=await ckChooseDialog(flat?'全部供应商':('📁 '+open),choices,{message:'点一下就选中。'});
+    var pick=await ckChooseDialog(flat?'全部供应商':('📁 '+open),choices,{message:'选择一个供应商。',providerPicker:true,navigationValues:['back']});
     if(pick===null||pick===undefined||pick==='')return null;
     if(pick==='back'){open=null;flat=false;continue}
     if(pick==='none')return '';

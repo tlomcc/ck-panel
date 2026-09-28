@@ -229,3 +229,64 @@ body.chat-active .chat-debug-sheet-chip span{overflow-wrap:anywhere!important;wh
   body.chat-active .chat-debug-sheet-table td::before{content:attr(data-label);color:var(--nb-muted,#718079);font:500 11px/1.65 inherit}
   body .ck-action-dialog{padding:18px!important;width:calc(100vw - 28px)!important}
 }
+
+/* Provider navigation stays in one sheet, with one scroll region. */
+body.chat-active .chat-current-thinking{min-width:0;border:1px solid var(--nb-line);border-radius:15px;background:var(--nb-paper);overflow:hidden}
+body.chat-active .chat-current-thinking[hidden]{display:none!important}
+body.chat-active .chat-current-thinking>header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 15px;border-bottom:1px solid var(--nb-line);color:var(--nb-ink);font-size:13px}
+body.chat-active .chat-current-thinking>header span{font-size:10px;color:var(--nb-muted)}
+body.chat-active .chat-current-thinking pre{margin:0;padding:15px;min-height:110px;max-height:42dvh;overflow:auto;overscroll-behavior:contain;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--nb-ink);font:inherit;font-size:13px;line-height:1.85;background:transparent}
+body.chat-active .chat-current-thinking.is-empty pre{color:var(--nb-muted)}
+body.chat-active .chat-current-thinking pre:focus-visible{outline:2px solid var(--nb-lilac-ink);outline-offset:-2px}
+body .ck-provider-picker .ck-action-dialog{height:min(620px,82dvh)!important}
+body .ck-provider-picker .ck-action-message{flex:none;min-height:2em}
+body .ck-provider-picker .ck-action-choices{flex:1!important;max-height:none!important;overflow-anchor:none;scrollbar-gutter:stable}
+body.dark .ck-action-dialog .ck-action-choice.active{background:var(--nb-sage)!important}
+
+/* Conversation notebook: a quiet index with a small book stamp. */
+body.chat-active .chat-shell .chat-drawer{width:352px!important;max-width:calc(100vw - 24px)!important;border:1px solid var(--nb-line)!important;border-radius:23px!important;background:var(--nb-paper)!important;box-shadow:0 14px 48px #172c2529!important;color:var(--nb-ink)!important}
+body.chat-active .chat-drawer .chat-drawer-head{height:auto!important;min-height:94px!important;padding:22px 18px 16px!important;border:0!important;background:transparent!important;gap:10px!important;flex:none!important}
+body.chat-active .chat-drawer .chat-drawer-heading{gap:13px!important;min-width:0}
+body.chat-active .chat-drawer .chat-drawer-heading b{display:block;font:600 21px/1.35 "Trebuchet MS","Microsoft YaHei UI",sans-serif!important;letter-spacing:1px;color:var(--nb-ink)!important}
+body.chat-active .chat-drawer .chat-drawer-heading p{margin:5px 0 0;font-size:11px;line-height:1.5;color:var(--nb-muted)}
+body.chat-active .chat-drawer #chat-session-count{display:inline!important;width:auto!important;min-width:0!important;height:auto!important;margin:0!important;padding:0!important;background:transparent!important;color:inherit!important;font:inherit!important;border:0!important}
+body.chat-active .chat-drawer .chat-drawer-stamp{display:grid;place-items:center;width:42px;height:47px;flex:none;margin:0!important;border:1px solid var(--nb-line);border-radius:12px 15px 15px 5px;background:var(--nb-sage);color:var(--nb-sage-ink)!important;transform:rotate(-5deg)}
+body.chat-active .chat-drawer svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+body.chat-active .chat-drawer .chat-drawer-stamp svg{width:29px;height:29px;stroke-width:1.25}
+body.chat-active .chat-drawer .chat-drawer-close{width:34px!important;height:34px!important;min-width:34px!important;align-self:flex-start;background:transparent!important;border:0!important;color:var(--nb-muted)!important;box-shadow:none!important}
+body.chat-active .chat-drawer .chat-drawer-actions{display:grid!important;grid-template-columns:minmax(0,1fr) 44px!important;gap:9px!important;padding:0 18px!important;flex:none}
+body.chat-active .chat-drawer .chat-drawer-actions button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:1px solid var(--nb-line);border-radius:12px;font-family:inherit;font-size:13px;font-weight:600;line-height:1.5;cursor:pointer;box-shadow:none}
+body.chat-active .chat-drawer .chat-drawer-new{background:var(--nb-sage);color:var(--nb-sage-ink)}
+body.chat-active .chat-drawer .chat-drawer-folder{background:transparent;color:var(--nb-muted)}
+body.chat-active .chat-drawer .chat-session-tools{position:relative;flex:none;margin:14px 18px 16px!important;padding:0!important;background:transparent!important}
+body.chat-active .chat-drawer .chat-session-tools>svg{position:absolute;left:12px;top:12px;width:17px;height:17px;pointer-events:none;color:var(--nb-muted)}
+body.chat-active .chat-drawer .chat-session-tools input{height:42px!important;padding:9px 12px 9px 37px!important;border:1px solid var(--nb-line)!important;border-radius:11px!important;background:var(--nb-page)!important;color:var(--nb-ink)!important;font-family:inherit!important;font-size:12px!important;line-height:1.5!important;box-shadow:none!important}
+body.chat-active .chat-drawer .chat-session-tools input::placeholder{color:var(--nb-muted);opacity:1}
+body.chat-active .chat-drawer .chat-session-list{flex:1!important;min-height:0;display:flex!important;flex-direction:column!important;gap:20px!important;padding:0 12px 20px!important;background:transparent!important;overflow:auto!important;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--nb-line) transparent}
+body.chat-active .chat-drawer .chat-folder{display:block!important;flex:none;padding:0!important;border:0!important;background:transparent!important}
+body.chat-active .chat-drawer .chat-folder-head{grid-template-columns:minmax(0,1fr) 32px!important;gap:3px!important;margin:0 3px 6px}
+body.chat-active .chat-drawer .chat-folder-head>button:first-child{min-height:36px;padding:5px 6px!important;gap:8px!important;color:var(--nb-muted)!important}
+body.chat-active .chat-drawer .chat-folder-head b{font-size:12px;letter-spacing:.03em;font-weight:600}
+body.chat-active .chat-drawer .chat-folder-head small{color:var(--nb-muted);font-size:11px;font-weight:400}
+body.chat-active .chat-drawer .chat-folder-menu{width:32px;height:32px;color:var(--nb-muted);background:transparent}
+body.chat-active .chat-drawer .chat-folder-body{gap:5px!important}
+body.chat-active .chat-drawer .chat-folder-divider{justify-content:space-between;margin:0 10px 9px!important;min-height:28px;color:var(--nb-muted)!important;font-size:11px;font-weight:500}
+body.chat-active .chat-drawer .chat-folder-divider::before,body.chat-active .chat-drawer .chat-folder-divider::after{display:none}
+body.chat-active .chat-drawer .chat-session-row{position:relative!important;grid-template-columns:minmax(0,1fr) 34px!important;gap:0!important;min-height:96px!important;border:1px solid transparent!important;border-radius:13px!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important}
+body.chat-active .chat-drawer .chat-session-row::after{display:none!important}
+body.chat-active .chat-drawer .chat-session-row.active{border-color:var(--nb-line)!important;background:var(--nb-sage)!important;box-shadow:inset 3px 0 var(--nb-sage-ink)!important}
+body.chat-active .chat-drawer .chat-session-item{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto auto auto!important;row-gap:5px!important;padding:13px 3px 12px 13px!important;min-height:94px!important;border-radius:0!important;box-shadow:none!important}
+body.chat-active .chat-drawer .chat-session-item .chat-session-title{grid-area:1 / 1!important;max-width:100%!important;color:var(--nb-ink)!important;font-size:14px!important;font-weight:600!important;line-height:1.5!important}
+body.chat-active .chat-drawer .chat-session-item .chat-session-preview{grid-area:2 / 1!important;color:var(--nb-muted)!important;font-size:12px!important;line-height:1.5!important}
+body.chat-active .chat-drawer .chat-session-item .chat-session-meta{grid-area:3 / 1!important;justify-self:start;max-width:100%!important;color:var(--nb-muted)!important;font-size:10px!important;line-height:1.5!important;font-style:normal!important;opacity:.85}
+body.chat-active .chat-drawer .chat-session-item .chat-session-folder-label{grid-area:4 / 1!important;color:var(--nb-sage-ink)!important;font-size:10px!important}
+body.chat-active .chat-drawer .chat-session-more{display:grid;place-items:center;width:32px;height:36px;margin:9px 2px 0 0;padding:0;border:0;border-radius:9px;background:transparent;color:var(--nb-muted);cursor:pointer}
+body.chat-active .chat-drawer .chat-session-more svg{fill:currentColor;stroke-width:1}
+body.chat-active .chat-drawer :is(.chat-folder-empty,.chat-session-search-empty){margin:4px 6px;padding:16px 12px;border:1px dashed var(--nb-line);border-radius:12px;background:transparent;color:var(--nb-muted);font-size:12px;line-height:1.8;text-align:left}
+body.chat-active .chat-drawer :is(button,input):focus-visible{outline:2px solid var(--nb-sage-ink)!important;outline-offset:-2px!important}
+@media(hover:hover){
+  body.chat-active .chat-drawer .chat-session-row:not(.active):hover,body.chat-active .chat-drawer :is(.chat-drawer-folder,.chat-session-more,.chat-folder-menu,.chat-drawer-close):hover{background:var(--nb-page)!important;color:var(--nb-ink)!important}
+}
+@media(prefers-reduced-motion:reduce){
+  body.chat-active .chat-shell .chat-drawer,body.chat-active .chat-drawer .chat-folder-chevron{transition:none!important}
+}

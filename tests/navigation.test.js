@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v244-audit-browser');
+const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v246-navigation-tests');
 fs.mkdirSync(out,{recursive:true});
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -31,15 +31,28 @@ const server=http.createServer((req,res)=>{
   const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw new Error(r.exceptionDetails.exception?.description||JSON.stringify(r.exceptionDetails));return r.result.value};
   const shot=async name=>{const x=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(out,name+'.png'),Buffer.from(x.data,'base64'))};
   await send('Page.enable');
-  for(const [width,dark] of [[390,false],[1280,true]]){
+  for(const [width,dark] of [[320,false],[390,false],[1280,false],[390,true],[1280,true]]){
     await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     await send('Page.navigate',{url:base+'/index.html'});
     for(let i=0;i<100;i++){if(await evaluate(`typeof chatRenderMessages==='function'&&typeof CKChatHistory==='object'`))break;await pause(40)}
     await evaluate(`document.body.classList.toggle('dark',${dark})`);await shot(width+'-'+dark+'-startup');
-    const result=await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/code-audit-browser.js'),'utf8'));
-    console.log(width+' '+dark,JSON.stringify(result));await pause(300);await shot(width+'-'+dark+'-search');
+    const result=await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/notebook.js'),'utf8'));
+    console.log(width+' '+dark,JSON.stringify(result));
+    console.log('navigation',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/navigation.js'),'utf8'))));
+    await shot(width+'-'+dark+'-drawer');
+    await evaluate("chatToggleSessions(false);chatOpenSettingTab('thinking')");await shot(width+'-'+dark+'-thinking');
+    await evaluate("closeToast();document.getElementById('chat-current-thinking').scrollIntoView({block:'end'})");await shot(width+'-'+dark+'-thinking-preview');
+    await evaluate("notebookShow('main')");
+    await evaluate("window.providerResult=undefined;void providerPickerChoose(providerLibraryList(),'',{}).then(x=>window.providerResult=x)");
+    await pause(80);await shot(width+'-'+dark+'-provider-folders');
+    await evaluate("document.querySelector('#ck-action-choices [data-value^=\"folder:\"]').click()");
+    await pause(80);await shot(width+'-'+dark+'-provider-options');
+    await evaluate("ckDialogCancel();document.querySelector('.brand-mark').click()");
+    await shot(width+'-'+dark+'-about');
+
   }
 
+  // Chrome may close the socket before acknowledging Browser.close.
   await Promise.race([send('Browser.close'),pause(500)]);
  }finally{socket?.close();browser.kill();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1;server.close()});
