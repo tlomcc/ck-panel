@@ -1,0 +1,43 @@
+(async()=>{
+ const check=(ok,message)=>{if(!ok)throw Error(message)},wait=()=>new Promise(r=>setTimeout(r,80));
+ await notebookShow('providers');
+ const cards=[...document.querySelectorAll('.prov-card')];cards.forEach(c=>c.classList.add('expanded'));
+ const card=cards[0],button=card.querySelector('.prov-save'),body=document.getElementById('api-config-body');
+ cards[1].querySelector('.prov-note-input').value='另一张卡未保存的备注';
+ card.querySelector('.prov-name-input').value='保存后仍停留在这里';
+ button.scrollIntoView({block:'center'});await wait();const y=button.getBoundingClientRect().top,pageY=scrollY;
+ const oldPersist=persistApiProviders,oldReload=reloadGatewayConfig;
+ persistApiProviders=async()=>({ok:true,j:{}});reloadGatewayConfig=async()=>({ok:true});
+ check(await saveProvider(button),'Provider save failed');await wait();
+ check(card.isConnected&&card.classList.contains('expanded'),'Saving replaced or closed the detail');
+ check(Math.abs(button.getBoundingClientRect().top-y)<2&&scrollY===pageY,'Saving jumped the viewport');
+ check(cards[1].querySelector('.prov-note-input').value==='另一张卡未保存的备注','Another card draft was lost');
+ check(card.querySelector('.prov-name').textContent==='保存后仍停留在这里','Saved header stale');
+ persistApiProviders=async()=>({ok:false,j:{error:'fixture failure'}});check(await saveProvider(button)===false,'Save failure hidden');check(card.isConnected&&!button.disabled,'Failure closed detail or disabled retry');
+ let finish;persistApiProviders=()=>new Promise(r=>finish=r);const pending=saveProvider(button);currentApiTab='main';renderApiConfig();const main=body.firstElementChild;finish({ok:true,j:{}});await pending;check(body.firstElementChild===main&&currentApiTab==='main','Late save navigated back');
+ persistApiProviders=oldPersist;reloadGatewayConfig=oldReload;closeToast();
+ await notebookShow('chat');
+ chatMessages=Array.from({length:75},(_,i)=>[{role:'user',text:'第 '+i+' 轮：一些足够长的聊天内容，用于检查消息操作切档时的位置。',turnId:'r'+i,ts:Date.now()-150000+i*1000},{role:'assistant',text:'第 '+i+' 轮回复。\n\n这段文字会换行，按钮显示与隐藏会改变每一轮高度。',turnId:'r'+i,ts:Date.now()-149500+i*1000}]).flat();chatCurrentSession().messages=chatMessages;
+ chatHistoryReset();chatSetActionMode('high');chatRenderMessages();await wait();chatScrollMessagesBottom(true);await wait();
+ const messages=chatMessagesBox();check(messages.scrollHeight>messages.clientHeight*3,'Not enough scrollable history');
+ const geom=()=>[messages.scrollHeight,messages.clientHeight,messages.scrollTop];const stages=[geom()];chatOpenSettingTab('display');await wait();stages.push(geom());chatSetActionMode('medium');await wait();stages.push(geom());chatToggleSettings(false);await wait();stages.push(geom());
+ check(messages.scrollHeight-messages.clientHeight-messages.scrollTop<3,'Medium mode lost the bottom '+JSON.stringify({h:messages.scrollHeight,c:messages.clientHeight,top:messages.scrollTop,pos:chatCaptureActionScroll(),stages}));
+ chatToggleMessageActions();await wait();check(messages.scrollHeight-messages.clientHeight-messages.scrollTop<3,'Expanding actions lost the bottom');
+ chatToggleMessageActions();await wait();check(messages.scrollHeight-messages.clientHeight-messages.scrollTop<3,'Collapsing actions lost the bottom');
+ messages.scrollTop=messages.scrollHeight/2;await wait();const position=chatCaptureActionScroll();chatSetActionMode('high');await wait();
+ const anchor=messages.querySelector('[data-chat-index="'+position.index+'"]');check(Math.abs(anchor.getBoundingClientRect().top-messages.getBoundingClientRect().top-position.offset)<3,'Historical reading anchor moved');
+ await notebookShow('thinking');
+ let cfg=chatLoadConfig();cfg.thinkingMode='native';cfg.thinkingPrompt='自己填写的提示词';cfg.fakeThinkingPrompt='旧别名';chatSaveConfigObject(cfg);chatWriteForm(cfg);
+ const prompt=document.getElementById('chat-thinking-prompt'),enabled=document.getElementById('chat-thinking-prompt-enabled');
+ enabled.checked=false;chatSaveConfig(true);cfg=chatLoadConfig();check(cfg.thinkingPromptEnabled===false&&cfg.thinkingPrompt==='自己填写的提示词'&&chatActiveThinkingPrompt(cfg)==='','Disabled prompt lost text or still sends it');
+ enabled.checked=true;prompt.value='';chatSaveConfig(true);cfg=chatLoadConfig();chatWriteForm(cfg);check(prompt.value===''&&cfg.fakeThinkingPrompt===''&&chatActiveThinkingPrompt(cfg)==='','Empty prompt restored default');
+ enabled.checked=false;chatSaveConfig(true);check(chatLoadConfig().thinkingMode==='native','Prompt toggle changed native mode');
+ await notebookShow('model');
+ const primary=document.getElementById('chat-system'),standby=document.getElementById('chat-system-standby');primary.value='当前稳定提示词';standby.value='备用完整提示词';chatSaveConfig(true);
+ check(chatLoadConfig().system==='当前稳定提示词','Draft changed system before expiration');
+ for(const s of chatSessions){s.messages.forEach(m=>m.ts=Date.now()-90000000);s.cacheLastReadAt=0;s.cacheFullCreatedAt=0;s.systemPromptCacheRequestedAt=0;s.systemPromptCacheUntil=0;}
+ check(chatMaybeSyncSystemPrompt(),'Expired standby did not promote');check(primary.value==='备用完整提示词'&&standby.value===primary.value,'Promotion failed to keep both fields');
+ check(document.getElementById('chat-system-standby-status').textContent.includes('归位成功'),'Promotion status missing');
+ check(document.getElementById('chat-side-model').scrollWidth<=document.getElementById('chat-side-model').clientWidth+1,'Standby panel overflow');
+ return {provider:'save, failure, retained drafts and late navigation',actions:'bottom and historical anchor across all modes',thinking:'disabled and empty survive save/reload',standby:'cached prefix stable, expiry promotes and retains draft'};
+})()

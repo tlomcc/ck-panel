@@ -14,20 +14,20 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v4-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v4.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="style.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="polish.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="chat.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="wechat.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="shell.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="components.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="daily-status.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="settings.css?v=chat-v248-drawer-swipe">
-<link rel="stylesheet" href="chat-ui.css?v=chat-v248-drawer-swipe">
-<script>window.CK_PANEL_VERSION='chat-v248-drawer-swipe';</script>
-<script>window.CK_PANEL_RELEASE_NOTES=["聊天侧栏支持向左跟手拖动收起，短距离松手自动回弹，也可快速左甩关闭。", "侧栏上下滚动、搜索和对话操作保持正常，拖动不会误点会话。"];</script>
-<link rel="stylesheet" href="notebook.css?v=chat-v248-drawer-swipe">
+<link rel="stylesheet" href="tokens.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="style.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="polish.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="chat.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="wechat.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="shell.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="components.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="daily-status.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="settings.css?v=chat-v249-prompts-and-stable-settings">
+<link rel="stylesheet" href="chat-ui.css?v=chat-v249-prompts-and-stable-settings">
+<script>window.CK_PANEL_VERSION='chat-v249-prompts-and-stable-settings';</script>
+<script>window.CK_PANEL_RELEASE_NOTES=["供应商保存保持明细和滚动位置，消息操作切档与返回聊天保持阅读位置。", "移除自动提示词中的固定昵称，新增思考提示词独立开关，清空后不再自动补回。", "系统提示词新增备用框，缓存到期自动归位并显示结果，保留备用内容。"];</script>
+<link rel="stylesheet" href="notebook.css?v=chat-v249-prompts-and-stable-settings">
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><img src="icons/app-icon-v4.svg" alt=""></div><div class="startup-name">CK</div><div class="startup-subtitle">小小日常，慢慢收藏</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -36,7 +36,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><img src="icons/app-icon-v4.svg" alt=""></button><div><h1>CK</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v248" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v248-drawer-swipe</button>
+<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v249" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v249-prompts-and-stable-settings</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -215,11 +215,12 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v248-drawer-swipe" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v248</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v249-prompts-and-stable-settings" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v249</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="time">时间提醒</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option><option value="cleanup">清理</option><option value="history">历史保留</option><option value="gateway">API 连接</option></optgroup><optgroup label="显示与管理"><option value="display">界面设置</option><option value="billing">计费显示</option><option value="tools">工具</option><option value="debug">调试</option><option value="session">会话管理</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13 5 5l7 4 7-4-1 8a7 7 0 1 1-12 0Z"/><path d="M9 15v1m6-1v1m-5 3q2 2 4 0"/></svg></span><div><h2>系统提示词</h2><p>给小克一张角色小卡片。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
-<label>系统提示词<textarea id="chat-system" rows="16" placeholder="留空使用网关默认人格"></textarea></label>
+<label>系统提示词<textarea id="chat-system" rows="16" placeholder="填写需要使用的系统提示词"></textarea></label>
+<div class="chat-prompt-standby"><label>系统提示词备用框<textarea id="chat-system-standby" rows="12" placeholder="放入修改后的完整系统提示词" oninput="chatSystemPromptStandbyEdited()"></textarea></label><p class="chat-field-hint">填写完整新版后点保存。缓存到期时自动替换上方系统提示词，备用框保留；所有窗口共用的缓存都到期后归位。继续聊天会顺延等待时间。</p><p id="chat-system-standby-status" class="chat-prompt-sync-status" role="status" aria-live="polite">备用框为空。</p></div>
 <label class="chat-switch"><input id="chat-system-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用系统提示词</span></label>
 </section><button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存提示词</button>
 </div>
@@ -234,6 +235,8 @@
 <div class="chat-memory-card"><label class="chat-switch"><input id="chat-retain-image-turn-thinking" type="checkbox" onchange="chatSaveConfig(true)"><span>图片轮次强制保留思考链</span></label><p>开启后，只要思考功能已启用，带图片的用户消息所对应的整轮助手思考会保留在后续上下文中，包括工具调用期间的思考；优先于历史思考保留开关。其他轮次照常处理，不改变自动截断范围，也无法恢复已清除的内容。</p></div>
 <label>思考链注入位置<select id="chat-thinking-injection-position"><option value="system_after_anchor">首条锚点后</option><option value="system_after_main">系统提示词后</option><option value="system_tail">系统区底部</option><option value="latest_user_prefix">最新消息开头</option><option value="latest_user_suffix">最新消息结尾</option></select></label>
 <label>思考提示词（原生/兼容共用）<textarea id="chat-thinking-prompt" rows="16" placeholder="定义小克如何进行思考；原生思考会强制使用简体中文"></textarea></label>
+<label class="chat-switch"><input id="chat-thinking-prompt-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用思考提示词</span></label>
+<p class="chat-field-hint">关闭后保留框内文字，不再发送这段提示词；思考模式仍按上方设置运行。留空不会自动补回默认内容。</p>
 <button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存思考设置</button>
 <section class="chat-current-thinking" id="chat-current-thinking" hidden><header><b>本轮思考</b><span>当前对话</span></header><pre id="chat-current-thinking-text" tabindex="0" aria-label="本轮思考内容">本轮暂未返回思考内容。</pre></section>
 </div>
@@ -351,11 +354,11 @@
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
 <aside id="panel-version-notes" class="panel-version-notes" aria-label="本次更新" hidden></aside>
-<script src="chat-ui.js?v=chat-v248-drawer-swipe"></script>
-<script src="chat-history.js?v=chat-v248-drawer-swipe"></script>
-<script src="script.js?v=chat-v248-drawer-swipe"></script>
-<script src="script-extra.js?v=chat-v248-drawer-swipe"></script>
-<script src="pwa.js?v=chat-v248-drawer-swipe"></script>
-<script src="select-ui.js?v=chat-v248-drawer-swipe"></script>
+<script src="chat-ui.js?v=chat-v249-prompts-and-stable-settings"></script>
+<script src="chat-history.js?v=chat-v249-prompts-and-stable-settings"></script>
+<script src="script.js?v=chat-v249-prompts-and-stable-settings"></script>
+<script src="script-extra.js?v=chat-v249-prompts-and-stable-settings"></script>
+<script src="pwa.js?v=chat-v249-prompts-and-stable-settings"></script>
+<script src="select-ui.js?v=chat-v249-prompts-and-stable-settings"></script>
 </body>
 </html>

@@ -20,8 +20,9 @@ const server=http.createServer((req,res)=>{
  const browser=spawn(chrome,['--headless=new','--disable-gpu','--no-sandbox','--hide-scrollbars','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore',windowsHide:true});
  let socket;
  try{
-  const portFile=path.join(profile,'DevToolsActivePort');for(let i=0;i<100&&!fs.existsSync(portFile);i++)await pause(50);
-  const port=fs.readFileSync(portFile,'utf8').split('\n')[0];
+  const portFile=path.join(profile,'DevToolsActivePort');let port;
+  for(let i=0;i<150;i++){try{port=fs.readFileSync(portFile,'utf8').split('\n')[0];if(port)break}catch(e){if(!['ENOENT','EBUSY','EPERM'].includes(e.code))throw e}await pause(50)}
+  if(!port)throw Error('Chrome debugging port unavailable');
   const targets=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();
   socket=new WebSocket(targets.find(x=>x.type==='page').webSocketDebuggerUrl);
   await new Promise((r,j)=>{socket.onopen=r;socket.onerror=j});let id=0;const pending=new Map();

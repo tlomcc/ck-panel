@@ -28,7 +28,7 @@ assert(/id="chat-native-thinking-visible"/.test(html),
   'native thinking display switch is missing');
 assert(source.includes("fake.disabled=mode==='native'"),
   'native mode must disable the compatibility thinking switch');
-assert(source.includes("body.thinking_prompt=String(cfg.thinkingPrompt"),
+assert(source.includes("body.thinking_prompt=chatActiveThinkingPrompt(cfg)"),
   'native mode must send the shared thinking prompt separately');
 assert(source.includes('chatShouldShowNativeThinking()'),
   'native thinking display must have a render gate');

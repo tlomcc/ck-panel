@@ -134,9 +134,28 @@ function chatActionMode(){
 }
 function chatSetActionMode(mode){
   if(!['low','medium','high'].includes(mode))return;
+  var position=chatCaptureActionScroll();
   chatActionModeCache=mode;chatActionOpenTurn='';
   try{localStorage.setItem('ck_chat_action_mode',mode)}catch(e){}
   chatSyncActionControls();chatRenderMessages({respectUserScroll:true,preservePosition:true});
+  chatRestoreActionScroll(position);
+}
+function chatCaptureActionScroll(){
+  var box=chatMessagesBox();if(!box)return null;
+  var top=box.getBoundingClientRect().top;
+  var anchor=Array.from(box.querySelectorAll('.chat-msg-row[data-chat-index]')).find(function(row){return row.getBoundingClientRect().bottom>top+2});
+  return {session:chatActiveSessionId,bottom:chatHistoryRange().end===chatMessages.length&&chatIsMessagesNearBottom(),index:anchor&&anchor.getAttribute('data-chat-index'),offset:anchor?anchor.getBoundingClientRect().top-top:0};
+}
+function chatRestoreActionScroll(position){
+  if(!position||position.session!==chatActiveSessionId)return;
+  var box=chatMessagesBox();if(!box)return;
+  function restore(){
+    if(position.session!==chatActiveSessionId)return;
+    if(position.bottom){box.scrollTop=box.scrollHeight;return}
+    var anchor=position.index!==null&&box.querySelector('[data-chat-index="'+position.index+'"]');
+    if(anchor)box.scrollTop+=anchor.getBoundingClientRect().top-box.getBoundingClientRect().top-position.offset;
+  }
+  restore();requestAnimationFrame(restore);
 }
 function chatSyncActionControls(){
   var mode=chatActionMode();
@@ -163,14 +182,18 @@ function chatActionSyncTurn(){
   chatSyncActionControls();
 }
 function chatToggleTurnActions(index){
+  var position=chatCaptureActionScroll();
   var key=chatActionTurnKey(index);chatActionOpenTurn=chatActionOpenTurn===key?'':key;
   chatRenderMessages({respectUserScroll:true,preservePosition:true});
+  chatRestoreActionScroll(position);
 }
 function chatToggleMessageActions(){
   if(chatActionMode()!=='medium')return;
+  var position=chatCaptureActionScroll();
   chatActionOpenTurn=chatActionOpenTurn==='all'?'':'all';
   chatSyncActionControls();
   chatRenderMessages({respectUserScroll:true,preservePosition:true});
+  chatRestoreActionScroll(position);
 }
 function chatCloseVersionNotes(){var el=document.getElementById('panel-version-notes');if(el)el.hidden=true;document.querySelectorAll('[data-version-notes]').forEach(function(b){b.setAttribute('aria-expanded','false')})}
 function chatToggleVersionNotes(event){

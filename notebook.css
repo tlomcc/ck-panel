@@ -298,3 +298,8 @@ body.chat-active .chat-drawer :is(button,input):focus-visible{outline:2px solid 
 @media(prefers-reduced-motion:reduce){
   body.chat-active .chat-shell .chat-drawer,body.chat-active .chat-drawer .chat-folder-chevron{transition:none!important}
 }
+/* 备用稿和归位回执沿用当前设置页的纸张、边线和状态色。 */
+.chat-prompt-standby{margin-top:18px;padding-top:16px;border-top:1px dashed var(--nb-line,#d8d5e4)}
+.chat-prompt-sync-status{margin:10px 0 4px;padding:10px 12px;border-left:3px solid currentColor;border-radius:4px;font-size:12px;line-height:1.7;overflow-wrap:anywhere;color:var(--nb-muted,#767184)}
+.chat-prompt-sync-status[data-state="success"]{color:var(--chat5-accent,#39755e)}
+.chat-prompt-sync-status[data-state="error"]{color:#b64b5d}
