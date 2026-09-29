@@ -38,6 +38,7 @@ function commitContext(session){
     chatMessages:[],
     chatEditingIndex:-1,
     CHAT_MAX_TRANSPORT_MESSAGES:400,
+    CHAT_HISTORY_TOOLS:historyTools,
     chatCurrentSession:()=>session,
     chatLimitArray:(list,max)=>(list||[]).slice(-max),
     chatResetSessionAnchorFromMessages:()=>{},
@@ -47,7 +48,7 @@ function commitContext(session){
     // 当日截断总结在提交点挂钩；这里记录调用，供下面断言"只有真的丢历史才生成总结"。
     chatDailyDigestScheduleForTrim:(cfg,plan)=>{digestCalls.push(plan)}
   };
-  const loaded=load(context,['chatCommitAutoTrimPlan']);
+  const loaded=load(context,['chatAutoTrimRoundCount','chatTimeReminderContext','chatCommitAutoTrimPlan']);
   loaded.digestCalls=digestCalls;
   return loaded;
 }

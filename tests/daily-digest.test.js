@@ -223,7 +223,7 @@ function testPanelWiring(){
   // 成功静默、失败出声。
   const request=extractFunction('chatDailyDigestRequest');
   assert.ok(!/toast\(/.test(request.slice(0,request.indexOf('}catch('))),'成功路径不能弹通知');
-  assert.ok(/toast\([^)]*当日截断总结失败/.test(request),'失败必须在面板通知');
+  assert.ok(request.includes('job.failureReason=errorText')&&extractFunction('chatApplyAutoTrimForPendingBatch').includes('chatShowTrimFailure('),'失败原因交给截断事务显示显著提示框');
   assert.ok(request.includes('chatDailyDigestPrune(session,todayKey,cfg)'),'按真实当前日期和保留期过期');
   assert.ok(request.includes('data.merge_with_previous!==true'),'模型不合并时必须保住同日旧正文');
   // 合并时网关要按"旧总结有多长、覆盖了多少轮"算字数预算，rounds 必须一起送。

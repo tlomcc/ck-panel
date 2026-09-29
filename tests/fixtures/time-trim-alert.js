@@ -1,0 +1,33 @@
+(async()=>{
+ const check=(value,msg)=>{if(!value)throw Error(msg)};
+ const pause=ms=>new Promise(r=>setTimeout(r,ms));
+ await notebookShow('debug');
+ const make=id=>({ts:Date.now(),event:'debug',data:{debug_id:id,cache_anchors:['system'],request_details:{model:'fixture',messages:2,areas:{}},diagnostic_rounds:[]}});
+ chatDebugRecords=[make('first')];chatRenderDebugRecords();
+ let fold=document.querySelector('details[data-cache-diag-key="first"]');
+ check(fold&&!fold.open,'Diagnostic must start collapsed');
+ const collapsed=fold.getBoundingClientRect().height;
+ fold.querySelector('summary').click();await pause(30);
+ check(fold.open&&fold.getBoundingClientRect().height>collapsed+50,'Summary must expand real diagnostic table');
+ chatDebugRecords.push(make('second'));chatRenderDebugRecords();
+ check(document.querySelector('details[data-cache-diag-key="first"]').open,'Stream rerender lost expanded state');
+ check(!document.querySelector('details[data-cache-diag-key="second"]').open,'New diagnostic inherited old expanded state');
+ document.querySelector('details[data-cache-diag-key="first"] summary').click();
+ chatRenderDebugRecords();check(!document.querySelector('details[data-cache-diag-key="first"]').open,'Closed state was lost');
+ chatShowTrimFailure('本次未截断，原对话已保留。测试服务暂不可用。');
+ let box=document.getElementById('chat-trim-failure'),card=box.querySelector('section');
+ const rect=card.getBoundingClientRect();
+ check(rect.left>=0&&rect.right<=innerWidth&&rect.top>=0&&rect.bottom<=innerHeight,'Failure dialog overflows viewport');
+ check(document.activeElement===box.querySelector('button'),'Close control must get focus');
+ check(box.querySelector('[role="alertdialog"]'),'Missing accessible alert');
+ box.querySelector('button').click();check(!document.getElementById('chat-trim-failure'),'Manual close failed');
+ chatShowTrimFailure('<script>unsafe</script>同步失败',true);
+ check(!document.querySelector('#chat-trim-failure script'),'Error was interpreted as HTML');
+ document.getElementById('chat-trim-failure').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ check(!document.getElementById('chat-trim-failure'),'Escape close failed');
+ const start=performance.now();chatShowTrimFailure('5 秒后自动关闭；鼠标停留也会关闭。');
+ await pause(4600);check(document.getElementById('chat-trim-failure'),'Auto-close fired too early');
+ await pause(600);check(!document.getElementById('chat-trim-failure'),'Auto-close did not fire at 5 seconds');
+ chatShowTrimFailure('本次未截断，原对话已保留。总结服务暂不可用，至少 1 小时后再自动尝试。');
+ return {collapsedHeight:collapsed,autoCloseElapsed:Math.round(performance.now()-start),width:innerWidth};
+})()

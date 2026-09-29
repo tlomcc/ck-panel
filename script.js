@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v251-topic-assisted-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v252-time-reminders-and-trim-alert';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4197,6 +4197,8 @@ function chatNormalizeSession(s){
     messages:Array.isArray(s.messages)?s.messages.slice():[],
     transportMessages:Array.isArray(s.transportMessages)?s.transportMessages.slice():[],
     transportUpdated:Number(s.transportUpdated||0)||0,
+    lastChatActivityAt:Number(s.lastChatActivityAt)||0,
+    timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
     latestRecall:s.latestRecall&&typeof s.latestRecall==='object'?JSON.parse(JSON.stringify(s.latestRecall)):null,
     apiProviderId:String(s.apiProviderId||'').trim(),
@@ -5381,11 +5383,16 @@ function chatDebugRecordHtml(record,index){
   var html=record&&record.event==='debug'&&record.data&&record.data.request_details
     ?chatFormatRequestAccountingHtml(record.data)
     :chatDecorateDebugBody(esc(body),record);
+  if(chatDebugRecordTopic(record,body)==='cache'){
+    var foldKey=String((record.data||{}).debug_id||record.ts||index);
+    html='<details class="chat-cache-diagnostic-fold" data-cache-diag-key="'+esc(foldKey)+'"><summary>🧊 缓存诊断 <span>点击展开 / 收起</span></summary>'+html+'</details>';
+  }
   return '<div class="chat-debug-record chat-debug-'+kind+'"><span class="chat-debug-time">['+esc(time)+']</span><button class="chat-debug-copy" type="button" data-debug-copy-index="'+index+'" aria-label="复制此调试模块" title="复制此调试模块"><svg class="chat-debug-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="1.5"/><path d="M16 8V6.5A1.5 1.5 0 0 0 14.5 5h-8A1.5 1.5 0 0 0 5 6.5v8A1.5 1.5 0 0 0 6.5 16H8"/></svg><svg class="chat-debug-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.5"/></svg></button><div class="chat-debug-body">'+html+'</div></div>';
 }
 function chatRenderDebugRecords(){
   var el=document.getElementById('chat-debug');
   if(!el)return;
+  var opened=new Set(Array.from(el.querySelectorAll('details[data-cache-diag-key][open]')).map(function(node){return node.dataset.cacheDiagKey}));
   chatDebugRecords=chatDebugPrune(chatDebugRecords);
   if(!chatDebugRecords.length){
     el.innerHTML='<div class="chat-debug-empty">暂无调试记录。这里会保留最近一天的聊天调试信息。</div>';
@@ -5401,6 +5408,7 @@ function chatRenderDebugRecords(){
     html+=chatDebugRecordHtml(chatDebugRecords[item.index],item.index);
   });
   el.innerHTML=html;
+  el.querySelectorAll('details[data-cache-diag-key]').forEach(function(node){node.open=opened.has(node.dataset.cacheDiagKey)});
   chatScrollDebugBottom();
 }
 function chatScrollDebugBottom(){
@@ -6372,6 +6380,8 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       messages:chatLimitArray(s.messages,maxVisible),
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
       transportUpdated:Number(s.transportUpdated||0)||0,
+    lastChatActivityAt:Number(s.lastChatActivityAt)||0,
+    timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
       dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
       latestRecall:s.latestRecall&&typeof s.latestRecall==='object'?JSON.parse(JSON.stringify(s.latestRecall)):null,
       apiProviderId:String(s.apiProviderId||'').trim(),
@@ -7463,9 +7473,9 @@ async function chatDailyDigestRequest(cfg,job){
     var errorText=String((error&&error.message)||error).slice(0,300);
     chatDailyDigestLastError=errorText;
     chatDebug('daily_digest',{ok:false,messages:messages.length,duration_ms:Date.now()-started,error:errorText});
-    // 成功静默、失败才出声：这批对话已经被截断掉了，用户需要知道这段记忆没接上。
+    // Preparation failure is reported once by the trim transaction; history is retained.
     chatDailyDigestSetStatus('最近一次截断总结失败：'+errorText,'error');
-    if(!job.cancelled)toast('当日截断总结失败，本次不截断，原对话已保留；至少 1 小时后再自动尝试。'+errorText,6000,{type:'error',closable:true,pauseOnHover:true});
+    job.failureReason=errorText;
     if(pruned.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
     else chatRenderDailyDigest(cfg);
     return null;
@@ -7476,6 +7486,9 @@ async function chatDailyDigestRequest(cfg,job){
 function chatCommitAutoTrimPlan(cfg,plan){
   var s=plan.session||chatCurrentSession();
   var active=s===chatCurrentSession();
+  var clock=chatTimeReminderContext(s,active?chatMessages:s.messages||[],[]);
+  s.lastChatActivityAt=clock.lastActivityAt;
+  s.timeReminderRoundCount=Math.max(Number(s.timeReminderRoundCount)||0,clock.round-1);
   if(plan.digestPrepared){
     s.dailyDigests=plan.digestPrepared.entries;
     chatDailyDigestLastError='';
@@ -7525,6 +7538,37 @@ function chatCommitAutoTrimPlan(cfg,plan){
     localAfter:trimCommitted?(plan.localAfter||0):(plan.localBefore||0),
   };
 }
+var chatTrimFailureTimer=0;
+var chatTrimFailureFocus=null;
+function chatCloseTrimFailure(){
+  clearInterval(chatTrimFailureTimer);chatTrimFailureTimer=0;
+  var box=document.getElementById('chat-trim-failure');
+  if(box)box.remove();
+  if(chatTrimFailureFocus&&chatTrimFailureFocus.isConnected)chatTrimFailureFocus.focus({preventScroll:true});
+  chatTrimFailureFocus=null;
+}
+function chatShowTrimFailure(message,syncOnly){
+  var previous=document.getElementById('chat-trim-failure');
+  if(!previous)chatTrimFailureFocus=document.activeElement;
+  clearInterval(chatTrimFailureTimer);
+  if(previous)previous.remove();
+  var box=document.createElement('div');
+  box.id='chat-trim-failure';box.className='chat-trim-failure';
+  box.innerHTML='<section role="alertdialog" aria-modal="true" aria-labelledby="chat-trim-failure-title" aria-describedby="chat-trim-failure-message"><div class="chat-trim-failure-icon" aria-hidden="true">!</div><h2 id="chat-trim-failure-title">'+(syncOnly?'截断同步失败':'截断未完成')+'</h2><p id="chat-trim-failure-message"></p><button type="button">关闭 <span>（5 秒后自动关闭）</span></button></section>';
+  box.querySelector('p').textContent=String(message||'请查看调试记录了解原因。');
+  var button=box.querySelector('button');button.onclick=chatCloseTrimFailure;
+  box.addEventListener('keydown',function(event){
+    if(event.key==='Escape'){event.preventDefault();chatCloseTrimFailure()}
+    if(event.key==='Tab'){event.preventDefault();button.focus()}
+  });
+  document.body.appendChild(box);button.focus({preventScroll:true});
+  var deadline=Date.now()+5000;
+  chatTrimFailureTimer=setInterval(function(){
+    var remaining=Math.max(0,Math.ceil((deadline-Date.now())/1000));
+    if(!remaining){chatCloseTrimFailure();return}
+    button.querySelector('span').textContent='（'+remaining+' 秒后自动关闭）';
+  },100);
+}
 async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestState,opts){
   // Both the idle timer and a new send share this barrier.
   while(chatTrimTransaction)await chatTrimTransaction;
@@ -7556,6 +7600,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
           session.trimRetryAfter=Date.now()+CHAT_AUTO_TRIM_IDLE_MS;
           chatSaveSessions();
           chatDailyDigestSetStatus('本次总结未完成，已保留原对话并跳过截断；至少 1 小时后再自动尝试。','error');
+          chatShowTrimFailure('本次未截断，原对话已保留。'+(job.failureReason||(!unchanged?'总结期间对话发生变化。':'总结未完成或内容发生变化。'))+' 至少 1 小时后再自动尝试。');
         }
         return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false,digestSkipped:true});
       }
@@ -7564,6 +7609,9 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     result.sessionId=session.id;
     if(result.trimmed&&(plan.manual||(opts&&opts.idleCheck)))await chatSyncTrimmedHistoryToGateway(cfg,result);
     return result;
+  }catch(error){
+    chatShowTrimFailure('截断操作失败：'+chatFriendlyError(error));
+    throw error;
   }finally{
     chatTrimTransaction=null;
     release();
@@ -7607,7 +7655,7 @@ async function chatManualTrimNow(){
     chatRenderTrimState(cfg);
   }catch(error){
     chatSetStatus('手动操作失败');
-    toast('手动操作失败：'+chatFriendlyError(error),5000,{type:'error',closable:true});
+    chatDebug('auto_trim_idle_error',{error:chatFriendlyError(error)});
   }finally{
     chatTrimBusy=false;
     if(button){button.textContent='立即截断';chatRenderTrimState(cfg)}
@@ -7664,6 +7712,7 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
   }catch(error){
     // 同步失败不回滚本地截断：本地已经是权威历史，下一次发送仍会把完整历史带给网关。
     chatDebug('trim_gateway_sync',{ok:false,error:String((error&&error.message)||error).slice(0,200)});
+    chatShowTrimFailure('本地截断已完成，但同步网关失败。下一次发送会携带本地历史重试同步。'+chatFriendlyError(error),true);
     return false;
   }finally{clearTimeout(timer)}
 }
@@ -9643,6 +9692,21 @@ function chatScrollMessagesBottom(instant){
     }
   });
 }
+function chatTimeReminderContext(session,messages,pending){
+  session=session||{};
+  var selected=new Set(pending||[]);
+  var prior=(messages||[]).filter(function(m){
+    return m&&!selected.has(m)&&(m.role==='user'||m.role==='assistant')&&!m.sendFailed&&!m.inFlight;
+  });
+  var last=Number(session.lastChatActivityAt)||0;
+  prior.forEach(function(m){last=Math.max(last,Number(m.ts)||0)});
+  var count=Math.max(Number(session.timeReminderRoundCount)||0,chatAutoTrimRoundCount(prior));
+  prior.forEach(function(m){count=Math.max(count,Number(m.timeReminderRound)||0)});
+  var retry=(pending||[]).reduce(function(n,m){return Math.max(n,Number(m.timeReminderRound)||0)},0);
+  var round=retry||count+1;
+  (pending||[]).forEach(function(m){m.timeReminderRound=round});
+  return {lastActivityAt:last,round:round};
+}
 function chatIsRealMessage(m){
   return m&&(m.role==='user'||m.role==='assistant')&&Number(m.ts||0);
 }
@@ -10583,6 +10647,7 @@ async function chatSubmitPendingMessages(options){
   chatSaveConfigObject(cfg);
   chatMaybeSyncSystemPrompt({beforeRequest:true});
   cfg.system=chatLoadConfig().system;
+  var timeReminderContext=chatTimeReminderContext(chatCurrentSession(),chatMessages,pending);
   var trimResult=await chatApplyAutoTrimForPendingBatch(cfg,pending,requestState);
   if(requestState&&requestState.stopped)return;
   var windowMessagesForRequest=chatWindowContextMessages();
@@ -10670,6 +10735,8 @@ async function chatSubmitPendingMessages(options){
     daily_digest_pack:chatDailyDigestPack(cfg,currentSession),
     api_base:cfg.apiBase,
     upstream_key:cfg.upstreamKey,
+    last_chat_activity_at:timeReminderContext.lastActivityAt,
+    time_reminder_round:timeReminderContext.round,
     nc_context_injection:cfg.ncContextInjection!==false,
     time_injection_every_rounds:chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds),
     backend_switch_notification:cfg.backendSwitchNotification!==false,
@@ -10966,6 +11033,10 @@ async function chatSubmitPendingMessages(options){
       }
       if(!streamCompleted)throw chatCreateRequestFailure('回复连接提前中断，请重试',false);
       if(!assistantText.trim()&&!nativeThinkingText.trim()&&!toolEvents.length)throw chatCreateRequestFailure('上游返回了空回复',false);
+      var clockSession=chatCurrentSession();
+      clockSession.lastChatActivityAt=Date.now();
+      clockSession.timeReminderRoundCount=Math.max(Number(clockSession.timeReminderRoundCount)||0,timeReminderContext.round);
+      chatScheduleSessionSave(cfg.sessionId);
       latencyTrace.panel_stream_done_ms=Date.now();
       }finally{
         if(reader){

@@ -20,11 +20,11 @@ function setup(){
  chatDailyDigestDayKey:t=>new Date(t).toISOString().slice(0,10),chatDailyDigestNormalize:list=>list||[],
  chatDailyDigestEntries:s=>s.dailyDigests||[],chatDailyDigestEndpoint:()=>'/digest',chatLimitArray:list=>list,
  chatSaveSessions:()=>{},chatRenderSessions:()=>{},chatRenderTrimState:()=>{},chatRenderDailyDigest:()=>{},chatResetSessionAnchorFromMessages:()=>{},
- chatDailyDigestSetStatus:()=>{},chatDebug:()=>{},toast:()=>{},chatSyncTrimmedHistoryToGateway:async()=>true,
+ chatDailyDigestSetStatus:()=>{},chatDebug:()=>{},toast:()=>{},chatShowTrimFailure:(...args)=>ctx.alerts.push(args),alerts:[],chatFriendlyError:e=>e.message,chatSyncTrimmedHistoryToGateway:async()=>true,
  fetch:async(url,opts)=>{requests.push({url,body:JSON.parse(opts.body),signal:opts.signal});return await new Promise(r=>{finish=r})}
  };
  vm.createContext(ctx);
- ['chatPlanAutoTrimForPendingBatch','chatDailyDigestScheduleForTrim','chatAwaitTrimDigest','chatDailyDigestRequest','chatCommitAutoTrimPlan','chatApplyAutoTrimForPendingBatch'].forEach(n=>vm.runInContext(extract(n),ctx));
+ ['chatAutoTrimRoundCount','chatTimeReminderContext','chatPlanAutoTrimForPendingBatch','chatDailyDigestScheduleForTrim','chatAwaitTrimDigest','chatDailyDigestRequest','chatCommitAutoTrimPlan','chatApplyAutoTrimForPendingBatch'].forEach(n=>vm.runInContext(extract(n),ctx));
  return {ctx,cfg,session,requests,advance:ms=>{now+=ms},reply:data=>finish({ok:true,json:async()=>data}),run:(state=null,opts={idleCheck:true})=>ctx.chatApplyAutoTrimForPendingBatch(cfg,[],state,opts)};
 }
 test('slow summary is a barrier; history and prefix change together exactly once',async()=>{
@@ -41,17 +41,20 @@ test('API failure preserves all history and waits a fresh hour before a new plan
  const x=setup();const original=JSON.stringify(x.session);const work=x.run();await tick();x.reply({ok:false,error:'API unavailable'});
  const failed=await work;assert.equal(failed.cacheBoundary,false);assert.equal(failed.trimmed,false);
  assert.equal(x.session.messages.length,10);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.session.cacheRebuildPending,undefined);
+ assert.equal(x.ctx.alerts.length,1);assert.match(x.ctx.alerts[0][0],/原对话已保留/);
  assert.ok(x.session.trimRetryAfter>Date.now());await x.run();assert.equal(x.requests.length,1);
  x.advance(3600001);const next=x.run();await tick();assert.equal(x.requests.length,2);x.reply({prepared:true,text:'新的成功总结'});assert.equal((await next).trimmed,true);assert.equal(x.session.trimRetryAfter,0);
 });
 test('stop cancels preparation and an ignored late response cannot alter the prefix',async()=>{
  const x=setup(),state={stopped:false};const work=x.run(state);await tick();state.stopped=true;
  const result=await work;assert.equal(result.trimmed,false);assert.equal(x.requests[0].signal.aborted,true);
+ assert.equal(x.ctx.alerts.length,0,'User cancellation is not a failure');
  x.reply({prepared:true,text:'迟到结果'});await x.ctx.chatDailyDigestChain;assert.equal(x.session.dailyDigests.length,0);assert.equal(x.session.messages.length,10);
 });
 test('editing during preparation invalidates the plan without deleting the edit',async()=>{
  const x=setup();const work=x.run();await tick();x.session.messages[0].text='新编辑';x.reply({prepared:true,text:'旧快照总结'});
  assert.equal((await work).trimmed,false);assert.equal(x.session.messages[0].text,'新编辑');assert.equal(x.session.dailyDigests.length,0);
+ assert.equal(x.ctx.alerts.length,1);
 });
 test('switching windows cannot move a summary or delete another window',async()=>{
  const x=setup();const work=x.run();await tick();const other={id:'other',messages:[{role:'user',text:'另一个窗口'}],dailyDigests:[]};

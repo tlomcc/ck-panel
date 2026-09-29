@@ -60,7 +60,7 @@ function streamContext(){
   const c=load({TextDecoder,Date,console,latencyTrace:{},requestState:{},assistantText:'',nativeThinkingText:'',toolEvents:[],
     markFirstReplyTs:noop,recordFirstDeltaLatency:noop,chatStreamProgressSet:noop,chatDebug:noop,
     chatApplyPollingLiveState:noop,chatStoreSessionRecall:noop,chatPollingLiveState:null,
-    chatCurrentSession:()=>({}),chatSetStatus:noop,cfg:{},responseUserTs:1,requestTurnId:'turn',recallInfo:null,
+    chatCurrentSession:()=>({}),chatScheduleSessionSave:noop,timeReminderContext:{round:1},chatSetStatus:noop,cfg:{},responseUserTs:1,requestTurnId:'turn',recallInfo:null,
     CHAT_PLATFORM_EXIT_ERROR:'Function process exited',chatUpsertToolEvent:(old,data)=>old.concat(data),scheduleStreamRender:noop},
     ['chatParseSse','chatContainsPlatformExitError','chatCreateRequestFailure','chatMarkNetworkFailure']);
   const marker='},async function(resp,attemptState){';
