@@ -70,6 +70,7 @@
  const themeSave=calls.filter(c=>c.body&&c.body.action==='save').at(-1).body;
  check(themeSave.aliases.length===2&&themeSave.recall_enabled===true,'Alias/recall settings lost');
  click('[data-mw="topic-api"]');check(currentApiTab==='topics'&&document.querySelector('[data-group="topic_materials"]'),'Theme supplier selection missing');
+ check(document.querySelector('[data-subtab="topics"].active'),'Theme API must also appear in API navigation');
  navTo('recall-lab');probeFailure=false;$('mw-lab-mode').value='all';$('mw-lab-form').requestSubmit();await wait(()=>$('mw-lab-status').textContent.includes('实验完成'));
  check($('mw-comparison').textContent.includes('C · 主题辅助'),'C comparison missing');
  check(calls.filter(c=>c.path==='/ck/recall-experiment').at(-1).body.path==='c','C request not sent');
