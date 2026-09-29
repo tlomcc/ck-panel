@@ -13,10 +13,11 @@
    const u=new URL(String(url)),body=init.body?JSON.parse(init.body):null;calls.push({path:u.pathname,query:u.search,body});
    if(u.pathname==='/ck/memory-topics'){
      if(init.method==='POST'){
+       if(body.action==='suggest')return response({ok:true,items:facts.filter(f=>!body.exclude_ids.includes(f.fact_id)).slice(0,3).map((f,i)=>({...f,stamp:'fixture-stamp',recommended:i<2})),scanned:5100,candidate_count:3,recommended_count:2,warnings:[]});
        if(failSave){failSave=false;return response({ok:false,error:'合成保存失败'},503)}
        if(conflict)return response({ok:false,error:'目录已有更新'},409);
        if(body.action==='delete')store.topics=store.topics.filter(t=>t.id!==body.id);
-       else{const t={id:body.id,title:body.title,note:body.note,materials:body.fact_ids.map(id=>facts.find(f=>f.fact_id===id)),changed_count:0};const at=store.topics.findIndex(x=>x.id===t.id);if(at<0)store.topics.unshift(t);else store.topics[at]=t}
+       else{const t={id:body.id,title:body.title,note:body.note,aliases:body.aliases,recall_enabled:body.recall_enabled,materials:body.fact_ids.map(id=>facts.find(f=>f.fact_id===id)),changed_count:0};const at=store.topics.findIndex(x=>x.id===t.id);if(at<0)store.topics.unshift(t);else store.topics[at]=t}
        store.revision++;
      }
      return response(store);
@@ -60,6 +61,21 @@
  click('[data-mw="api"]');check(currentApiTab==='experiment','Provider page navigation failed');
  check(document.querySelector('[data-group="recall_rewrite"]')&&document.querySelector('[data-group="recall_vector"]'),'Existing provider pickers missing');
  check(document.getElementById('api-config-body').textContent.includes('修改后也会影响正常 Fact 召回'),'Shared config implication missing');
+ // Theme workflow reuses Facts, saves reviewed suggestions and offers C.
+ navTo('topics');input('mw-aliases','日本行程，东京行');
+ click('[data-mw="suggest"]');await wait(()=>$('mw-search-status').textContent.includes('检索 5100'));
+ check(document.querySelectorAll('[data-mw-pick]:checked').length===2,'Suggested candidates must be reviewable');
+ click('[data-mw="add-selected"]');check($('mw-material-count').textContent.includes('3 / 200'),'Bulk add failed');
+ click('#mw-save');await wait(()=>$('mw-status').textContent==='主题已保存。');
+ const themeSave=calls.filter(c=>c.body&&c.body.action==='save').at(-1).body;
+ check(themeSave.aliases.length===2&&themeSave.recall_enabled===true,'Alias/recall settings lost');
+ click('[data-mw="topic-api"]');check(currentApiTab==='topics'&&document.querySelector('[data-group="topic_materials"]'),'Theme supplier selection missing');
+ navTo('recall-lab');probeFailure=false;$('mw-lab-mode').value='all';$('mw-lab-form').requestSubmit();await wait(()=>$('mw-lab-status').textContent.includes('实验完成'));
+ check($('mw-comparison').textContent.includes('C · 主题辅助'),'C comparison missing');
+ check(calls.filter(c=>c.path==='/ck/recall-experiment').at(-1).body.path==='c','C request not sent');
+ check(chatNormalizeFactRecallMode('c')==='c'&&chatFactRecallModeMeta('c').shortLabel==='C','C config normalized away');
+ check(document.querySelector('input[name="chat-fact-recall-mode"][value="c"]'),'C chat selector missing');
+ $('mw-lab-mode').value='both';
  // A delayed response from one Key must never populate another Key's page.
  probeFailure=false;navTo('recall-lab');
  let release;holdProbe=new Promise(r=>release=r);$('mw-lab-form').requestSubmit();

@@ -26,10 +26,19 @@ assert(!/chat-quick-recall-toggle|chatQuickToggleRecall/.test(html+script),'the 
 assert(/function chatRenderQuickRecallControls\(cfg\)/.test(script),'quick recall controls need a shared renderer');
 assert(/chatRenderQuickRecallControls\(cfg\)/.test(script.slice(script.indexOf('function chatRenderRecallState('),script.indexOf('function chatRenderNcContextState('))),
   'recall state refresh must update header quick controls');
-assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSetFactRecallModeField\('b'\)/.test(script)&&/chatSaveRecallSetting\(true\)/.test(script),
-  'Fact B quick toggle must enable B or fully disable recall');
-assert(/aria-label',factOn\?'关闭 Fact B 召回':'开启 Fact B 召回'/.test(script),
-  'Fact B quick toggle needs explicit on/off labels');
+assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSaveRecallSetting\(true\)/.test(script),'quick toggle must save');
+const vm=require('node:vm');
+const toggle=script.slice(script.indexOf('function chatQuickToggleFactMode(){'),script.indexOf('function chatRenderRecallState('));
+for(const mode of ['a','b','c'])for(const enabled of [true,false]){
+  let chosen,saved;const input={checked:enabled};
+  const sandbox={chatLoadConfig:()=>({factRecallMode:mode,recall:enabled}),chatNormalizeFactRecallMode:v=>v,
+    document:{getElementById:()=>input},chatSetFactRecallModeField:v=>chosen=v,chatSaveRecallSetting:v=>saved=v};
+  vm.runInNewContext(toggle+';chatQuickToggleFactMode()',sandbox);
+  assert(chosen===(mode==='c'?'c':'b'),'Quick toggle must preserve configured C');
+  assert(input.checked===!(enabled&&mode!=='a')&&saved,'Quick toggle must save correct on/off state');
+}
+assert(script.includes("+' Fact '+quickLabel+' 召回'"),'Quick toggle label must identify current mode');
+assert(/name="chat-fact-recall-mode" value="c"/.test(html),'C option missing');
 assert(/\.chat-quick-fact-toggle/.test(fs.readFileSync(path.join(root,'chat-ui.css'),'utf8')),'quick controls need compact chat header styling');
 assert(/chat-quick-fact-toggle/.test(html)&&!/fact-quick-cloud/.test(html),'quick control uses the compact recall icon');
 assert(/小模型先判定/.test(script),'strict A description must explain the model gate');

@@ -1,5 +1,5 @@
 /* Existing notebook palette; a dated material thread makes the directory legible. */
-body #sub-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}
+body #sub-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
 .mw-page{color:var(--nb-ink);font-family:var(--ck-font-body);padding-bottom:40px!important}
 .mw-page .ck-notebook-heading{margin-bottom:15px}
 .mw-page .mw-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}
@@ -54,3 +54,7 @@ body #sub-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}
   .mw-page .mw-search-form>div{flex-wrap:wrap}
   .mw-page .mw-search-form input{flex-basis:180px}
 }
+
+.mw-page .mw-check{display:flex;align-items:center;gap:8px;margin:14px 0}.mw-page .mw-check input,.mw-page .mw-pick input{width:auto;min-height:20px}.mw-page .mw-pick{flex:0 0 24px}.mw-page .mw-search-result>div{min-width:0;flex:1}
+
+.mw-page #mw-materials{max-height:520px;overflow:auto;overscroll-behavior:contain}@media(max-width:700px){.mw-page #mw-materials{max-height:360px}}

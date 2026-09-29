@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v250-memory-topics-and-recall-lab';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v251-topic-assisted-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2743,7 +2743,7 @@ function chatNormalizeRecallMode(value){
   return 'fact_only';
 }
 function chatNormalizeFactRecallMode(value){
-  return String(value||'').trim().toLowerCase()==='b'?'b':'a';
+  var mode=String(value||'').trim().toLowerCase();return mode==='c'?'c':mode==='b'?'b':'a';
 }
 function chatNormalizeRecallRecentRounds(value){
   var number=Math.round(Number(value));
@@ -2755,6 +2755,7 @@ function chatNormalizeTimeInjectionEveryRounds(value){
 }
 function chatFactRecallModeMeta(value){
   var mode=chatNormalizeFactRecallMode(value);
+  if(mode==='c')return {value:'c',label:'C（主题辅助）',shortLabel:'C',debugText:'明确主题时限定材料；其余沿用 B；相关主题附目录，按需读取最多 5 条。不重提取 Fact。'};
   return mode==='b'
     ? {value:'b',label:'B（宽松）',shortLabel:'B',debugText:'宽松过滤 + 强制保底 + 模型精筛'}
     : {value:'a',label:'A（严格）',shortLabel:'A',debugText:'小模型先判定；PASS 立即停止；通过后最多注入 1 条高匹配 Fact'};
@@ -2830,22 +2831,24 @@ function chatRenderQuickRecallControls(cfg){
   var recall=cfg.recall!==false;
   var factMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   var factButton=document.getElementById('chat-quick-fact-toggle');
-  var factOn=recall&&factMode==='b';
+  var factOn=recall&&(factMode==='b'||factMode==='c');
+  var quickLabel=factMode==='c'?'C':'B';
   if(factButton){
     factButton.classList.toggle('is-on',factOn);
     factButton.classList.toggle('is-off',!factOn);
     factButton.disabled=false;
     factButton.setAttribute('aria-pressed',factOn?'true':'false');
-    factButton.setAttribute('aria-label',factOn?'关闭 Fact B 召回':'开启 Fact B 召回');
-    factButton.title=factOn?'关闭 Fact B 召回':'开启 Fact B 召回';
+    factButton.setAttribute('aria-label',(factOn?'关闭':'开启')+' Fact '+quickLabel+' 召回');
+    factButton.title=(factOn?'关闭':'开启')+' Fact '+quickLabel+' 召回';
   }
 }
 function chatQuickToggleFactMode(){
   var cfg=chatLoadConfig()||{};
-  var factOn=cfg.recall!==false&&chatNormalizeFactRecallMode(cfg.factRecallMode)==='b';
+  var mode=chatNormalizeFactRecallMode(cfg.factRecallMode);
+  var factOn=cfg.recall!==false&&(mode==='b'||mode==='c');
   var recallInput=document.getElementById('chat-recall-enabled');
   if(recallInput)recallInput.checked=!factOn;
-  chatSetFactRecallModeField('b');
+  chatSetFactRecallModeField(mode==='c'?'c':'b');
   return chatSaveRecallSetting(true);
 }
 function chatRenderRecallState(statusText,statusKind){
@@ -11260,7 +11263,8 @@ var API_TABS=[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'chat_digest',label:'截断总结',info:'截断时把被丢掉的完整轮次写成总结，同一天合成一段，跨日期批次单独一段，均标明完整日期和起止时间。保留范围可在「截断总结」设为今天及过去 0–100 天，下一轮注入系统区。普通聊天不调用。请为这一组独立选择供应商和模型。'}
   ]},
-  {key:'experiment',label:'实验 API',info:'召回实验复用下面两组 Fact 召回配置。修改后也会影响正常 Fact 召回；A/B 比较只在实验页点击运行时调用，可能产生模型费用。主题目录不调用模型。',sharedRecall:true},
+  {key:'topics',label:'主题 API',info:'主题找材料直接复用现有 Fact 和向量。智能查找最多提交 40 条候选给选材模型；只在点击时调用，不在聊天中反复选材。查询向量复用“召回 → 向量化”，按需读取材料使用当前聊天模型。',groups:[{key:'topic_materials',label:'主题选材',info:'为智能找材料独立选择供应商和模型（OpenAI 兼容接口）。未配置或失败时保留检索候选供手选，不会重新提取 Fact。'}]},
+  {key:'experiment',label:'实验 API',info:'召回实验复用下面两组 Fact 召回配置。修改后也会影响正常 Fact 召回；A/B/C 比较只在实验页点击运行时调用，可能产生模型费用。主题智能选材另在“主题 API”配置；C 聊天沿用召回 API。',sharedRecall:true},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}
