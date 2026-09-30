@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v253-rolling-summary-prompt-controls';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v254-adaptive-thinking-effort';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2475,6 +2475,7 @@ function chatDefaultConfig(){
     recallRecentRounds:10,
     thinkingMode:'off',
     thinkingBudgetTokens:4096,
+    thinkingEffort:'high',
     thinkingPrompt:chatDefaultThinkingPrompt(),
     thinkingPromptStandby:'',
     thinkingPromptStandbySyncedAt:0,
@@ -2537,6 +2538,10 @@ function chatNormalizeThinkingBudget(value){
   if(n<=4096)return 4096;
   return 8192;
 }
+function chatNormalizeThinkingEffort(value){
+  var effort=String(value||'').trim().toLowerCase();
+  return ['low','medium','high','max'].indexOf(effort)>=0?effort:'high';
+}
 function chatThinkingModeLabel(value){
   var mode=chatNormalizeThinkingMode(value);
   return mode==='adaptive'?'自适应思考':(mode==='native'?'原生思考':(mode==='compat'?'兼容思考':'关闭'));
@@ -2565,6 +2570,10 @@ function chatRenderThinkingControls(cfg){
       ?'自适应思考由 Claude 根据问题自动决定思考量；这里不设置固定预算。'
       :'选择原生思考后才能设置预算；它是预算上限，不是固定消耗。');
   if(budgetInput)budgetInput.disabled=mode!=='native';
+  var effortLabel=document.getElementById('chat-thinking-effort-label');
+  if(effortLabel)effortLabel.hidden=mode!=='adaptive';
+  var effortInput=document.getElementById('chat-thinking-effort');
+  if(effortInput){effortInput.value=chatNormalizeThinkingEffort(cfg.thinkingEffort);effortInput.disabled=mode!=='adaptive';}
   var fake=document.getElementById('chat-fake-thinking');
   if(fake){fake.checked=mode==='compat';fake.disabled=mode==='native';}
   var nativeVisible=document.getElementById('chat-native-thinking-visible');
@@ -3437,6 +3446,7 @@ function chatLoadConfig(){
     cfg.fakeThinking===true,
   );
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.thinkingEffort=chatNormalizeThinkingEffort(cfg.thinkingEffort);
   cfg.thinkingPrompt=chatThinkingPromptValue(saved||cfg);
   cfg.thinkingPromptEnabled=cfg.thinkingPromptEnabled!==false;
   cfg.fakeThinkingPrompt=cfg.thinkingPrompt;
@@ -3475,6 +3485,7 @@ function chatLoadConfig(){
   cfg=chatApplyWindowTrimToConfig(cfg);
   cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.thinkingEffort=chatNormalizeThinkingEffort(cfg.thinkingEffort);
   cfg.thinkingPrompt=chatThinkingPromptValue(cfg);
   cfg.thinkingPromptEnabled=cfg.thinkingPromptEnabled!==false;
   cfg.fakeThinkingPrompt=cfg.thinkingPrompt;
@@ -3517,6 +3528,7 @@ function chatSaveConfigObject(cfg){
   cfg.recallRecentRounds=chatNormalizeRecallRecentRounds(cfg.recallRecentRounds);
   cfg.thinkingMode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
   cfg.thinkingBudgetTokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+  cfg.thinkingEffort=chatNormalizeThinkingEffort(cfg.thinkingEffort);
   cfg.fakeThinking=cfg.thinkingMode==='compat';
   cfg.backendSwitchNotification=cfg.backendSwitchNotification!==false;
   cfg.retainNativeThinkingHistory=cfg.retainNativeThinkingHistory!==false;
@@ -4468,6 +4480,7 @@ function chatReadForm(){
     thinkingBudgetTokens:chatNormalizeThinkingBudget(
       chatFieldValue('chat-thinking-budget',saved.thinkingBudgetTokens||4096)
     ),
+    thinkingEffort:chatNormalizeThinkingEffort(chatFieldValue('chat-thinking-effort',saved.thinkingEffort)),
     thinkingPrompt:chatThinkingPromptValue(saved),
     thinkingPromptStandby:String(saved.thinkingPromptStandby||''),
     thinkingPromptStandbySyncedAt:Number(saved.thinkingPromptStandbySyncedAt)||0,
@@ -5907,7 +5920,7 @@ function chatFormatDebug(ev,data){
      );
      var thinkingText=thinkingMode==='native'
        ?('｜思考：原生 '+(data.native_thinking_budget_tokens||0)+' tokens')
-       :(thinkingMode==='compat'?('｜思考：兼容 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考：关');
+       :(thinkingMode==='adaptive'?('｜思考：自适应 · '+chatNormalizeThinkingEffort(data.thinking_effort)):(thinkingMode==='compat'?('｜思考：兼容 '+(data.ck_thinking_prompt_chars||0)+'字'):'｜思考：关'));
     var injectionText=data.injection_positions?('｜注入：世界书 '+(data.injection_positions.worldbook||'-')+' / 思考链 '+(data.injection_positions.thinking||'-')+' / 当日总结 '+(data.injection_positions.daily_digest||'-')):'';
     var dailyDigestText=data.daily_digest_chars?('｜当日截断总结：'+data.daily_digest_chars+' 字'):'';
     var targetText=data.reply_target_chars!==undefined?('｜回复目标：最新 '+(data.reply_target_chars||0)+'字'):'';
@@ -10353,6 +10366,7 @@ async function chatSubmitPendingMessages(options){
     body.native_thinking_enabled=true;
     body.thinking_prompt=chatActiveThinkingPrompt(cfg);
     if(thinkingMode==='native')body.thinking_budget_tokens=thinkingBudgetTokens;
+    if(thinkingMode==='adaptive')body.thinking_effort=chatNormalizeThinkingEffort(cfg.thinkingEffort);
   }
   // 轮询只发开关和配置修订。候选的地址、Key、模型一律由网关自己从已加载配置解析，
   // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。

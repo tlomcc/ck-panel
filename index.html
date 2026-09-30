@@ -14,21 +14,21 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v4-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v4.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="style.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="polish.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="chat.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="wechat.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="shell.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="components.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="daily-status.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="settings.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="chat-ui.css?v=chat-v253-rolling-summary-prompt-controls">
-<script>window.CK_PANEL_VERSION='chat-v253-rolling-summary-prompt-controls';</script>
-<script>window.CK_PANEL_RELEASE_NOTES=["系统和思考提示词只读；上方备选框默认折叠，支持保存、确认后立即同步与当前字数显示。","修复编辑待发送消息后输入框变高，以及分条切换整段时图标未立即变灰的问题。","新增极简北京时间注入，只发送时分；默认保留旧时间，可开启每轮清理。","界面设置新增聊天搜索开关，关闭后隐藏顶部搜索图标。","截断总结升级：过去 n 天滚动详细总结、y 天合并大总结、独立当日总结；按 y+x+当日顺序注入。","跨日内容归入结束日期，自动补齐和滚动；验证 x+y≤n，保留未保存草稿，失败保留原内容。"];</script>
-<link rel="stylesheet" href="notebook.css?v=chat-v253-rolling-summary-prompt-controls">
-<link rel="stylesheet" href="memory-workbench.css?v=chat-v253-rolling-summary-prompt-controls">
+<link rel="stylesheet" href="tokens.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="style.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="polish.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="chat.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="wechat.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="shell.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="components.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="daily-status.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="settings.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="chat-ui.css?v=chat-v254-adaptive-thinking-effort">
+<script>window.CK_PANEL_VERSION='chat-v254-adaptive-thinking-effort';</script>
+<script>window.CK_PANEL_RELEASE_NOTES=["自适应思考新增低、中、高、最高强度，默认高；保存后所有窗口共用。", "完整发送 thinking.type=adaptive 与 output_config.effort，不发送固定 token 预算；Opus 5.5 开启思考请选择自适应模式。", "修复自适应思考在请求信息中被误显示为关闭的问题。"];</script>
+<link rel="stylesheet" href="notebook.css?v=chat-v254-adaptive-thinking-effort">
+<link rel="stylesheet" href="memory-workbench.css?v=chat-v254-adaptive-thinking-effort">
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><img src="icons/app-icon-v4.svg" alt=""></div><div class="startup-name">CK</div><div class="startup-subtitle">小小日常，慢慢收藏</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -37,7 +37,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><img src="icons/app-icon-v4.svg" alt=""></button><div><h1>CK</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v253" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v253-rolling-summary-prompt-controls</button>
+<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v254" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v254-adaptive-thinking-effort</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -222,7 +222,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v253-rolling-summary-prompt-controls" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v253</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v254-adaptive-thinking-effort" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v254</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="time">时间提醒</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option><option value="cleanup">清理</option><option value="history">历史保留</option><option value="gateway">API 连接</option></optgroup><optgroup label="显示与管理"><option value="display">界面设置</option><option value="billing">计费显示</option><option value="tools">工具</option><option value="debug">调试</option><option value="session">会话管理</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13 5 5l7 4 7-4-1 8a7 7 0 1 1-12 0Z"/><path d="M9 15v1m6-1v1m-5 3q2 2 4 0"/></svg></span><div><h2>系统提示词</h2><p>给小克一张角色小卡片。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
@@ -234,6 +234,7 @@
 <div class="chat-side-panel" id="chat-side-thinking" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a5 5 0 1 1 0-10 6 6 0 0 1 11 2 4 4 0 0 1 0 8Z"/><path d="M10 12v1m5-1v1m-4 3h3"/></svg></span><div><h2>思考</h2><p>让想法慢慢成形，再好好回答。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <div class="chat-memory-card"><b>思考模式</b><details class="chat-setting-help"><summary>说明与用法</summary><p>关闭保持现有请求；原生思考使用固定预算；自适应思考交给 Claude 按问题决定思考量；兼容思考使用现有可折叠标签协议。三种思考方式互斥。</p></details></div>
 <label>思考模式<select id="chat-thinking-mode" onchange="chatThinkingModeChanged(this.value)"><option value="off">关闭</option><option value="native">原生思考</option><option value="adaptive">自适应思考</option><option value="compat">兼容思考</option></select></label>
+<label id="chat-thinking-effort-label" hidden>自适应思考强度<select id="chat-thinking-effort" onchange="chatSaveConfig(true)"><option value="low">低</option><option value="medium">中</option><option value="high">高（默认）</option><option value="max">最高（需模型支持）</option></select><small class="chat-field-hint">由模型按问题决定思考量，强度不是固定 token 预算。Opus 5.5 开启思考时请选择自适应模式。</small></label>
 <label id="chat-thinking-budget-label"><span class="chat-setting-label-row"><span>原生思考预算</span><small id="chat-thinking-budget-unavailable">不可用</small></span><select id="chat-thinking-budget" onchange="chatSaveConfig(true)"><option value="1024">低 · 1024 tokens</option><option value="4096">中 · 4096 tokens</option><option value="8192">高 · 8192 tokens</option></select></label>
 <p class="chat-field-hint" id="chat-thinking-budget-hint">选择原生思考后才能设置预算；它是预算上限，不是固定消耗。</p>
 <div class="chat-memory-card"><b>伪思考链</b><details class="chat-setting-help"><summary>说明与用法</summary><p>兼容思考模式会要求每轮在正文前输出一个可折叠的思考块，并随窗口历史保存。</p></details></div>
@@ -375,13 +376,13 @@
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
 <aside id="panel-version-notes" class="panel-version-notes" aria-label="本次更新" hidden></aside>
-<script src="chat-ui.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="chat-history.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="chat-digest.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="script.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="memory-workbench.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="script-extra.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="pwa.js?v=chat-v253-rolling-summary-prompt-controls"></script>
-<script src="select-ui.js?v=chat-v253-rolling-summary-prompt-controls"></script>
+<script src="chat-ui.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="chat-history.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="chat-digest.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="script.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="memory-workbench.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="script-extra.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="pwa.js?v=chat-v254-adaptive-thinking-effort"></script>
+<script src="select-ui.js?v=chat-v254-adaptive-thinking-effort"></script>
 </body>
 </html>
