@@ -1,8 +1,7 @@
 {
-  "version": "chat-v254-adaptive-thinking-effort",
+  "version": "chat-v255-prompt-editor-sizing",
   "notes": [
-    "自适应思考新增低、中、高、最高强度，默认高；保存后所有窗口共用。",
-    "完整发送 thinking.type=adaptive 与 output_config.effort，不发送固定 token 预算；Opus 5.5 开启思考请选择自适应模式。",
-    "修复自适应思考在请求信息中被误显示为关闭的问题。"
+    "系统和思考提示词备选框加大，展开后更方便编辑长提示词。",
+    "当前生效的只读提示词框适当缩小，为编辑区域留出空间。"
   ]
 }

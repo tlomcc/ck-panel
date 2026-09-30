@@ -45,7 +45,11 @@ try{
   check(document.querySelectorAll('#chat-plus-grid>button').length===20,'Missing tray buttons');
   for(const key of ['model','thinking','worldbook','digest','memory']){
     chatOpenSettingTab(key);
-    check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=(key==='worldbook'?240:key==='digest'?220:300),'Text editor too small '+key);
+    const formal=document.getElementById(key==='model'?'chat-system':key==='thinking'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]);
+    const draft=document.getElementById(key==='model'?'chat-system-standby':key==='thinking'?'chat-thinking-standby':'');
+    if(draft)draft.closest('details').open=true;
+    check((draft||formal).getBoundingClientRect().height>=(key==='worldbook'?240:key==='digest'?220:300),'Text editor too small '+key);
+    if(draft){check(draft.getBoundingClientRect().height>formal.getBoundingClientRect().height,'Standby editor must be larger than the readonly prompt '+key);draft.closest('details').open=false;}
   }
   document.getElementById('chat-system').value='完整提示词\n'+('编辑正文，不应截断。\n'.repeat(100));
   const systemDraft=document.getElementById('chat-system').value;

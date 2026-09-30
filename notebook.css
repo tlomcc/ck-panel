@@ -311,7 +311,9 @@ body.chat-active .chat-drawer :is(button,input):focus-visible{outline:2px solid 
 .chat-digest-reserve textarea{max-width:100%}
 #chat-digest-range-hint.error{color:var(--danger,#b74f53)}
 #chat-side-digest textarea[readonly],#chat-system[readonly],#chat-thinking-prompt[readonly]{cursor:text}
-#chat-system-standby,#chat-thinking-standby,#chat-digest-today,#chat-digest-rollup{height:clamp(180px,28vh,280px)!important;min-height:180px!important}
+body.chat-active .chat-settings :is(#chat-system-standby,#chat-thinking-standby){height:clamp(300px,48dvh,520px)!important;min-height:300px!important}
+body.chat-active .chat-settings :is(#chat-system,#chat-thinking-prompt){height:clamp(120px,18dvh,180px)!important;min-height:120px!important}
+#chat-digest-today,#chat-digest-rollup{height:clamp(180px,28vh,280px)!important;min-height:180px!important}
 #chat-digest-detail{height:clamp(220px,36vh,360px)!important;min-height:220px!important}
 #chat-daily-digest-pack{height:clamp(220px,32vh,320px)!important;min-height:220px!important}
 .chat-prompt-sync-status{margin:10px 0 4px;padding:10px 12px;border-left:3px solid currentColor;border-radius:4px;font-size:12px;line-height:1.7;overflow-wrap:anywhere;color:var(--nb-muted,#767184)}
