@@ -26,6 +26,40 @@ function setup(){
     commit:prepared=>{assert.ok(prepared);session.dailyDigests=prepared.entries;session.digestRollup=prepared.rollup;}
   };
 }
+
+test('no truncation today is normal; explicit refresh reports no source and never calls model',async()=>{
+  const x=setup(),notices=[];x.ctx.toast=text=>notices.push(text);
+  x.nodes['chat-daily-digest-save-status']={};
+  x.session.messages.push(...x.turn('2026-09-30','today'));
+  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true,notify:true}),true);
+  assert.equal(x.calls.length,0);assert.equal(x.session.dailyDigests.length,0);
+  assert.match(notices[0],/暂无摘要/);assert.match(notices[0],/正常状态/);
+});
+
+test('rollover errors report the actual day and batch size; rollup errors do not pretend messages were lost',async()=>{
+  for(const rollup of [false,true]){
+    const x=setup(),events=[];x.ctx.chatDebug=(event,data)=>events.push({event,data});
+    if(rollup)x.session.dailyDigests=[x.entry('2026-09-27','旧摘要')];
+    else x.session.messages.push(...x.turn('2026-09-29','yesterday'));
+    x.reply(()=>({ok:false,error:'incomplete output'}));
+    assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),false);
+    const error=events.find(e=>e.event==='daily_digest').data;
+    assert.equal(error.messages,rollup?null:2);assert.match(error.error,rollup?/y 天大总结压缩/:/跨日补总结（2026-09-29）/);
+    assert.equal(x.session.dailyDigests.length,rollup?1:0);
+  }
+});
+
+test('old automatic rollups are recompressed once; hand edited rollups stay intact',async()=>{
+  for(const edited of [false,true]){
+    const x=setup();x.session.dailyDigests=[x.entry('2026-09-27','旧摘要')];
+    const source=x.ctx.chatDigestRollupSource(x.cfg,x.session);
+    x.session.digestRollup={start:source.range.start,end:source.range.end,text:'旧版大总结',source:source.legacyStamp,edited};
+    assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),true);
+    assert.equal(x.calls.length,edited?0:1);
+    assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),true);
+    assert.equal(x.calls.length,edited?0:1);
+  }
+});
 test('n excludes today; x and y select adjacent natural-day windows with exact headers',()=>{
   const x=setup();x.session.dailyDigests=[26,27,28,29,30].map(day=>x.entry('2026-09-'+day,'日期'+day));
   assert.deepEqual(plain(x.ctx.chatDailyDigestEntries(x.session).map(r=>r.dayKey)),['2026-09-27','2026-09-28','2026-09-29','2026-09-30']);

@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v256-sidebar-round-count';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v257-summary-feedback-compression';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5301,7 +5301,7 @@ function chatDebugRecordKind(record,text){
   if(ev==='done'||text.indexOf('请求完成')>=0)return 'done';
   if(text.indexOf('缓存诊断')>=0||text.indexOf('缓存读取')>=0||text.indexOf('缓存创建')>=0||text.indexOf('CACHE')>=0)return 'cache';
   if(ev==='error'||text.indexOf('请求错误')>=0)return 'error';
-  if(text.indexOf('当日截断总结失败')>=0)return 'error';
+  if(text.indexOf('当日截断总结失败')>=0||text.indexOf('总结更新失败')>=0)return 'error';
   return 'info';
 }
 function chatIntentRewriteFromDebug(data){
@@ -5957,8 +5957,9 @@ function chatFormatDebug(ev,data){
     var chars=data.result_chars?('｜结果：'+data.result_chars+'字'):'';
     return '🛠 工具调用｜'+(data.name||'未知工具')+'｜'+status+'｜来源：'+(data.source||'internal')+sec+chars;
   }
+  if(ev==='daily_digest_refresh')return '🗂 '+(data.message||'总结检查完成');
   if(ev==='daily_digest'){
-    if(data.ok===false)return '⚠️ 当日截断总结失败｜本批 '+(data.messages||0)+' 条消息没能接上｜'+(data.error||'未知原因');
+    if(data.ok===false)return '⚠️ 总结更新失败'+(Number(data.messages)>0?'｜本批 '+data.messages+' 条消息':'')+'｜'+(data.error||'未知原因')+'｜原内容已保留';
     if(data.skipped)return '🗂 当日截断总结｜跳过：'+(data.skipped==='expired_day'
       ?('内容属于 '+(data.day_key||'-')+'，放到今天已经过期')
       :data.skipped);

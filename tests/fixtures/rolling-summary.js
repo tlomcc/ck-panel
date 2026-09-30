@@ -61,6 +61,8 @@
  field('chat-digest-detail-days').value='3';field('chat-digest-rollup-days').value='1';chatDigestSettingsEdited();
  check(chatSaveDailyDigestSetting()===null&&chatLoadConfig().dailyDigestDetailDays===1,'x+y>n was accepted');
  field('chat-digest-detail-days').value='1';field('chat-digest-rollup-days').value='2';chatSaveDailyDigestSetting();await chatDailyDigestChain;
+ check(field('chat-daily-digest-save-status').textContent.includes('实际注入内容已更新'),'Settings save did not report completion');
+ check(field('chat-daily-digest-save-status').textContent.includes('→'),'Settings save did not show compression sizes');
  reserve.open=true;const detail=field('chat-digest-detail');detail.value+='\n\n草稿里的补充';chatDigestEditorChanged('detail');const unsaved=detail.value;
  chatRenderDailyDigest(cfg);check(detail.value===unsaved,'Render overwrote an unsaved summary draft');
  session.dailyDigests[0].text+='后台已保存的更新';check(chatSaveDigestEditor('detail')===false,'Concurrent summary edit overwrote newer saved content');
