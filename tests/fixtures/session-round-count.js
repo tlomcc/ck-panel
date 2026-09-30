@@ -1,0 +1,68 @@
+(async()=>{
+  const check=(ok,msg)=>{if(!ok)throw Error(msg)};
+  window.fetch=async()=>{throw Error('Offline fixture')};localStorage.clear();
+  await chatOpenIndexedDb();
+  chatSessionsReady=true;chatInitialized=true;apiProvidersLoaded=true;
+  chatActiveSessionId='round-count';chatMessages=[];chatFolders=[];
+  const turn=id=>[{role:'user',text:'问题第一条',turnId:id,ts:Date.now()},
+    {role:'user',text:'问题第二条',turnId:id,ts:Date.now()},
+    {role:'assistant',text:'回复第一条',turnId:id,ts:Date.now()},
+    {role:'assistant',text:'回复第二条',turnId:id,ts:Date.now()}];
+  for(let i=0;i<120;i++)chatMessages.push(...turn('t'+i));
+  const session={id:chatActiveSessionId,title:'轮数验证',messages:chatMessages,transportMessages:[],dailyDigests:[]};
+  chatSessions=[session];
+  const cfg=chatLoadConfig();cfg.sessionId=session.id;cfg.autoTrimEnabled=false;cfg.autoTrimRoundLimitEnabled=false;
+  chatSaveConfigObject(cfg);chatWriteForm(cfg);
+  document.getElementById('loading-wrap').classList.add('done');document.body.classList.add('chat-active');
+  document.querySelectorAll('.panel-tab').forEach(el=>el.classList.toggle('active',el.id==='tab-chat'));
+  chatRenderMessages();chatToggleSessions(true,true);
+  const count=()=>document.querySelector('.chat-session-meta').textContent.split(' · ')[0];
+  check(count()==='120 轮','full history must count beyond the rendered 50-round page');
+  session.transportMessages=chatWindowContextMessages();chatRenderSessions();
+  check(chatTransportRoundCount(session.transportMessages)===240,'rebuilt transport fixture');
+  check(count()==='120 轮','rebuilt transport must not double the sidebar');
+  chatStartEditMessage(0);document.getElementById('chat-input').value='修改后的第一条';chatSaveEditedMessage();
+  check(session.transportMessages.length===0&&count()==='120 轮','editing must keep the count');
+  chatStageUserMessage('暂存一条');chatStageUserMessage('再暂存一条');
+  check(count()==='120 轮','queued bubbles must not count');
+  const pending=chatPendingMessages();pending.forEach(m=>{m.role='user';m.turnId='next';m.inFlight=true});
+  chatSaveLocalMessages();check(count()==='121 轮','one sending batch counts once immediately');
+  chatFinalizeStoppedRequest({pendingMessages:pending,submitTs:Date.now(),transportSnapshot:{messages:[],updated:0}});
+  check(count()==='120 轮','stopping restores the sent count');
+  pending.forEach(m=>{m.role='user';m.sendFailed=true});chatSaveLocalMessages();
+  check(count()==='120 轮','failed messages must not count');
+  pending.forEach(m=>{delete m.sendFailed;m.role='user'});
+  chatMessages.push({role:'assistant',text:'重试成功',turnId:'next'});chatSaveLocalMessages();
+  check(count()==='121 轮','retry succeeds once');
+  const submit=chatSubmitPendingMessages;chatSubmitPendingMessages=()=>{};
+  chatRegenerateFromUser(chatMessages.length-2);
+  check(count()==='121 轮','regenerating one bubble must not split the existing send batch');
+  const last=chatMessages.at(-1);last.role='user';last.turnId='next';
+  const variants=last.replyVariantsCarry;delete last.replyVariantsCarry;
+  chatMessages.push({role:'assistant',text:'新版本',turnId:'next',replyVariants:[...variants,{messages:[{role:'assistant',text:'新版本',turnId:'next'}]}],replyVariantIndex:1});
+  chatSaveLocalMessages();chatSwitchReplyVariant(chatMessages.length-1,-1);
+  check(count()==='121 轮','switching reply variants must not add rounds');chatSubmitPendingMessages=submit;
+  chatMessages=CKChatHistory.trimLocalTurns(chatMessages,20).keptMessages;chatSaveLocalMessages();
+  check(count()==='20 轮','trimmed history must show retained rounds');
+  const complete=chatSessionStorageData(CHAT_MAX_SESSIONS,0,0);
+  await chatSaveSessionsToIndexedDb(complete);
+  const summary=JSON.parse(localStorage.getItem(CHAT_MESSAGES_KEY));
+  check(summary[0].messages.length<=40,'localStorage must be a partial history');
+  chatSessions=summary.map(chatNormalizeSession);chatMessages=chatSessions[0].messages;
+  chatSessionsReady=false;chatSessionsLoadPromise=null;chatRenderSessions();
+  check(count()==='加载中','partial summary must not flash a fake count');
+  await chatStartIndexedDbSessionLoad();
+  check(count()==='20 轮'&&chatMessages.length>40,'full IndexedDB load restores exact count: '+count()+' / '+chatMessages.length+' messages / failed='+chatIndexedDbFailed);
+  const originalLoad=chatLoadSessionsFromIndexedDb;
+  chatSessions=[{id:session.id,title:'空会话',messages:[],transportMessages:[]}];chatMessages=[];
+  chatSessionsReady=false;chatSessionsLoadPromise=null;chatLoadSessionsFromIndexedDb=async()=>[];
+  chatRenderSessions();await chatStartIndexedDbSessionLoad();
+  check(count()==='新会话','empty database must not leave loading stuck');
+  chatSessions=[{...session,messages:turn('offline'),transportMessages:[]}];chatMessages=chatSessions[0].messages;
+  chatSessionsReady=false;chatSessionsLoadPromise=null;chatLoadSessionsFromIndexedDb=async()=>{throw Error('fixture read failure')};
+  chatRenderSessions();await chatStartIndexedDbSessionLoad();
+  check(count()==='1 轮','read failure must finish loading with available history');
+  chatLoadSessionsFromIndexedDb=originalLoad;chatIndexedDbFailed=false;
+  chatSessions=complete;chatMessages=complete[0].messages;chatRenderSessions();chatToggleSessions(true,true);
+  return {retained:count(),rebuiltTransport:'240 messages / 120 rounds',lifecycle:'stage/send/stop/fail/retry/edit/regenerate/variant/trim passed',storage:'partial/full/empty/failed load passed'};
+})()

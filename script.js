@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v255-prompt-editor-sizing';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v256-sidebar-round-count';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6591,6 +6591,7 @@ function chatStartIndexedDbSessionLoad(){
     if(localSnapshot.length){
       chatSaveSessionsToIndexedDb(chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES));
     }
+    if(chatInitialized)chatRenderSessions();
     return chatSessions;
   }).catch(function(e){
     chatIndexedDbFailed=true;
@@ -6599,6 +6600,7 @@ function chatStartIndexedDbSessionLoad(){
     // 并提示用户历史可能无法完整持久化。
     chatMarkSessionsReady();
     chatNotifyPersistenceDegraded();
+    if(chatInitialized)chatRenderSessions();
     return chatSessions;
   });
   return chatSessionsLoadPromise;
@@ -6633,8 +6635,15 @@ function chatSessionPreview(s){
   return m?chatMessageDisplayText(m).replace(/\s+/g,' ').slice(0,54):'还没有消息';
 }
 function chatSessionMeta(s){
-  var n=chatConversationRoundCount((s&&s.messages)||[],(s&&s.transportMessages)||[]);
-  return (n?n+' 轮':'新会话')+(s.updated?' · '+chatTimeLabel(s.updated):'');
+  // localStorage 只存最近一小段摘要；完整 IndexedDB 历史到位前不能用它报总轮数。
+  if(!chatSessionsReady&&chatIndexedDbSupported()&&!chatIndexedDbFailed)return '加载中';
+  // 侧栏按屏幕历史的发送批次计数。编辑后的 transport 可能把同一批用户气泡
+  // 展开成多条 user，发送中也可能仍是上一轮快照，不能拿它作显示轮数。
+  var sent=((s&&s.messages)||[]).filter(function(message){
+    return message&&(message.role==='assistant'||(message.role==='user'&&message.sendFailed!==true));
+  });
+  var n=chatAutoTrimRoundCount(sent);
+  return (n?n+' 轮':'新会话')+(s&&s.updated?' · '+chatTimeLabel(s.updated):'');
 }
 function chatSessionRowHtml(s,folderName){
   return '<div class="chat-session-row '+(s.id===chatActiveSessionId?'active':'')+'"><button class="chat-session-item" type="button"'+(s.id===chatActiveSessionId?' aria-current="true"':'')+' onclick="chatSelectSession(\''+escAttr(s.id)+'\')"><span class="chat-session-title">'+esc(s.title||'未命名对话')+'</span><small class="chat-session-preview">'+esc(chatSessionPreview(s))+'</small><em class="chat-session-meta">'+esc(chatSessionMeta(s))+'</em>'+(folderName?'<small class="chat-session-folder-label">'+esc(folderName)+'</small>':'')+'</button><button class="chat-session-more" type="button" onclick="chatSessionMenu(\''+escAttr(s.id)+'\',event)" title="对话操作" aria-label="对话操作：'+escAttr(s.title||'未命名对话')+'"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button></div>';
