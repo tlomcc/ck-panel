@@ -30,14 +30,14 @@
  let cfg=chatLoadConfig();cfg.thinkingMode='native';cfg.thinkingPrompt='自己填写的提示词';cfg.fakeThinkingPrompt='旧别名';chatSaveConfigObject(cfg);chatWriteForm(cfg);
  const prompt=document.getElementById('chat-thinking-prompt'),enabled=document.getElementById('chat-thinking-prompt-enabled');
  enabled.checked=false;chatSaveConfig(true);cfg=chatLoadConfig();check(cfg.thinkingPromptEnabled===false&&cfg.thinkingPrompt==='自己填写的提示词'&&chatActiveThinkingPrompt(cfg)==='','Disabled prompt lost text or still sends it');
- enabled.checked=true;prompt.value='';chatSaveConfig(true);cfg=chatLoadConfig();chatWriteForm(cfg);check(prompt.value===''&&cfg.fakeThinkingPrompt===''&&chatActiveThinkingPrompt(cfg)==='','Empty prompt restored default');
+ enabled.checked=true;check(prompt.readOnly,'Formal thinking prompt is editable');chatStorePrompt('thinking','',true);chatSaveConfig(true);cfg=chatLoadConfig();chatWriteForm(cfg);check(prompt.value===''&&cfg.fakeThinkingPrompt===''&&chatActiveThinkingPrompt(cfg)==='','Empty prompt restored default');
  enabled.checked=false;chatSaveConfig(true);check(chatLoadConfig().thinkingMode==='native','Prompt toggle changed native mode');
  await notebookShow('model');
- const primary=document.getElementById('chat-system'),standby=document.getElementById('chat-system-standby');primary.value='当前稳定提示词';standby.value='备用完整提示词';chatSaveConfig(true);
+ const primary=document.getElementById('chat-system'),standby=document.getElementById('chat-system-standby');chatStorePrompt('system','当前稳定提示词',true);standby.value='备用完整提示词';chatSavePromptStandby('system');
  check(chatLoadConfig().system==='当前稳定提示词','Draft changed system before expiration');
  for(const s of chatSessions){s.messages.forEach(m=>m.ts=Date.now()-90000000);s.cacheLastReadAt=0;s.cacheFullCreatedAt=0;s.systemPromptCacheRequestedAt=0;s.systemPromptCacheUntil=0;}
  check(chatMaybeSyncSystemPrompt(),'Expired standby did not promote');check(primary.value==='备用完整提示词'&&standby.value===primary.value,'Promotion failed to keep both fields');
- check(document.getElementById('chat-system-standby-status').textContent.includes('归位成功'),'Promotion status missing');
+ check(document.getElementById('chat-system-standby-status').textContent.includes('同步成功'),'Promotion status missing');
  check(document.getElementById('chat-side-model').scrollWidth<=document.getElementById('chat-side-model').clientWidth+1,'Standby panel overflow');
  return {provider:'save, failure, retained drafts and late navigation',actions:'bottom and historical anchor across all modes',thinking:'disabled and empty survive save/reload',standby:'cached prefix stable, expiry promotes and retains draft'};
 })()

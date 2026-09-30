@@ -1,5 +1,10 @@
 /* CK: river jade, ink and a small folded conversation. */
 :root{--ck-ui-jade:#357b70;--ck-ui-ink:#254943;--ck-ui-mist:#eef5f2;--ck-ui-line:#d8e5df;--ck-ui-blue:#43a6d5}
+body.chat-active #chat-search-toggle[hidden]{display:none!important}
+body.chat-active #chat-split-replies-btn[aria-pressed="false"] span,
+body.chat-active #chat-split-replies-btn[aria-pressed="false"]:is(:hover,:focus,:active) span{background:var(--ck-surface-soft,#f1f2f3)!important;border-color:var(--ck-line,#ddd)!important;color:#92999f!important;box-shadow:none!important;filter:none!important;transition:none!important}
+body.chat-active #chat-split-replies-btn[aria-pressed="false"] b{color:#92999f!important}
+body.dark.chat-active #chat-split-replies-btn[aria-pressed="false"] span,body.dark.chat-active #chat-split-replies-btn[aria-pressed="false"]:is(:hover,:focus,:active) span,body.dark.chat-active #chat-split-replies-btn[aria-pressed="false"] b{color:#7c858e!important}
 body.chat-active .chat-cache-tick path{stroke-width:1.25!important;vector-effect:none!important}
 body.chat-active .chat-msg-tools button{display:inline-grid!important;place-items:center!important;width:28px!important;height:26px!important;padding:5px!important;border:0!important;background:transparent!important;color:#899995!important}
 body.chat-active .chat-msg-tools svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}

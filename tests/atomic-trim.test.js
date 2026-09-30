@@ -10,7 +10,8 @@ function setup(){
  const session={id:'s',messages,transportMessages:[],dailyDigests:[],cacheLastReadAt:now-7200000};
  const cfg={dailyDigestEnabled:true,panelKey:'fixture',dailyDigestRetentionDays:3};
  const ctx={console,Set,Map,Promise,AbortController,setTimeout,clearTimeout,setInterval,clearInterval,
- Date:class extends Date{static now(){return now}},CHAT_HISTORY_TOOLS:history,CHAT_AUTO_TRIM_IDLE_MS:3600000,CHAT_DAILY_DIGEST_TIMEOUT_MS:90000,CHAT_MAX_TRANSPORT_MESSAGES:0,
+ Date:class extends Date{static now(){return now}},CHAT_HISTORY_TOOLS:history,CKChatHistory:history,CHAT_AUTO_TRIM_IDLE_MS:3600000,CHAT_DAILY_DIGEST_TIMEOUT_MS:90000,CHAT_MAX_TRANSPORT_MESSAGES:0,
+ chatSplitThinkingText:text=>({text}),document:{getElementById:()=>null},
  chatMessages:messages,chatEditingIndex:-1,chatSessions:[session],chatTrimTransaction:null,chatDailyDigestChain:Promise.resolve(),
  chatCurrentSession:()=>session,chatDailyDigestFindSession:id=>ctx.chatSessions.find(s=>s.id===id),chatLoadConfig:()=>cfg,
  chatAutoTrimConfigFrom:()=>({enabled:true,keep:2,roundLimitEnabled:false,roundLimit:10}),
@@ -24,7 +25,9 @@ function setup(){
  fetch:async(url,opts)=>{requests.push({url,body:JSON.parse(opts.body),signal:opts.signal});return await new Promise(r=>{finish=r})}
  };
  vm.createContext(ctx);
- ['chatAutoTrimRoundCount','chatTimeReminderContext','chatPlanAutoTrimForPendingBatch','chatDailyDigestScheduleForTrim','chatAwaitTrimDigest','chatDailyDigestRequest','chatCommitAutoTrimPlan','chatApplyAutoTrimForPendingBatch'].forEach(n=>vm.runInContext(extract(n),ctx));
+ vm.runInContext(fs.readFileSync(require.resolve('../chat-digest.js'),'utf8'),ctx);
+ ctx.chatRenderDailyDigest=()=>{};ctx.chatDailyDigestSetStatus=()=>{};ctx.chatDailyDigestEndpoint=()=>'/digest';
+ ['chatAutoTrimRoundCount','chatTimeReminderContext','chatPlanAutoTrimForPendingBatch','chatCommitAutoTrimPlan','chatApplyAutoTrimForPendingBatch'].forEach(n=>vm.runInContext(extract(n),ctx));
  return {ctx,cfg,session,requests,advance:ms=>{now+=ms},reply:data=>finish({ok:true,json:async()=>data}),run:(state=null,opts={idleCheck:true})=>ctx.chatApplyAutoTrimForPendingBatch(cfg,[],state,opts)};
 }
 test('slow summary is a barrier; history and prefix change together exactly once',async()=>{

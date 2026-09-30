@@ -7,7 +7,7 @@ const chrome=process.env.CK_CHROME||'C:\\Program Files\\Google\\Chrome\\Applicat
 if(!fs.existsSync(chrome)){console.log('settings browser: SKIP (Chrome unavailable)');process.exit(0)}
 fs.mkdirSync(out,{recursive:true});
 for(const name of fs.readdirSync(root))if(name.endsWith('.css'))fs.copyFileSync(path.join(root,name),path.join(out,name));
-fs.writeFileSync(path.join(out,'runtime.js'),fs.readFileSync(path.join(root,'script.js'),'utf8').replace(/^init\(\);\s*$/m,''));
+fs.writeFileSync(path.join(out,'runtime.js'),['chat-ui.js','chat-history.js','chat-digest.js','script.js'].map(name=>fs.readFileSync(path.join(root,name),'utf8').replace(/^init\(\);\s*$/m,'')).join('\n'));
 let base=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[\s\S]*?<\/script>/g,'');
 const probe=String.raw`
 window.addEventListener('load',function(){
@@ -45,10 +45,11 @@ try{
   check(document.querySelectorAll('#chat-plus-grid>button').length===20,'Missing tray buttons');
   for(const key of ['model','thinking','worldbook','digest','memory']){
     chatOpenSettingTab(key);
-    check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=(key==='worldbook'?240:300),'Text editor too small '+key);
+    check(document.getElementById(destinations[key]==='chat-thinking-mode'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]).getBoundingClientRect().height>=(key==='worldbook'?240:key==='digest'?220:300),'Text editor too small '+key);
   }
   document.getElementById('chat-system').value='完整提示词\n'+('编辑正文，不应截断。\n'.repeat(100));
   const systemDraft=document.getElementById('chat-system').value;
+  chatStorePrompt('system',systemDraft,true);
   chatSaveConfig(true);chatWriteForm(chatLoadConfig());
   check(document.getElementById('chat-system').value===systemDraft,'Long prompt save lost text');
   check([...document.querySelectorAll('.chat-setting-help')].every(x=>!x.open),'Explanations must start collapsed');
@@ -76,7 +77,9 @@ try{
   check(chatLoadConfig().timeInjectionEveryRounds===7,'Time save failed');
   chatOpenSettingTab('digest');
   document.getElementById('chat-daily-digest-retention-days').value='3';
-  document.getElementById('chat-daily-digest-retention-days').dispatchEvent(new Event('change'));
+  document.getElementById('chat-digest-detail-days').value='1';
+  document.getElementById('chat-digest-rollup-days').value='2';
+  chatSaveDailyDigestSetting();
   check(chatLoadConfig().dailyDigestRetentionDays===3,'Digest save failed after move');
   chatWriteForm(chatLoadConfig());
   check(document.getElementById('chat-time-injection-every-rounds').value==='7','Saved time not restored');

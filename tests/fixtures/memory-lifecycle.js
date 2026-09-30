@@ -15,8 +15,8 @@
  let hydrate,finish;chatEnsureSessionsReady=()=>new Promise(r=>hydrate=r);chatDailyDigestChain=new Promise(r=>finish=r);
  const creating=chatNewSession();await Promise.resolve();check(chatSessions.length===2,'Created before hydration');hydrate();await tick();check(chatSessions.length===2,'Did not wait for pending digest');
  chatSessions[0].dailyDigests.push(Object.assign(entry('d2','晚到的总结'),{startTs:now-86400000}));finish();await creating;
- check(chatCurrentSession().dailyDigests.length===2,'Inheritance from another window lost summaries');
- check(chatCurrentSession().dailyDigests.some(d=>d.text==='晚到的总结'),'Pending summary not inherited');chatCurrentSession().dailyDigests[0].text='独立修改';check(chatSessions.find(s=>s.id==='small').dailyDigests.every(d=>d.text!=='独立修改'),'Inherited summary shares references');
+ check(chatCurrentSession().dailyDigests.length===1,'Same ending date must be inherited as one daily summary');
+ check(chatCurrentSession().dailyDigests[0].text.includes('晚到的总结')&&chatCurrentSession().dailyDigests[0].text.includes('今天的约定'),'Pending or earlier summary content not inherited');chatCurrentSession().dailyDigests[0].text='独立修改';check(chatSessions.find(s=>s.id==='small').dailyDigests.every(d=>d.text!=='独立修改'),'Inherited summary shares references');
  chatEnsureSessionsReady=()=>Promise.resolve(chatSessions);
  cfg=chatLoadConfig();cfg.newSessionDigestSyncEnabled=false;chatSaveConfigObject(cfg);chatWriteForm(cfg);await chatNewSession();check(chatCurrentSession().dailyDigests.length===0,'Disabled inheritance still copied');
  // Per-window recall persists through config saves, hydration and latest empty turns.
@@ -41,5 +41,5 @@
  document.getElementById('chat-worldbook-content').value=cfg.worldbooks[0].content;chatWorldbookContentCount();
  const panel=document.getElementById('chat-side-worldbook');check(panel.scrollWidth<=panel.clientWidth+1,'Worldbook overflows horizontally');
  for(const id of ['chat-worldbook-name','chat-worldbook-content','chat-worldbook-select']){const r=document.getElementById(id).getBoundingClientRect();check(r.width>150&&r.right<=innerWidth&&r.left>=0,'Clipped control '+id)}
- return {inherited:2,recallIsolated:true,toggleClear:true,worldbooks:100,width:innerWidth};
+ return {inheritedPassages:2,inheritedDays:1,recallIsolated:true,toggleClear:true,worldbooks:100,width:innerWidth};
 })()

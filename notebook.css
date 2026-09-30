@@ -299,7 +299,21 @@ body.chat-active .chat-drawer :is(button,input):focus-visible{outline:2px solid 
   body.chat-active .chat-shell .chat-drawer,body.chat-active .chat-drawer .chat-folder-chevron{transition:none!important}
 }
 /* 备用稿和归位回执沿用当前设置页的纸张、边线和状态色。 */
-.chat-prompt-standby{margin-top:18px;padding-top:16px;border-top:1px dashed var(--nb-line,#d8d5e4)}
+.chat-prompt-standby,.chat-digest-reserve{margin:14px 0 20px;padding:12px 14px;border:1px dashed var(--nb-line,#d8d5e4);border-radius:12px}
+.chat-prompt-standby>summary,.chat-digest-reserve>summary{font-size:13px;font-weight:650;cursor:pointer;line-height:1.7}
+.chat-prompt-standby[open]>summary,.chat-digest-reserve[open]>summary{margin-bottom:16px}
+.chat-digest-reserve>summary small{display:block;font-size:11px;font-weight:400;color:var(--text-secondary);padding-left:14px}
+.chat-field-count{display:block;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;font-weight:400;opacity:.7;margin-top:5px}
+.chat-digest-days{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.chat-digest-days label{min-width:0;font-size:12px!important}
+.chat-digest-days input{width:100%;min-width:0}
+.chat-digest-reserve .chat-actions{margin-bottom:18px}
+.chat-digest-reserve textarea{max-width:100%}
+#chat-digest-range-hint.error{color:var(--danger,#b74f53)}
+#chat-side-digest textarea[readonly],#chat-system[readonly],#chat-thinking-prompt[readonly]{cursor:text}
+#chat-system-standby,#chat-thinking-standby,#chat-digest-today,#chat-digest-rollup{height:clamp(180px,28vh,280px)!important;min-height:180px!important}
+#chat-digest-detail{height:clamp(220px,36vh,360px)!important;min-height:220px!important}
+#chat-daily-digest-pack{height:clamp(220px,32vh,320px)!important;min-height:220px!important}
 .chat-prompt-sync-status{margin:10px 0 4px;padding:10px 12px;border-left:3px solid currentColor;border-radius:4px;font-size:12px;line-height:1.7;overflow-wrap:anywhere;color:var(--nb-muted,#767184)}
 .chat-prompt-sync-status[data-state="success"]{color:var(--chat5-accent,#39755e)}
 .chat-prompt-sync-status[data-state="error"]{color:#b64b5d}

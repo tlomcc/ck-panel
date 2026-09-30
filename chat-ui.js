@@ -63,6 +63,7 @@ var chatSearchTimer=0,chatSearchGeneration=0,chatSearchTextCache=new WeakMap();
 function chatToggleSearch(force){
   var box=document.getElementById('chat-search');if(!box)return;
   var open=typeof force==='boolean'?force:box.hidden;
+  if(open&&chatLoadConfig().searchEnabled===false)open=false;
   box.hidden=!open;
   document.getElementById('chat-search-toggle').setAttribute('aria-expanded',String(open));
   if(open){document.getElementById('chat-search-input').focus({preventScroll:true});chatSearchMessages()}
@@ -139,6 +140,12 @@ function chatSetActionMode(mode){
   try{localStorage.setItem('ck_chat_action_mode',mode)}catch(e){}
   chatSyncActionControls();chatRenderMessages({respectUserScroll:true,preservePosition:true});
   chatRestoreActionScroll(position);
+}
+function chatRenderSearchSetting(cfg){
+  var enabled=(cfg||chatLoadConfig()).searchEnabled!==false;
+  var button=document.getElementById('chat-search-toggle');
+  if(button)button.hidden=!enabled;
+  if(!enabled)chatResetSearch();
 }
 function chatCaptureActionScroll(){
   var box=chatMessagesBox();if(!box)return null;

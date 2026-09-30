@@ -3,7 +3,7 @@ var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v252-time-reminders-and-trim-alert';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v253-rolling-summary-prompt-controls';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2465,6 +2465,9 @@ function chatDefaultConfig(){
     systemPromptStandbySyncedAt:0,
     ncContextInjection:true,
     timeInjectionEveryRounds:1,
+    minimalTimeEnabled:false,
+    minimalTimeCleanEachRound:false,
+    searchEnabled:true,
     backendSwitchNotification:true,
     recall:true,
     recallMode:'fact_only',
@@ -2473,6 +2476,8 @@ function chatDefaultConfig(){
     thinkingMode:'off',
     thinkingBudgetTokens:4096,
     thinkingPrompt:chatDefaultThinkingPrompt(),
+    thinkingPromptStandby:'',
+    thinkingPromptStandbySyncedAt:0,
     thinkingPromptEnabled:true,
     fakeThinking:false,
     fakeThinkingPrompt:chatDefaultThinkingPrompt(),
@@ -2507,7 +2512,9 @@ function chatDefaultConfig(){
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
-    dailyDigestRetentionDays:0,
+    dailyDigestRetentionDays:7,
+    dailyDigestDetailDays:3,
+    dailyDigestRollupDays:4,
     newSessionDigestSyncEnabled:true,
     costPricing:chatDefaultCostPricing(),
     costPricingDefaults:[],
@@ -2566,7 +2573,7 @@ function chatRenderThinkingControls(cfg){
   chatSetFieldChecked('chat-retain-image-turn-thinking',cfg.retainImageTurnThinking===true);
   chatRenderCurrentThinking();
   var prompt=document.getElementById('chat-thinking-prompt');
-  if(prompt)prompt.disabled=mode==='off'||cfg.thinkingPromptEnabled===false;
+  if(prompt){prompt.readOnly=true;prompt.disabled=false;}
   chatSetFieldChecked('chat-thinking-prompt-enabled',cfg.thinkingPromptEnabled!==false);
   var position=document.getElementById('chat-thinking-injection-position');
   if(position)position.disabled=mode!=='compat';
@@ -2970,50 +2977,108 @@ function chatSystemPromptCacheWait(cfg,now){
   });
   return {until:until,count:count};
 }
-function chatRenderSystemPromptStandby(cfg,message,kind){
-  var status=document.getElementById('chat-system-standby-status');if(!status)return;
+var chatPromptDraftDirty={system:false,thinking:false};
+function chatPromptFields(kind){
+  return kind==='thinking'
+    ?{key:'thinkingPrompt',draft:'thinkingPromptStandby',stamp:'thinkingPromptStandbySyncedAt',main:'chat-thinking-prompt',input:'chat-thinking-standby',label:'思考提示词'}
+    :{key:'system',draft:'systemPromptStandby',stamp:'systemPromptStandbySyncedAt',main:'chat-system',input:'chat-system-standby',label:'系统提示词'};
+}
+function chatRenderPromptCounts(){
+  ['chat-system','chat-system-standby','chat-thinking-prompt','chat-thinking-standby'].forEach(function(id){
+    var field=document.getElementById(id),count=document.getElementById(id+'-count');
+    if(field&&count)count.textContent='当前 '+Array.from(String(field.value||'')).length+' 字';
+  });
+}
+function chatRenderPromptStandby(kind,cfg,message,state){
+  var fields=chatPromptFields(kind),status=document.getElementById(fields.input+'-status');
+  chatRenderPromptCounts();
+  if(!status)return;
   cfg=cfg||chatLoadConfig();
-  var standby=String(cfg.systemPromptStandby||'');
+  var standby=String(cfg[fields.draft]||'');
   if(!message){
-    if(!standby.trim())message='备用框为空，不会自动替换系统提示词。';
-    else if(standby===String(cfg.system||'')){
-      message='归位成功 · 两框内容一致，备用框已保留。';kind='success';
-      if(cfg.systemPromptStandbySyncedAt)message+=' '+new Date(cfg.systemPromptStandbySyncedAt).toLocaleString('zh-CN',{hour12:false});
+    if(chatPromptDraftDirty[kind]){message='备选框有未保存的修改。';state='pending';}
+    else if(standby===String(cfg[fields.key]||'')){
+      message='同步成功 · 两框内容一致，备选内容已保留。';state='success';
+      if(cfg[fields.stamp])message+=' '+new Date(cfg[fields.stamp]).toLocaleString('zh-CN',{hour12:false});
+    }else if(!standby.trim()){
+      message='备选框为空，不会自动清空正式提示词；需要清空时请点「立即同步」。';
     }else{
       var wait=chatSystemPromptCacheWait(cfg,Date.now());
-      message=wait.count?'等待缓存到期 · '+wait.count+' 个窗口，最早 '+new Date(wait.until).toLocaleString('zh-CN',{hour12:false})+' 归位。':'已保存，等待空闲时检查归位。';
-      kind='pending';
+      message=wait.count?'等待缓存到期 · '+wait.count+' 个窗口，最早 '+new Date(wait.until).toLocaleString('zh-CN',{hour12:false})+' 同步。':'已保存，等待空闲时自动同步。';
+      state='pending';
     }
   }
   if(status.textContent!==message)status.textContent=message;
-  status.dataset.state=kind||'';
+  status.dataset.state=state||'';
+}
+function chatRenderSystemPromptStandby(cfg,message,kind){
+  chatRenderPromptStandby('system',cfg,message,kind);
+  chatRenderPromptStandby('thinking',cfg);
+}
+function chatPromptStandbyEdited(kind){
+  chatPromptDraftDirty[kind]=true;
+  chatRenderPromptStandby(kind,null,'备选框有未保存的修改。保存后等待自动同步，或直接点「立即同步」。','pending');
 }
 function chatSystemPromptStandbyEdited(){
-  chatRenderSystemPromptStandby(null,'备用框有未保存的修改，点“保存提示词”后等待归位。','pending');
+  chatPromptStandbyEdited('system');
 }
-function chatMaybeSyncSystemPrompt(options){
-  options=options||{};
-  var cfg=chatLoadConfig(),standby=String(cfg.systemPromptStandby||'');
-  var main=document.getElementById('chat-system'),draft=document.getElementById('chat-system-standby');
-  if((main&&main.value!==String(cfg.system||''))||(draft&&draft.value!==standby)){
-    chatRenderSystemPromptStandby(cfg,'有未保存的提示词修改，保存后再检查归位。','pending');return false;
+function chatThinkingPromptStandbyEdited(){
+  chatPromptStandbyEdited('thinking');
+}
+function chatStorePrompt(kind,text,promote){
+  var fields=chatPromptFields(kind),cfg=chatLoadConfig();
+  cfg[fields.draft]=text;
+  if(promote){
+    cfg[fields.key]=text;cfg[fields.stamp]=Date.now();
+    if(kind==='thinking')cfg.fakeThinkingPrompt=text;
   }
-  if(!standby.trim()||standby===String(cfg.system||'')){chatRenderSystemPromptStandby(cfg);return false}
-  if(!chatSessionsReady||(chatSending&&!options.beforeRequest)||chatTrimBusy||chatTrimTransaction){
-    chatRenderSystemPromptStandby(cfg,'等待当前任务完成后检查归位。','pending');return false;
-  }
-  var now=Date.now(),wait=chatSystemPromptCacheWait(cfg,now);
-  if(wait.until>now){chatRenderSystemPromptStandby(cfg);return false}
-  cfg.system=standby;cfg.systemPromptStandbySyncedAt=now;
   chatSaveConfigObject(cfg);
   var stored;
   try{stored=JSON.parse(localStorage.getItem(CHAT_CONFIG_KEY)||'{}')}catch(e){}
-  if(!stored||stored.system!==standby||stored.systemPromptStandby!==standby){
-    chatRenderSystemPromptStandby(cfg,'归位未成功：本地保存失败，下一次检查会重试。','error');return false;
+  if(!stored||stored[fields.draft]!==text||(promote&&stored[fields.key]!==text)){
+    chatRenderPromptStandby(kind,cfg,'保存未成功：本地存储不可用，请重试。','error');return false;
   }
-  if(main)main.value=standby;
-  chatRenderSystemPromptStandby(cfg);
+  chatPromptDraftDirty[kind]=false;
+  if(promote)chatSetFieldValue(fields.main,text);
+  chatRenderPromptStandby(kind,cfg);
   return true;
+}
+function chatSavePromptStandby(kind){
+  var fields=chatPromptFields(kind),input=document.getElementById(fields.input);
+  if(!input||!chatStorePrompt(kind,String(input.value||''),false))return false;
+  chatMaybeSyncPrompt(kind);
+  toast(fields.label+'备选内容已保存');
+  return true;
+}
+async function chatSyncPromptNow(kind){
+  var fields=chatPromptFields(kind),input=document.getElementById(fields.input);
+  if(!input)return false;
+  var text=String(input.value||'');
+  var confirmed=await ckConfirmDialog('是否将备选内容立即同步到正式'+fields.label+'？'+(!text.trim()?'同步后正式提示词将为空。':'')+'确认后立即保存并生效，无需等待缓存到期。',{title:'同步'+fields.label,confirmText:'立即同步',cancelText:'取消'});
+  if(!confirmed)return false;
+  if(input.value!==text){toast('备选内容已变化，请重新确认同步');return false;}
+  if(!chatStorePrompt(kind,text,true))return false;
+  toast(fields.label+'已同步');return true;
+}
+function chatMaybeSyncPrompt(kind,options){
+  options=options||{};
+  var fields=chatPromptFields(kind),cfg=chatLoadConfig(),standby=String(cfg[fields.draft]||'');
+  var draft=document.getElementById(fields.input);
+  if(chatPromptDraftDirty[kind]||(draft&&draft.value!==standby)){
+    chatRenderPromptStandby(kind,cfg,'有未保存的备选内容，保存后再检查同步。','pending');return false;
+  }
+  if(!standby.trim()||standby===String(cfg[fields.key]||'')){chatRenderPromptStandby(kind,cfg);return false}
+  if(!chatSessionsReady||(chatSending&&!options.beforeRequest)||chatTrimBusy||chatTrimTransaction){
+    chatRenderPromptStandby(kind,cfg,'等待当前任务完成后检查同步。','pending');return false;
+  }
+  var now=Date.now(),wait=chatSystemPromptCacheWait(cfg,now);
+  if(wait.until>now){chatRenderPromptStandby(kind,cfg);return false}
+  return chatStorePrompt(kind,standby,true);
+}
+function chatMaybeSyncSystemPrompt(options){
+  var system=chatMaybeSyncPrompt('system',options);
+  var thinking=chatMaybeSyncPrompt('thinking',options);
+  return system||thinking;
 }
 function chatRequestUpstreamFormat(cfg,cacheStrategy){
   var strategy=chatNormalizeCacheStrategy(cacheStrategy);
@@ -3346,6 +3411,11 @@ function chatLoadConfig(){
         Object.prototype.hasOwnProperty.call(saved||{},'autoCleanRounds'))cfg.autoCleanMode='rounds';
     }
   }catch(e){}
+  if(saved&&!Object.prototype.hasOwnProperty.call(saved,'dailyDigestDetailDays')){
+    cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(saved.dailyDigestRetentionDays);
+    cfg.dailyDigestDetailDays=Math.min(3,cfg.dailyDigestRetentionDays);
+    cfg.dailyDigestRollupDays=cfg.dailyDigestRetentionDays-cfg.dailyDigestDetailDays;
+  }
   cfg.panelKey=storedPanelKey();
   try{
     var savedCacheStrategy=localStorage.getItem(CHAT_CACHE_STRATEGY_KEY);
@@ -3384,6 +3454,7 @@ function chatLoadConfig(){
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
   cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
+  var digestOptions=chatDigestOptions(cfg);cfg.dailyDigestDetailDays=digestOptions.x;cfg.dailyDigestRollupDays=digestOptions.y;
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.gatewayInternalRetryEnabled=cfg.gatewayInternalRetryEnabled===true;
   cfg.gatewayInternalRetryMax=Math.max(0,Math.min(5,Math.round(Number(cfg.gatewayInternalRetryMax)||0)));
@@ -3470,6 +3541,7 @@ function chatSaveConfigObject(cfg){
   cfg.autoCleanRounds=autoCleanSave.rounds;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
   cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
+  var digestOptions=chatDigestOptions(cfg);cfg.dailyDigestDetailDays=digestOptions.x;cfg.dailyDigestRollupDays=digestOptions.y;
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.allowFourthCacheBreakpoint=cfg.allowFourthCacheBreakpoint===true;
@@ -4200,6 +4272,10 @@ function chatNormalizeSession(s){
     lastChatActivityAt:Number(s.lastChatActivityAt)||0,
     timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
+    digestRollup:chatNormalizeDigestRollup(s.digestRollup),
+    digestOmittedCovered:chatDigestOmittedCoverage(s.digestOmittedCovered),
+    digestCheckedDay:String(s.digestCheckedDay||''),
+    digestRetryAfter:Number(s.digestRetryAfter)||0,
     latestRecall:s.latestRecall&&typeof s.latestRecall==='object'?JSON.parse(JSON.stringify(s.latestRecall)):null,
     apiProviderId:String(s.apiProviderId||'').trim(),
     apiModel:String(s.apiModel||'').trim(),
@@ -4371,12 +4447,15 @@ function chatReadForm(){
     upstreamKey:'',
     model:'',
     sessionId:String(chatFieldValue('chat-session-id',saved.sessionId||chatSessionId())||saved.sessionId||chatSessionId()),
-    system:chatFieldValue('chat-system',saved.system||'')||'',
+    system:String(saved.system||''),
     systemPromptEnabled:chatFieldChecked('chat-system-enabled',saved.systemPromptEnabled!==false),
-    systemPromptStandby:chatFieldValue('chat-system-standby',saved.systemPromptStandby||''),
+    systemPromptStandby:String(saved.systemPromptStandby||''),
     systemPromptStandbySyncedAt:Number(saved.systemPromptStandbySyncedAt)||0,
     ncContextInjection:chatFieldChecked('chat-nc-context-injection',saved.ncContextInjection!==false),
     timeInjectionEveryRounds:chatNormalizeTimeInjectionEveryRounds(chatFieldValue('chat-time-injection-every-rounds',saved.timeInjectionEveryRounds)),
+    minimalTimeEnabled:chatFieldChecked('chat-minimal-time-enabled',saved.minimalTimeEnabled===true),
+    minimalTimeCleanEachRound:chatFieldChecked('chat-minimal-time-clean-each-round',saved.minimalTimeCleanEachRound===true),
+    searchEnabled:chatFieldChecked('chat-search-enabled',saved.searchEnabled!==false),
     backendSwitchNotification:chatFieldChecked('chat-backend-switch-notification',saved.backendSwitchNotification!==false),
     recall:chatFieldChecked('chat-recall-enabled',saved.recall!==false),
     recallMode:chatRecallModeFromForm(saved.recallMode),
@@ -4389,10 +4468,12 @@ function chatReadForm(){
     thinkingBudgetTokens:chatNormalizeThinkingBudget(
       chatFieldValue('chat-thinking-budget',saved.thinkingBudgetTokens||4096)
     ),
-    thinkingPrompt:chatFieldValue('chat-thinking-prompt',chatThinkingPromptValue(saved)),
+    thinkingPrompt:chatThinkingPromptValue(saved),
+    thinkingPromptStandby:String(saved.thinkingPromptStandby||''),
+    thinkingPromptStandbySyncedAt:Number(saved.thinkingPromptStandbySyncedAt)||0,
     thinkingPromptEnabled:chatFieldChecked('chat-thinking-prompt-enabled',saved.thinkingPromptEnabled!==false),
     fakeThinking:false,
-    fakeThinkingPrompt:chatFieldValue('chat-thinking-prompt',chatThinkingPromptValue(saved)),
+    fakeThinkingPrompt:chatThinkingPromptValue(saved),
     nativeThinkingVisible:chatFieldChecked('chat-native-thinking-visible',saved.nativeThinkingVisible!==false),
     retainNativeThinkingHistory:chatFieldChecked('chat-retain-native-thinking-history',saved.retainNativeThinkingHistory!==false),
     retainPseudoThinkingHistory:chatFieldChecked('chat-retain-pseudo-thinking-history',saved.retainPseudoThinkingHistory!==false),
@@ -4434,7 +4515,9 @@ function chatReadForm(){
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
-    dailyDigestRetentionDays:chatDailyDigestRetentionDays(chatFieldValue('chat-daily-digest-retention-days',saved.dailyDigestRetentionDays)),
+    dailyDigestRetentionDays:chatDigestOptions(saved).n,
+    dailyDigestDetailDays:chatDigestOptions(saved).x,
+    dailyDigestRollupDays:chatDigestOptions(saved).y,
     newSessionDigestSyncEnabled:chatFieldChecked('chat-new-session-digest-sync',saved.newSessionDigestSyncEnabled!==false),
     costPricing:chatReadCostPricing(saved.costPricing),
     costPricingDefaults:chatReadCostDefaults(saved.costPricingDefaults),
@@ -4456,11 +4539,16 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-session-id',cfg.sessionId||chatSessionId());
   chatSetFieldValue('chat-system',cfg.system||'');
   chatSetFieldChecked('chat-system-enabled',cfg.systemPromptEnabled!==false);
-  chatSetFieldValue('chat-system-standby',cfg.systemPromptStandby||'');
+  if(!chatPromptDraftDirty.system)chatSetFieldValue('chat-system-standby',cfg.systemPromptStandby||'');
+  if(!chatPromptDraftDirty.thinking)chatSetFieldValue('chat-thinking-standby',cfg.thinkingPromptStandby||'');
   chatRenderSystemPromptStandby(cfg);
   chatSetFieldChecked('chat-thinking-prompt-enabled',cfg.thinkingPromptEnabled!==false);
   chatSetFieldChecked('chat-nc-context-injection',cfg.ncContextInjection!==false);
   chatSetFieldValue('chat-time-injection-every-rounds',chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds));
+  chatSetFieldChecked('chat-minimal-time-enabled',cfg.minimalTimeEnabled===true);
+  chatSetFieldChecked('chat-minimal-time-clean-each-round',cfg.minimalTimeCleanEachRound===true);
+  chatSetFieldChecked('chat-search-enabled',cfg.searchEnabled!==false);
+  chatRenderSearchSetting(cfg);
   chatSetFieldChecked('chat-backend-switch-notification',cfg.backendSwitchNotification!==false);
   chatRenderSessionRecall();
   chatSetFieldChecked('chat-recall-enabled',cfg.recall!==false);
@@ -4469,6 +4557,7 @@ function chatWriteForm(cfg){
   chatSetFieldValue('chat-recall-recent-rounds',chatNormalizeRecallRecentRounds(cfg.recallRecentRounds));
   chatRenderThinkingControls(cfg);
   if(document.getElementById('chat-thinking-prompt'))document.getElementById('chat-thinking-prompt').value=chatThinkingPromptValue(cfg);
+  chatRenderPromptCounts();
   if(document.getElementById('chat-native-thinking-visible'))document.getElementById('chat-native-thinking-visible').checked=cfg.nativeThinkingVisible!==false;
   chatSetFieldChecked('chat-retain-native-thinking-history',cfg.retainNativeThinkingHistory!==false);
   chatSetFieldChecked('chat-retain-pseudo-thinking-history',cfg.retainPseudoThinkingHistory!==false);
@@ -4627,12 +4716,14 @@ function chatSaveConfig(silent){
   chatRenderBackendSwitchNotificationState();
   chatRenderThinkingControls(cfg);
   chatRenderCostPricingModeHint(cfg.costPricing&&cfg.costPricing.mode);
+  chatRenderSearchSetting(cfg);
   chatRenderDailyDigest(cfg);
   chatRenderAutoCleanState(cfg);
   chatRenderDebugRecords();
   chatRenderSystemPromptStandby(cfg);
   if(!chatSending&&chatMaybeSyncSystemPrompt()){
-    var synced=chatLoadConfig();cfg.system=synced.system;cfg.systemPromptStandbySyncedAt=synced.systemPromptStandbySyncedAt;
+    var synced=chatLoadConfig();
+    ['system','systemPromptStandbySyncedAt','thinkingPrompt','fakeThinkingPrompt','thinkingPromptStandbySyncedAt'].forEach(function(key){cfg[key]=synced[key]});
   }
   if(!silent)toast('聊天配置已保存');
   return cfg;
@@ -6383,6 +6474,10 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     lastChatActivityAt:Number(s.lastChatActivityAt)||0,
     timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
       dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
+    digestRollup:chatNormalizeDigestRollup(s.digestRollup),
+    digestOmittedCovered:chatDigestOmittedCoverage(s.digestOmittedCovered),
+    digestCheckedDay:String(s.digestCheckedDay||''),
+    digestRetryAfter:Number(s.digestRetryAfter)||0,
       latestRecall:s.latestRecall&&typeof s.latestRecall==='object'?JSON.parse(JSON.stringify(s.latestRecall)):null,
       apiProviderId:String(s.apiProviderId||'').trim(),
       apiModel:String(s.apiModel||'').trim(),
@@ -6947,542 +7042,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     forceCacheRebuild:pendingBoundary||drop>0,
   };
 }
-// ===== 按日期保留的截断总结 =====
-// 截断把最旧的完整真实轮次从上下文里删掉，这里负责让助手仍然记得刚才聊了什么、
-// 当时是什么气氛。生成在网关（无状态的 /ck/chat-digest/prepare），存储和有效期在这里，
-// 因为只有面板知道用户本地时钟的自然日边界。
-// 保留今天及之前 N 个自然日；跨日期批次按结束日期过期，始终独立于每日总结。
-function chatDailyDigestRetentionDays(value){
-  var days=Number(value);
-  return isFinite(days)?Math.max(0,Math.min(100,Math.floor(days))):0;
-}
-function chatDailyDigestFirstDay(dayKey,days){
-  var parts=String(dayKey||'').split('-').map(Number);
-  var date=new Date(parts[0],parts[1]-1,parts[2],12);
-  date.setDate(date.getDate()-chatDailyDigestRetentionDays(days));
-  return chatDailyDigestDayKey(date.getTime());
-}
-function chatDailyDigestPad2(value){
-  value=Math.floor(Number(value)||0);
-  return (value<10?'0':'')+value;
-}
-function chatDailyDigestDayKey(ts){
-  var value=Number(ts||0)||0;
-  if(value<=0)return '';
-  var d=new Date(value);
-  if(isNaN(d.getTime()))return '';
-  return d.getFullYear()+'-'+chatDailyDigestPad2(d.getMonth()+1)+'-'+chatDailyDigestPad2(d.getDate());
-}
-function chatDailyDigestClock(ts){
-  var value=Number(ts||0)||0;
-  if(value<=0)return '??:??';
-  var d=new Date(value);
-  if(isNaN(d.getTime()))return '??:??';
-  return chatDailyDigestPad2(d.getHours())+':'+chatDailyDigestPad2(d.getMinutes());
-}
-// 条目标签必须带具体时间，后续作废和合并都靠它认人。
-// 起止跨了自然日时把起始那天的日期也写出来，让"昨夜到今晨"那一条一眼可辨。
-function chatDailyDigestRangeLabel(entry){
-  entry=entry||{};
-  var startTs=Number(entry.startTs||0)||0;
-  var endTs=Number(entry.endTs||0)||0;
-  var startDay=chatDailyDigestDayKey(startTs);
-  var endDay=chatDailyDigestDayKey(endTs);
-  return (startDay||entry.dayKey||'日期未知')+' '+chatDailyDigestClock(startTs)+'-'+
-    (startDay!==endDay?(endDay+' '):'')+chatDailyDigestClock(endTs);
-}
-function chatDailyDigestNormalize(list){
-  var out=[];
-  (Array.isArray(list)?list:[]).forEach(function(row){
-    if(!row||typeof row!=='object')return;
-    var text=String(row.text||'').trim();
-    if(!text)return;
-    var endTs=Number(row.endTs!==undefined?row.endTs:row.end_ts)||0;
-    var startTs=Number(row.startTs!==undefined?row.startTs:row.start_ts)||endTs;
-    var dayKey=chatDailyDigestDayKey(endTs)||String(row.dayKey||row.day_key||'');
-    if(!dayKey)return;
-    out.push({
-      id:String(row.id||('dg-'+endTs+'-'+Math.random().toString(36).slice(2,7))),
-      startTs:startTs,
-      endTs:endTs,
-      dayKey:dayKey,
-      kind:chatDailyDigestDayKey(startTs)!==dayKey?'cross_date':'daily',
-      text:text,
-      rounds:Number(row.rounds||0)||0,
-      mergedCount:Number(row.mergedCount||row.merged_count||0)||0,
-      trigger:String(row.trigger||''),
-      // 用户在记忆块里手改过的条目要留标记：注入的是他改后的版本，界面上也得说清楚。
-      edited:row.edited===true||row.edited==='true',
-      createdAt:Number(row.createdAt||row.created_at||0)||0
-    });
-  });
-  out.sort(function(a,b){return (a.endTs||0)-(b.endTs||0)||(a.createdAt||0)-(b.createdAt||0)});
-  // 兼容旧存档同日多条：完整拼接成一个日段，不丢正文；跨日期段各自保留。
-  var grouped=[],days={};
-  out.forEach(function(row){
-    var previous=row.kind==='daily'?days[row.dayKey]:null;
-    if(previous){
-      previous.text+='\n\n'+row.text;
-      previous.startTs=Math.min(previous.startTs,row.startTs);
-      previous.endTs=Math.max(previous.endTs,row.endTs);
-      previous.rounds+=row.rounds;
-      previous.mergedCount+=row.mergedCount+1;
-      previous.edited=previous.edited||row.edited;
-    }else{
-      grouped.push(row);
-      if(row.kind==='daily')days[row.dayKey]=row;
-    }
-  });
-  grouped.sort(function(a,b){return a.startTs-b.startTs||a.endTs-b.endTs});
-  return grouped;
-}
-function chatDailyDigestKeepDay(list,dayKey){
-  dayKey=String(dayKey||'');
-  if(!dayKey)return [];
-  return chatDailyDigestNormalize(list).filter(function(row){return row.dayKey===dayKey});
-}
-function chatDailyDigestEntries(session,dayKey,cfg){
-  session=session||chatCurrentSession();
-  if(!session)return [];
-  cfg=cfg||chatLoadConfig();
-  dayKey=dayKey||chatDailyDigestDayKey(Date.now());
-  var firstDay=chatDailyDigestFirstDay(dayKey,cfg.dailyDigestRetentionDays);
-  return chatDailyDigestNormalize(session.dailyDigests).filter(function(row){
-    return row.dayKey>=firstDay&&row.dayKey<=dayKey;
-  });
-}
-function chatNewSessionDigestSource(cfg,preferred){
-  var sources=(chatSessions||[]).filter(function(session){
-    return String(session.title||'').trim()===CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE&&chatDailyDigestEntries(session,null,cfg).length;
-  });
-  if(preferred&&sources.some(function(session){return session.id===preferred.id}))return preferred;
-  sources.sort(function(a,b){return (b.updated||b.created||0)-(a.updated||a.created||0)});
-  return sources[0]||null;
-}
-function chatNewSessionDailyDigests(cfg,sourceSession){
-  cfg=cfg||chatLoadConfig();
-  if(cfg.newSessionDigestSyncEnabled===false)return [];
-  sourceSession=chatNewSessionDigestSource(cfg,sourceSession);
-  if(!sourceSession)return [];
-  return chatDailyDigestEntries(sourceSession,null,cfg).map(function(entry){return JSON.parse(JSON.stringify(entry))});
-}
-// 过期边界始终以当前自然日计算，不因晚到的旧日总结而向过去移动。
-function chatDailyDigestPrune(session,dayKey,cfg){
-  if(!session)return {changed:false,entries:[]};
-  var before=chatDailyDigestNormalize(session.dailyDigests);
-  var kept=chatDailyDigestEntries(session,dayKey,cfg);
-  session.dailyDigests=kept;
-  return {changed:kept.length!==before.length,entries:kept};
-}
-function chatDailyDigestBlockText(entry){
-  return '【'+chatDailyDigestRangeLabel(entry)+'】\n'+String((entry&&entry.text)||'');
-}
-// 保留范围内所有完整段都注入，不再受旧的 12 条 / 24000 字容量限制。
-function chatDailyDigestPack(cfg,session){
-  cfg=cfg||chatLoadConfig();
-  if(cfg.dailyDigestEnabled===false)return '';
-  return chatDailyDigestEntries(session,null,cfg).map(chatDailyDigestBlockText).join('\n\n');
-}
-function chatDailyDigestEndpoint(cfg){
-  var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
-  if(/\/ck\/chat$/.test(base))base=base.replace(/\/ck\/chat$/,'');
-  return base+'/ck/chat-digest/prepare';
-}
-// 送给网关的对话。助手正文里剥掉伪思考链：那是脑内独白，不是当时真说出口的话，
-// 留着只会让总结把两种声音混在一起。
-function chatDailyDigestRequestMessages(list){
-  var out=[];
-  (Array.isArray(list)?list:[]).forEach(function(message){
-    if(!message||typeof message!=='object')return;
-    var role=message.role==='pending_user'?'user':message.role;
-    if(role!=='user'&&role!=='assistant')return;
-    if(role==='assistant'&&message.stopped===true)return;
-    var text=String(message.text||'');
-    if(role==='assistant'){
-      var parsed=chatSplitThinkingText(text,{suppressThinking:true,hideUnclosedThinking:true});
-      text=String((parsed&&parsed.text)||'');
-    }
-    text=text.trim();
-    if(!text)return;
-    out.push({role:role,text:text,ts:Number(message.ts||0)||0});
-  });
-  return out;
-}
-function chatDailyDigestFindSession(sessionId){
-  sessionId=String(sessionId||'');
-  if(!sessionId)return null;
-  for(var i=0;i<chatSessions.length;i++){
-    if(String(chatSessions[i]&&chatSessions[i].id||'')===sessionId)return chatSessions[i];
-  }
-  return null;
-}
-function chatDailyDigestSetStatus(text,kind){
-  var el=document.getElementById('chat-daily-digest-save-status');
-  if(!el)return;
-  el.textContent=String(text||'');
-  el.className='chat-cache-save-status'+(kind==='ok'?' ok':'')+(kind==='error'?' error':'');
-}
-function chatDailyDigestDisplayText(entries){
-  return (entries||[]).map(chatDailyDigestBlockText).join('\n\n');
-}
-/* ---- 记忆块里的当日截断总结：可编辑 ---- */
-// 用户要求（2026-08-24）：模型写太长或写偏时，他要能在记忆块里直接二次总结再保存。
-// 编辑期间绝不能被自动渲染覆盖：后台落地一条新总结、切个 tab、保存一次别的设置都会
-// 走到 chatRenderDailyDigest，直接写 value 就会把用户打了一半的字抹掉。
-var chatDailyDigestEditDirty=false;
-var chatDailyDigestEditSessionId='';
-// 最近一次生成失败的原因。空着的记忆块必须说得出是"今天没截断"还是"生成失败了"，
-// 否则用户只能看到一个空框，没法判断要不要重试。
-var chatDailyDigestLastError='';
-function chatDailyDigestMarkEdited(){
-  chatDailyDigestEditDirty=true;
-  chatDailyDigestEditSessionId=String((chatCurrentSession()||{}).id||'');
-  chatDailyDigestSetStatus('有未保存的修改，点「保存总结正文」才会生效。');
-}
-function chatRenderDailyDigest(cfg,opts){
-  cfg=cfg||chatLoadConfig();
-  opts=opts||{};
-  var session=chatCurrentSession();
-  var pruned=chatDailyDigestPrune(session,null,cfg);
-  if(pruned.changed)chatSaveSessions();
-  var entries=pruned.entries;
-  var sessionId=String((session||{}).id||'');
-  // 换了会话就别再护着上一个会话的草稿，那份文字对当前会话没有意义。
-  if(chatDailyDigestEditDirty&&chatDailyDigestEditSessionId!==sessionId)chatDailyDigestEditDirty=false;
-  var keepDraft=chatDailyDigestEditDirty&&opts.force!==true;
-  if(!keepDraft)chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestDisplayText(entries));
-  chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
-  chatSetFieldValue('chat-daily-digest-retention-days',chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays));
-  var hint=document.getElementById('chat-daily-digest-hint');
-  if(hint){
-    var edited=entries.filter(function(row){return row.edited===true}).length;
-    if(cfg.dailyDigestEnabled===false){
-      hint.textContent='已关闭：截断时不再生成总结，已有条目也不会注入。';
-    }else if(!entries.length&&chatDailyDigestLastError){
-      hint.textContent='空的原因是最近一次生成失败："'+chatDailyDigestLastError+'"。可以直接在这里手写今天的总结再保存。';
-    }else if(!entries.length){
-      hint.textContent='保留范围内还没有截断总结。截断成功时静默生成；也可以直接在这里手写今天的总结再保存。';
-    }else{
-      var chars=chatDailyDigestPack(cfg,session).length;
-      var crossCount=entries.filter(function(row){return row.kind==='cross_date'}).length;
-      hint.textContent='保留今天及之前 '+chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays)+' 天 · '+
-        (entries.length-crossCount)+' 段每日总结 / '+crossCount+' 段跨日期总结'+(edited?('（'+edited+' 段已手工编辑）'):'')+
-        ' · 注入 '+chars+' 字。每天零点按保留天数过期，跨日期段按结束日期计算。保留【日期 时段】并修改各段正文。';
-    }
-  }
-  if(keepDraft)chatDailyDigestSetStatus('有未保存的修改，点「保存总结正文」才会生效。');
-  return entries;
-}
-// 编辑回写。两种写法都接受，谁都不用记规则：
-//   1. 保留【时段】那些行 —— 按时段逐条替换正文；正文清空或整块删掉就是删这一条。
-//   2. 整段不带【】 —— 把今天所有条目合并成一条，时间范围取并集，正文用用户写的。
-// 今天本来没有条目时直接写字也算数：等于手写一条今天的总结。
-var CHAT_DAILY_DIGEST_HEADER_RE=/^【([^】]*)】\s*$/;
-function chatDailyDigestEditedCopy(entry,text){
-  var next={};
-  Object.keys(entry||{}).forEach(function(key){next[key]=entry[key]});
-  if(String(text||'')!==String((entry&&entry.text)||''))next.edited=true;
-  next.text=String(text||'');
-  return next;
-}
-function chatDailyDigestMergeEdit(text,entries){
-  text=String(text||'').trim();
-  if(!text)return [];
-  entries=entries||[];
-  var startTs=0,endTs=0,rounds=0,mergedCount=0;
-  entries.forEach(function(row){
-    var s=Number(row.startTs||0)||0,e=Number(row.endTs||0)||0;
-    if(s)startTs=startTs?Math.min(startTs,s):s;
-    if(e>endTs)endTs=e;
-    rounds+=Number(row.rounds||0)||0;
-    mergedCount+=Number(row.mergedCount||0)||0;
-  });
-  if(!endTs)endTs=Date.now();
-  if(!startTs)startTs=endTs;
-  var last=entries.length?entries[entries.length-1]:null;
-  return [{
-    id:String((last&&last.id)||('dg-'+endTs+'-'+Math.random().toString(36).slice(2,7))),
-    startTs:startTs,
-    endTs:endTs,
-    dayKey:String((last&&last.dayKey)||chatDailyDigestDayKey(endTs)),
-    text:text,
-    rounds:rounds,
-    mergedCount:mergedCount+Math.max(0,entries.length-1),
-    trigger:String((last&&last.trigger)||'manual_edit'),
-    edited:true,
-    createdAt:Number((last&&last.createdAt)||0)||Date.now()
-  }];
-}
-function chatDailyDigestParseEdit(raw,entries){
-  entries=(entries||[]).slice();
-  var lines=String(raw==null?'':raw).replace(/\r\n/g,'\n').split('\n');
-  var sections=[],lead=[];
-  lines.forEach(function(line){
-    var m=line.match(CHAT_DAILY_DIGEST_HEADER_RE);
-    if(m){sections.push({label:String(m[1]||'').trim(),lines:[]});return}
-    (sections.length?sections[sections.length-1].lines:lead).push(line);
-  });
-  function body(rows){return rows.join('\n').trim()}
-  if(!sections.length){
-    if(body(lead)&&entries.some(function(row){return chatDailyDigestDayKey(row.startTs)!==entries[0].dayKey||row.dayKey!==entries[0].dayKey})){
-      return {error:'有多个日期或跨日期总结时，请保留每段【日期 时段】分别修改，避免把不同日期合成一段。'};
-    }
-    return {mode:'merge',entries:chatDailyDigestMergeEdit(body(lead),entries)};
-  }
-  if(body(lead))return {error:'第一个【时段】上面不能再写内容：要么每段都跟在自己的【时段】下面，要么整段都不写【】（那样会合并成一条）。'};
-  var out=[];
-  for(var i=0;i<sections.length;i++){
-    var label=sections[i].label,hit=-1;
-    for(var j=0;j<entries.length;j++){
-      if(chatDailyDigestRangeLabel(entries[j])===label){hit=j;break}
-    }
-    if(hit<0)return {error:'找不到时段「'+label+'」对应的条目。别改【】里的时间，只改下面的正文；想合成一条就把所有【】都删掉。'};
-    var entry=entries.splice(hit,1)[0];
-    var text=body(sections[i].lines);
-    if(!text)continue;
-    out.push(chatDailyDigestEditedCopy(entry,text));
-  }
-  return {mode:'blocks',entries:out};
-}
-function chatSaveDailyDigestText(){
-  var el=document.getElementById('chat-daily-digest-pack');
-  if(!el)return null;
-  var cfg=chatLoadConfig();
-  var session=chatCurrentSession();
-  if(!session){toast('没有可保存的会话');return null}
-  var before=chatDailyDigestEntries(session,null,cfg);
-  var parsed=chatDailyDigestParseEdit(el.value,before);
-  if(parsed.error){
-    chatDailyDigestSetStatus(parsed.error,'error');
-    toast(parsed.error,6000,{type:'error',closable:true,pauseOnHover:true});
-    return null;
-  }
-  var next=chatDailyDigestNormalize(parsed.entries);
-  session.dailyDigests=next;
-  session.updated=Date.now();
-  chatSaveSessions();
-  chatDailyDigestEditDirty=false;
-  chatDailyDigestLastError='';
-  chatRenderDailyDigest(cfg,{force:true});
-  var chars=chatDailyDigestPack(cfg,session).length;
-  chatDebug('daily_digest_edit',{
-    ok:true,mode:parsed.mode,before:before.length,after:next.length,chars:chars
-  });
-  chatDailyDigestSetStatus(
-    next.length
-      ?'已保存：'+next.length+' 条 · 下一轮注入 '+chars+' 字'
-      :'已保存：保留范围内的总结已清空，不再注入。',
-    'ok'
-  );
-  toast(next.length?'截断总结已保存':'截断总结已清空');
-  return next;
-}
-function chatResetDailyDigestText(){
-  chatDailyDigestEditDirty=false;
-  var entries=chatRenderDailyDigest(chatLoadConfig(),{force:true});
-  chatDailyDigestSetStatus('已恢复为当前存档'+(entries.length?('（'+entries.length+' 条）'):'（保留范围内还没有条目）'),'ok');
-  return entries;
-}
-function chatSaveDailyDigestSetting(auto){
-  var cfg=chatSaveConfig(true);
-  if(!auto){
-    chatDailyDigestSetStatus(
-      cfg.dailyDigestEnabled===false
-        ?'已保存：截断总结已关闭'
-        :'已保存：截断总结已启用，保留今天及之前 '+cfg.dailyDigestRetentionDays+' 天',
-      'ok'
-    );
-    toast('截断总结设置已保存');
-  }
-  return cfg;
-}
-// 串行执行：两次截断挨得很近时也要按顺序落条目，否则第二条看不到第一条，合并判断就失真。
-var chatDailyDigestChain=Promise.resolve();
-// 返回本次总结的 promise（没有可总结内容或功能关闭时返回 null）。
-// 截断那一轮要用它把总结等回来再发请求，见 chatAwaitTrimDigest。
-function chatDailyDigestScheduleForTrim(cfg,plan,job){
-  cfg=cfg||chatLoadConfig();
-  if(cfg.dailyDigestEnabled===false)return null;
-  var messages=chatDailyDigestRequestMessages(plan&&plan.droppedMessages);
-  if(!messages.length)return null;
-  job=job||{};
-  var sessionId=String((plan.session||chatCurrentSession()||{}).id||'');
-  var trigger=String((plan&&plan.trigger)||'');
-  var rounds=Number((plan&&plan.dropped)||0)||0;
-  var task=chatDailyDigestChain.then(function(){
-    return chatDailyDigestRequest(cfg,Object.assign(job,{messages:messages,sessionId:sessionId,trigger:trigger,rounds:rounds}));
-  }).catch(function(){return null});
-  chatDailyDigestChain=task;
-  return task;
-}
-// 截断那一轮先把总结等回来，再让调用方去组装请求体。
-// 为什么要等：截断已经让消息区整段重建了，总结这时候一起进去只重建一次；
-// 异步落地的话本轮请求里没有总结、下一轮才第一次带上它，系统前缀又变一次，
-// 等于连着两轮整段重建。等待有上限、失败不阻塞、用户点停止立刻退出。
-async function chatAwaitTrimDigest(result,requestState){
-  if(!result||!result.digestWait)return result;
-  var started=Date.now(),poll=0;
-  chatDailyDigestSetStatus('正在整理将截断的对话，完成后再发送…');
-  try{
-    var entry=await new Promise(function(resolve,reject){
-      result.digestWait.then(resolve,reject);
-      if(requestState)poll=setInterval(function(){
-        if(requestState.stopped){
-          if(result.cancelDigest)result.cancelDigest();
-          resolve(null);
-        }
-      },100);
-    });
-    result.digestPrepared=entry;
-    result.digestWaited=requestState&&requestState.stopped?'stopped':(entry?'ok':'failed');
-    if(entry)chatDailyDigestSetStatus('');
-  }catch(error){result.digestWaited='failed'}
-  finally{if(poll)clearInterval(poll)}
-  result.digestWaitMs=Date.now()-started;
-  chatDebug('daily_digest_wait',{ok:result.digestWaited==='ok',outcome:result.digestWaited,wait_ms:result.digestWaitMs,trigger:result.trigger,dropped:result.dropped});
-  return result;
-}
-async function chatDailyDigestRequest(cfg,job){
-  // 这个请求是异步落地的，配置可能在截断之后被改过（关掉功能、换网关地址、换 Key），
-  // 所以这里不复用截断当时的快照，重新读一次。
-  cfg=chatLoadConfig();
-  job=job||{};
-  var messages=Array.isArray(job.messages)?job.messages:[];
-  if(!messages.length||job.cancelled)return null;
-  if(cfg.dailyDigestEnabled===false)return null;
-  var panelKey=String(cfg.panelKey||'').trim();
-  if(!panelKey)return null;
-  var session=chatDailyDigestFindSession(job.sessionId);
-  if(!session)return null;
-  var startTs=0,endTs=0;
-  messages.forEach(function(row){
-    var ts=Number(row.ts||0)||0;
-    if(ts<=0)return;
-    endTs=Math.max(endTs,ts);
-    startTs=startTs?Math.min(startTs,ts):ts;
-  });
-  var now=Date.now();
-  if(!endTs)endTs=now;
-  if(!startTs)startTs=endTs;
-  var dayKey=chatDailyDigestDayKey(endTs);
-  var todayKey=chatDailyDigestDayKey(now);
-  // 未截断的旧消息也可能仍在用户设置的保留期内。
-  if(!job.prepareOnly&&(dayKey<chatDailyDigestFirstDay(todayKey,cfg.dailyDigestRetentionDays)||dayKey>todayKey)){
-    var stale=chatDailyDigestPrune(session,todayKey,cfg);
-    if(stale.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
-    chatDebug('daily_digest',{ok:true,skipped:'expired_day',day_key:dayKey,today:todayKey,messages:messages.length});
-    return null;
-  }
-  var pruned=job.prepareOnly?{changed:false,entries:chatDailyDigestEntries(session,todayKey,cfg)}:chatDailyDigestPrune(session,todayKey,cfg);
-  var crossDate=chatDailyDigestDayKey(startTs)!==dayKey;
-  var targets=chatDailyDigestNormalize(pruned.entries).filter(function(row){return !crossDate&&row.kind==='daily'&&row.dayKey===dayKey});
-  // rounds 一起送过去：网关按"这条旧总结覆盖了多少轮"和它自己的字数算合并时的字数预算，
-  // 否则一整天几十轮会被当成一条短总结重写，越合并越薄。
-  var previous=targets.map(function(row){
-    return {start_ts:row.startTs,end_ts:row.endTs,text:row.text,rounds:Number(row.rounds||0)||0};
-  });
-  var controller=null,timer=0,timedOut=false;
-  var started=Date.now();
-  try{
-    if(typeof AbortController!=='undefined'){
-      controller=new AbortController();
-      job.controller=controller;
-      timer=setTimeout(function(){timedOut=true;try{controller.abort()}catch(e){}},CHAT_DAILY_DIGEST_TIMEOUT_MS);
-    }
-    var response=await fetch(chatDailyDigestEndpoint(cfg),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      signal:controller?controller.signal:undefined,
-      body:JSON.stringify({
-        key:panelKey,
-        session_id:String(session.id||cfg.sessionId||''),
-        event_id:'dg-'+endTs+'-'+Math.random().toString(36).slice(2,8),
-        reason:job.trigger||'auto_trim',
-        merge_mode:'by_date',
-        tz_offset_minutes:-new Date().getTimezoneOffset(),
-        messages:messages,
-        previous:previous
-      })
-    });
-    var data={};
-    try{data=await response.json()}catch(e){}
-    if(timedOut||job.cancelled)throw new Error(timedOut?'总结接口超时':'已取消总结');
-    if(!response.ok||data.ok===false)throw new Error((data&&data.error)||('HTTP '+response.status));
-    if(data.prepared!==true){
-      chatDebug('daily_digest',{ok:true,skipped:String(data.skipped||'not_prepared'),messages:messages.length});
-      return null;
-    }
-    var text=String(data.text||'').trim();
-    if(!text)throw new Error('网关未返回总结正文');
-    var entry={
-      id:'dg-'+endTs+'-'+Math.random().toString(36).slice(2,7),
-      startTs:startTs,
-      endTs:endTs,
-      dayKey:dayKey,
-      kind:crossDate?'cross_date':'daily',
-      text:text,
-      rounds:Number(job.rounds||0)||0,
-      trigger:String(job.trigger||''),
-      createdAt:Date.now()
-    };
-    // 等待期间用户可能改设置、编辑或删除会话；不能把旧快照写回并复活数据。
-    cfg=chatLoadConfig();
-    session=chatDailyDigestFindSession(job.sessionId);
-    if(!session||cfg.dailyDigestEnabled===false||job.cancelled)return null;
-    var kept=chatDailyDigestEntries(session,null,cfg).slice();
-    if(!chatDailyDigestEntries({dailyDigests:[entry]},null,cfg).length){
-      // Generation succeeded; respect the configured retention without blocking truncation forever.
-      return job.prepareOnly?{entry:entry,entries:kept,source:JSON.stringify(session.dailyDigests||[])}:null;
-    }
-    var target=targets.length?targets[0]:null;
-    var liveTarget=target?kept.find(function(row){return row.id===target.id}):null;
-    if(target&&(!liveTarget||liveTarget.text!==target.text)){
-      throw new Error('总结生成期间原正文已被修改，本次结果未覆盖你的修改');
-    }
-    var merged=!!liveTarget;
-    if(merged){
-      // 同一天始终只有一段，跨日期批次不参与合并。
-      var last=liveTarget;
-      if(data.merge_with_previous!==true)entry.text=last.text+'\n\n'+entry.text;
-      entry.startTs=Math.min(Number(last.startTs||entry.startTs)||entry.startTs,entry.startTs);
-      entry.endTs=Math.max(last.endTs,entry.endTs);
-      entry.rounds=(Number(last.rounds||0)||0)+entry.rounds;
-      entry.mergedCount=(Number(last.mergedCount||0)||0)+1;
-      kept=kept.filter(function(row){return row.id!==last.id});
-    }
-    kept.push(entry);
-    if(job.prepareOnly)return {entry:entry,entries:chatDailyDigestNormalize(kept),source:JSON.stringify(session.dailyDigests||[])};
-    session.dailyDigests=chatDailyDigestNormalize(kept);
-    session.updated=Date.now();
-    chatSaveSessions();
-    chatDailyDigestLastError='';
-    // 新总结落地时以存档为准：用户手上那份草稿已经作废了，强制刷成最新内容。
-    chatRenderDailyDigest(cfg,{force:true});
-    chatDebug('daily_digest',{
-      ok:true,merged:merged,chars:text.length,rounds:entry.rounds,day_key:dayKey,
-      range:chatDailyDigestRangeLabel(entry),entries:session.dailyDigests.length,
-      trigger:entry.trigger,provider_model:String(data.provider_model||''),
-      input_rounds:Number(data.input_rounds||0)||0,
-      budget:String(data.budget_low||0)+'-'+String(data.budget_high||0),
-      guard_trimmed:data.guard_trimmed===true,salvaged:data.salvaged===true,
-      duration_ms:Date.now()-started
-    });
-    return entry;
-  }catch(error){
-    if(timedOut)error=new Error('总结超时（'+Math.round(CHAT_DAILY_DIGEST_TIMEOUT_MS/1000)+' 秒）');
-    var errorText=String((error&&error.message)||error).slice(0,300);
-    chatDailyDigestLastError=errorText;
-    chatDebug('daily_digest',{ok:false,messages:messages.length,duration_ms:Date.now()-started,error:errorText});
-    // Preparation failure is reported once by the trim transaction; history is retained.
-    chatDailyDigestSetStatus('最近一次截断总结失败：'+errorText,'error');
-    job.failureReason=errorText;
-    if(pruned.changed){chatSaveSessions();chatRenderDailyDigest(cfg)}
-    else chatRenderDailyDigest(cfg);
-    return null;
-  }finally{
-    if(timer)clearTimeout(timer);
-  }
-}
+// Rolling-summary storage and preparation live in chat-digest.js.
 function chatCommitAutoTrimPlan(cfg,plan){
   var s=plan.session||chatCurrentSession();
   var active=s===chatCurrentSession();
@@ -7491,6 +7051,8 @@ function chatCommitAutoTrimPlan(cfg,plan){
   s.timeReminderRoundCount=Math.max(Number(s.timeReminderRoundCount)||0,clock.round-1);
   if(plan.digestPrepared){
     s.dailyDigests=plan.digestPrepared.entries;
+    s.digestRollup=plan.digestPrepared.rollup;
+    s.digestRetryAfter=0;
     chatDailyDigestLastError='';
   }
   s.trimRetryAfter=0;
@@ -7594,7 +7156,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
         (plan.droppedMessages||[]).every(function(m){return (session===chatCurrentSession()?chatMessages:session.messages||[]).indexOf(m)>=0})&&
         (plan.droppedTransportMessages||[]).every(function(m){return (session.transportMessages||[]).indexOf(m)>=0});
       var prepared=plan.digestPrepared;
-      if(!unchanged||!prepared||(requestState&&requestState.stopped)||prepared.source!==JSON.stringify(session.dailyDigests||[])){
+      if(!unchanged||!prepared||(requestState&&requestState.stopped)||!chatDigestPreparedStillValid(session,prepared)){
         plan.cancelDigest();
         if(!(requestState&&requestState.stopped)&&chatDailyDigestFindSession(session.id)===session){
           session.trimRetryAfter=Date.now()+CHAT_AUTO_TRIM_IDLE_MS;
@@ -7933,6 +7495,7 @@ function chatWindowContextMessages(messages){
       text:String(m.text||''),
       ts:m.ts||0
     };
+    if(m.role==='user'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(m.minimalTime||'')))item.minimalTime=m.minimalTime;
     var content=chatMessageContentParts(m);
     if(m.role==='assistant'&&String(m.thinking||'').trim()){
       content.unshift({type:'thinking',thinking:String(m.thinking||'')});
@@ -8313,6 +7876,7 @@ function chatExitEditMode(){
   }
   chatSetEditActionsVisible(false);
   chatRenderEditImages();
+  chatAutosizeInput(document.getElementById('chat-input'));
   chatSetStatus(chatSending?'正在请求网关...':'');
 }
 function chatCancelEdit(){
@@ -10274,7 +9838,7 @@ async function chatNewSession(){
   cfg.memoryPreview='';
   chatActiveSessionId=cfg.sessionId;
   chatMessages=[];
-  chatSessions.unshift({id:cfg.sessionId,title:chatDefaultWindowTitle(),messages:[],transportMessages:[],firstUserText:'',firstUserTs:0,dailyDigests:inheritedDigests,created:Date.now(),updated:Date.now()});
+  chatSessions.unshift({id:cfg.sessionId,title:chatDefaultWindowTitle(),messages:[],transportMessages:[],firstUserText:'',firstUserTs:0,dailyDigests:inheritedDigests,digestRollup:cfg.newSessionDigestSyncEnabled!==false?chatNormalizeDigestRollup((chatNewSessionDigestSource(cfg,previousSession)||{}).digestRollup):null,created:Date.now(),updated:Date.now()});
   document.getElementById('chat-session-id').value=cfg.sessionId;
   var memoryPack=document.getElementById('chat-memory-pack');
   if(memoryPack)memoryPack.value='';
@@ -10369,6 +9933,7 @@ function chatInit(){
   }
   if(!chatCacheTimer)chatCacheTimer=setInterval(function(){
     chatMaybeSyncSystemPrompt();
+    chatMaybeRollDigestAtDayBoundary();
     chatUpdateCacheExpiryHint(true);
     // 1h 空闲自动截断的在线路径。函数内部自带 30s 节流和多重前置判断，
     // 不满足条件时立即返回，不会每 15 秒做重活。
@@ -10376,7 +9941,7 @@ function chatInit(){
     // 按轮自动清理走同一个定时器，也自带 30s 节流和前置判断。
     chatMaybeAutoClean();
   },15000);
-  function checkTrimOnWake(){chatMaybeSyncSystemPrompt();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
+  function checkTrimOnWake(){chatMaybeSyncSystemPrompt();chatMaybeRollDigestAtDayBoundary();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
   document.addEventListener('visibilitychange',function(){if(!document.hidden)checkTrimOnWake()});
   window.addEventListener('pageshow',checkTrimOnWake);
   window.addEventListener('focus',checkTrimOnWake);
@@ -10646,11 +10211,19 @@ async function chatSubmitPendingMessages(options){
   if(memoryPack)memoryPack.value='';
   chatSaveConfigObject(cfg);
   chatMaybeSyncSystemPrompt({beforeRequest:true});
-  cfg.system=chatLoadConfig().system;
+  var syncedPrompts=chatLoadConfig();
+  cfg.system=syncedPrompts.system;cfg.thinkingPrompt=syncedPrompts.thinkingPrompt;cfg.fakeThinkingPrompt=syncedPrompts.fakeThinkingPrompt;
+  await chatRefreshRollingDigest(cfg,{requestState:requestState});
+  if(requestState&&requestState.stopped)return;
   var timeReminderContext=chatTimeReminderContext(chatCurrentSession(),chatMessages,pending);
   var trimResult=await chatApplyAutoTrimForPendingBatch(cfg,pending,requestState);
   if(requestState&&requestState.stopped)return;
   var windowMessagesForRequest=chatWindowContextMessages();
+  var minimalClock=cfg.minimalTimeEnabled===true?new Date(submitTs+8*3600000).toISOString().slice(11,16):'';
+  if(cfg.minimalTimeCleanEachRound===true){
+    chatMessages.forEach(function(m){delete m.minimalTime});
+    windowMessagesForRequest.forEach(function(m){delete m.minimalTime});
+  }
   var userMessageIndexes=[];
   // 重新生成时带着走的"上一版回复"。先接过来，等新回复落地时挂到新的那一组上，
   // 翻页才有得翻。故意不在这里删：万一这次发送被停止或失败，字段还留在消息上，
@@ -10662,6 +10235,7 @@ async function chatSubmitPendingMessages(options){
     if(i>=0&&m&&m.role==='pending_user'){
       m.role='user';
       m.ts=submitTs;
+      if(minimalClock)m.minimalTime=minimalClock;else delete m.minimalTime;
       m.cacheHit=false;
       if(Array.isArray(m.replyVariantsCarry)&&m.replyVariantsCarry.length){
         carriedReplyVariants=m.replyVariantsCarry;
@@ -10739,6 +10313,9 @@ async function chatSubmitPendingMessages(options){
     time_reminder_round:timeReminderContext.round,
     nc_context_injection:cfg.ncContextInjection!==false,
     time_injection_every_rounds:chatNormalizeTimeInjectionEveryRounds(cfg.timeInjectionEveryRounds),
+    minimal_time_enabled:cfg.minimalTimeEnabled===true,
+    minimal_time_text:minimalClock,
+    minimal_time_clean_each_round:cfg.minimalTimeCleanEachRound===true,
     backend_switch_notification:cfg.backendSwitchNotification!==false,
     retain_native_thinking_history:cfg.retainNativeThinkingHistory!==false,
     retain_pseudo_thinking_history:cfg.retainPseudoThinkingHistory!==false,
@@ -11332,7 +10909,7 @@ var API_TABS=[
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。也可以勾「随机模式」不按顺序、每次在队列里摇一个用。只影响聊天、Fact 和召回配置。'},
   {key:'memory',label:'记忆',info:'这一栏管 Fact 提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'chat_digest',label:'截断总结',info:'截断时把被丢掉的完整轮次写成总结，同一天合成一段，跨日期批次单独一段，均标明完整日期和起止时间。保留范围可在「截断总结」设为今天及过去 0–100 天，下一轮注入系统区。普通聊天不调用。请为这一组独立选择供应商和模型。'}
+    {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
   ]},
   {key:'topics',label:'主题 API',info:'主题找材料直接复用现有 Fact 和向量。智能查找最多提交 40 条候选给选材模型；只在点击时调用，不在聊天中反复选材。查询向量复用“召回 → 向量化”，按需读取材料使用当前聊天模型。',groups:[{key:'topic_materials',label:'主题选材',info:'为智能找材料独立选择供应商和模型（OpenAI 兼容接口）。未配置或失败时保留检索候选供手选，不会重新提取 Fact。'}]},
   {key:'experiment',label:'实验 API',info:'召回实验复用下面两组 Fact 召回配置。修改后也会影响正常 Fact 召回；A/B/C 比较只在实验页点击运行时调用，可能产生模型费用。主题智能选材另在“主题 API”配置；C 聊天沿用召回 API。',sharedRecall:true},
