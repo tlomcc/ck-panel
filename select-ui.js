@@ -19,7 +19,7 @@
       button.hidden=select.hidden||select.getAttribute('aria-hidden')==='true';
       button.setAttribute('aria-label',label(select)+'：'+text);
     });
-    document.querySelectorAll('select:not([multiple]):not([data-ck-select])').forEach(function(select){
+    document.querySelectorAll('select:not([multiple]):not([data-ck-select]):not([data-ck-native])').forEach(function(select){
       if(select.size>1)return;
       var button=document.createElement('button');
       button.type='button';button.className='ck-select-button';

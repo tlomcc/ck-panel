@@ -1,7 +1,7 @@
 {
-  "version": "chat-v258-vps-gateway-selection",
+  "version": "chat-v259-vps-native-selection",
   "notes": [
-    "新增阿里云与 VPS 网关连接选择，切换前验证配置、鉴权与记忆接口。",
-    "保留聊天、提示词和原有设置；回复或截断进行中禁止切换。"
+    "修复运行位置选项被弹窗遮挡，阿里云和 VPS 可以正常选择。",
+    "VPS 连接仍保留原有聊天和配置；当前域名需开启代理。"
   ]
 }
