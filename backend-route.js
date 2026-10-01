@@ -11,14 +11,14 @@
   }
   function parse(saved){
     if(!saved||saved.mode!=='vps')return Object.assign({},legacy);
-    return {mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp)};
+    return {mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:saved.execution==='claude_code_api'?'claude_code_api':'direct_api'};
   }
   var current=Object.assign({},legacy),saved;
   try{saved=JSON.parse(root.localStorage.getItem(key)||'null');current=parse(saved)}catch(e){}
   if(!saved&&root.location&&root.location.hostname==='127.0.0.1'&&root.location.port==='19080'){
     current={mode:'vps',gateway:root.location.origin+'/gateway',mcp:root.location.origin+'/mcp'};
   }
-  function storageValue(route){return JSON.stringify({mode:route.mode,gateway:route.gateway,mcp:route.mcp})}
+  function storageValue(route){return JSON.stringify({mode:route.mode,gateway:route.gateway,mcp:route.mcp,execution:route.execution||'direct_api'})}
   async function probe(route,authKey,fetcher){
     var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},20000);
     try{
@@ -27,6 +27,7 @@
       var status=await health.json();
       if(status.status!=='ok')throw new Error('这个地址没有返回 CK 网关状态。');
       if(status.migration_read_only===true)throw new Error('VPS 仍是只读预览，暂不能作为正式连接。');
+      if(route.execution==='claude_code_api'&&status.claude_code_api!==true)throw new Error('目标 VPS 的 Claude Code API 服务尚未就绪。');
       if(!authKey)return;
       var headers={'x-api-key':authKey,'Content-Type':'application/json'};
       var cfg=await fetcher(route.gateway+'/config',{headers:headers,cache:'no-store',signal:controller.signal});
@@ -46,6 +47,7 @@
 function ckOpenBackendRoute(){
   var active=CKBackendRoute.current;
   document.getElementById('ck-backend-mode').value=active.mode;
+  document.getElementById('ck-execution-mode').value=active.execution||'direct_api';
   var previous;
   try{previous=JSON.parse(localStorage.getItem(CKBackendRoute.key)||'null')}catch(e){}
   document.getElementById('ck-vps-gateway').value=(previous&&previous.gateway&&previous.mode==='vps'?previous.gateway:'https://tlomcc.cc.cd:18443/gateway');
@@ -68,7 +70,7 @@ function ckBackendFieldsChanged(){
   document.getElementById('ck-vps-fields').hidden=document.getElementById('ck-backend-mode').value!=='vps';
 }
 function ckRenderBackendRoute(){
-  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?'VPS 网关':'阿里云（迁移保留）'});
+  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（API）':'VPS · 直接 API'):'阿里云（迁移保留）'});
 }
 if(typeof document==='object'){
   document.addEventListener('DOMContentLoaded',ckRenderBackendRoute);
@@ -90,7 +92,7 @@ async function ckSaveBackendRoute(){
   window.ckBackendSwitchBusy=true;button.disabled=true;
   try{
     oldValue=localStorage.getItem(CKBackendRoute.key);
-    var route=CKBackendRoute.parse({mode:document.getElementById('ck-backend-mode').value,gateway:document.getElementById('ck-vps-gateway').value,mcp:document.getElementById('ck-vps-mcp').value});
+    var route=CKBackendRoute.parse({mode:document.getElementById('ck-backend-mode').value,gateway:document.getElementById('ck-vps-gateway').value,mcp:document.getElementById('ck-vps-mcp').value,execution:document.getElementById('ck-execution-mode').value});
     var auth=typeof storedPanelKey==='function'?storedPanelKey():'';
     if(!auth&&route.mode==='vps')throw new Error('请先在当前面板登录，验证现有配置后再切换 VPS。');
     message.textContent='正在检查网关、配置和记忆接口…';

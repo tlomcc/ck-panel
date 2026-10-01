@@ -47,7 +47,7 @@ assert(thinkingMode.includes("raw==='adaptive'")&&thinkingMode.includes("return 
 assert(thinkingControls.includes("mode==='adaptive'")&&thinkingControls.includes('自动决定'),'adaptive mode must explain that budget is automatic');
 assert(source.includes("if(thinkingMode==='native'||thinkingMode==='adaptive')"),'adaptive mode must send native thinking fields');
 assert(source.includes("if(thinkingMode==='native')body.thinking_budget_tokens"),'fixed budget must remain native-only');
-assert(renderStream.includes("splitEnabled===false?'':chatStreamingAssistantPreviewText(rawText)"),'whole reply mode must suppress streaming text preview');
+assert(renderStream.includes("splitEnabled===false?rawText:chatStreamingAssistantPreviewText(rawText)"),'whole reply mode must stream all received text');
 assert(source.includes('cfg.splitAssistantReplies!==false'),'stream renderer must receive the whole-reply setting');
 assert(openState.includes("querySelector('.chat-thinking.open')")&&restoreState.includes("classList.toggle('open'"),'open thinking blocks must survive message rerenders');
 assert(css.includes('top:var(--ck-chat-vv-top,0px)!important'),'chat surface must follow visual viewport offset');

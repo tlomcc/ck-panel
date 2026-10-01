@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync(path.join(__dirname,'../backend-route.js'),'utf8');
 function fixture(saved){
  const storage=new Map(saved?[['ckBackendRouteV1',JSON.stringify(saved)]]:[]),els={};
- for(const id of ['ck-backend-status','ck-backend-save','ck-backend-mode','ck-vps-gateway','ck-vps-mcp','chat-input'])els[id]={value:'',textContent:''};
+ for(const id of ['ck-backend-status','ck-backend-save','ck-backend-mode','ck-execution-mode','ck-vps-gateway','ck-vps-mcp','chat-input'])els[id]={value:'',textContent:''};
  els['ck-backend-mode'].value='vps';els['ck-vps-gateway'].value='https://tlomcc.cc.cd:18443/gateway';els['ck-vps-mcp'].value='https://tlomcc.cc.cd:18443/mcp';
  const ctx={URL,AbortController,setTimeout,clearTimeout,setInterval:()=>0,clearInterval,document:{addEventListener(){},getElementById:id=>els[id]},localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},sessionStorage:{setItem(){}},location:{hostname:'test',reload(){ctx.reloaded=true}},storedPanelKey:()=> 'test-key',panelAppStarted:true,chatSessionsReady:true,chatSaveConfig(){},chatSaveLocalMessages(){},async chatSaveSessionsToIndexedDb(){ctx.saved=true}};
  ctx.window=ctx;vm.createContext(ctx);vm.runInContext(source,ctx);
@@ -38,4 +38,12 @@ test('busy before or during asynchronous probe blocks switching',async()=>{
   const {ctx,storage}=fixture();if(mid){const f=ctx.fetch;ctx.fetch=async u=>{ctx.chatSending=true;return f(u)}}else ctx.chatSending=true;
   await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,undefined);assert.equal(storage.has('ckBackendRouteV1'),false);
  }
+});
+
+test('Claude Code selection requires live capability and persists only the explicit route',async()=>{
+ const {ctx,els,storage}=fixture();els['ck-execution-mode'].value='claude_code_api';
+ await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,undefined);assert.equal(storage.has('ckBackendRouteV1'),false);
+ const original=ctx.fetch;ctx.fetch=async url=>url.endsWith('/health')?{ok:true,json:async()=>({status:'ok',claude_code_api:true})}:original(url);
+ await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,true);assert.equal(JSON.parse(storage.get('ckBackendRouteV1')).execution,'claude_code_api');
+ assert.equal(ctx.CKBackendRoute.parse({mode:'aliyun',execution:'claude_code_api'}).execution,undefined);
 });

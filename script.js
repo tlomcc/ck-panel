@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v259-vps-native-selection';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v260-claude-api-live-stream';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8191,8 +8191,8 @@ function chatStreamingAssistantPreviewText(rawText){
   return units.length?chatJoinNaturalUnits(units.slice(0,1)):text;
 }
 function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking,showNativeThinking,splitEnabled){
-  // "整段"模式只在流结束后落一条完整消息，避免先显示首段再被整段替换。
-  var preview=splitEnabled===false?'':chatStreamingAssistantPreviewText(rawText);
+  // 所有后端共享增量显示；整段模式也立即显示已收到的正文。
+  var preview=splitEnabled===false?rawText:chatStreamingAssistantPreviewText(rawText);
   return chatRenderAssistantContent(preview,true,tools,undefined,nativeThinking,showNativeThinking);
 }
 function chatSplitOutsideCodeBlocks(text){
@@ -8452,8 +8452,8 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   chatAssistantRevealQueue={
     sessionId:chatActiveSessionId,
     messages:messages,
-    nextIndex:1,
-    hidden:new Set(messages.slice(1)),
+    nextIndex:Math.max(1,Math.min(messages.length,Number(opts.alreadyShownCount)||1)),
+    hidden:new Set(messages.slice(Math.max(1,Number(opts.alreadyShownCount)||1))),
     timer:0
   };
   // 重新生成带过来的旧答案：连同这一组新答案一起变成版本列表，挂在组内第一条上。
@@ -10321,6 +10321,7 @@ async function chatSubmitPendingMessages(options){
     session_id:cfg.sessionId,
     // 轮次 id 一起发给网关：断线补收时用它对账，避免把上一轮的旧回复当成这一轮的答案。
     turn_id:requestTurnId,
+    execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps'&&CKBackendRoute.current.execution==='claude_code_api')?'claude_code_api':'direct_api',
     text:text,
     model:cfg.model,
     provider_name:cfg.mainRouteProvider||'',
@@ -10449,22 +10450,58 @@ async function chatSubmitPendingMessages(options){
     }
     return firstReplyTs;
   }
-  // 回复收完整后再统一分段；SSE 阶段只收集文本，不提前创建内容气泡。
+  // Native thinking and first text render on the next frame for every backend.
+  // CK remains the owner of stored messages; these rows are temporary previews.
   var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;
+  var streamBubbles=out?[out]:[],streamShownCount=0,streamRevealTimer=0,streamNextRevealAt=0;
+  var streamAux=null;
   function flushStreamRender(){
-    if(streamRenderStopped)return;
+    if(streamRenderStopped||!out||!out.isConnected)return;
     streamRenderDirty=false;
-    chatRenderCurrentThinking({sessionId:cfg.sessionId,turnId:requestTurnId,text:[nativeThinkingText,chatSplitThinkingText(assistantText).thinking].filter(Boolean).join('\n\n')});
-    if(!out||(!toolEvents.length&&!nativeThinkingText))return;
+    var parsed=chatSplitThinkingText(assistantText,{hideUnclosedThinking:true});
+    var allThinking=[nativeThinkingText,parsed.thinking].filter(Boolean).join('\n\n');
+    chatRenderCurrentThinking({sessionId:cfg.sessionId,turnId:requestTurnId,text:allThinking});
+    var visibleThinking=[cfg.nativeThinkingVisible===false?'':nativeThinkingText,parsed.thinking].filter(Boolean).join('\n\n');
+    var units=parsed.text?(cfg.splitAssistantReplies===false?[parsed.text]:chatNaturalUnits(parsed.text).map(function(unit){return unit.text})):[];
+    var now=Date.now();
+    if(units.length&&!streamShownCount){streamShownCount=1;streamNextRevealAt=now+150;}
+    if(units.length>streamShownCount&&now>=streamNextRevealAt){streamShownCount++;streamNextRevealAt=now+150;}
+    var shown=Math.min(streamShownCount,units.length);
     var shouldStick=chatIsMessagesNearBottom();
-    out.classList.remove('streaming-empty');
-    if(out.parentNode)out.parentNode.classList.remove('streaming-empty-row');
-    // 流式阶段的 out 是临时助手气泡；原生思考的正式结构在回复落定后才会
-    // 作为气泡外的独立块渲染，避免先黏在正文上再跳出去。
-    out.innerHTML=chatRenderStreamingAssistantContent(
-      assistantText,toolEvents,nativeThinkingText,false,cfg.splitAssistantReplies!==false
-    );
+    if((visibleThinking||toolEvents.length)&&!streamAux&&out.parentNode){
+      streamAux=document.createElement('div');
+      streamAux.className='chat-stream-aux';
+      out.parentNode.insertBefore(streamAux,out);
+    }
+    if(streamAux){
+      var previous=streamAux.querySelector('.chat-thinking');
+      var wasOpen=previous?previous.classList.contains('open'):true;
+      var auxParts=chatRenderAssistantParts('',false,toolEvents,undefined,visibleThinking,true);
+      streamAux.innerHTML=auxParts.thinking+auxParts.toolTrace;
+      var thought=streamAux.querySelector('.chat-thinking');
+      if(thought)thought.classList.toggle('open',wasOpen);
+    }
+    while(streamBubbles.length<shown){
+      var row=document.createElement('div');
+      row.className='chat-msg-row assistant chat-ephemeral-row';
+      var bubble=document.createElement('div');bubble.className='chat-bubble assistant';
+      row.appendChild(bubble);
+      var stamp=document.createElement('div');stamp.className='chat-msg-time';stamp.textContent=chatFullTimeLabel(firstReplyTs||Date.now());row.appendChild(stamp);
+      chatPlaceAssistantBubbleBeforePending(bubble);streamBubbles.push(bubble);
+    }
+    streamBubbles.forEach(function(bubble,index){
+      var text=index<shown?units[index]:'';
+      if(index>0&&bubble.parentNode)bubble.parentNode.hidden=index>=shown;
+      bubble.classList.toggle('streaming-empty',!text);
+      if(bubble.parentNode)bubble.parentNode.classList.toggle('streaming-empty-row',!text);
+      var html=text?chatRenderAssistantContent(text,true,[],undefined,'',false):'';
+      if(bubble.innerHTML!==html)bubble.innerHTML=html;
+    });
+    if(shown)chatRecordFirstRenderedLatency(latencyTrace);
     chatFollowMessagesBottom(shouldStick,true,true);
+    if(units.length>shown&&!streamRevealTimer){
+      streamRevealTimer=setTimeout(function(){streamRevealTimer=0;scheduleStreamRender();},Math.max(1,streamNextRevealAt-Date.now()));
+    }
   }
   function scheduleStreamRender(){
     if(streamRenderStopped)return;
@@ -10477,6 +10514,7 @@ async function chatSubmitPendingMessages(options){
   }
   function stopStreamRender(){
     streamRenderStopped=true;
+    if(streamRevealTimer){clearTimeout(streamRevealTimer);streamRevealTimer=0;}
     if(chatThinkingPreviewLive&&chatThinkingPreviewLive.turnId===requestTurnId)chatThinkingPreviewLive=null;
     if(streamRenderRaf){cancelAnimationFrame(streamRenderRaf);streamRenderRaf=0;}
     streamRenderDirty=false;
@@ -10537,6 +10575,7 @@ async function chatSubmitPendingMessages(options){
           if(deltaText)markFirstReplyTs();
           if(deltaText)chatStreamProgressSet('正在写');
           assistantText+=deltaText;
+          if(deltaText)scheduleStreamRender();
         }else if(ev==='thinking'){
           var thinkingDelta=typeof data==='string'?data:String((data&&data.text)||'');
           if(thinkingDelta){
@@ -10653,7 +10692,7 @@ async function chatSubmitPendingMessages(options){
     chatStreamProgressStop();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,alreadyShownCount:streamShownCount,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
     // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
     carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
     chatClearInFlightMarks(userMessageIndexes);
@@ -10680,6 +10719,9 @@ async function chatSubmitPendingMessages(options){
     stopStreamRender();
     chatRenderCurrentThinking();
     chatStreamProgressStop();
+    streamBubbles.forEach(function(bubble){
+      if(bubble&&bubble.parentNode&&bubble.parentNode.classList.contains('chat-ephemeral-row'))bubble.parentNode.remove();
+    });
     if(out&&out.parentNode)out.parentNode.remove();
     chatReleaseSendingUi(requestState);
     if(requestCompleted){

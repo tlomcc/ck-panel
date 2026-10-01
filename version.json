@@ -1,7 +1,7 @@
 {
-  "version": "chat-v259-vps-native-selection",
+  "version": "chat-v260-claude-api-live-stream",
   "notes": [
-    "修复运行位置选项被弹窗遮挡，阿里云和 VPS 可以正常选择。",
-    "VPS 连接仍保留原有聊天和配置；当前域名需开启代理。"
+    "新增 VPS Claude Code（API 适配）路径，供应商、提示词、截断、总结和缓存均跟随 CK 配置。",
+    "所有路径即时显示思考与正文首字，分段模式保留逐条气泡。"
   ]
 }

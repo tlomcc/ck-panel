@@ -36,7 +36,9 @@ assert(source.includes('🧾 输入 token 明细')&&source.includes('📊 实际
   'cache diagnostics must show input, actual usage, and cleanup accounting');
 assert(source.includes('输出 token 明细')&&source.includes('原生思考'),
   'cache diagnostics must show output and native thinking accounting');
-assert(/chatRenderStreamingAssistantContent\(\s*assistantText,toolEvents,nativeThinkingText,false(?:,|\))/.test(source),
-  'streaming native thinking must stay out of the temporary assistant bubble');
+assert(source.includes('out.parentNode.insertBefore(streamAux,out)'),
+  'streaming thinking belongs outside the text bubble');
+assert(source.includes("cfg.nativeThinkingVisible===false?'':nativeThinkingText"),
+  'streaming thinking respects the CK visibility setting');
 
 console.log('native thinking panel tests: OK');
