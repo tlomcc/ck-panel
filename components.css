@@ -711,3 +711,14 @@ body.chat-active .ck-backtop{display:none}
 @media(prefers-reduced-motion:reduce){
   .ck-backtop{transition:none}
 }
+
+/* Gateway location selection shares existing chat/config storage. */
+#ck-backend-dialog{z-index:30000}
+.ck-backend-card{max-width:520px;max-height:90dvh;overflow:auto}
+.ck-backend-card label{display:block;margin:14px 0 6px;font-weight:600}
+.ck-backend-card select,.ck-backend-card input{width:100%;min-height:42px;padding:9px 10px;border:1px solid var(--line,#ccd5cf);border-radius:8px;background:var(--surface,#fff);color:inherit;font:inherit;box-sizing:border-box}
+.ck-backend-card p,.ck-backend-card small{display:block;margin:10px 0;line-height:1.65;overflow-wrap:anywhere}
+.ck-backend-card small{opacity:.75}
+.ck-auth-backend{display:none}
+.panel-auth-gate .ck-auth-backend{display:inline-flex;margin-bottom:10px}
+body.dark .ck-backend-card input,body.dark .ck-backend-card select{background:#202923;border-color:#49564c}

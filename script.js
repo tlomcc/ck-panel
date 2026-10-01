@@ -1,9 +1,10 @@
 var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/mcp';
 var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
+if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKBackendRoute.current.gateway;}
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v257-summary-feedback-compression';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v258-vps-gateway-selection';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -10003,6 +10004,7 @@ function chatInit(){
   }
 }
 async function chatSendMessage(){
+  if(window.ckBackendSwitchBusy){toast('正在验证并切换网关，请稍候');return;}
   chatInit();
   chatFlushAssistantRevealQueue();
   if(chatSending){
