@@ -48,7 +48,8 @@
   }
   function renderMaterials(){
     var d=state.draft;if(!d)return;
-    var items=d.materials.slice().sort(function(a,b){return String(a.time||'9999').localeCompare(String(b.time||'9999'))});
+    function timeKey(value){var m=String(value||'').match(/(20\d{2})[年./-](\d{1,2})(?:[月./-](\d{1,2})日?)?/);return m?m[1]+'-'+m[2].padStart(2,'0')+'-'+(m[3]||'1').padStart(2,'0'):'9999'}
+    var items=d.materials.slice().sort(function(a,b){return timeKey(a.time).localeCompare(timeKey(b.time))});
     message('mw-material-count',items.length+' / 200 条材料 · 按日期排列');
     el('mw-materials').innerHTML=items.length?items.map(function(m){return materialMarkup(m,true)}).join(''):'<p class="mw-empty">这个主题还没有材料。在下方搜索并加入 Fact。</p>';
   }

@@ -9,6 +9,7 @@
  const facts=Array.from({length:31},(_,i)=>({fact_id:'fact-'+i,text:i===0?'六月讨论旅行安排 <img src=x onerror="window.bad=1">':'合成旅行材料 '+i,time:'2026.06.'+String(i%28+1).padStart(2,'0'),status:'active',category:'旅行',source:{},history:[]}));
  let store={ok:true,revision:0,topics:[]},failSave=false,conflict=false,probeFailure=false,holdProbe=null;
  facts[0].status='expired';facts[0].superseded_by='fact-1';
+ facts[0].time='2026.10.2';facts[1].time='2026.2.3';
  const calls=[],response=(data,status=200)=>({ok:status<400,status,json:async()=>JSON.parse(JSON.stringify(data))});
  window.fetch=async(url,init={})=>{
    const u=new URL(String(url)),body=init.body?JSON.parse(init.body):null;u.pathname=u.pathname.replace(/^\/gateway(?=\/)/,'');calls.push({path:u.pathname,query:u.search,body});
@@ -69,6 +70,7 @@
  click('[data-mw="suggest"]');await wait(()=>$('mw-search-status').textContent.includes('检索 5100'));
  check(document.querySelectorAll('[data-mw-pick]:checked').length===2,'Suggested candidates must be reviewable');
  click('[data-mw="add-selected"]');check($('mw-material-count').textContent.includes('3 / 200'),'Bulk add failed');
+ check(document.querySelector('#mw-materials time').textContent==='2026.2.3','Timeline sorted dates as plain text');
  click('#mw-save');await wait(()=>$('mw-status').textContent==='主题已保存。');
  const themeSave=calls.filter(c=>c.body&&c.body.action==='save').at(-1).body;
  check(themeSave.aliases.length===2&&themeSave.recall_enabled===true,'Alias/recall settings lost');
