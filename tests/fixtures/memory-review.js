@@ -6,6 +6,7 @@
  panelAuthKey='fixture-key';localStorage.setItem(API_KEY_STORAGE,panelAuthKey);panelAppStarted=false;document.getElementById('loading-wrap').classList.add('done');
  const facts=[{fact_id:'f1',text:'看房后决定六月搬家。 <img src=x onerror="window.bad=1">',time:'2026-06-01'},{fact_id:'f2',text:'六月搬家，签订租房合同。',time:'2026-06-03'}];
  const proposal=n=>({id:'proposal_'+n,title:'六月搬家',status:'pending',target_topic_id:'',fact_ids:['f1','f2'],reason:'看房与签约可能是同一次搬家。',uncertainties:['需要核对地址'],evidence:[{fact_id:'f1',quote:'看房后决定六月搬家。'}],materials:facts});
+ facts[0].status='expired';facts[0].superseded_by='f2';
  let store={ok:true,revision:1,topics:[],organizer:{settings:{enabled:true,daily_calls:30,batch_size:8},pending:[proposal(1),proposal(2)],pending_count:2,operations:[],decisions:[],progress:{checked:8,total:100},usage:{date:'2026-10-02',calls:1},last_run:{status:'ok'}}};
  let fail=false,conflict=false;const requests=[];
  const response=(data,status=200)=>({ok:status<400,status,json:async()=>JSON.parse(JSON.stringify(data))});
@@ -31,6 +32,7 @@
  };
  navTo('topics');await wait(()=>$('mw-organizer').textContent.includes('2 项待审批'));
  check(document.querySelectorAll('[data-proposal]').length===2,'Cards missing');
+ check($('mw-organizer').textContent.includes('已过期 · 经历中的历史状态'),'Review hides historical status');
  check(!window.bad&&!document.querySelector('#mw-organizer img'),'Fact HTML executed');
  const selector='[data-proposal="proposal_1"] ';
  input(selector+'[data-mr-field="opinion"]','这是六月那次，请把七月的材料分开。');

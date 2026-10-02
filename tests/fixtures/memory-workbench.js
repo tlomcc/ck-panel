@@ -8,6 +8,7 @@
  $('loading-wrap').classList.add('done');
  const facts=Array.from({length:31},(_,i)=>({fact_id:'fact-'+i,text:i===0?'六月讨论旅行安排 <img src=x onerror="window.bad=1">':'合成旅行材料 '+i,time:'2026.06.'+String(i%28+1).padStart(2,'0'),status:'active',category:'旅行',source:{},history:[]}));
  let store={ok:true,revision:0,topics:[]},failSave=false,conflict=false,probeFailure=false,holdProbe=null;
+ facts[0].status='expired';facts[0].superseded_by='fact-1';
  const calls=[],response=(data,status=200)=>({ok:status<400,status,json:async()=>JSON.parse(JSON.stringify(data))});
  window.fetch=async(url,init={})=>{
    const u=new URL(String(url)),body=init.body?JSON.parse(init.body):null;u.pathname=u.pathname.replace(/^\/gateway(?=\/)/,'');calls.push({path:u.pathname,query:u.search,body});
@@ -37,6 +38,8 @@
  click('[data-mw="new"]');await wait(()=>$('mw-title'));
  check($('mw-save').disabled,'Empty title cannot save');input('mw-title','旅行手册 <script>window.bad=3</script>');input('mw-note','把出发前的计划与路上的小事放在一起。');
  input('mw-query','旅行');$('mw-search-form').requestSubmit();await wait(()=>document.querySelectorAll('.mw-search-result').length===30);
+ check(calls.at(-1).query.includes('state=all'),'Timeline search excluded expired Facts');
+ check($('mw-results').textContent.includes('已过期'),'Historical candidate missing status');
  input('mw-query','尚未提交的新查询');click('#mw-more');await wait(()=>document.querySelectorAll('.mw-search-result').length===31);
  const searchCall=calls.filter(c=>c.path==='/entity-facts').at(-1);check(searchCall.query.includes('offset=30')&&searchCall.query.includes(encodeURIComponent('旅行')),'Paging changed query before a new search');
  click('[data-mw="add"][data-id="fact-0"]');check(document.querySelector('[data-mw="add"][data-id="fact-0"]').disabled,'Duplicate add allowed');

@@ -22,6 +22,7 @@
         '<p>'+escape(p.reason)+'</p>'+(p.stale?'<p class="mw-cost">材料或主题已有更新，建议保留意见后重新判断。</p>':'')+
         (p.uncertainties||[]).map(function(x){return '<p class="mr-doubt">'+escape(x)+'</p>'}).join('')+
         '<details class="mr-materials"><summary>核对材料与引用依据</summary>'+(p.materials||[]).map(function(m){return '<label class="mr-material"><input type="checkbox" data-mr-field="pick" value="'+attr(m.fact_id)+'" '+(d.ids.indexOf(m.fact_id)>=0?'checked':'')+(m.missing?' disabled':'')+'><span><small>'+escape(m.time||'日期未记录')+'</small><span class="mr-fact-text">'+escape(m.text)+'</span>'+
+          (m.status==='expired'?'<small>已过期 · 经历中的历史状态'+(m.expired_reason?'：'+escape(m.expired_reason):'')+'</small>':'')+
           ((m.current_topics||[]).length?'<small>当前主题：'+escape(m.current_topics.map(function(id){var t=state.topics.find(function(x){return x.id===id});return t?t.title:'主题已变化'}).join('、'))+'</small>':'')+'</span></label>'+button('fact','查看原文与历史','data-id="'+attr(m.fact_id)+'"')}).join('')+
           (p.evidence||[]).map(function(e){return '<blockquote>'+escape(e.quote)+'</blockquote>'}).join('')+'</details>'+
         '<details class="mr-adjust"><summary>调整目标或材料</summary><label>归入主题<select data-mr-field="target"><option value="" '+(!d.target?'selected':'')+'>新建主题</option>'+state.topics.map(function(t){return '<option value="'+attr(t.id)+'" '+(t.id===d.target?'selected':'')+'>'+escape(t.title)+'</option>'}).join('')+'</select></label>'+
