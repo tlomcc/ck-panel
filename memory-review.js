@@ -8,9 +8,11 @@
   function copy(value){return JSON.parse(JSON.stringify(value))}
   function rid(){return 'review_'+(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2))}
   window.memoryReviewMount=function(hooks){
+    if(active&&active.dispose)active.dispose();
     var root=document.getElementById('mw-organizer');
+    var refreshTimer=null;
     var state={data:null,topics:[],tab:'pending',drafts:{},busy:false,request:null,message:''};
-    var instance={update:update,hasDraft:function(){return Object.keys(state.drafts).length>0}};
+    var instance={update:update,hasDraft:function(){return Object.keys(state.drafts).length>0},dispose:function(){clearTimeout(refreshTimer)}};
     active=instance;
     function draft(p){return state.drafts[p.id]||(state.drafts[p.id]={opinion:p.opinion||'',target:p.target_topic_id||'',title:p.title,ids:p.fact_ids.slice(),move:false})}
     function status(text){state.message=text;var node=root.querySelector('[data-mr-status]');if(node)node.textContent=text}
@@ -31,9 +33,10 @@
       if(active!==instance||!root.isConnected)return;
       var o=state.data;if(!o){root.innerHTML='';return}
       var progress=o.progress||{},usage=o.usage||{},last=o.last_run||{};
-      var statusNames={ok:'本轮已完成',running:'正在整理',needs_model:'等待配置主题 API',retry:'稍后重试',changed:'将按最新意见重新判断',queued:'已加入整理队列'};
+      var statusNames={ok:'本轮已完成',running:'正在整理',needs_model:'等待配置主题 API',retry:'稍后重试',changed:'将按最新意见重新判断',queued:'正在启动',paused:'已暂停',daily_limit:'今天的调用额度已用完',review_limit:'请先处理待审批方案',up_to_date:'当前材料已检查完毕'};
       var disabled=state.busy?' disabled':'';
       root.innerHTML='<section class="mw-card mr-organizer"><div class="mw-editor-head"><h3>自动整理</h3><span class="mr-badge">'+(o.settings.enabled?'已开启':'已暂停')+'</span></div>'+
+        '<fieldset class="mr-run-controls"'+disabled+'><div class="mw-toolbar"><button type="button" class="btn btn-blue btn-sm" data-mr="start" '+(o.running||last.status==='queued'?'disabled':'')+'>'+(o.running?'正在整理…':last.status==='queued'?'正在启动…':'立即开始')+'</button>'+button('pause','暂停',!o.settings.enabled&&!o.running?'disabled':'')+'</div></fieldset>'+
         '<p>已检查 '+(progress.checked||0)+' / '+(progress.total||0)+' 份材料 · '+o.pending_count+' 项待审批</p>'+
         '<p class="mw-note">'+escape(statusNames[last.status]||'等待下一轮整理')+(last.message?' · '+escape(last.message):'')+(usage.date?' · '+escape(usage.date)+' 已使用 '+usage.calls+' 次模型调用':'')+'</p>'+
         '<details class="mr-settings"><summary>整理设置与调用预算</summary><fieldset'+disabled+'><label class="mw-check"><input id="mr-enabled" type="checkbox" '+(o.settings.enabled?'checked':'')+'>自动整理已有和新增材料</label><div class="mr-settings-grid"><label>每日模型调用上限<input id="mr-daily" type="number" min="1" max="200" value="'+o.settings.daily_calls+'"></label><label>每批检查材料数<input id="mr-batch" type="number" min="2" max="12" value="'+o.settings.batch_size+'"></label></div><p class="mw-note">使用主题 API 的模型，后台分批运行；不占用聊天生成。暂时找不到关联的材料会保留，等待新线索。</p><div class="mw-toolbar">'+button('settings','保存设置')+button('api','主题 API')+button('rescan','重新检查历史材料')+'</div></fieldset></details>'+
@@ -48,6 +51,20 @@
       state.data=data.organizer||null;state.topics=data.topics||[];
       if(state.data){var pending=new Set(state.data.pending.map(function(p){return p.id}));Object.keys(state.drafts).forEach(function(id){if(!pending.has(id))delete state.drafts[id]})}
       render();
+      scheduleRefresh();
+    }
+    function scheduleRefresh(){
+      clearTimeout(refreshTimer);
+      if(active!==instance||!state.data||!state.data.settings.enabled)return;
+      var delay=state.data.running||state.data.last_run&&state.data.last_run.status==='queued'?10000:30000;
+      refreshTimer=setTimeout(async function(){
+        if(active!==instance||!root.isConnected)return;
+        var focused=document.activeElement;
+        var editing=root.contains(focused)&&/^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName);
+        if(!state.busy&&hooks.canWrite()&&root.closest('.panel-tab').classList.contains('active')&&document.visibilityState==='visible'&&
+            !editing&&!Object.keys(state.drafts).length)await refresh(true);
+        scheduleRefresh();
+      },delay);
     }
     root.addEventListener('input',function(e){
       var node=e.target,container=node.closest('[data-proposal]');if(!container||!state.data)return;
@@ -61,17 +78,20 @@
       if(!hooks.canWrite()){status('请先保存或处理主题编辑区的草稿，再提交审批。');return}
       var unsigned=JSON.stringify(body);
       if(!state.request||state.request.unsigned!==unsigned)state.request={unsigned:unsigned,body:Object.assign({},body,{request_id:rid(),expected_revision:hooks.revision()})};
-      state.busy=true;root.querySelectorAll('.mr-content,.mr-settings fieldset').forEach(function(n){n.disabled=true});status('正在保存…');
+      state.busy=true;root.querySelectorAll('.mr-content,.mr-settings fieldset,.mr-run-controls').forEach(function(n){n.disabled=true});status('正在保存…');
       try{
         var data=await hooks.request(state.request.body);
         if(active!==instance)return;
-        if(clearId)delete state.drafts[clearId];state.request=null;state.message='已保存。后续整理会参考你的处理结果和意见。';
+        if(clearId)delete state.drafts[clearId];state.request=null;
+        state.message=body.action==='organizer_pause'?'已暂停，已完成的主题和处理意见保留。':body.action==='organizer_start'?
+          (data.organizer.trigger==='requested'?'已请求立即开始，进度会自动更新。':data.organizer.trigger==='scheduled'?'已开启，后台会在下一次调度时开始。':data.organizer.running?'已有一轮正在整理。':data.organizer.last_run.message||'已提交开始请求。'):
+          '已保存。后续整理会参考你的处理结果和意见。';
         hooks.apply(data);
       }catch(e){
         if(active!==instance)return;
         status(e.message+' 意见和选择已保留。');
         if(e.status===409){state.request=null;await refresh(true)}
-      }finally{if(active===instance){state.busy=false;root.querySelectorAll('.mr-content,.mr-settings fieldset').forEach(function(n){n.disabled=false})}}
+      }finally{if(active===instance){state.busy=false;root.querySelectorAll('.mr-content,.mr-settings fieldset,.mr-run-controls').forEach(function(n){n.disabled=false})}}
     }
     async function refresh(preserveMessage){
       if(!hooks.canWrite()){status('请先保存主题编辑区的草稿。');return}
@@ -84,6 +104,7 @@
       if(action==='api'){navTo('apiconfig');switchApiTab('topics');return}
       if(action.indexOf('tab-')===0){state.tab=action.slice(4);render();return}
       if(action==='refresh'){await refresh(false);return}
+      if(action==='start'||action==='pause'){await submit({action:'organizer_'+action});return}
       if(action==='settings'){
         await submit({action:'organizer_settings',settings:{enabled:root.querySelector('#mr-enabled').checked,daily_calls:Number(root.querySelector('#mr-daily').value),batch_size:Number(root.querySelector('#mr-batch').value)}});return;
       }

@@ -23,6 +23,8 @@
     store.organizer.pending_count=store.organizer.pending.length;
     if(body.decision==='approve')store.topics.push({id:'topic_approved',title:body.title,materials:facts,aliases:[],note:''});
    }else if(body.action==='organizer_settings')store.organizer.settings=body.settings;
+   else if(body.action==='organizer_start'){store.organizer.settings.enabled=true;store.organizer.running=true;store.organizer.trigger='requested';store.organizer.last_run={status:'running'}}
+   else if(body.action==='organizer_pause'){store.organizer.settings.enabled=false;store.organizer.running=false;delete store.organizer.trigger;store.organizer.last_run={status:'paused'}}
    store.revision++;
   }
   return response(store);
@@ -32,6 +34,11 @@
  check(!window.bad&&!document.querySelector('#mw-organizer img'),'Fact HTML executed');
  const selector='[data-proposal="proposal_1"] ';
  input(selector+'[data-mr-field="opinion"]','这是六月那次，请把七月的材料分开。');
+ click('[data-mr="pause"]');await wait(()=>!store.organizer.settings.enabled&&!document.querySelector('[data-mr="start"]').disabled);
+ check(document.querySelector(selector+'textarea').value.includes('七月'),'Pause lost opinion');
+ click('[data-mr="start"]');await wait(()=>store.organizer.running&&document.querySelector('[data-mr="start"]').disabled);
+ check(!document.querySelector('[data-mr="pause"]').disabled,'Running state must allow pause');
+ click('[data-mr="pause"]');await wait(()=>!store.organizer.running&&!document.querySelector('[data-mr="start"]').disabled);
  click('[data-mr="tab-opinions"]');click('[data-mr="tab-pending"]');
  check(document.querySelector(selector+'textarea').value.includes('七月'),'Tab lost opinion');
  fail=true;click(selector+'[data-mr="recheck"]');await wait(()=>$('mw-organizer').textContent.includes('合成保存失败'));
@@ -55,5 +62,5 @@
  // Leave an example for desktop/mobile visual review.
  store.organizer.pending=[proposal(3)];store.organizer.pending_count=1;
  click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_3"]'));
- return {optionalOpinion:true,opinionSurvivesTabsAndFailures:true,retryReceipt:true,conflictRefresh:true,approval:true,recheck:true,escaped:true};
+ return {immediateStart:true,pause:true,opinionSurvivesPause:true,optionalOpinion:true,opinionSurvivesTabsAndFailures:true,retryReceipt:true,conflictRefresh:true,approval:true,recheck:true,escaped:true};
 })()
