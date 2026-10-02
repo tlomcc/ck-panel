@@ -1,7 +1,7 @@
 (function(root){
   'use strict';
   var key='ckBackendRouteV1';
-  var legacy={mode:'aliyun',gateway:'https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run',mcp:'https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/mcp'};
+  var defaults={mode:'vps',gateway:'https://tlomcc.cc.cd:18443/gateway',mcp:'https://tlomcc.cc.cd:18443/mcp',execution:'direct_api',subscriptionModel:'sonnet'};
   function normalize(value){
     var url=new URL(String(value||'').trim());
     if(url.username||url.password||url.search||url.hash)throw new Error('地址不能包含密钥、账号、查询参数或片段。');
@@ -10,14 +10,14 @@
     return url.href.replace(/\/+$/,'');
   }
   function parse(saved){
-    if(!saved||saved.mode!=='vps')return Object.assign({},legacy);
+    if(!saved||saved.mode!=='vps')return Object.assign({},defaults);
     var execution=saved.execution||'direct_api';
     if(['direct_api','claude_code_api','claude_code_subscription'].indexOf(execution)<0)throw new Error('未知聊天执行路径');
     var model=String(saved.subscriptionModel||'sonnet').trim();
     if(!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('请填写官方 Claude 模型名或 sonnet、opus、haiku');
     return {mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:execution,subscriptionModel:model};
   }
-  var current=Object.assign({},legacy),saved;
+  var current=Object.assign({},defaults),saved;
   try{saved=JSON.parse(root.localStorage.getItem(key)||'null');current=parse(saved)}catch(e){}
   if(!saved&&root.location&&root.location.hostname==='127.0.0.1'&&root.location.port==='19080'){
     current={mode:'vps',gateway:root.location.origin+'/gateway',mcp:root.location.origin+'/mcp'};
@@ -56,7 +56,7 @@
   }
   function isSubscription(){return current.mode==='vps'&&current.execution==='claude_code_subscription'}
   function subscriptionRoute(){return {ok:true,source:'claude_subscription',provider:null,providerName:'Claude 订阅',providerHost:'api.anthropic.com',apiBase:'',upstreamKey:'',apiType:'claude',model:current.subscriptionModel||'sonnet',reason:''}}
-  root.CKBackendRoute={isSubscription:isSubscription,subscriptionRoute:subscriptionRoute,subscriptionStatus:subscriptionStatus,key:key,current:current,legacy:legacy,normalize:normalize,parse:parse,probe:probe,storageValue:storageValue};
+  root.CKBackendRoute={isSubscription:isSubscription,subscriptionRoute:subscriptionRoute,subscriptionStatus:subscriptionStatus,key:key,current:current,defaults:defaults,normalize:normalize,parse:parse,probe:probe,storageValue:storageValue};
   if(typeof module==='object'&&module.exports)module.exports=root.CKBackendRoute;
 })(typeof window==='object'?window:globalThis);
 
@@ -90,7 +90,7 @@ function ckBackendFieldsChanged(){
   document.getElementById('ck-execution-hint').textContent=sub?'使用独立的官方订阅登录；CK 继续管理提示词、记忆、历史与工具。辅助总结和向量等仍使用各自 API。订阅不可用时不会自动切回 API。':'使用面板中的供应商 API 配置。Claude Code · API 使用官方客户端，由 CK 管理提示词、工具和聊天历史。';
 }
 function ckRenderBackendRoute(){
-  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_subscription'?'VPS · Claude Code（订阅）':CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（API）':'VPS · 直接 API'):'阿里云（迁移保留）'});
+  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_subscription'?'VPS · Claude Code（订阅）':CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（API）':'VPS · 直接 API'):'VPS · 直接 API'});
 }
 if(typeof document==='object'){
   document.addEventListener('DOMContentLoaded',ckRenderBackendRoute);

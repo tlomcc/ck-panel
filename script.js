@@ -1,10 +1,10 @@
-var API_BASE='https://memory-tools-kjlrchffqe.cn-hangzhou.fcapp.run/mcp';
-var GRAPH_API_BASE='https://ck-gateway-kbjndwjdwa.cn-hangzhou.fcapp.run';
+var API_BASE='https://tlomcc.cc.cd:18443/mcp';
+var GRAPH_API_BASE='https://tlomcc.cc.cd:18443/gateway';
 if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKBackendRoute.current.gateway;}
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v265-merged-settings-tools';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v266-vps-primary';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}

@@ -73,7 +73,8 @@
  // The route choice stays in CK and uses the native selector, no nested popup.
  ckOpenBackendRoute();document.getElementById('ck-backend-mode').value='vps';ckBackendFieldsChanged();
  assert(!document.getElementById('ck-vps-fields').hidden,'VPS route fields hidden');
- assert(document.getElementById('ck-execution-mode').options.length===2,'execution routes missing');ckCloseBackendRoute();
+ assert(document.getElementById('ck-execution-mode').options.length===3,'execution routes missing');
+ assert(document.getElementById('ck-backend-mode').options.length===1&&document.getElementById('ck-backend-mode').value==='vps','retired gateway remains selectable');ckCloseBackendRoute();
  const box=document.getElementById('chat-messages');assert(box.scrollWidth<=box.clientWidth+2,'message layout overflow');
  return {results,stop:true,routeSelector:true};
 })()

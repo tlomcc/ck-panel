@@ -11,10 +11,8 @@
   assert(box.textContent.includes('15.6%')&&box.textContent.includes('78天 9时'),'metrics not rendered');
   assert(box.querySelector('.ck-server-card').scrollWidth<=box.querySelector('.ck-server-card').clientWidth+1,'status card overflows');
   const screenshot=window.__captureStatus; // CDP harness captures this open state separately.
-  document.querySelector('[data-mode=aliyun]').click();await pause(40);
-  assert(!box.querySelector('progress'),'FC incorrectly shows host resource bars');
-  document.querySelector('[data-mode=vps]').click();await pause(40);
+  assert(!document.querySelector('[data-mode=aliyun]'),'retired Alibaba probe remains selectable');
   window.__closeStatusTest=()=>{document.getElementById('ck-server-close').click();window.fetch=old;storedPanelKey=oldAuth;};
-  return {metrics:true,auth:true,fcDistinct:true,calls};
+  return {metrics:true,auth:true,retiredCloudRemoved:true,calls};
  }catch(e){window.fetch=old;storedPanelKey=oldAuth;throw e}
 })()
