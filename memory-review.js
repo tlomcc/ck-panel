@@ -18,17 +18,20 @@
     function status(text){state.message=text;var node=root.querySelector('[data-mr-status]');if(node)node.textContent=text}
     function card(p){
       var d=state.drafts[p.id]||{opinion:p.opinion||'',target:p.target_topic_id||'',title:p.title,ids:p.fact_ids,move:false};
-      return '<article class="mr-proposal" data-proposal="'+attr(p.id)+'"><div class="mw-editor-head"><h3>'+escape(p.title)+'</h3><span class="mr-badge">'+(p.status==='deferred'?'已暂缓':'待审批')+' · '+p.fact_ids.length+' 份材料</span></div>'+
-        '<p>'+escape(p.reason)+'</p>'+(p.stale?'<p class="mw-cost">材料或主题已有更新，建议保留意见后重新判断。</p>':'')+
+      var target=state.topics.find(function(t){return t.id===d.target});
+      return '<article class="mr-proposal" data-proposal="'+attr(p.id)+'"><div class="mw-editor-head"><h3>'+(d.target?'是否将这些材料加入主题？':'是否用这些材料新建主题？')+'</h3><span class="mr-badge">'+(p.status==='deferred'?'已暂缓':'待审批')+' · '+p.fact_ids.length+' 份待加入材料</span></div>'+
+        '<p><strong>'+(d.target?'目标主题：':'拟建主题：')+'</strong>'+escape(target?target.title:d.target?(p.target_title||p.title):d.title)+'</p>'+
+        '<p><strong>建议理由：</strong>'+escape(p.reason)+'</p>'+(p.stale?'<p class="mw-cost">材料或主题已有更新，建议保留意见后重新判断。</p>':'')+
+        '<h4>需要你判断的疑点</h4>'+
         (p.uncertainties||[]).map(function(x){return '<p class="mr-doubt">'+escape(x)+'</p>'}).join('')+
-        '<details class="mr-materials"><summary>核对材料与引用依据</summary>'+(p.materials||[]).map(function(m){return '<label class="mr-material"><input type="checkbox" data-mr-field="pick" value="'+attr(m.fact_id)+'" '+(d.ids.indexOf(m.fact_id)>=0?'checked':'')+(m.missing?' disabled':'')+'><span><small>'+escape(m.time||'日期未记录')+'</small><span class="mr-fact-text">'+escape(m.text)+'</span>'+
-          (m.status==='expired'?'<small>已过期 · 经历中的历史状态'+(m.expired_reason?'：'+escape(m.expired_reason):'')+'</small>':'')+
+        '<div class="mr-materials"><h4>待加入材料（尚未加入目标主题）</h4>'+(p.materials||[]).map(function(m){return '<label class="mr-material"><input type="checkbox" data-mr-field="pick" value="'+attr(m.fact_id)+'" '+(d.ids.indexOf(m.fact_id)>=0?'checked':'')+(m.missing?' disabled':'')+'><span><small>'+escape(m.time||'日期未记录')+'</small><span class="mr-fact-text">'+escape(m.text)+'</span>'+
           ((m.current_topics||[]).length?'<small>当前主题：'+escape(m.current_topics.map(function(id){var t=state.topics.find(function(x){return x.id===id});return t?t.title:'主题已变化'}).join('、'))+'</small>':'')+'</span></label>'+button('fact','查看原文与历史','data-id="'+attr(m.fact_id)+'"')}).join('')+
-          (p.evidence||[]).map(function(e){return '<blockquote>'+escape(e.quote)+'</blockquote>'}).join('')+'</details>'+
+          '</div>'+(d.target?'<details class="mr-reference"><summary>目标主题已有材料（仅供对照，无需审批）</summary>'+((target?target.materials:p.target_materials)||[]).slice(0,5).map(function(m){return '<p><small>'+escape(m.time||'日期未记录')+'</small></p><blockquote>'+escape(m.text||'')+'</blockquote>'}).join('')+'</details>':'')+
+        '<details><summary>模型引用依据</summary>'+(p.evidence||[]).map(function(e){return '<blockquote>'+escape(e.quote)+'</blockquote>'}).join('')+'</details>'+
         '<details class="mr-adjust"><summary>调整目标或材料</summary><label>归入主题<select data-mr-field="target"><option value="" '+(!d.target?'selected':'')+'>新建主题</option>'+state.topics.map(function(t){return '<option value="'+attr(t.id)+'" '+(t.id===d.target?'selected':'')+'>'+escape(t.title)+'</option>'}).join('')+'</select></label>'+
-        '<label>新主题名称<input data-mr-field="title" maxlength="80" value="'+attr(d.title)+'"></label><label class="mw-check"><input type="checkbox" data-mr-field="move" '+(d.move?'checked':'')+'>同时从其他主题移出所选材料</label><p class="mw-note">材料可在上方展开后取消勾选；移出关系会被记住。</p></details>'+
+        '<label>新主题名称<input data-mr-field="title" maxlength="80" value="'+attr(d.title)+'"></label><label class="mw-check"><input type="checkbox" data-mr-field="move" '+(d.move?'checked':'')+'>同时从其他主题移出所选材料</label><p class="mw-note">在上方勾选本次要加入的材料；移出关系会被记住。</p></details>'+
         '<label for="opinion-'+attr(p.id)+'">处理意见（选填）</label><textarea id="opinion-'+attr(p.id)+'" data-mr-field="opinion" maxlength="2000" rows="3" placeholder="例如：这是上一次搬家的事，请按时间分开。下次整理相关材料时会先参考这些意见。">'+escape(d.opinion)+'</textarea>'+
-        '<div class="mw-toolbar">'+button('approve','同意当前方案')+button('recheck','保存意见并重新判断')+button('defer','暂缓')+button('reject','拒绝')+'</div></article>';
+        '<div class="mw-toolbar">'+button('approve',d.target?'加入所选材料':'新建主题并加入')+button('recheck','保存意见并重新判断')+button('defer','暂缓')+button('reject','不加入')+'</div></article>';
     }
     function render(){
       if(active!==instance||!root.isConnected)return;
@@ -40,7 +43,8 @@
       var disabled=state.busy?' disabled':'';
       root.innerHTML='<section class="mw-card mr-organizer"><div class="mw-editor-head"><h3>自动整理</h3><span class="mr-badge">'+(o.settings.enabled?'已开启':'已暂停')+'</span></div>'+
         '<fieldset class="mr-run-controls"'+disabled+'><div class="mw-toolbar"><button type="button" class="btn btn-blue btn-sm" data-mr="start" '+(o.running||last.status==='queued'?'disabled':'')+'>'+(o.running?'正在整理…':last.status==='queued'?'正在启动…':'立即开始')+'</button>'+button('pause','暂停',!o.settings.enabled&&!o.running?'disabled':'')+'</div></fieldset>'+
-        '<p>已检查 '+(progress.checked||0)+' / '+(progress.total||0)+' 份材料 · '+o.pending_count+' 项待审批</p>'+
+        '<p>已检查 '+(progress.checked||0)+' / '+(progress.total||0)+' 份有效材料 · '+o.pending_count+' 项待审批</p>'+
+        '<p class="mw-note">主题仅收录当前有效材料，排除过期和被替代的版本。待审批只决定材料是否加入目标主题。</p>'+
         '<p class="mw-note">'+escape(statusNames[last.status]||'等待下一轮整理')+(last.message?' · '+escape(last.message):'')+(usage.date?' · '+escape(usage.date)+' 已使用 '+usage.calls+' 次模型调用':'')+'</p>'+
         '<details class="mr-settings"'+(state.settingsOpen?' open':'')+'><summary>整理设置与调用预算</summary><fieldset'+disabled+'><label class="mw-check"><input id="mr-enabled" type="checkbox" '+(settings.enabled?'checked':'')+'>自动整理已有和新增材料</label><div class="mr-settings-grid"><label>每日模型调用上限（1–1000）<input id="mr-daily" type="number" min="1" max="1000" step="1" value="'+attr(settings.daily_calls)+'"></label><label>每批检查材料数（2–12）<input id="mr-batch" type="number" min="2" max="12" step="1" value="'+attr(settings.batch_size)+'"></label></div><p class="mw-note">使用主题 API 的模型，后台分批运行；不占用聊天生成。暂时找不到关联的材料会保留，等待新线索。</p><div class="mw-toolbar">'+button('settings','保存设置')+button('api','主题 API')+button('rescan','重新检查历史材料')+'</div></fieldset></details>'+
         '<div class="mw-toolbar mr-tabs" role="group" aria-label="整理记录">'+button('tab-pending','待审批 '+o.pending_count,'aria-pressed="'+(state.tab==='pending')+'"')+button('tab-automatic','自动处理记录','aria-pressed="'+(state.tab==='automatic')+'"')+button('tab-opinions','处理意见','aria-pressed="'+(state.tab==='opinions')+'"')+button('refresh','刷新进度')+'</div>'+
@@ -83,6 +87,7 @@
       if(field==='pick')d.ids=Array.from(container.querySelectorAll('[data-mr-field="pick"]:checked')).map(function(n){return n.value});
       else if(field==='move')d.move=node.checked;else if(field)d[field]=node.value;
       state.request=null;
+      if(field==='target')render();
     });
     async function submit(body,clearId){
       if(!hooks.canWrite()){status('请先保存或处理主题编辑区的草稿，再提交审批。');return}

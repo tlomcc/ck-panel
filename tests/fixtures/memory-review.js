@@ -6,7 +6,7 @@
  panelAuthKey='fixture-key';localStorage.setItem(API_KEY_STORAGE,panelAuthKey);panelAppStarted=false;document.getElementById('loading-wrap').classList.add('done');
  const facts=[{fact_id:'f1',text:'看房后决定六月搬家。 <img src=x onerror="window.bad=1">',time:'2026-06-01'},{fact_id:'f2',text:'六月搬家，签订租房合同。',time:'2026-06-03'}];
  const proposal=n=>({id:'proposal_'+n,title:'六月搬家',status:'pending',target_topic_id:'',fact_ids:['f1','f2'],reason:'看房与签约可能是同一次搬家。',uncertainties:['需要核对地址'],evidence:[{fact_id:'f1',quote:'看房后决定六月搬家。'}],materials:facts});
- facts[0].status='expired';facts[0].superseded_by='f2';
+ facts.forEach(f=>f.status='active');
  let store={ok:true,revision:1,topics:[],organizer:{settings:{enabled:true,daily_calls:30,batch_size:8},pending:[proposal(1),proposal(2)],pending_count:2,operations:[],decisions:[],progress:{checked:8,total:100},usage:{date:'2026-10-02',calls:1},last_run:{status:'ok'}}};
  let fail=false,conflict=false;const requests=[];
  const response=(data,status=200)=>({ok:status<400,status,json:async()=>JSON.parse(JSON.stringify(data))});
@@ -32,7 +32,8 @@
  };
  navTo('topics');await wait(()=>$('mw-organizer').textContent.includes('2 项待审批'));
  check(document.querySelectorAll('[data-proposal]').length===2,'Cards missing');
- check($('mw-organizer').textContent.includes('已过期 · 经历中的历史状态'),'Review hides historical status');
+ check($('mw-organizer').textContent.includes('待加入材料（尚未加入目标主题）'),'Candidate membership ambiguous');
+ check(document.querySelector('.mr-materials input').getClientRects().length>0,'Candidates hidden');
  check(!window.bad&&!document.querySelector('#mw-organizer img'),'Fact HTML executed');
  const selector='[data-proposal="proposal_1"] ';
  input(selector+'[data-mr-field="opinion"]','这是六月那次，请把七月的材料分开。');
@@ -79,7 +80,11 @@
  check(requests.length===count&&$('mw-organizer').textContent.includes('设置未保存：'),'Invalid settings submitted');
  input('#mr-daily','500');click('[data-mr="settings"]');await wait(()=>$('mw-organizer').textContent.includes('设置已保存：'));
  // Leave an example for desktop/mobile visual review.
- store.organizer.pending=[proposal(3)];store.organizer.pending_count=1;
+ const existing=store.topics[0];
+ store.organizer.pending=[{...proposal(3),target_topic_id:existing.id,fact_ids:['f3'],materials:[{fact_id:'f3',text:'六月搬家，搬运家具到新家。',time:'2026-06-05',status:'active'}]}];store.organizer.pending_count=1;
  click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_3"]'));
+ check(document.querySelector('[data-proposal="proposal_3"] [data-mr="approve"]').textContent==='加入所选材料','Approval action unclear');
+ check(document.querySelectorAll('.mr-materials input').length===1,'Existing members offered for approval');
+ check(document.querySelector('.mr-reference').textContent.includes('无需审批'),'Existing evidence not separated');
  return {settings500and10:true,settingsSurviveRefreshFailureAndConflict:true,immediateStart:true,pause:true,opinionSurvivesPause:true,optionalOpinion:true,opinionSurvivesTabsAndFailures:true,retryReceipt:true,conflictRefresh:true,approval:true,recheck:true,escaped:true};
 })()

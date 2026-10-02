@@ -56,7 +56,7 @@
   function renderEditor(){
     var d=state.draft;el('mw-search').hidden=!d;
     if(!d){el('mw-topic-editor').innerHTML='<div class="mw-card mw-empty">选择一个主题，或新建主题开始整理。</div>';return}
-    el('mw-topic-editor').innerHTML='<section class="mw-card"><div class="mw-editor-head"><h3>主题内容</h3><span id="mw-draft-status" class="mw-note">已保存</span></div><fieldset id="mw-editor-fields"><label for="mw-title">主题名称</label><input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"><label for="mw-note">我的说明</label><textarea id="mw-note" rows="3" maxlength="2000" placeholder="这份目录想收下什么？">'+esc(d.note||'')+'</textarea><label for="mw-aliases">主题别名（逗号分隔，最多 12 个，每个至少 2 字）</label><input id="mw-aliases" maxlength="970" value="'+escAttr((d.aliases||[]).join('，'))+'" placeholder="例如：日本旅行、东京行程"><label class="mw-check"><input id="mw-enabled" type="checkbox" '+(d.recall_enabled!==false?'checked':'')+'>允许召回 C 使用这个主题</label></fieldset><div class="mw-toolbar">'+button('save','保存主题','id="mw-save"')+button('delete','删除主题','id="mw-delete"')+button('copy','复制目录')+'</div><p class="mw-note">保存只更新关联，不修改原始 Fact。聊天设置选择 C 后，提到主题名或别名会限定检索；普通问题命中相关材料时附目录。主题按时间保留当前与已过期的材料，记录事情进展；展开历史材料时会标注状态。</p><h3 id="mw-material-count"></h3><div id="mw-materials" class="mw-timeline"></div></section>';
+    el('mw-topic-editor').innerHTML='<section class="mw-card"><div class="mw-editor-head"><h3>主题内容</h3><span id="mw-draft-status" class="mw-note">已保存</span></div><fieldset id="mw-editor-fields"><label for="mw-title">主题名称</label><input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"><label for="mw-note">我的说明</label><textarea id="mw-note" rows="3" maxlength="2000" placeholder="这份目录想收下什么？">'+esc(d.note||'')+'</textarea><label for="mw-aliases">主题别名（逗号分隔，最多 12 个，每个至少 2 字）</label><input id="mw-aliases" maxlength="970" value="'+escAttr((d.aliases||[]).join('，'))+'" placeholder="例如：日本旅行、东京行程"><label class="mw-check"><input id="mw-enabled" type="checkbox" '+(d.recall_enabled!==false?'checked':'')+'>允许召回 C 使用这个主题</label></fieldset><div class="mw-toolbar">'+button('save','保存主题','id="mw-save"')+button('delete','删除主题','id="mw-delete"')+button('copy','复制目录')+'</div><p class="mw-note">保存只更新关联，不修改原始 Fact。聊天设置选择 C 后，提到主题名或别名会限定检索；普通问题命中相关材料时附目录。主题按时间展示当前有效材料，过期及被替代的版本不再收录。</p><h3 id="mw-material-count"></h3><div id="mw-materials" class="mw-timeline"></div></section>';
     renderMaterials();syncButtons();
   }
   function syncButtons(){
@@ -106,10 +106,10 @@
     if(!more){state.results=[];state.more=false;renderResults()}
     state.searching=true;message('mw-search-status','正在搜索已有 Fact…');el('mw-more').disabled=true;
     try{
-      var data=await request('/entity-facts?state=all&sort=recent&limit=30&offset='+offset+'&q='+encodeURIComponent(query));
+      var data=await request('/entity-facts?state=active&sort=recent&limit=30&offset='+offset+'&q='+encodeURIComponent(query));
       if(seq!==state.searchSeq||!validKey(key))return;
       if(!Array.isArray(data.items)||!data.pagination)throw new Error('Fact 搜索格式无效');
-      state.results=more?state.results.concat(data.items):data.items;state.searchQuery=query;state.offset=data.pagination.next_offset;state.more=data.pagination.has_more;
+      var eligible=data.items.filter(function(m){return (!m.status||m.status==='active')&&!m.superseded_by});state.results=more?state.results.concat(eligible):eligible;state.searchQuery=query;state.offset=data.pagination.next_offset;state.more=data.pagination.has_more;
       renderResults();message('mw-search-status','找到 '+data.pagination.total+' 条，已显示 '+state.results.length+' 条。加入后保存主题即可。');
     }catch(e){if(seq===state.searchSeq&&validKey(key)){message('mw-search-status',e.message);state.more=false;el('mw-more').hidden=true}}
     finally{if(seq===state.searchSeq&&validKey(key)){state.searching=false;el('mw-more').disabled=false}}
@@ -122,7 +122,7 @@
     try{
       var data=await request('/ck/memory-topics',{action:'suggest',title:title,note:state.draft.note||'',exclude_ids:state.draft.materials.map(function(m){return m.fact_id}),smart:smart});
       if(!validKey(key)||seq!==state.searchSeq||!state.draft||state.draft.id!==draftId)return;
-      state.results=data.items;renderResults();message('mw-search-status','检索 '+data.scanned+' 条 Fact（含历史状态），显示 '+data.candidate_count+' 条候选，模型建议 '+data.recommended_count+' 条。请核对勾选后加入并保存。 '+(data.warnings||[]).join(' '));
+      state.results=data.items;renderResults();message('mw-search-status','检索 '+data.scanned+' 条有效 Fact，显示 '+data.candidate_count+' 条候选，模型建议 '+data.recommended_count+' 条。请核对勾选后加入并保存。 '+(data.warnings||[]).join(' '));
     }catch(e){if(validKey(key)&&seq===state.searchSeq)message('mw-search-status',e.message)}
     finally{if(validKey(key)&&seq===state.searchSeq)state.searching=false}
   }

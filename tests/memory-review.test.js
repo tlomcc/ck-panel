@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('node:assert/strict');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../0-工作间/v267-topic-organizer/browser');
+const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../0-工作间/v272-topic-current/browser');
 fs.mkdirSync(out,{recursive:true});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const server=http.createServer((req,res)=>{
@@ -44,6 +44,9 @@ const server=http.createServer((req,res)=>{
     const geometry=await evaluate(`({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,duplicates:(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.length-new Set(ids).size})()})`);
     assert(geometry.scroll<=geometry.width+1,JSON.stringify({destination,width,...geometry}));assert.equal(geometry.duplicates,0);
     await shot(destination+'-'+width+'-'+dark);
+    await evaluate("document.querySelector('[data-proposal]').scrollIntoView({block:'start'});document.querySelector('.mr-reference').open=true");
+    await pause(80);
+    await shot('approval-'+width+'-'+dark);
    }
   }
   await Promise.race([send('Browser.close'),pause(500)]);
