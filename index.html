@@ -14,22 +14,22 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v4-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v4.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="style.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="polish.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="chat.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="wechat.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="shell.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="components.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="daily-status.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="settings.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="chat-ui.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="server-status.css?v=chat-v272-current-topic-materials">
-<script>window.CK_PANEL_VERSION='chat-v272-current-topic-materials';</script>
+<link rel="stylesheet" href="tokens.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="style.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="polish.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="chat.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="wechat.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="shell.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="components.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="daily-status.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="settings.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="chat-ui.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="server-status.css?v=chat-v273-resumable-tiered-digest">
+<script>window.CK_PANEL_VERSION='chat-v273-resumable-tiered-digest';</script>
 <script>window.CK_PANEL_RELEASE_NOTES=["新增服务器状态页，查看 VPS 资源与关键服务。", "修复结束后仍在等待、流式文字成块跳出及思考计时换行。"];</script>
-<link rel="stylesheet" href="notebook.css?v=chat-v272-current-topic-materials">
-<link rel="stylesheet" href="memory-workbench.css?v=chat-v272-current-topic-materials">
+<link rel="stylesheet" href="notebook.css?v=chat-v273-resumable-tiered-digest">
+<link rel="stylesheet" href="memory-workbench.css?v=chat-v273-resumable-tiered-digest">
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><img src="icons/app-icon-v4.svg" alt=""></div><div class="startup-name">CK</div><div class="startup-subtitle">小小日常，慢慢收藏</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -38,7 +38,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><img src="icons/app-icon-v4.svg" alt=""></button><div><h1>CK</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v272" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v272-current-topic-materials</button>
+<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v273" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v273-resumable-tiered-digest</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -221,7 +221,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v272-current-topic-materials" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v272</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v273-resumable-tiered-digest" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v273</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option><option value="cleanup">清理</option><option value="gateway">API 连接</option></optgroup><optgroup label="显示与管理"><option value="display">设置</option><option value="tools">工具</option><option value="debug">调试</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13 5 5l7 4 7-4-1 8a7 7 0 1 1-12 0Z"/><path d="M9 15v1m6-1v1m-5 3q2 2 4 0"/></svg></span><div><h2>系统提示词</h2><p>给小克一张角色小卡片。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
@@ -298,7 +298,7 @@
 <p class="chat-field-hint" id="chat-digest-detail-hint">每个日期一条，表头固定为【YYYY-MM-DD】。跨日对话按结束日期归档，没有内容的日期不编造总结。</p>
 <div class="chat-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveDigestEditor('detail')">保存详细总结</button><button class="btn btn-outline" type="button" onclick="chatResetDigestEditor('detail')">放弃修改</button></div>
 <label>y 天滚动大总结<textarea id="chat-digest-rollup" rows="10" placeholder="【2026-05-18-2026-05-20】&#10;这段日期的合并总结" oninput="chatDigestEditorChanged('rollup')"></textarea><small class="chat-field-count" id="chat-digest-rollup-count">当前 0 字</small></label>
-<p class="chat-field-hint" id="chat-digest-rollup-hint">排除最近 x 天，取紧接着的 y 天详细总结合成一段。日期或来源变化后自动更新。</p>
+<p class="chat-field-hint" id="chat-digest-rollup-hint">排除最近 x 天，按之前 y 天逐日提炼后合并展示，每天最多1500字。日期或来源变化后自动更新。</p>
 <div class="chat-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveDigestEditor('rollup')">保存大总结</button><button class="btn btn-outline" type="button" onclick="chatRefreshDigestNow('rollup')">重新生成大总结</button><button class="btn btn-outline" type="button" onclick="chatResetDigestEditor('rollup')">放弃修改</button></div>
 </details>
 <label>当日新总结<textarea id="chat-digest-today" rows="12" placeholder="当日的新内容保存在这里，跨日后进入滚动详细总结。" oninput="chatDigestEditorChanged('today')"></textarea><small class="chat-field-count" id="chat-digest-today-count">当前 0 字</small></label>
@@ -311,15 +311,15 @@
 <div class="chat-digest-days"><label>n · 滚动保留<input id="chat-daily-digest-retention-days" type="number" min="1" max="100" step="1" value="7" inputmode="numeric" oninput="chatDigestSettingsEdited()"></label><label>x · 详细注入<input id="chat-digest-detail-days" type="number" min="0" max="100" step="1" value="3" inputmode="numeric" oninput="chatDigestSettingsEdited()"></label><label>y · 合并注入<input id="chat-digest-rollup-days" type="number" min="0" max="100" step="1" value="4" inputmode="numeric" oninput="chatDigestSettingsEdited()"></label></div>
 <p class="chat-field-hint" id="chat-digest-range-hint">x + y 必须小于或等于 n；这三个天数均不含今天。</p>
 <label class="chat-switch"><input id="chat-daily-digest-enabled" type="checkbox" checked onchange="chatSaveDailyDigestSetting(true)"><span>启用截断总结</span></label>
-<div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveDailyDigestSetting()">保存总结设置</button><span class="chat-cache-save-status" id="chat-daily-digest-save-status" role="status" aria-live="polite"></span></div>
-<details class="chat-setting-help"><summary>日期与更新规则</summary><p>n=3 时，备选框保留昨天、前天、大前天。x 取最近 x 个自然日；y 从这之前再取 y 个自然日，合成【开始日期-结束日期】一段。每天滚动，缺失日期不以更早日期代替。</p><p>每日详细总结表头固定为【2026-05-21】。跨午夜的一轮对话归入回复结束的日期，正文保留实际发生时间。今天单独保存，第二天进入滚动详细总结框。</p><p>页面运行时自动检查跨日；关闭或休眠后，在下次打开或发送时补齐。总结仍使用「截断总结」API。生成失败保留已存内容与原对话，截断等待总结成功后才执行。</p></details>
+<div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveDailyDigestSetting()">保存总结设置</button><button class="btn btn-outline btn-sm" id="chat-digest-cancel-btn" type="button" hidden onclick="chatCancelDigestWork()">停止总结（保留进度）</button><span class="chat-cache-save-status" id="chat-daily-digest-save-status" role="status" aria-live="polite"></span></div>
+<details class="chat-setting-help"><summary>日期与更新规则</summary><p>n=3 时，备选框保留昨天、前天、大前天。x 取最近 x 个自然日；y 从这之前再取 y 个自然日，合成【开始日期-结束日期】一段。每天滚动，缺失日期不以更早日期代替。</p><p>每日详细总结表头固定为【2026-05-21】。跨午夜的一轮对话归入回复结束的日期，正文保留实际发生时间。今天单独保存，不设字数预算；进入 x 后每天0–2500字，进入 y 后每天0–1500字，都是上限，不要求凑满。完整当日来源保留，跨日后另外生成摘要。</p><p>页面运行时自动检查跨日；关闭或休眠后，在下次打开或发送时补齐。总结仍使用「截断总结」API。每批生成最多等待3分钟，必要时重试一次，限流最多额外等待1分钟。界面显示批次和等待时间，可随时停止。成功批次会保存，失败或刷新后继续；原对话只在全部总结成功后截断。</p></details>
 </div>
 <label class="chat-switch"><input id="chat-new-session-digest-sync" type="checkbox" checked onchange="chatSaveConfig(true)"><span>新窗口继承「小克」窗口的所有总结</span></label><p class="chat-field-hint">从最近有有效总结的「小克」窗口独立复制滚动详细总结、大总结和当日内容。</p>
 </section>
 </div>
 <div class="chat-side-panel" id="chat-side-trim" data-notebook="peach"><header class="ck-notebook-heading" data-scope="window"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 9 12 11M8 16 20 3"/></svg></span><div><h2>截断</h2><p>留下最近的对话，收好更早的记忆。</p></div><span class="chat-scope-badge">当前窗口</span></header>
 <div class="chat-memory-card chat-trim-state"><b id="chat-trim-current">当前 0 轮</b><p id="chat-trim-next">到达 1h 缓存边界后自动整理，完成后保留最近 200 轮。</p></div><div class="chat-scope-tabs" role="group" aria-label="截断设置作用范围"><button type="button" data-trim-view="window" aria-pressed="true" onclick="chatSelectTrimScope('window')">当前窗口</button><button type="button" data-trim-view="default" aria-pressed="false" onclick="chatSelectTrimScope('default')">通用默认</button></div>
-<section id="chat-trim-window-section" class="chat-setting-group" data-scope="window"><div class="chat-scope-heading" data-scope="window"><span class="chat-scope-badge">当前窗口</span><div><b>本窗口的独立设置</b></div></div><div class="chat-memory-card chat-window-trim-card"><b>当前窗口截断</b><details class="chat-setting-help"><summary>说明与用法</summary><p>打开后，本窗口使用下面这组独立设置；关闭时跟随下方默认截断。</p></details><label class="chat-switch"><input id="chat-window-trim-override" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口使用独立截断设置</span></label><fieldset id="chat-window-trim-fields" class="chat-trim-fields"><legend class="sr-only">本窗口独立截断参数</legend><label class="chat-switch"><input id="chat-window-trim-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用当前窗口 1h 缓存边界自动截断</span></label><label>当前窗口至少保留真实轮数<input id="chat-window-trim-keep" type="number" min="1" step="1" value="200" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-round-limit-enabled" type="checkbox" onchange="chatSaveConfig(true)"><span>启用当前窗口轮数上限自动截断</span></label><label>当前窗口达到轮数上限<input id="chat-window-trim-round-limit" type="number" min="2" step="1" value="1000" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-prefix-silent" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口共同前缀模式静默通知</span></label></fieldset><p class="chat-field-hint" id="chat-window-trim-hint">当前窗口跟随默认截断。</p></div><div class="chat-actions"><button class="btn btn-outline btn-sm" id="chat-manual-trim-btn" type="button" onclick="chatManualTrimNow()">立即截断</button></div><button class="chat-setting-link" type="button" onclick="chatOpenSettingTab('digest')">查看本窗口截断总结 →</button></section>
+<section id="chat-trim-window-section" class="chat-setting-group" data-scope="window"><div class="chat-scope-heading" data-scope="window"><span class="chat-scope-badge">当前窗口</span><div><b>本窗口的独立设置</b></div></div><div class="chat-memory-card chat-window-trim-card"><b>当前窗口截断</b><details class="chat-setting-help"><summary>说明与用法</summary><p>打开后，本窗口使用下面这组独立设置；关闭时跟随下方默认截断。</p></details><label class="chat-switch"><input id="chat-window-trim-override" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口使用独立截断设置</span></label><fieldset id="chat-window-trim-fields" class="chat-trim-fields"><legend class="sr-only">本窗口独立截断参数</legend><label class="chat-switch"><input id="chat-window-trim-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用当前窗口 1h 缓存边界自动截断</span></label><label>当前窗口至少保留真实轮数<input id="chat-window-trim-keep" type="number" min="1" step="1" value="200" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-round-limit-enabled" type="checkbox" onchange="chatSaveConfig(true)"><span>启用当前窗口轮数上限自动截断</span></label><label>当前窗口达到轮数上限<input id="chat-window-trim-round-limit" type="number" min="2" step="1" value="1000" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-prefix-silent" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口共同前缀模式静默通知</span></label></fieldset><p class="chat-field-hint" id="chat-window-trim-hint">当前窗口跟随默认截断。</p></div><div class="chat-actions"><button class="btn btn-outline btn-sm" id="chat-manual-trim-btn" type="button" onclick="chatManualTrimNow()">立即截断</button><button class="btn btn-outline btn-sm" id="chat-trim-cancel-btn" type="button" hidden onclick="chatCancelDigestWork()">停止总结（保留进度）</button></div><button class="chat-setting-link" type="button" onclick="chatOpenSettingTab('digest')">查看本窗口截断总结 →</button></section>
 <section id="chat-trim-default-section" class="chat-setting-group" data-scope="default" hidden><div class="chat-scope-heading" data-scope="default"><span class="chat-scope-badge">通用默认</span><div><b>所有跟随默认的窗口</b><p>启用独立设置的窗口不受这里影响。</p></div></div><div class="chat-memory-card"><b>默认截断</b><details class="chat-setting-help"><summary>说明与用法</summary><p>所有没有启用独立截断设置的窗口都使用这里的配置。</p></details></div>
 <label class="chat-switch"><input id="chat-auto-trim-enabled" type="checkbox" checked><span>启用 1h 缓存边界自动截断</span></label>
 <label>至少保留真实轮数<input id="chat-auto-trim-keep" type="number" min="1" step="1" value="200"></label>
@@ -378,16 +378,16 @@
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
 <aside id="panel-version-notes" class="panel-version-notes" aria-label="本次更新" hidden></aside>
-<script src="chat-ui.js?v=chat-v272-current-topic-materials"></script>
-<script src="chat-history.js?v=chat-v272-current-topic-materials"></script>
-<script src="chat-digest.js?v=chat-v272-current-topic-materials"></script>
-<script src="backend-route.js?v=chat-v272-current-topic-materials"></script>
-<script src="server-status.js?v=chat-v272-current-topic-materials"></script>
-<script src="script.js?v=chat-v272-current-topic-materials"></script>
-<script src="memory-review.js?v=chat-v272-current-topic-materials"></script>
-<script src="memory-workbench.js?v=chat-v272-current-topic-materials"></script>
-<script src="script-extra.js?v=chat-v272-current-topic-materials"></script>
-<script src="pwa.js?v=chat-v272-current-topic-materials"></script>
-<script src="select-ui.js?v=chat-v272-current-topic-materials"></script>
+<script src="chat-ui.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="chat-history.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="chat-digest.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="backend-route.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="server-status.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="script.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="memory-review.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="memory-workbench.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="script-extra.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="pwa.js?v=chat-v273-resumable-tiered-digest"></script>
+<script src="select-ui.js?v=chat-v273-resumable-tiered-digest"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v272-current-topic-materials';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v273-resumable-tiered-digest';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1547,7 +1547,7 @@ var CHAT_AUTO_CLEAN_DEFAULT_ROUNDS=100;
 var CHAT_AUTO_CLEAN_MIN_ROUNDS=5;
 var CHAT_AUTO_CLEAN_MAX_ROUNDS=5000;
 // 截断总结：每日段及跨日期段，按用户设置的自然日范围保留。
-var CHAT_DAILY_DIGEST_TIMEOUT_MS=90000;
+var CHAT_DAILY_DIGEST_TIMEOUT_MS=450000;
 // The API deadline aborts the entire preparation. There is no shorter send deadline.
 var chatTrimTransaction=null;
 var CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE='小克';
@@ -4315,6 +4315,7 @@ function chatNormalizeSession(s){
     timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
     digestRollup:chatNormalizeDigestRollup(s.digestRollup),
+    digestWork:chatDigestNormalizeWork(s.digestWork),
     digestOmittedCovered:chatDigestOmittedCoverage(s.digestOmittedCovered),
     digestCheckedDay:String(s.digestCheckedDay||''),
     digestRetryAfter:Number(s.digestRetryAfter)||0,
@@ -4412,7 +4413,10 @@ function chatSaveSessionsToIndexedDb(snapshot,partial){
     return;
   }
   snapshot=(snapshot||chatSessionStorageData(CHAT_MAX_SESSIONS,CHAT_MAX_VISIBLE_MESSAGES,CHAT_MAX_TRANSPORT_MESSAGES)).map(chatNormalizeSession);
-  return chatOpenIndexedDb().then(function(db){
+  // Serialize snapshots, including writes queued while the database is opening.
+  // A newer checkpoint must never be overtaken by an older pending snapshot.
+  var prior=chatSaveSessionsToIndexedDb.pending||Promise.resolve();
+  var save=prior.catch(function(){}).then(function(){return chatOpenIndexedDb()}).then(function(db){
     return new Promise(function(resolve,reject){
       var keep={};
       snapshot.forEach(function(s){keep[s.id]=true});
@@ -4437,6 +4441,8 @@ function chatSaveSessionsToIndexedDb(snapshot,partial){
     chatNotifyPersistenceDegraded();
     chatSaveSessions();
   });
+  chatSaveSessionsToIndexedDb.pending=save;
+  return save;
 }
 function chatFieldValue(id,fallback){
   var el=document.getElementById(id);
@@ -6519,6 +6525,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
       dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
     digestRollup:chatNormalizeDigestRollup(s.digestRollup),
+    digestWork:chatDigestNormalizeWork(s.digestWork),
     digestOmittedCovered:chatDigestOmittedCoverage(s.digestOmittedCovered),
     digestCheckedDay:String(s.digestCheckedDay||''),
     digestRetryAfter:Number(s.digestRetryAfter)||0,
@@ -7104,6 +7111,7 @@ function chatCommitAutoTrimPlan(cfg,plan){
   s.timeReminderRoundCount=Math.max(Number(s.timeReminderRoundCount)||0,clock.round-1);
   if(plan.digestPrepared){
     s.dailyDigests=plan.digestPrepared.entries;
+    s.digestWork=null;
     s.digestRollup=plan.digestPrepared.rollup;
     s.digestRetryAfter=0;
     chatDailyDigestLastError='';
@@ -7289,14 +7297,17 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
   if(!session||!panelKey)return false;
   var targetSessionId=session.id;
   var controller=new AbortController();
-  var timer=setTimeout(function(){controller.abort()},15000);
+  var timer;
+  var timeout=new Promise(function(resolve,reject){timer=setTimeout(function(){controller.abort();reject(new Error('网关同步等待超时；本地历史已保留'))},15000)});
   try{
-    var resp=await fetch(chatCleanEndpoint(cfg),{
+    var resp=await Promise.race([timeout,fetch(chatCleanEndpoint(cfg),{
       method:'POST',signal:controller.signal,
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         key:panelKey,
         session_id:targetSessionId,
+        execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps')?(CKBackendRoute.current.execution||'direct_api'):'direct_api',
+        trim_sync_only:true,
         model:cfg.model,
         api_base:cfg.apiBase,
         upstream_key:cfg.upstreamKey,
@@ -7307,21 +7318,16 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
         recall_recent_rounds:chatNormalizeRecallRecentRounds(cfg.recallRecentRounds),
         transport_updated_at:session.transportUpdated||0,
         transport_messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),
-        window_messages:chatWindowContextMessages(session.messages),
+        window_messages:(session.transportMessages||[]).length?undefined:chatWindowContextMessages(session.messages),
         // 轮询开启时聊天用的是固定 session scope，这里必须同样标注，
         // 否则会清到另一个 scope，聊天侧历史根本不会被更新。
         chat_polling_enabled:chatPollingEnabledForConfig(cfg),
         trim_trigger:String(result.trigger||'')
       })
-    });
+    })]);
     if(!resp.ok)throw new Error('HTTP '+resp.status);
-    var data=await resp.json();
-    var target=chatSessions.find(function(x){return x.id===targetSessionId});
-    if(target&&Array.isArray(data.transport_messages)){
-      target.transportMessages=chatLimitArray(data.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);
-      target.transportUpdated=Date.now();
-      chatSaveSessions();
-    }
+    var data=await Promise.race([timeout,resp.json()]);
+    if(data.ok!==true)throw new Error(data.error||'网关未确认同步');
     chatDebug('trim_gateway_sync',{ok:true,trigger:String(result.trigger||''),dropped:Number(result.dropped||0)});
     return true;
   }catch(error){

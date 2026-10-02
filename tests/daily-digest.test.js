@@ -16,7 +16,7 @@ function setup(){
     chatSetFieldValue:(id,value)=>{if(nodes[id])nodes[id].value=String(value)},chatSetFieldChecked:()=>{},chatFieldChecked:()=>true,
     chatSplitThinkingText:text=>({text:text.replace(/<thinking>[\s\S]*?<\/thinking>/g,'')}),
     document:{getElementById:id=>nodes[id]||null},
-    fetch:async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>reply?reply(body):{ok:true,prepared:true,merge_with_previous:!!body.previous?.length,text:body.mode==='rolling_summary'?'合并：'+body.summaries.map(r=>r.text).join('；'):(body.previous?.[0]?.text||'')+'新日记'+body.day_key}}}
+    fetch:async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>reply?reply(body):{ok:true,prepared:true,merge_with_previous:!!body.previous?.length,text:body.mode==='compact_day'?body.tier+'摘要：'+body.text.slice(0,500):'新日记'+body.day_key}}}
   };
   vm.createContext(ctx);vm.runInContext(source,ctx);
   return {ctx,cfg,session,calls,nodes,advance:days=>now+=days*86400000,reply:value=>reply=value,
@@ -39,7 +39,7 @@ test('no truncation today is normal; explicit refresh reports no source and neve
 test('rollover errors report the actual day and batch size; rollup errors do not pretend messages were lost',async()=>{
   for(const rollup of [false,true]){
     const x=setup(),events=[];x.ctx.chatDebug=(event,data)=>events.push({event,data});
-    if(rollup)x.session.dailyDigests=[x.entry('2026-09-27','旧摘要')];
+    if(rollup){x.session.dailyDigests=[x.entry('2026-09-27','旧摘要')];x.session.dailyDigests[0].detail={source:x.ctx.chatDigestStamp('旧摘要'),text:'旧摘要'};}
     else x.session.messages.push(...x.turn('2026-09-29','yesterday'));
     x.reply(()=>({ok:false,error:'incomplete output'}));
     assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),false);
@@ -55,9 +55,9 @@ test('old automatic rollups are recompressed once; hand edited rollups stay inta
     const source=x.ctx.chatDigestRollupSource(x.cfg,x.session);
     x.session.digestRollup={start:source.range.start,end:source.range.end,text:'旧版大总结',source:source.legacyStamp,edited};
     assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),true);
-    assert.equal(x.calls.length,edited?0:1);
+    assert.equal(x.calls.length,edited?1:2);
     assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),true);
-    assert.equal(x.calls.length,edited?0:1);
+    assert.equal(x.calls.length,edited?1:2);
   }
 });
 test('n excludes today; x and y select adjacent natural-day windows with exact headers',()=>{
@@ -91,24 +91,29 @@ test('x/y zero, gaps, year boundaries and long retained records are not silently
 test('preparation groups by complete turn end date, strips thinking, and reuses saved coverage',async()=>{
   const x=setup();x.cfg.dailyDigestRollupDays=0;
   const raw=[...x.turn('2026-09-29','a'),{role:'user',text:'晚上',turnId:'night',ts:stamp('2026-09-29','23:50')},{role:'assistant',text:'<thinking>秘密思考</thinking>今晨',turnId:'night',ts:stamp('2026-09-30','00:10')}];
-  const result=await x.run(raw);assert.ok(result);assert.equal(x.calls.length,2);assert.equal(x.session.dailyDigests.length,0,'prepare must not mutate storage');
-  assert.deepEqual(x.calls.map(b=>b.day_key),['2026-09-29','2026-09-30']);assert.ok(!JSON.stringify(x.calls).includes('秘密思考'));
+  const result=await x.run(raw);assert.ok(result);assert.equal(x.calls.length,3);assert.equal(x.session.dailyDigests.length,0,'prepare must not mutate storage');
+  assert.deepEqual(x.calls.filter(b=>b.mode==='daily_part').map(b=>b.day_key),['2026-09-29','2026-09-30']);assert.ok(!JSON.stringify(x.calls).includes('秘密思考'));
   assert.equal(result.entries.length,2);x.commit(result);const count=x.calls.length;await x.run(raw);assert.equal(x.calls.length,count,'same turns must not be summarized twice');
-  const next=await x.run(x.turn('2026-09-30','next'));assert.equal(next.entries.length,2);assert.equal(x.calls.at(-1).previous[0].text,result.entries[1].text);
+  const next=await x.run(x.turn('2026-09-30','next'));assert.equal(next.entries.length,2);assert.equal(x.calls.at(-1).previous,undefined);assert.ok(next.entries[1].text.startsWith(result.entries[1].text));
 });
-test('rolling big summary consumes the y source box only, never raw chat or x/today summaries',async()=>{
+test('y is summarized per source day, and the same day is reused when the window moves',async()=>{
   const x=setup();x.session.dailyDigests=[27,28,29,30].map(d=>x.entry('2026-09-'+d,'source-'+d));
-  const result=await x.run([]);assert.ok(result);assert.equal(x.calls.length,1);const call=x.calls[0];
-  assert.equal(call.mode,'rolling_summary');assert.equal(call.messages,undefined);assert.deepEqual(call.summaries.map(r=>r.day_key),['2026-09-27','2026-09-28']);
-  x.commit(result);await x.run([]);assert.equal(x.calls.length,1,'unchanged range should use the stored rollup');
-  x.advance(1);const next=await x.run([]);assert.equal(x.calls.length,2);assert.equal(next.rollup.start,'2026-09-28');assert.equal(next.rollup.end,'2026-09-29');
+  const result=await x.run([]);assert.ok(result);
+  const calls=x.calls.filter(c=>c.tier==='y');assert.equal(calls.length,2);
+  assert.deepEqual(calls.map(c=>c.day_key),['2026-09-27','2026-09-28']);
+  for(const c of calls){assert.equal(c.messages,undefined);assert.ok(!c.text.includes('source-29'));assert.ok(!c.text.includes('source-30'));}
+  x.commit(result);const count=x.calls.length;await x.run([]);assert.equal(x.calls.length,count);
+  x.advance(1);const next=await x.run([]);
+  assert.equal(x.calls.filter(c=>c.tier==='y').length,3,'only the newly entering y day is generated');
+  assert.equal(next.rollup.start,'2026-09-28');assert.equal(next.rollup.end,'2026-09-29');
 });
+
 test('midnight maintenance completes unsummarized days, leaves today for its own box, and survives reload',async()=>{
   const x=setup();x.cfg.dailyDigestRollupDays=0;x.session.messages.push(...x.turn('2026-09-29','yesterday'),...x.turn('2026-09-30','today'));
-  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);assert.equal(x.calls.length,1);assert.equal(x.calls[0].day_key,'2026-09-29');
+  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);assert.equal(x.calls.length,2);assert.equal(x.calls[0].day_key,'2026-09-29');
   x.session.dailyDigests=plain(x.session.dailyDigests);x.advance(1);assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);
-  assert.equal(x.calls.length,2);assert.equal(x.calls[1].day_key,'2026-09-30');assert.equal(x.session.messages.length,4,'maintenance never truncates conversation');
-  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);assert.equal(x.calls.length,2);
+  assert.equal(x.calls.length,4);assert.equal(x.calls[2].day_key,'2026-09-30');assert.equal(x.session.messages.length,4,'maintenance never truncates conversation');
+  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);assert.equal(x.calls.length,4);
 });
 test('API failure, invalid output, key changes and concurrent edits cannot commit partial updates',async()=>{
   for(const behavior of ['failure','incomplete','key','edit']){
@@ -148,4 +153,43 @@ test('clearing a saved summary does not recreate the same covered turns on the n
   x.cfg.dailyDigestEnabled=true;const count=x.calls.length;const prepared=await x.run(messages);
   assert.equal(prepared.entries.length,0);assert.equal(x.calls.length,count);
   assert.ok((await x.run(x.turn('2026-09-30','new'))).entries.length===1,'new content should still be summarized');
+});
+
+test('completed batches survive failure and reload, while changed source batches are regenerated',async()=>{
+  const x=setup();x.cfg.dailyDigestRollupDays=0;
+  const raw=x.turn('2026-09-30','resume');raw[0].text='甲'.repeat(10000);raw[1].text='乙'.repeat(10000);
+  let failed=false;x.reply(body=>{if(body.messages[0].role==='assistant'&&!failed){failed=true;return {ok:false,error:'timeout'}}return {prepared:true,text:body.messages[0].role+'完成'}});
+  assert.equal(await x.run(raw),null);assert.equal(x.calls.length,2);assert.equal(x.session.dailyDigests.length,0);
+  const y=setup();y.cfg.dailyDigestRollupDays=0;y.session.digestWork=plain(x.session.digestWork);
+  const prepared=await y.run(raw);assert.ok(prepared);assert.equal(y.calls.length,1,'successful first batch survived reload');
+  assert.equal(y.calls[0].messages[0].role,'assistant');assert.match(prepared.entries[0].text,/user完成/);
+  raw[0].text='丙'.repeat(10000);const before=y.calls.length;assert.ok(await y.run(raw));assert.equal(y.calls.length,before+1,'only changed input invalidates its batch');
+});
+
+test('checkpoint namespace excludes edited summaries, changed keys and changed endpoints',async()=>{
+  for(const change of ['summary','key','endpoint']){
+    const x=setup();x.cfg.dailyDigestRollupDays=0;const raw=x.turn('2026-09-30','one');
+    await x.run(raw);assert.equal(x.calls.length,1);
+    if(change==='summary')x.session.dailyDigests=[x.entry('2026-09-30','手工修改')];
+    if(change==='key')x.cfg.panelKey='another';if(change==='endpoint')x.cfg.gatewayUrl='https://other.invalid';
+    await x.run(raw);assert.equal(x.calls.length,2,change);
+  }
+});
+
+test('x and y have independent stored summaries and never overwrite the full daily source',async()=>{
+  const x=setup();x.session.dailyDigests=[x.entry('2026-09-29','当天详细记录'.repeat(1000))];
+  const original=x.session.dailyDigests[0].text;
+  x.reply(body=>({prepared:true,text:body.tier==='x'?'近期摘要':'较早摘要'}));
+  x.commit(await x.run([]));assert.equal(x.session.dailyDigests[0].text,original);
+  assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/近期摘要/);assert.ok(!x.ctx.chatDailyDigestPack(x.cfg,x.session).includes(original));
+  x.advance(1);x.commit(await x.run([]));assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/较早摘要/);
+  assert.equal(x.session.dailyDigests[0].text,original);
+});
+
+test('unused archive days do not block a trim, and explicit y regeneration calls the model',async()=>{
+  const x=setup();x.cfg.dailyDigestRetentionDays=10;x.session.dailyDigests=[x.entry('2026-09-22','备选旧记录'),x.entry('2026-09-28','需要压缩')];
+  x.commit(await x.run([]));assert.ok(x.calls.every(c=>c.day_key==='2026-09-28'));
+  const before=x.calls.length;
+  assert.ok(await x.ctx.chatDailyDigestRequest(x.cfg,{sessionId:'s',messages:[],forceRollup:true}));
+  assert.equal(x.calls.length,before+1);
 });

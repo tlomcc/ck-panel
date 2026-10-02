@@ -102,3 +102,28 @@ test('a send waits for idle gateway-history synchronization as well as the summa
  const send=x.ctx.chatApplyAutoTrimForPendingBatch(x.cfg,[pending],{}).then(r=>{sendReady=true;return r});
  await tick();assert.equal(sendReady,false);syncDone(true);await idle;await send;assert.equal(sendReady,true);assert.equal(x.requests.length,1);
 });
+
+test('trim sync sends the correct execution route and never replaces newer local history',async()=>{
+ const x=setup();let resolve;
+ Object.assign(x.ctx,{window:{CKBackendRoute:{}},CKBackendRoute:{current:{mode:'vps',execution:'claude_code_api'}},
+ chatCleanEndpoint:()=>'/clean',chatNormalizeRecallMode:v=>v,chatNormalizeFactRecallMode:v=>v,chatNormalizeRecallRecentRounds:v=>v,
+ chatWindowContextMessages:m=>m,chatPollingEnabledForConfig:()=>false});
+ vm.runInContext(extract('chatSyncTrimmedHistoryToGateway'),x.ctx);
+ x.session.transportMessages=[{role:'user',content:'保留历史'}];let payload;
+ x.ctx.fetch=async(url,options)=>{payload=JSON.parse(options.body);return await new Promise(r=>resolve=r)};
+ const work=x.ctx.chatSyncTrimmedHistoryToGateway(x.cfg,{trimmed:true,sessionId:'s'});
+ x.session.transportMessages.push({role:'assistant',content:'新回复'});
+ resolve({ok:true,json:async()=>({ok:true,transport_messages:[{role:'user',content:'旧响应'}]})});
+ assert.equal(await work,true);assert.equal(payload.execution_backend,'claude_code_api');assert.equal(payload.trim_sync_only,true);
+ assert.equal(payload.window_messages,undefined);assert.equal(x.session.transportMessages.length,2);
+ assert.equal(x.session.transportMessages[1].content,'新回复');
+});
+
+test('trim sync cannot hang forever when fetch ignores abort',async()=>{
+ const x=setup();Object.assign(x.ctx,{window:{},chatCleanEndpoint:()=>'/clean',chatNormalizeRecallMode:v=>v,chatNormalizeFactRecallMode:v=>v,
+ chatNormalizeRecallRecentRounds:v=>v,chatWindowContextMessages:m=>m,chatPollingEnabledForConfig:()=>false,
+ setTimeout:(fn,ms)=>setTimeout(fn,Math.min(ms,10)),fetch:()=>new Promise(()=>{})});
+ vm.runInContext(extract('chatSyncTrimmedHistoryToGateway'),x.ctx);
+ assert.equal(await x.ctx.chatSyncTrimmedHistoryToGateway(x.cfg,{trimmed:true,sessionId:'s'}),false);
+ assert.equal(x.session.messages.length,10);assert.match(x.ctx.alerts[0][0],/本地截断已完成/);
+});
