@@ -22,7 +22,11 @@
     store.organizer.decisions.unshift({...p,decision:body.decision,opinion:body.opinion,at:'2026-10-02'});
     store.organizer.pending=store.organizer.pending.filter(p=>p.id!==body.proposal_id);
     store.organizer.pending_count=store.organizer.pending.length;
-    if(body.decision==='approve')store.topics.push({id:'topic_approved',title:body.title,materials:facts,aliases:[],note:''});
+    if(body.decision==='approve'){
+     const target=store.topics.find(t=>t.id===body.target_topic_id);
+     if(target){if(body.rename_to)target.title=body.rename_to;if(p.kind!=='rename')target.materials.push(...p.materials)}
+     else store.topics.push({id:'topic_approved',title:body.title,materials:facts.slice(),aliases:[],note:''});
+    }
    }else if(body.action==='organizer_settings')store.organizer.settings=body.settings;
    else if(body.action==='organizer_start'){store.organizer.settings.enabled=true;store.organizer.running=true;store.organizer.trigger='requested';store.organizer.last_run={status:'running'}}
    else if(body.action==='organizer_pause'){store.organizer.settings.enabled=false;store.organizer.running=false;delete store.organizer.trigger;store.organizer.last_run={status:'paused'}}
@@ -79,12 +83,35 @@
  const count=requests.length;input('#mr-daily','1001');click('[data-mr="settings"]');
  check(requests.length===count&&$('mw-organizer').textContent.includes('设置未保存：'),'Invalid settings submitted');
  input('#mr-daily','500');click('[data-mr="settings"]');await wait(()=>$('mw-organizer').textContent.includes('设置已保存：'));
- // Leave an example for desktop/mobile visual review.
+ // Existing-topic names can be changed with new materials or separately, without re-approval of members.
  const existing=store.topics[0];
  store.organizer.pending=[{...proposal(3),target_topic_id:existing.id,fact_ids:['f3'],materials:[{fact_id:'f3',text:'六月搬家，搬运家具到新家。',time:'2026-06-05',status:'active'}]}];store.organizer.pending_count=1;
  click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_3"]'));
  check(document.querySelector('[data-proposal="proposal_3"] [data-mr="approve"]').textContent==='加入所选材料','Approval action unclear');
  check(document.querySelectorAll('.mr-materials input').length===1,'Existing members offered for approval');
  check(document.querySelector('.mr-reference').textContent.includes('无需审批'),'Existing evidence not separated');
+ input('[data-proposal="proposal_3"] [data-mr-field="rename_to"]','从看房签约到入住新家');
+ check(document.querySelector('[data-proposal="proposal_3"] [data-mr="approve"]').textContent==='加入材料并更新名称','Combined rename action unclear');
+ click('[data-proposal="proposal_3"] [data-mr="approve"]');await wait(()=>!document.querySelector('[data-proposal="proposal_3"]'));
+ check(existing.title==='从看房签约到入住新家'&&existing.materials.length===3,'Append and rename not applied');
+ store.organizer.pending=[{...proposal(4),kind:'rename',target_topic_id:existing.id,rename_to:'居住变化与搬家经历',materials:[],reference_materials:facts}];store.organizer.pending_count=1;
+ click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_4"]'));
+ check(document.querySelectorAll('.mr-materials input').length===0,'Rename offered existing materials as membership choices');
+ check(document.querySelector('[data-proposal="proposal_4"]').textContent.includes('本次只调整名称'),'Rename purpose unclear');
+ check(!document.querySelector('[data-proposal="proposal_4"] [data-mr-field="target"]'),'Rename allowed unrelated target mutation');
+ input('[data-proposal="proposal_4"] [data-mr-field="rename_to"]','');
+ const beforeEmpty=requests.length;click('[data-proposal="proposal_4"] [data-mr="approve"]');
+ check(requests.length===beforeEmpty,'Empty rename submitted');
+ input('[data-proposal="proposal_4"] [data-mr-field="rename_to"]','<img src=x onerror="window.bad=3">居住变化');
+ click('[data-mr="tab-opinions"]');click('[data-mr="tab-pending"]');
+ check(!window.bad,'Rename escaped incorrectly');
+ input('[data-proposal="proposal_4"] [data-mr-field="rename_to"]','从寻找住处到安顿新家的经历');
+ conflict=true;click('[data-proposal="proposal_4"] [data-mr="approve"]');await wait(()=>$('mw-organizer').textContent.includes('并发更新'));
+ check(document.querySelector('[data-proposal="proposal_4"] [data-mr-field="rename_to"]').value==='从寻找住处到安顿新家的经历','Conflict lost new name');
+ click('[data-proposal="proposal_4"] [data-mr="approve"]');await wait(()=>!document.querySelector('[data-proposal="proposal_4"]'));
+ check(existing.title==='从寻找住处到安顿新家的经历'&&existing.materials.length===3,'Rename-only changed membership');
+ // Leave the rename-only example visible for desktop/mobile screenshots.
+ store.organizer.pending=[{...proposal(5),kind:'rename',target_topic_id:existing.id,rename_to:'从看房签约到在新家安顿的完整经历',materials:[],reference_materials:facts}];store.organizer.pending_count=1;
+ click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_5"]'));
  return {settings500and10:true,settingsSurviveRefreshFailureAndConflict:true,immediateStart:true,pause:true,opinionSurvivesPause:true,optionalOpinion:true,opinionSurvivesTabsAndFailures:true,retryReceipt:true,conflictRefresh:true,approval:true,recheck:true,escaped:true};
 })()

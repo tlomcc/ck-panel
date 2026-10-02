@@ -14,24 +14,26 @@
     var state={data:null,topics:[],tab:'pending',drafts:{},settingsDraft:null,settingsOpen:false,busy:false,request:null,message:''};
     var instance={update:update,hasDraft:function(){return !!state.settingsDraft||Object.keys(state.drafts).length>0},dispose:function(){clearTimeout(refreshTimer)}};
     active=instance;
-    function draft(p){return state.drafts[p.id]||(state.drafts[p.id]={opinion:p.opinion||'',target:p.target_topic_id||'',title:p.title,ids:p.fact_ids.slice(),move:false})}
+    function initialDraft(p){return {opinion:p.opinion||'',target:p.target_topic_id||'',title:p.title,rename_to:p.rename_to||'',ids:p.fact_ids.slice(),move:false}}
+    function draft(p){return state.drafts[p.id]||(state.drafts[p.id]=initialDraft(p))}
     function status(text){state.message=text;var node=root.querySelector('[data-mr-status]');if(node)node.textContent=text}
     function card(p){
-      var d=state.drafts[p.id]||{opinion:p.opinion||'',target:p.target_topic_id||'',title:p.title,ids:p.fact_ids,move:false};
+      var d=state.drafts[p.id]||initialDraft(p),renaming=p.kind==='rename';
       var target=state.topics.find(function(t){return t.id===d.target});
-      return '<article class="mr-proposal" data-proposal="'+attr(p.id)+'"><div class="mw-editor-head"><h3>'+(d.target?'是否将这些材料加入主题？':'是否用这些材料新建主题？')+'</h3><span class="mr-badge">'+(p.status==='deferred'?'已暂缓':'待审批')+' · '+p.fact_ids.length+' 份待加入材料</span></div>'+
+      return '<article class="mr-proposal" data-proposal="'+attr(p.id)+'"><div class="mw-editor-head"><h3>'+(renaming?'是否按意见调整主题名称？':d.target?'是否将这些材料加入主题？':'是否用这些材料新建主题？')+'</h3><span class="mr-badge">'+(p.status==='deferred'?'已暂缓':'待审批')+' · '+(renaming?'调整名称':p.fact_ids.length+' 份待加入材料')+'</span></div>'+
         '<p><strong>'+(d.target?'目标主题：':'拟建主题：')+'</strong>'+escape(target?target.title:d.target?(p.target_title||p.title):d.title)+'</p>'+
+        (d.target?'<label class="mr-rename"><strong>'+(renaming?'调整后的名称':'同时调整名称（留空则保留原名）')+'</strong><input data-mr-field="rename_to" maxlength="80" value="'+attr(d.rename_to)+'" placeholder="结合前后经历重新拟名"></label>':'')+
         '<p><strong>建议理由：</strong>'+escape(p.reason)+'</p>'+(p.stale?'<p class="mw-cost">材料或主题已有更新，建议保留意见后重新判断。</p>':'')+
         '<h4>需要你判断的疑点</h4>'+
         (p.uncertainties||[]).map(function(x){return '<p class="mr-doubt">'+escape(x)+'</p>'}).join('')+
-        '<div class="mr-materials"><h4>待加入材料（尚未加入目标主题）</h4>'+(p.materials||[]).map(function(m){return '<label class="mr-material"><input type="checkbox" data-mr-field="pick" value="'+attr(m.fact_id)+'" '+(d.ids.indexOf(m.fact_id)>=0?'checked':'')+(m.missing?' disabled':'')+'><span><small>'+escape(m.time||'日期未记录')+'</small><span class="mr-fact-text">'+escape(m.text)+'</span>'+
+        (renaming?'<p class="mw-note">本次只调整名称，已有材料作为命名依据。</p>':'<div class="mr-materials"><h4>待加入材料（尚未加入目标主题）</h4>'+(p.materials||[]).map(function(m){return '<label class="mr-material"><input type="checkbox" data-mr-field="pick" value="'+attr(m.fact_id)+'" '+(d.ids.indexOf(m.fact_id)>=0?'checked':'')+(m.missing?' disabled':'')+'><span><small>'+escape(m.time||'日期未记录')+'</small><span class="mr-fact-text">'+escape(m.text)+'</span>'+
           ((m.current_topics||[]).length?'<small>当前主题：'+escape(m.current_topics.map(function(id){var t=state.topics.find(function(x){return x.id===id});return t?t.title:'主题已变化'}).join('、'))+'</small>':'')+'</span></label>'+button('fact','查看原文与历史','data-id="'+attr(m.fact_id)+'"')}).join('')+
-          '</div>'+(d.target?'<details class="mr-reference"><summary>目标主题已有材料（仅供对照，无需审批）</summary>'+((target?target.materials:p.target_materials)||[]).slice(0,5).map(function(m){return '<p><small>'+escape(m.time||'日期未记录')+'</small></p><blockquote>'+escape(m.text||'')+'</blockquote>'}).join('')+'</details>':'')+
+          '</div>')+(d.target?'<details class="mr-reference"><summary>目标主题已有材料（仅供对照，无需审批）</summary>'+((target?target.materials:p.target_materials)||[]).slice(0,5).map(function(m){return '<p><small>'+escape(m.time||'日期未记录')+'</small></p><blockquote>'+escape(m.text||'')+'</blockquote>'}).join('')+'</details>':'')+
         '<details><summary>模型引用依据</summary>'+(p.evidence||[]).map(function(e){return '<blockquote>'+escape(e.quote)+'</blockquote>'}).join('')+'</details>'+
-        '<details class="mr-adjust"><summary>调整目标或材料</summary><label>归入主题<select data-mr-field="target"><option value="" '+(!d.target?'selected':'')+'>新建主题</option>'+state.topics.map(function(t){return '<option value="'+attr(t.id)+'" '+(t.id===d.target?'selected':'')+'>'+escape(t.title)+'</option>'}).join('')+'</select></label>'+
-        '<label>新主题名称<input data-mr-field="title" maxlength="80" value="'+attr(d.title)+'"></label><label class="mw-check"><input type="checkbox" data-mr-field="move" '+(d.move?'checked':'')+'>同时从其他主题移出所选材料</label><p class="mw-note">在上方勾选本次要加入的材料；移出关系会被记住。</p></details>'+
-        '<label for="opinion-'+attr(p.id)+'">处理意见（选填）</label><textarea id="opinion-'+attr(p.id)+'" data-mr-field="opinion" maxlength="2000" rows="3" placeholder="例如：这是上一次搬家的事，请按时间分开。下次整理相关材料时会先参考这些意见。">'+escape(d.opinion)+'</textarea>'+
-        '<div class="mw-toolbar">'+button('approve',d.target?'加入所选材料':'新建主题并加入')+button('recheck','保存意见并重新判断')+button('defer','暂缓')+button('reject','不加入')+'</div></article>';
+        (renaming?'':'<details class="mr-adjust"><summary>调整目标或材料</summary><label>归入主题<select data-mr-field="target"><option value="" '+(!d.target?'selected':'')+'>新建主题</option>'+state.topics.map(function(t){return '<option value="'+attr(t.id)+'" '+(t.id===d.target?'selected':'')+'>'+escape(t.title)+'</option>'}).join('')+'</select></label>'+
+        (!d.target?'<label>新主题名称<input data-mr-field="title" maxlength="80" value="'+attr(d.title)+'"></label>':'')+'<label class="mw-check"><input type="checkbox" data-mr-field="move" '+(d.move?'checked':'')+'>同时从其他主题移出所选材料</label><p class="mw-note">在上方勾选本次要加入的材料；移出关系会被记住。</p></details>')+
+        '<label for="opinion-'+attr(p.id)+'">处理意见（选填）</label><textarea id="opinion-'+attr(p.id)+'" data-mr-field="opinion" maxlength="2000" rows="3" placeholder="例如：可以加入，但请结合前因后果重拟主题名。保存意见并重新判断可先调整方案；同意时附带的意见也会安排后续整理。">'+escape(d.opinion)+'</textarea>'+
+        '<div class="mw-toolbar">'+button('approve',renaming?'采用新名称':d.target?(d.rename_to.trim()?'加入材料并更新名称':'加入所选材料'):'新建主题并加入')+button('recheck','保存意见并重新判断')+button('defer','暂缓')+button('reject',renaming?'不采用此名称':'不加入')+'</div></article>';
     }
     function render(){
       if(active!==instance||!root.isConnected)return;
@@ -87,7 +89,8 @@
       if(field==='pick')d.ids=Array.from(container.querySelectorAll('[data-mr-field="pick"]:checked')).map(function(n){return n.value});
       else if(field==='move')d.move=node.checked;else if(field)d[field]=node.value;
       state.request=null;
-      if(field==='target')render();
+      if(field==='target'){d.rename_to='';render()}
+      if(field==='rename_to'&&p.kind!=='rename'){var approve=container.querySelector('[data-mr="approve"]');if(approve)approve.textContent=d.rename_to.trim()?'加入材料并更新名称':'加入所选材料'}
     });
     async function submit(body,clearId){
       if(!hooks.canWrite()){status('请先保存或处理主题编辑区的草稿，再提交审批。');return}
@@ -136,7 +139,10 @@
       var container=b.closest('[data-proposal]');if(!container)return;
       var p=state.data.pending.find(function(x){return x.id===container.dataset.proposal});if(!p)return;
       var d=draft(p),body={action:'organizer_review',proposal_id:p.id,decision:action,opinion:d.opinion};
-      if(action==='approve'){body.fact_ids=d.ids;body.target_topic_id=d.target;body.title=d.title;body.move=d.move}
+      if(action==='approve'){
+        if(p.kind==='rename'&&!d.rename_to.trim()){status('请填写新名称，或选择不采用此名称。');return}
+        body.fact_ids=d.ids;body.target_topic_id=d.target;body.title=d.title;body.move=d.move;body.rename_to=d.rename_to;
+      }
       await submit(body,p.id);
     });
     render();return instance;

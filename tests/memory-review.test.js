@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('node:assert/strict');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../0-工作间/v272-topic-current/browser');
+const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../0-工作间/v274-topic-feedback/browser');
 fs.mkdirSync(out,{recursive:true});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const server=http.createServer((req,res)=>{
