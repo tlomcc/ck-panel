@@ -49,3 +49,18 @@ test('Claude Code selection requires live capability and persists only the expli
  await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,true);assert.equal(JSON.parse(storage.get('ckBackendRouteV1')).execution,'claude_code_api');
  assert.equal(ctx.CKBackendRoute.parse({mode:'aliyun',execution:'claude_code_api'}).execution,undefined);
 });
+
+
+test('subscription requires login, persists independent model and never falls back to API',async()=>{
+ const {ctx,els,storage}=fixture();els['ck-execution-mode'].value='claude_code_subscription';
+ els['ck-subscription-model']={value:'opus'};
+ const original=ctx.fetch;let ready=false;
+ ctx.fetch=async url=>url.endsWith('/ck/subscription/status')?{ok:true,json:async()=>({ready,message:'订阅未登录'})}:original(url);
+ await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,undefined);assert.equal(storage.has('ckBackendRouteV1'),false);
+ assert.match(els['ck-backend-status'].textContent,/订阅未登录/);
+ ready=true;await ctx.ckSaveBackendRoute();
+ const saved=JSON.parse(storage.get('ckBackendRouteV1'));assert.equal(saved.execution,'claude_code_subscription');assert.equal(saved.subscriptionModel,'opus');
+ const next=fixture(saved).ctx.CKBackendRoute;assert.equal(next.isSubscription(),true);assert.equal(next.subscriptionRoute().upstreamKey,'');assert.equal(next.subscriptionRoute().model,'opus');
+ assert.equal(next.subscriptionRoute().apiBase,'');
+ assert.throws(()=>next.parse({...saved,execution:'not-a-route'}));
+});

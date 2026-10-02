@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v263-observer-status-stream';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v264-subscription-route';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2261,6 +2261,7 @@ function chatEnrichUsageRoute(usage,cfg){
   if(!obj.provider_id&&!obj.providerId)obj.provider_id=cfg.mainRouteProviderId||'';
   if(!obj.provider_url&&!obj.api_base)obj.provider_url=cfg.apiBase||'';
   if(!obj.model)obj.model=cfg.model||'';
+  if(cfg.chatApiSource==='claude_subscription'){obj.execution_backend='claude_code_subscription';obj.provider_id='claude-subscription';obj.billing_status='subscription';}
   if(!obj.upstream_format&&cfg.apiBase){
     var base=String(cfg.apiBase||'').toLowerCase();
     obj.upstream_format=(base.indexOf('nowcoding.ai')>=0||/\/messages\/?$/.test(base))?'anthropic':'openai';
@@ -2346,7 +2347,9 @@ function chatUsageCost(usage){
   var hasUsage=chatUsageHasTokenFields(usage);
   var mode=chatNormalizeCostMode(pricing.mode);
   var status='unknown',total=null,currency=chatUsageBillingCurrency(usage),reason='';
-  if(mode!=='manual'&&explicitAmount!==null&&billingStatus!=='unknown'){
+  if(usage.execution_backend==='claude_code_subscription'||usage.provider_id==='claude-subscription'){
+    status='subscription';total=null;reason='订阅用量；不按 API 单价估算，额外用量以官方账单为准';
+  }else if(mode!=='manual'&&explicitAmount!==null&&billingStatus!=='unknown'){
     status=billingStatus||'known';
     total=explicitAmount;
   }else if(mode==='manual'&&hasUsage){
@@ -2395,6 +2398,7 @@ function chatUsageCost(usage){
 }
 function chatFormatUsageCost(usage){
   var cost=chatUsageCost(usage);
+  if(cost.status==='subscription')return '费用：订阅用量（额外用量以官方账单为准）';
   if(cost.status==='known')return '费用：'+chatCostAmountText(cost.total,cost.currency||'');
   if(cost.status==='estimated')return '费用：估算 '+chatCostAmountText(cost.total,cost.currency||'¥');
   if(cost.status==='calculated')return '费用：按面板单价 '+chatCostAmountText(cost.total,cost.currency||cost.pricing.currency||'');
@@ -2402,6 +2406,7 @@ function chatFormatUsageCost(usage){
 }
 function chatUsageCostBreakdown(usage){
   var cost=chatUsageCost(usage);
+  if(cost.status==='subscription')return '订阅用量：输入 '+cost.inputTotal+' · 输出 '+cost.output+' · 缓存读取 '+cost.read+'；不按 API 单价估算';
   var currency=cost.pricing&&cost.pricing.currency?cost.pricing.currency:'';
   return '输入未命中 '+cost.input+' · 缓存读取 '+cost.read+' · 5m 创建 '+cost.create5m+' · 1h 创建 '+cost.create1h+
     (cost.legacyCreate>0?' · TTL 未知创建 '+cost.legacyCreate:'')+' · 输出 '+cost.output+
@@ -2437,6 +2442,7 @@ function chatAttachAssistantCost(msg,usage){
 function chatAssistantCostLabel(msg){
   if(!msg)return '';
   var status=String(msg.apiCostStatus||'').toLowerCase();
+  if(status==='subscription')return '订阅用量';
   if(status==='unknown')return '费用未知';
   if(!Object.prototype.hasOwnProperty.call(msg,'apiCost'))return '';
   var value=Number(msg.apiCost);
@@ -2447,6 +2453,7 @@ function chatAssistantCostLabel(msg){
 function chatAssistantCostHtml(msg){
   var label=chatAssistantCostLabel(msg);
   if(!label)return '';
+  if(msg.apiCostStatus==='subscription')return '<span class="chat-msg-cost" title="订阅用量；额外用量以官方账单为准">订阅用量</span>';
   var exact=msg.apiCostStatus==='unknown'?(msg.apiCostReason||'上游未返回价格'):chatCostAmountText(msg.apiCost,msg.apiCostCurrency||'');
   var cls='chat-msg-cost'+(msg.apiCostStatus==='unknown'?' chat-msg-cost-unknown':'')+(msg.apiCostStatus==='estimated'?' chat-msg-cost-estimated':'')+(msg.apiCostStatus==='calculated'?' chat-msg-cost-calculated':'');
   return '<span class="'+cls+'" title="本轮 API 花费：'+escAttr(exact)+'">'+esc(label)+'</span>';
@@ -2954,7 +2961,7 @@ function chatRenderCacheStrategyState(statusText,statusKind){
     status.textContent=statusText||'选择后会立即保存，也可点按钮确认。';
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
   }
-  var ccNative=typeof CKBackendRoute==='object'&&CKBackendRoute.current.mode==='vps'&&CKBackendRoute.current.execution==='claude_code_api';
+  var ccNative=typeof CKBackendRoute==='object'&&CKBackendRoute.current.mode==='vps'&&['claude_code_api','claude_code_subscription'].indexOf(CKBackendRoute.current.execution)>=0;
   if(strategy)strategy.disabled=false;
   var cacheSave=document.querySelector('.chat-cache-mode-actions .chat-cache-save-btn');
   if(cacheSave)cacheSave.disabled=false;
@@ -3184,6 +3191,7 @@ function chatSessionForRoute(cfg){
   return sessionId?chatSessions.find(function(session){return session&&String(session.id||'')===sessionId})||null:null;
 }
 function chatWindowApiRouteConfig(cfg){
+  if(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription())return CKBackendRoute.subscriptionRoute();
   var main=chatMainRouteConfig();
   if(!apiProvidersLoaded)return main;
   var session=chatSessionForRoute(cfg);
@@ -3211,6 +3219,7 @@ function chatWindowApiRouteConfig(cfg){
   return route;
 }
 function chatPollingEnabledForConfig(cfg){
+  if(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription())return false;
   if(cfg&&cfg.chatApiSource==='chat_window_api')return false;
   try{return chatPollingView().enabled===true}catch(e){return false}
 }
@@ -3369,6 +3378,7 @@ function chatSyncPanelKeyToApiStorage(key){
 function chatRenderMainRouteSummary(){
   var el=document.getElementById('chat-main-route-summary');
   if(!el)return;
+  if(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription()){el.textContent='Claude 订阅 · '+CKBackendRoute.subscriptionRoute().model+'；提示词与历史由 CK 管理，辅助 API 保持原配置。';el.classList.remove('empty');return}
   if(!apiProvidersLoaded){
     var hasKey=isPanelAuthenticated();
     var panelKeyEl=document.getElementById('chat-panel-key');
@@ -3394,6 +3404,12 @@ function chatOpenMainApiConfig(){
 }
 function chatEnsureMainRouteReady(){
   chatSyncPanelKeyToApiStorage();
+  if(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription()){
+    var control=new AbortController(),timer=setTimeout(function(){control.abort()},20000);
+    return CKBackendRoute.subscriptionStatus(CKBackendRoute.current,storedPanelKey(),window.fetch.bind(window),control.signal).then(function(status){
+      return status.ready?CKBackendRoute.subscriptionRoute():{ok:false,source:'claude_subscription',reason:status.message||'订阅未登录'};
+    }).catch(function(){return {ok:false,source:'claude_subscription',reason:'订阅状态无法确认，请检查连接'}}).finally(function(){clearTimeout(timer)});
+  }
   var p=apiProvidersLoaded?Promise.resolve(true):loadApiProviders();
   return Promise.resolve(p).then(function(ok){
     if(ok===false){
@@ -3409,6 +3425,7 @@ function chatEnsureMainRouteReady(){
   });
 }
 function chatHandleMainRouteNotReady(route){
+  if(route&&route.source==='claude_subscription'){chatSetStatus(route.reason);toast(route.reason);ckOpenBackendRoute();return}
   var windowRoute=route&&route.source==='chat_window_api';
   var reason=(route&&route.reason)||(windowRoute?'当前窗口 API 未配置':'主链路未配置');
   chatSetStatus(windowRoute?'当前窗口 API 未就绪':'主链路未配置');
@@ -10378,7 +10395,7 @@ async function chatSubmitPendingMessages(options){
     session_id:cfg.sessionId,
     // 轮次 id 一起发给网关：断线补收时用它对账，避免把上一轮的旧回复当成这一轮的答案。
     turn_id:requestTurnId,
-    execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps'&&CKBackendRoute.current.execution==='claude_code_api')?'claude_code_api':'direct_api',
+    execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps')?(CKBackendRoute.current.execution||'direct_api'):'direct_api',
     text:text,
     model:cfg.model,
     provider_name:cfg.mainRouteProvider||'',
@@ -10442,6 +10459,7 @@ async function chatSubmitPendingMessages(options){
   // 浏览器里不会出现整组候选凭据。单链路字段照旧发送，网关在轮询生效时会覆盖它们。
   var pollingView=chatPollingView();
   body.chat_polling_enabled=chatPollingEnabledForConfig(cfg);
+  if(body.execution_backend==='claude_code_subscription'){delete body.upstream_key;delete body.api_base;body.provider_id='claude-subscription';body.provider_name='Claude 订阅';}
   body.chat_polling_revision=String(pollingView.revision||'');
   if(trimResult.cacheBoundary||currentSession.cacheRebuildPending){
     body.cache_rebuild_boundary=String(trimResult.trigger||'manual');

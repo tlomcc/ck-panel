@@ -11,14 +11,18 @@
   }
   function parse(saved){
     if(!saved||saved.mode!=='vps')return Object.assign({},legacy);
-    return {mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:saved.execution==='claude_code_api'?'claude_code_api':'direct_api'};
+    var execution=saved.execution||'direct_api';
+    if(['direct_api','claude_code_api','claude_code_subscription'].indexOf(execution)<0)throw new Error('未知聊天执行路径');
+    var model=String(saved.subscriptionModel||'sonnet').trim();
+    if(!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('请填写官方 Claude 模型名或 sonnet、opus、haiku');
+    return {mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:execution,subscriptionModel:model};
   }
   var current=Object.assign({},legacy),saved;
   try{saved=JSON.parse(root.localStorage.getItem(key)||'null');current=parse(saved)}catch(e){}
   if(!saved&&root.location&&root.location.hostname==='127.0.0.1'&&root.location.port==='19080'){
     current={mode:'vps',gateway:root.location.origin+'/gateway',mcp:root.location.origin+'/mcp'};
   }
-  function storageValue(route){return JSON.stringify({mode:route.mode,gateway:route.gateway,mcp:route.mcp,execution:route.execution||'direct_api'})}
+  function storageValue(route){return JSON.stringify({mode:route.mode,gateway:route.gateway,mcp:route.mcp,execution:route.execution||'direct_api',subscriptionModel:route.subscriptionModel||'sonnet'})}
   async function probe(route,authKey,fetcher){
     var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},20000);
     try{
@@ -28,6 +32,11 @@
       if(status.status!=='ok')throw new Error('这个地址没有返回 CK 网关状态。');
       if(status.migration_read_only===true)throw new Error('VPS 仍是只读预览，暂不能作为正式连接。');
       if(route.execution==='claude_code_api'&&(status.claude_code_api!==true||status.claude_code_native!==true))throw new Error('目标 VPS 的 Claude Code 原生服务尚未就绪。');
+      if(route.execution==='claude_code_subscription'){
+        if(!authKey)throw new Error('请先登录 CK 面板');
+        var subscription=await subscriptionStatus(route,authKey,fetcher,controller.signal);
+        if(!subscription.ready)throw new Error(subscription.message||'订阅未登录，暂不可用');
+      }
       if(!authKey)return;
       var headers={'x-api-key':authKey,'Content-Type':'application/json'};
       var cfg=await fetcher(route.gateway+'/config',{headers:headers,cache:'no-store',signal:controller.signal});
@@ -40,7 +49,14 @@
       if(!tools.result||!Array.isArray(tools.result.tools)||!tools.result.tools.length)throw new Error('记忆接口没有返回工具列表。');
     }finally{clearTimeout(timer)}
   }
-  root.CKBackendRoute={key:key,current:current,legacy:legacy,normalize:normalize,parse:parse,probe:probe,storageValue:storageValue};
+  async function subscriptionStatus(route,authKey,fetcher,signal){
+    var response=await fetcher(route.gateway+'/ck/subscription/status',{headers:{'x-api-key':authKey},cache:'no-store',signal:signal});
+    if(!response.ok)throw new Error(response.status===404?'当前网关尚未安装订阅功能':'订阅状态检查失败：HTTP '+response.status);
+    return response.json();
+  }
+  function isSubscription(){return current.mode==='vps'&&current.execution==='claude_code_subscription'}
+  function subscriptionRoute(){return {ok:true,source:'claude_subscription',provider:null,providerName:'Claude 订阅',providerHost:'api.anthropic.com',apiBase:'',upstreamKey:'',apiType:'claude',model:current.subscriptionModel||'sonnet',reason:''}}
+  root.CKBackendRoute={isSubscription:isSubscription,subscriptionRoute:subscriptionRoute,subscriptionStatus:subscriptionStatus,key:key,current:current,legacy:legacy,normalize:normalize,parse:parse,probe:probe,storageValue:storageValue};
   if(typeof module==='object'&&module.exports)module.exports=root.CKBackendRoute;
 })(typeof window==='object'?window:globalThis);
 
@@ -48,6 +64,7 @@ function ckOpenBackendRoute(){
   var active=CKBackendRoute.current;
   document.getElementById('ck-backend-mode').value=active.mode;
   document.getElementById('ck-execution-mode').value=active.execution||'direct_api';
+  document.getElementById('ck-subscription-model').value=active.subscriptionModel||'sonnet';
   var previous;
   try{previous=JSON.parse(localStorage.getItem(CKBackendRoute.key)||'null')}catch(e){}
   document.getElementById('ck-vps-gateway').value=(previous&&previous.gateway&&previous.mode==='vps'?previous.gateway:'https://tlomcc.cc.cd:18443/gateway');
@@ -68,9 +85,12 @@ function ckCloseBackendRoute(){
 }
 function ckBackendFieldsChanged(){
   document.getElementById('ck-vps-fields').hidden=document.getElementById('ck-backend-mode').value!=='vps';
+  var sub=document.getElementById('ck-execution-mode').value==='claude_code_subscription';
+  document.getElementById('ck-subscription-fields').hidden=!sub;
+  document.getElementById('ck-execution-hint').textContent=sub?'使用独立的官方订阅登录；CK 继续管理提示词、记忆、历史与工具。辅助总结和向量等仍使用各自 API。订阅不可用时不会自动切回 API。':'使用面板中的供应商 API 配置。Claude Code · API 使用官方客户端，由 CK 管理提示词、工具和聊天历史。';
 }
 function ckRenderBackendRoute(){
-  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（原生）':'VPS · 直接 API'):'阿里云（迁移保留）'});
+  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_subscription'?'VPS · Claude Code（订阅）':CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（API）':'VPS · 直接 API'):'阿里云（迁移保留）'});
 }
 if(typeof document==='object'){
   document.addEventListener('DOMContentLoaded',ckRenderBackendRoute);
@@ -92,7 +112,7 @@ async function ckSaveBackendRoute(){
   window.ckBackendSwitchBusy=true;button.disabled=true;
   try{
     oldValue=localStorage.getItem(CKBackendRoute.key);
-    var route=CKBackendRoute.parse({mode:document.getElementById('ck-backend-mode').value,gateway:document.getElementById('ck-vps-gateway').value,mcp:document.getElementById('ck-vps-mcp').value,execution:document.getElementById('ck-execution-mode').value});
+    var route=CKBackendRoute.parse({mode:document.getElementById('ck-backend-mode').value,gateway:document.getElementById('ck-vps-gateway').value,mcp:document.getElementById('ck-vps-mcp').value,execution:document.getElementById('ck-execution-mode').value,subscriptionModel:(document.getElementById('ck-subscription-model')||{}).value||'sonnet'});
     var auth=typeof storedPanelKey==='function'?storedPanelKey():'';
     if(!auth&&route.mode==='vps')throw new Error('请先在当前面板登录，验证现有配置后再切换 VPS。');
     message.textContent='正在检查网关、配置和记忆接口…';
@@ -118,4 +138,14 @@ async function ckSaveBackendRoute(){
     message.textContent=(e.name==='AbortError'?'连接验证超时。':(e.message||'连接失败。'))+' 当前连接没有切换。'
   }
   finally{window.ckBackendSwitchBusy=false;button.disabled=false}
+}
+
+async function ckCheckSubscriptionStatus(){
+  var el=document.getElementById('ck-subscription-status');el.textContent='正在检查…';
+  var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},20000);
+  try{
+    var route={gateway:CKBackendRoute.normalize(document.getElementById('ck-vps-gateway').value)};
+    var status=await CKBackendRoute.subscriptionStatus(route,storedPanelKey(),window.fetch.bind(window),controller.signal);
+    el.textContent=status.message||'订阅尚未就绪';
+  }catch(e){el.textContent=e.name==='AbortError'?'检查超时，请稍后重试':e.message}finally{clearTimeout(timer)}
 }

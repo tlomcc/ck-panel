@@ -1,7 +1,8 @@
 {
-  "version": "chat-v263-observer-status-stream",
+  "version": "chat-v264-subscription-route",
   "notes": [
-    "新增服务器状态页，查看 VPS 资源与关键服务。",
-    "修复结束后仍在等待、流式文字成块跳出及思考计时换行。"
+    "新增独立的 Claude Code 订阅路线、模型设置与登录状态检查。",
+    "API 和订阅分别管理认证与会话；订阅未登录时阻止发送，错误后不自动重试或切换 API。",
+    "订阅继续使用 CK 的提示词、历史与工具，用量不按 API 单价估算。"
   ]
 }
