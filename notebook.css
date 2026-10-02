@@ -97,8 +97,8 @@ body.chat-active :is(.chat-session-title,.chat-title-center h2,.chat-drawer-head
 body.chat-active :is(.chat-session-tools input,.chat-compose-box){border-color:var(--nb-line)!important;background:var(--nb-page)!important;border-radius:13px!important}
 body.chat-active .chat-plus-grid button>span{border:1px solid var(--nb-line)!important;border-radius:14px 14px 14px 6px!important;box-shadow:none!important;background:var(--nb-sage)!important;color:var(--nb-sage-ink)!important}
 body.chat-active .chat-plus-grid :is([data-setting="model"],[data-setting="thinking"],[data-setting="display"])>span{background:var(--nb-lilac)!important;color:var(--nb-lilac-ink)!important}
-body.chat-active .chat-plus-grid :is([data-setting="time"],[data-setting="billing"],[data-setting="trim"],[data-setting="cleanup"])>span{background:var(--nb-peach)!important;color:var(--nb-peach-ink)!important}
-body.chat-active .chat-plus-grid :is([data-setting="gateway"],[data-setting="history"],[data-setting="tools"],[data-setting="session"],[data-setting="debug"])>span{background:var(--nb-sky)!important;color:var(--nb-sky-ink)!important}
+body.chat-active .chat-plus-grid :is([data-setting="trim"],[data-setting="cleanup"])>span{background:var(--nb-peach)!important;color:var(--nb-peach-ink)!important}
+body.chat-active .chat-plus-grid :is([data-setting="gateway"],[data-setting="tools"],[data-setting="debug"])>span{background:var(--nb-sky)!important;color:var(--nb-sky-ink)!important}
 body.chat-active .chat-plus-grid [data-setting="worldbook"]>span{background:var(--nb-sage)!important;color:var(--nb-sage-ink)!important}
 
 /* Main pages: garden overview, filing cards, a daily log and connection folders. */

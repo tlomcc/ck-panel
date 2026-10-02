@@ -23,8 +23,8 @@ assert(!/chat-plus-page/.test(html),'paged plus tray markup must be gone');
 assert(!/chat-plus-dots|chat-plus-dot"/.test(html),'plus pager dots must be gone');
 assert(!/chat-plus-arrow/.test(html),'plus pager arrows must be gone');
 const trayButtons=(html.match(/<div class="chat-plus-grid"[\s\S]*?<\/div>/)||[''])[0];
-assert((trayButtons.match(/<button/g)||[]).length===20,'all 20 plus entries must live in one grid');
-['相册','拍摄','上传文件','提示词','API 连接','世界书','Fact 召回','分条','截断','调试','清理','思考','时间提醒','缓存策略','截断总结','历史保留','计费显示','工具','会话管理'].forEach(function(label){
+assert((trayButtons.match(/<button/g)||[]).length===16,'all 16 plus entries must live in one grid');
+['相册','拍摄','上传文件','设置','提示词','API 连接','世界书','Fact 召回','分条','截断','调试','清理','思考','缓存策略','截断总结','工具'].forEach(function(label){
   assert(trayButtons.includes('<b>'+label+'</b>'),'plus tray lost entry '+label);
 });
 ['chatPlusRenderPager','chatPlusSetPage','chatPlusPrevPage','chatPlusNextPage','chatPlusHandleTouchStart','chatPlusPager'].forEach(function(name){
@@ -88,7 +88,7 @@ assert(/#chat-side-worldbook \.chat-worldbook-list\{[^}]*border-bottom/.test(css
 assert(!/border:1px solid rgba\(18,140,76,\.16\)/.test(css.chat),'dead .chat-recall-switch declarations must be gone');
 
 // ── 面板内部顺序：说明卡紧贴它解释的控件；操作按钮分主次 ─────────────────
-const trim=html.slice(html.indexOf('id="chat-side-trim"'),html.indexOf('id="chat-side-debug"'));
+const trim=html.slice(html.indexOf('id="chat-side-trim"'),html.indexOf('id="chat-side-display"'));
 assert(trim.indexOf('轮数上限</b>')<trim.indexOf('chat-auto-trim-round-limit-enabled'),'the round-limit card must sit above its own controls');
 assert(trim.indexOf('通知方式</b>')<trim.indexOf('chat-auto-trim-prefix-silent'),'the notification card must sit above its own switch');
 assert((trim.match(/chat-wide-btn/g)||[]).length===1,'only one primary button per panel');

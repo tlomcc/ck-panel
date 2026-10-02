@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v248-drawer-swipe');
+const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v265-settings-merge/drawer');
 fs.mkdirSync(out,{recursive:true});
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -82,7 +82,19 @@ const server=http.createServer((req,res)=>{
     assert(await evaluate("document.getElementById('ckActionModal').classList.contains('show')"),'Session action tap stopped working');
     await evaluate('ckDialogCancel()');
     await shot(width+'-'+dark+'-restored');
-    console.log(JSON.stringify({width,dark,fallback,tracking:true,dismiss:true,rebound:true,flick:true,verticalScroll:true,cancel:true,search:true,reopen:true,menu:true}));
+    // Tap search, then real blank space at the bottom of a short list.
+    await touch('touchStart',input.x,input.y);await touch('touchEnd');await settle();
+    assert((await state()).open,'Search tap dismissed drawer');
+    await evaluate('document.activeElement.blur();chatSessions=chatSessions.slice(0,1);chatRenderSessions()');
+    const blank=await evaluate("(()=>{const r=document.getElementById('chat-session-list').getBoundingClientRect();const x=r.x+r.width/2,y=r.bottom-30;return {x,y,blank:document.elementFromPoint(x,y).id==='chat-session-list'}})()");
+    assert(blank.blank,'Fixture must tap actual blank list space');
+    await touch('touchStart',blank.x,blank.y);await touch('touchEnd');await settle();
+    assert(!(await state()).open&&(await state()).inert,'Blank list tap did not dismiss');
+    await evaluate('chatToggleSessions(true)');await settle();
+    await send('Input.dispatchMouseEvent',{type:'mousePressed',x:blank.x,y:blank.y,button:'left',clickCount:1});
+    await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:blank.x,y:blank.y,button:'left',clickCount:1});await settle();
+    assert(!(await state()).open,'Blank list mouse click did not dismiss');
+    console.log(JSON.stringify({width,dark,fallback,tracking:true,dismiss:true,rebound:true,flick:true,verticalScroll:true,cancel:true,search:true,reopen:true,menu:true,blankTap:true,blankMouse:true}));
   }
 
   await Promise.race([send('Browser.close'),pause(500)]);

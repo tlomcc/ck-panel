@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v264-subscription-route';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v265-merged-settings-tools';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8686,15 +8686,18 @@ function chatSelectTrimScope(scope){
     if(button)button.setAttribute('aria-pressed',key===scope?'true':'false');
   });
 }
+function chatSettingDestination(tab){
+  return ({billing:'display',history:'display',time:'display',session:'tools'})[tab]||tab;
+}
 function chatSettingTitle(tab){
-  return ({"model": "提示词", "thinking": "思考", "gateway": "API 连接", "billing": "计费显示", "tools": "工具", "worldbook": "世界书", "memory": "Fact 召回", "time": "时间提醒", "cache": "缓存策略", "history": "历史保留", "cleanup": "清理", "digest": "截断总结", "session": "会话管理", "trim": "截断", "debug": "调试", "display": "界面设置"})[tab]||'聊天设置';
+  tab=chatSettingDestination(tab);
+  return ({"model": "提示词", "thinking": "思考", "gateway": "API 连接", "tools": "工具", "worldbook": "世界书", "memory": "Fact 召回", "cache": "缓存策略", "cleanup": "清理", "digest": "截断总结", "trim": "截断", "debug": "调试", "display": "设置"})[tab]||'聊天设置';
 }
 function chatOpenSettingTab(tab){
   if(tab==='memory')chatRenderSessionRecall();
   chatTogglePlus(false);
   chatSwitchSideTab(tab||'model');
   chatToggleSettings(true);
-  if(tab==='display')chatSyncActionControls();
 }
 function chatToggleDebugSettings(){
   var el=document.querySelector('.chat-settings');
@@ -8728,7 +8731,7 @@ function chatAttachDrawerDismiss(){
   var drawer=document.querySelector('.chat-drawer');
   if(!drawer||drawer.__ckDismissReset)return;
   var shell=drawer.closest('.chat-shell'),mask=shell.querySelector('.chat-drawer-mask');
-  var gesture=null,suppressClickUntil=0;
+  var gesture=null,suppressClickUntil=0,blankClickMoved=false;
   function reset(){
     var old=gesture;gesture=null;
     if(old&&old.committed)suppressClickUntil=Date.now()+400;
@@ -8743,6 +8746,7 @@ function chatAttachDrawerDismiss(){
   function start(e,point){
     if(gesture)finish(true);
     if(!shell.classList.contains('chat-sessions-open')||!point)return;
+    blankClickMoved=false;
     if(e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
     if(e.pointerType==='mouse'&&e.button!==0)return;
     if(e.isPrimary===false)return;
@@ -8752,6 +8756,7 @@ function chatAttachDrawerDismiss(){
     var g=gesture;
     if(!g||!point||(e.pointerId!==undefined&&e.pointerId!==g.pointerId))return;
     var dx=point.clientX-g.x,dy=point.clientY-g.y;
+    if(Math.max(Math.abs(dx),Math.abs(dy))>=8)blankClickMoved=true;
     if(!g.committed){
       if(Math.max(Math.abs(dx),Math.abs(dy))<8)return;
       // Lock to the first clear direction so vertical list scrolling stays native.
@@ -8791,8 +8796,13 @@ function chatAttachDrawerDismiss(){
     drawer.addEventListener('touchcancel',function(){finish(true)},{passive:true});
   }
   drawer.addEventListener('click',function(e){
-    if(Date.now()>suppressClickUntil)return;
-    e.preventDefault();e.stopImmediatePropagation();
+    if(Date.now()<=suppressClickUntil){
+      e.preventDefault();e.stopImmediatePropagation();return;
+    }
+    if(blankClickMoved||!shell.classList.contains('chat-sessions-open'))return;
+    if(e.target.matches('.chat-drawer,.chat-drawer-head,.chat-drawer-heading,.chat-drawer-actions,.chat-session-tools,.chat-session-list,.chat-folder,.chat-folder-head,.chat-folder-body,.chat-folder-divider')){
+      chatToggleSessions(false,true);
+    }
   },true);
   window.addEventListener('blur',function(){finish(true)});
   window.addEventListener('resize',function(){finish(true)});
@@ -8924,6 +8934,7 @@ function ckAttachChatSheetDismiss(){
   },true);
 }
 function chatSwitchSideTab(tab,silent){
+  tab=chatSettingDestination(tab);
   tab=document.getElementById('chat-side-'+tab)?tab:'model';
   var nav=document.getElementById('chat-settings-nav');
   if(nav)nav.value=tab;
@@ -8940,7 +8951,8 @@ function chatSwitchSideTab(tab,silent){
     chatSaveConfigObject(cfg);
   }
   // 两块折叠说明（√ 的颜色 / 用量符号）和默认价格表都长在「设置」页的计费开关下面。
-  if(tab==='billing'){
+  if(tab==='display'){
+    chatSyncActionControls();
     chatRenderTickLegend();
     chatRenderUsageLegend();
     // 读回来再渲染：没渲染过就用存档值，已经在改的那几行不能被冲掉。

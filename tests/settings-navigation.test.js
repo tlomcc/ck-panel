@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const {spawn}=require('child_process');
 const root=path.resolve(__dirname,'..');
-const out=path.resolve(root,'../0-工作间/20260923-cleanup-browser');
+const out=path.resolve(root,'../0-工作间/v265-settings-merge/browser');
 const chrome=process.env.CK_CHROME||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 if(!fs.existsSync(chrome)){console.log('settings browser: SKIP (Chrome unavailable)');process.exit(0)}
 fs.mkdirSync(out,{recursive:true});
@@ -28,9 +28,9 @@ try{
   const allIds=[...document.querySelectorAll('[id]')].map(el=>el.id);
   check(allIds.length===new Set(allIds).size,'Duplicate DOM IDs');
   const destinations={model:'chat-system',thinking:'chat-thinking-mode',worldbook:'chat-worldbook-content',
-    gateway:'chat-window-api-editor',billing:'chat-cost-defaults',tools:'chat-use-mcp',memory:'chat-recall-enabled',time:'chat-time-injection-every-rounds',
-    cache:'chat-cache-strategy',history:'chat-retain-current-time-history',cleanup:'chat-auto-clean-enabled',digest:'chat-daily-digest-pack',
-    session:'chat-session-id',trim:'chat-window-trim-override',debug:'chat-debug'};
+    gateway:'chat-window-api-editor',display:'chat-cost-defaults',tools:'chat-use-mcp',memory:'chat-recall-enabled',
+    cache:'chat-cache-strategy',cleanup:'chat-auto-clean-enabled',digest:'chat-daily-digest-pack',
+    trim:'chat-window-trim-override',debug:'chat-debug'};
   const geometry=[];
   for(const [key,field] of Object.entries(destinations)){
     const nav=document.getElementById('chat-settings-nav');nav.value=key;nav.dispatchEvent(new Event('change'));
@@ -42,7 +42,13 @@ try{
     check(active[0].scrollWidth<=active[0].clientWidth+2,'Horizontal overflow '+key);
     geometry.push({key,height:active[0].clientHeight,scroll:active[0].scrollHeight});
   }
-  check(document.querySelectorAll('#chat-plus-grid>button').length===20,'Missing tray buttons');
+  check(document.querySelectorAll('#chat-plus-grid>button').length===16,'Missing tray buttons');
+  for(const [legacy,target,field] of [['billing','display','chat-billing-enabled'],['history','display','chat-retain-recall-history'],['time','display','chat-time-injection-every-rounds'],['session','tools','chat-session-id']]){
+    cfg=chatLoadConfig();cfg.chatSideTab=legacy;chatWriteForm(cfg);
+    const active=document.querySelector('.chat-side-panel.active');
+    check(active.id==='chat-side-'+target&&active.contains(document.getElementById(field)),'Saved destination not migrated: '+legacy);
+    check(document.getElementById('chat-settings-nav').value===target,'Navigation not migrated: '+legacy);
+  }
   for(const key of ['model','thinking','worldbook','digest','memory']){
     chatOpenSettingTab(key);
     const formal=document.getElementById(key==='model'?'chat-system':key==='thinking'?'chat-thinking-prompt':key==='memory'?'chat-memory-pack':destinations[key]);
@@ -136,7 +142,7 @@ try{
   socket.onmessage=e=>{const result=JSON.parse(e.data);const task=pending.get(result.id);if(task){pending.delete(result.id);result.error?task.reject(result.error):task.resolve(result.result)}};
   const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++counter;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}))});
   await send('Page.enable');
-for(const [width,dark,destination] of [[390,false,'trim'],[390,true,'trim'],[1280,false,'time'],[390,false,'digest'],[390,false,'daily-running'],[390,true,'daily-blocked'],[1280,false,'daily-running']]){
+for(const [width,dark,destination] of [[320,false,'display'],[390,false,'display'],[390,true,'display'],[1280,false,'display'],[1280,true,'display'],[390,false,'tools'],[1280,true,'tools'],[390,false,'trim'],[390,true,'trim'],[1280,false,'time'],[390,false,'digest'],[390,false,'daily-running'],[390,true,'daily-blocked'],[1280,false,'daily-running']]){
   const tag=width+'-'+(dark?'dark':'light')+'-'+destination;
   const html=base.replace('</body>','<pre id="settings-result" hidden></pre><script src="runtime.js"></script><script>const TEST_WIDTH='+width+';const TEST_DARK='+dark+';const TEST_DESTINATION='+JSON.stringify(destination)+';'+probe+'</script></body>');
   const file=path.join(out,tag+'.html');fs.writeFileSync(file,html);
@@ -152,7 +158,7 @@ for(const [width,dark,destination] of [[390,false,'trim'],[390,true,'trim'],[128
   fs.writeFileSync(path.join(out,tag+'.png'),Buffer.from(screenshot.data,'base64'));
   assert(result.startsWith('SETTINGS_OK'),tag+': '+(result||'No browser output'));
   fs.writeFileSync(path.join(out,tag+'-result.txt'),result);
-  console.log('settings browser: '+tag+' PASS (15 destinations, scopes, persistence, overflow)');
+  console.log('settings browser: '+tag+' PASS (merged destinations, scopes, persistence, overflow)');
 }
 await send('Browser.close');
 }finally{if(socket)socket.close();browser.kill()}
