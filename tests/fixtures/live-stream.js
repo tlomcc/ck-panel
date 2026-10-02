@@ -25,6 +25,8 @@
   stream.thinking('先核对这条消息。');await pause(70);
   assert(document.querySelector('.chat-stream-aux .chat-thinking-body')?.textContent.includes('先核对'),'thinking missing before text');
   const thought=document.querySelector('.chat-stream-aux .chat-thinking');
+  const labelBox=thought.querySelector('.chat-thinking-label').getBoundingClientRect();
+  assert(labelBox.height<24,'thinking label wrapped while streaming');
   assert(!thought.classList.contains('open'),'thinking must start collapsed');
   assert(getComputedStyle(thought.querySelector('.chat-thinking-body')).display==='none','thinking content visible while folded');
   await pause(160);
@@ -58,7 +60,9 @@
  burst.text('流'.repeat(240));await pause(25);
  assert(burstOut.textContent.length>0&&burstOut.textContent.length<240,'large chunk appeared all at once');
  const stableParagraph=burstOut.querySelector('p');await pause(160);
- assert(burstOut.textContent.length===240,'stream smoothing accumulated too much delay');
+ assert(burstOut.textContent.length<240,'burst was dumped after a short deadline');
+ await pause(950);
+ assert(burstOut.textContent.length===240,'stream smoothing did not finish');
  assert(burstOut.querySelector('p')===stableParagraph,'stream replaced the Markdown paragraph');
  burst.stop();burstOut.parentNode.remove();
  // Stop must cancel pending segment reveals and prevent later deltas changing DOM.

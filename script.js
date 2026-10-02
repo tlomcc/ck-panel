@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v262-native-cache-continuity';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v263-observer-status-stream';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8178,17 +8178,21 @@ function chatThinkingCaption(timing){
   return (timing.active?'思考中 · ':'已思考 ')+(Math.max(0,Number(timing.durationMs))/1000).toFixed(1)+' 秒';
 }
 function chatCreateStreamPacer(){
-  var visible='',pendingAt=0,lastFrame=0;
+  var visible='',lastFrame=0,credit=0;
   return {value:function(){return visible},next:function(target,now,instant){
     target=String(target||'');now=Number(now)||Date.now();
-    if(instant||target.indexOf(visible)!==0){visible=target;pendingAt=0;lastFrame=now;return visible;}
-    if(target===visible){pendingAt=0;lastFrame=now;return visible;}
-    if(!pendingAt)pendingAt=now;
-    var count=!visible.length?1:Math.max(1,Math.ceil((target.length-visible.length)*Math.min(1,Math.max(8,now-lastFrame)/55)));
-    if(now-pendingAt>=120)count=target.length-visible.length;
+    if(instant||target.indexOf(visible)!==0){visible=target;credit=0;lastFrame=now;return visible;}
+    if(target===visible){credit=0;lastFrame=now;return visible;}
+    // Spread bursts over frames, without a deadline that dumps the whole tail.
+    // Time credit also keeps 120Hz screens from revealing twice as fast.
+    var elapsed=lastFrame?Math.min(32,Math.max(0,now-lastFrame)):16;
+    var backlog=target.length-visible.length;
+    credit+=elapsed*Math.max(55,backlog/0.22)/1000;
+    var count=!visible.length?1:Math.floor(credit);
+    if(count)credit=Math.max(0,credit-count);
     var end=Math.min(target.length,visible.length+count);
     if(end<target.length&&/[\uD800-\uDBFF]/.test(target.charAt(end-1)))end++;
-    visible=target.slice(0,end);lastFrame=now;if(visible===target)pendingAt=0;return visible;
+    visible=target.slice(0,end);lastFrame=now;if(visible===target)credit=0;return visible;
   }};
 }
 function chatPatchStreamMarkup(element,html){
@@ -10565,6 +10569,8 @@ async function chatSubmitPendingMessages(options){
       if(index>0&&bubble.parentNode)bubble.parentNode.hidden=index>=shown;
       bubble.classList.toggle('streaming-empty',!text);
       if(bubble.parentNode)bubble.parentNode.classList.toggle('streaming-empty-row',!text);
+      if(bubble.__ckStreamText===text)return;
+      bubble.__ckStreamText=text;
       var html=text?chatRenderAssistantContent(text,true,[],undefined,'',false):'';
       chatPatchStreamMarkup(bubble,html);
     });
@@ -10642,7 +10648,11 @@ async function chatSubmitPendingMessages(options){
           return;
         }
         attemptState.receivedValidContent=true;
-        if(ev==='done'||ev==='done_marker')streamCompleted=true;
+        if(ev==='done'||ev==='done_marker'){
+          streamCompleted=true;
+          finishThinking();
+          chatStreamProgressStop();
+        }
         if(ev==='delta'){
           var deltaText=typeof data==='string'?data:String((data&&data.text)||'');
           recordFirstDeltaLatency(data&&typeof data==='object'?data:null);
@@ -10724,7 +10734,7 @@ async function chatSubmitPendingMessages(options){
         }
       }
       try{
-      while(reader){
+      while(reader&&!streamCompleted){
         if(requestState&&requestState.stopped)throw chatCreateAbortError();
         var r;
         try{r=await reader.read()}
@@ -10759,14 +10769,16 @@ async function chatSubmitPendingMessages(options){
       latencyTrace.panel_stream_done_ms=Date.now();
       }finally{
         if(reader){
-          if(!streamCompleted||streamError){try{await reader.cancel()}catch(e){}}
+          // done is the protocol boundary; some proxies leave HTTP open.
+          // Cancellation itself must not become another completion wait.
+          try{Promise.resolve(reader.cancel()).catch(function(){})}catch(e){}
           try{reader.releaseLock()}catch(e){}
         }
       }
     });
     if(requestState&&requestState.stopped)return;
     finishThinking();
-    var smoothFinishUntil=Date.now()+140;
+    var smoothFinishUntil=Date.now()+800;
     while(streamPacer.value()!==String(chatSplitThinkingText(assistantText,{hideUnclosedThinking:true}).text||'')&&Date.now()<smoothFinishUntil&&!(requestState&&requestState.stopped)){
       scheduleStreamRender();await new Promise(function(resolve){setTimeout(resolve,16)});
     }

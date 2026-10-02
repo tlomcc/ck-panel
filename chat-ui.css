@@ -177,8 +177,11 @@ body.dark.chat-active .chat-head-actions .chat-quick-actions-toggle[aria-pressed
 body.dark.chat-active .chat-quick-actions-toggle[aria-pressed="true"] .chat-action-page{fill:#426453}
 body.chat-active .chat-head-actions .chat-quick-actions-toggle:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
 /* Streaming reasoning stays compact; numeric timing does not shift its label. */
-body.chat-active .chat-thinking-label{font-variant-numeric:tabular-nums}
-body.chat-active .chat-thinking.is-thinking .chat-thinking-label{animation:ck-thinking-breathe 1.6s ease-in-out infinite}
+body.chat-active .chat-thinking-label{font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
+body.chat-active .chat-thinking-head{flex-wrap:nowrap!important;white-space:nowrap!important}
+body.chat-active .chat-stream-aux{min-width:0;width:100%;max-width:100%;align-self:flex-start}
+body.chat-active .chat-stream-aux .chat-thinking{width:fit-content!important;min-width:min(172px,100%);max-width:100%!important}
+body.chat-active .chat-stream-aux .chat-thinking.open{width:100%!important}
 body.chat-active .chat-thinking-head:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 @keyframes ck-thinking-breathe{0%,100%{opacity:1}50%{opacity:.58}}
 @media(prefers-reduced-motion:reduce){body.chat-active .chat-thinking.is-thinking .chat-thinking-label{animation:none}}

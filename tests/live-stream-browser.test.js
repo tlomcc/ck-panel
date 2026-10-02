@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v261-live-stream-browser');
+const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v263-live-stream-browser');
 fs.mkdirSync(out,{recursive:true});
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -39,6 +39,10 @@ const server=http.createServer((req,res)=>{
     await evaluate('window.__streamSource='+JSON.stringify(fs.readFileSync(path.join(root,'script.js'),'utf8')));
     const result=await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/live-stream.js'),'utf8'));
     console.log(width+' '+dark,JSON.stringify(result));
+    console.log('completion',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/stream-completion.js'),'utf8'))));
+    console.log('status',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/server-status.js'),'utf8'))));
+    await shot(width+'-'+dark+'-server-status');
+    await evaluate('window.__closeStatusTest()');
     await pause(400);
     await shot(width+'-'+dark+'-stream');
   }

@@ -1,7 +1,7 @@
 {
-  "version": "chat-v262-native-cache-continuity",
+  "version": "chat-v263-observer-status-stream",
   "notes": [
-    "修复 Claude Code 连续聊天反复重建长历史缓存的问题，编辑和截断仍以 CK 为准。",
-    "Claude Code 缓存时长跟随 CK 面板的 5 分钟或 1 小时设置。"
+    "新增服务器状态页，查看 VPS 资源与关键服务。",
+    "修复结束后仍在等待、流式文字成块跳出及思考计时换行。"
   ]
 }
