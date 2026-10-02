@@ -59,8 +59,25 @@
  check(requests.at(-1).fact_ids.length===2,'Batch approval lost members');
  check(document.querySelectorAll('.mw-topic-link').length===1,'Approved theme not refreshed');
  check(!window.bad,'Opinion HTML executed');
+ // Settings remain editable across refreshes, failures and concurrent worker writes.
+ document.querySelector('.mr-settings').open=true;
+ input('#mr-daily','500');input('#mr-batch','10');
+ click('[data-mr="refresh"]');await wait(()=>$('mw-organizer').textContent.includes('已刷新'));
+ check($('mr-daily').value==='500'&&$('mr-batch').value==='10','Refresh lost settings draft');
+ check(document.querySelector('.mr-settings').open,'Refresh closed settings');
+ fail=true;click('[data-mr="settings"]');await wait(()=>$('mw-organizer').textContent.includes('设置未保存成功'));
+ check($('mr-daily').value==='500'&&$('mr-batch').value==='10','Failure lost settings');
+ conflict=true;click('[data-mr="settings"]');await wait(()=>$('mw-organizer').textContent.includes('并发更新'));
+ check($('mr-daily').value==='500'&&$('mr-batch').value==='10','Conflict lost settings');
+ click('[data-mr="settings"]');await wait(()=>$('mw-organizer').textContent.includes('设置已保存：每日最多 500 次，每批 10 份'));
+ check(store.organizer.settings.daily_calls===500&&store.organizer.settings.batch_size===10,'Settings payload wrong');
+ click('[data-mr="refresh"]');await wait(()=>$('mw-organizer').textContent.includes('已刷新'));
+ check($('mr-daily').value==='500'&&$('mr-batch').value==='10','Saved settings did not persist');
+ const count=requests.length;input('#mr-daily','1001');click('[data-mr="settings"]');
+ check(requests.length===count&&$('mw-organizer').textContent.includes('设置未保存：'),'Invalid settings submitted');
+ input('#mr-daily','500');click('[data-mr="settings"]');await wait(()=>$('mw-organizer').textContent.includes('设置已保存：'));
  // Leave an example for desktop/mobile visual review.
  store.organizer.pending=[proposal(3)];store.organizer.pending_count=1;
  click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_3"]'));
- return {immediateStart:true,pause:true,opinionSurvivesPause:true,optionalOpinion:true,opinionSurvivesTabsAndFailures:true,retryReceipt:true,conflictRefresh:true,approval:true,recheck:true,escaped:true};
+ return {settings500and10:true,settingsSurviveRefreshFailureAndConflict:true,immediateStart:true,pause:true,opinionSurvivesPause:true,optionalOpinion:true,opinionSurvivesTabsAndFailures:true,retryReceipt:true,conflictRefresh:true,approval:true,recheck:true,escaped:true};
 })()
