@@ -12,7 +12,7 @@
  const factory=new Function('cfg','out','requestTurnId','latencyTrace',`
    var assistantText='',nativeThinkingText='',toolEvents=[],firstReplyTs=Date.now();
    ${source.slice(start,end)}
-   return {text(v){assistantText+=v;scheduleStreamRender()},thinking(v){nativeThinkingText+=v;scheduleStreamRender()},stop:stopStreamRender,count(){return streamShownCount},raw(){return assistantText}};
+   return {text(v){assistantText+=v;trackThinking();scheduleStreamRender()},thinking(v){nativeThinkingText+=v;trackThinking();scheduleStreamRender()},stop:stopStreamRender,count(){return streamShownCount},raw(){return assistantText},duration(){return thinkingTiming().durationMs}};
  `);
  const results=[];
  for(const split of [false,true]){
@@ -24,9 +24,17 @@
   const stream=factory(cfg,out,'live',latency);
   stream.thinking('先核对这条消息。');await pause(70);
   assert(document.querySelector('.chat-stream-aux .chat-thinking-body')?.textContent.includes('先核对'),'thinking missing before text');
+  const thought=document.querySelector('.chat-stream-aux .chat-thinking');
+  assert(!thought.classList.contains('open'),'thinking must start collapsed');
+  assert(getComputedStyle(thought.querySelector('.chat-thinking-body')).display==='none','thinking content visible while folded');
+  await pause(160);
+  assert(/思考中.*0\.[12]/.test(thought.querySelector('.chat-thinking-label').textContent),'thinking timer did not advance');
+  stream.thinking('继续核对。');await pause(40);
+  assert(document.querySelector('.chat-stream-aux .chat-thinking')===thought,'thinking card replaced during streaming');
   assert(!out.textContent.includes('先核对'),'thinking leaked into text bubble');
   stream.text('第');await pause(70);
   assert(out.textContent==='第','first character withheld');
+  assert(thought.querySelector('.chat-thinking-label').textContent.includes('已思考'),'timer did not stop for text');
   assert(latency.panel_first_rendered_char_ms&&!latency.panel_stream_done_ms,'first render waits for done');
   stream.text('一段\n第二段');await pause(400);
   let bubbles=[...document.querySelectorAll('.chat-ephemeral-row .chat-bubble.assistant')].filter(x=>!x.parentNode.hidden);
@@ -35,13 +43,24 @@
   stream.text('\n```js\nconst answer=42;');await pause(230);
   stream.text('\n```\n结束');await pause(400);
   const shown=stream.count();stream.stop();
-  await chatAppendAssistantReplies(stream.raw(),null,[],{splitAssistantReplies:split,alreadyShownCount:shown,turnId:'live',thinking:'先核对这条消息。',latency});
+  await chatAppendAssistantReplies(stream.raw(),null,[],{splitAssistantReplies:split,alreadyShownCount:shown,turnId:'live',thinking:'先核对这条消息。',thinkingDurationMs:stream.duration(),latency});
   assert(!document.querySelector('.chat-ephemeral-row'),'temporary rows survived completion');
   assert(chatMessages.filter(m=>m.role==='assistant').length===(split?4:1),'wrong persisted split count');
   assert(!chatAssistantRevealQueue?.hidden.size,'already visible text hidden again on completion');
   assert(chatMessages[1].thinking==='先核对这条消息。','thinking not persisted');
+  assert(chatMessages[1].thinkingDurationMs>=200,'thinking duration not persisted');
+  assert(!document.querySelector('.chat-thinking.open'),'completed thinking auto-expanded');
   results.push({split,firstCharacterBeforeDone:true,thinkingBeforeText:true,shown});
  }
+ // Large upstream chunks spread over several frames with a bounded catch-up.
+ chatRenderMessages({force:true,removeEphemeral:true});
+ const burstOut=chatAddBubble('assistant','',false),burst=factory({sessionId:'live-stream',splitAssistantReplies:false},burstOut,'burst',{});
+ burst.text('流'.repeat(240));await pause(25);
+ assert(burstOut.textContent.length>0&&burstOut.textContent.length<240,'large chunk appeared all at once');
+ const stableParagraph=burstOut.querySelector('p');await pause(160);
+ assert(burstOut.textContent.length===240,'stream smoothing accumulated too much delay');
+ assert(burstOut.querySelector('p')===stableParagraph,'stream replaced the Markdown paragraph');
+ burst.stop();burstOut.parentNode.remove();
  // Stop must cancel pending segment reveals and prevent later deltas changing DOM.
  chatRenderMessages({force:true,removeEphemeral:true});
  const stoppedOut=chatAddBubble('assistant','',false),stopper=factory({sessionId:'live-stream',splitAssistantReplies:true},stoppedOut,'stopped',{});

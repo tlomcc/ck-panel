@@ -150,7 +150,7 @@ function testWiring(){
   assert(/class="chat-thinking/.test(parts),'思考链块要独立渲染');
   assert(parts.includes('chat-thinking-copy'),'思考链块要有自己的复制按钮');
   assert(parts.includes('思考（未闭合）'),'未闭合时要在标题上说明');
-  assert(parts.includes("'chat-thinking open'"),'未闭合又没正文时默认展开，别让用户以为回复丢了');
+  assert(!parts.includes("'chat-thinking open'"),'思考始终默认折叠，包括未闭合或尚无正文时');
   assert(!parts.includes('chat-bubble'),'assistant parts 不许再造一层气泡');
   assert(source.includes(".closest('.chat-thinking-copy')"),'思考链复制按钮要接上点击');
   assert(/\.chat-thinking-copy\{/.test(css),'思考链复制按钮要有样式');

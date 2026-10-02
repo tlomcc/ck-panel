@@ -27,7 +27,7 @@
       var status=await health.json();
       if(status.status!=='ok')throw new Error('这个地址没有返回 CK 网关状态。');
       if(status.migration_read_only===true)throw new Error('VPS 仍是只读预览，暂不能作为正式连接。');
-      if(route.execution==='claude_code_api'&&status.claude_code_api!==true)throw new Error('目标 VPS 的 Claude Code API 服务尚未就绪。');
+      if(route.execution==='claude_code_api'&&(status.claude_code_api!==true||status.claude_code_native!==true))throw new Error('目标 VPS 的 Claude Code 原生服务尚未就绪。');
       if(!authKey)return;
       var headers={'x-api-key':authKey,'Content-Type':'application/json'};
       var cfg=await fetcher(route.gateway+'/config',{headers:headers,cache:'no-store',signal:controller.signal});
@@ -70,7 +70,7 @@ function ckBackendFieldsChanged(){
   document.getElementById('ck-vps-fields').hidden=document.getElementById('ck-backend-mode').value!=='vps';
 }
 function ckRenderBackendRoute(){
-  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（API）':'VPS · 直接 API'):'阿里云（迁移保留）'});
+  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（原生）':'VPS · 直接 API'):'阿里云（迁移保留）'});
 }
 if(typeof document==='object'){
   document.addEventListener('DOMContentLoaded',ckRenderBackendRoute);

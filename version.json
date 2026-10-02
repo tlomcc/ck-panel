@@ -1,7 +1,7 @@
 {
-  "version": "chat-v260-claude-api-live-stream",
+  "version": "chat-v261-native-claude-smooth-stream",
   "notes": [
-    "新增 VPS Claude Code（API 适配）路径，供应商、提示词、截断、总结和缓存均跟随 CK 配置。",
-    "所有路径即时显示思考与正文首字，分段模式保留逐条气泡。"
+    "VPS Claude Code 改为官方原生请求，工具续接同样通过 Claude Code；提示词与上下文跟随 CK，使用原生 5 分钟缓存。",
+    "所有路径平滑显示流式正文，思考默认折叠并显示耗时，保留分段气泡。"
   ]
 }

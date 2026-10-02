@@ -44,6 +44,8 @@ test('Claude Code selection requires live capability and persists only the expli
  const {ctx,els,storage}=fixture();els['ck-execution-mode'].value='claude_code_api';
  await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,undefined);assert.equal(storage.has('ckBackendRouteV1'),false);
  const original=ctx.fetch;ctx.fetch=async url=>url.endsWith('/health')?{ok:true,json:async()=>({status:'ok',claude_code_api:true})}:original(url);
+ await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,undefined,'old adapted route must not pass the native capability check');
+ ctx.fetch=async url=>url.endsWith('/health')?{ok:true,json:async()=>({status:'ok',claude_code_api:true,claude_code_native:true})}:original(url);
  await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,true);assert.equal(JSON.parse(storage.get('ckBackendRouteV1')).execution,'claude_code_api');
  assert.equal(ctx.CKBackendRoute.parse({mode:'aliyun',execution:'claude_code_api'}).execution,undefined);
 });

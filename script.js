@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v260-claude-api-live-stream';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v261-native-claude-smooth-stream';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2953,6 +2953,17 @@ function chatRenderCacheStrategyState(statusText,statusKind){
   if(status){
     status.textContent=statusText||'选择后会立即保存，也可点按钮确认。';
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
+  }
+  var ccNative=typeof CKBackendRoute==='object'&&CKBackendRoute.current.mode==='vps'&&CKBackendRoute.current.execution==='claude_code_api';
+  if(strategy)strategy.disabled=ccNative;
+  var cacheSave=document.querySelector('.chat-cache-mode-actions .chat-cache-save-btn');
+  if(cacheSave)cacheSave.disabled=ccNative;
+  if(ccNative){
+    var nativeNote='当前由 Claude Code 管理缓存，使用原生 5 分钟缓存。';
+    if(savedEl)savedEl.textContent=nativeNote;
+    if(debugMode)debugMode.textContent=nativeNote+'实际命中以本轮用量为准。';
+    if(detail)detail.textContent='模型、提示词、记忆和截断继续在 CK 配置。此路径的缓存断点由 Claude Code 生成；直接 API 的已保存策略是：'+savedMeta.label+'。';
+    if(status)status.textContent='切回直接 API 后可调整原来的缓存策略。';
   }
   chatRenderRecallState();
   chatRenderNcContextState();
@@ -8161,7 +8172,48 @@ function chatRenderToolTrace(tools){
     return '<details class="chat-tool-card '+statusClass+'" data-tool-key="'+escAttr(chatToolEventKey(t,i))+'"'+open+'><summary><span class="chat-tool-icon">⌁</span><span class="chat-tool-main"><b>'+esc(chatToolShortName(t.name))+'</b><small>'+esc(subtitle+(meta.length?' · '+meta.join(' · '):''))+'</small></span><span class="chat-tool-status">'+esc(chatToolStatusLabel(status,isError))+'</span><span class="chat-tool-chevron">⌄</span></summary><div class="chat-tool-body">'+body+'</div></details>';
   }).join('')+'</div>';
 }
-function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking,showNativeThinking){
+function chatThinkingCaption(timing){
+  if(!timing||!isFinite(Number(timing.durationMs)))return '思考';
+  return (timing.active?'思考中 · ':'已思考 ')+(Math.max(0,Number(timing.durationMs))/1000).toFixed(1)+' 秒';
+}
+function chatCreateStreamPacer(){
+  var visible='',pendingAt=0,lastFrame=0;
+  return {value:function(){return visible},next:function(target,now,instant){
+    target=String(target||'');now=Number(now)||Date.now();
+    if(instant||target.indexOf(visible)!==0){visible=target;pendingAt=0;lastFrame=now;return visible;}
+    if(target===visible){pendingAt=0;lastFrame=now;return visible;}
+    if(!pendingAt)pendingAt=now;
+    var count=!visible.length?1:Math.max(1,Math.ceil((target.length-visible.length)*Math.min(1,Math.max(8,now-lastFrame)/55)));
+    if(now-pendingAt>=120)count=target.length-visible.length;
+    var end=Math.min(target.length,visible.length+count);
+    if(end<target.length&&/[\uD800-\uDBFF]/.test(target.charAt(end-1)))end++;
+    visible=target.slice(0,end);lastFrame=now;if(visible===target)pendingAt=0;return visible;
+  }};
+}
+function chatPatchStreamMarkup(element,html){
+  // Keep Markdown nodes and disclosure state stable during incremental updates.
+  if(!element||element.__ckStreamMarkup===html)return;
+  var template=document.createElement('template');template.innerHTML=html;
+  function patch(parent,wanted){
+    var next=Array.prototype.slice.call(wanted.childNodes);
+    next.forEach(function(node,index){
+      var old=parent.childNodes[index];
+      if(!old){parent.appendChild(node.cloneNode(true));return;}
+      if(old.nodeType!==node.nodeType||old.nodeName!==node.nodeName){parent.replaceChild(node.cloneNode(true),old);return;}
+      if(node.nodeType===3){if(old.nodeValue!==node.nodeValue)old.nodeValue=node.nodeValue;return;}
+      if(node.nodeType!==1)return;
+      var isThought=old.classList.contains('chat-thinking'),open=isThought&&old.classList.contains('open');
+      Array.prototype.slice.call(old.attributes).forEach(function(attr){if(!node.hasAttribute(attr.name)&&!(old.tagName==='DETAILS'&&attr.name==='open'))old.removeAttribute(attr.name);});
+      Array.prototype.slice.call(node.attributes).forEach(function(attr){if(old.tagName==='DETAILS'&&attr.name==='open')return;if(old.getAttribute(attr.name)!==attr.value)old.setAttribute(attr.name,attr.value);});
+      if(isThought)old.classList.toggle('open',open);
+      patch(old,node);
+      if(isThought){var head=old.querySelector('.chat-thinking-head');if(head)head.setAttribute('aria-expanded',open?'true':'false');}
+    });
+    while(parent.childNodes.length>next.length)parent.removeChild(parent.lastChild);
+  }
+  patch(element,template.content);element.__ckStreamMarkup=html;
+}
+function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking,showNativeThinking,thinkingTiming){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
   var toolTrace=chatRenderToolTrace(tools);
   var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
@@ -8169,13 +8221,12 @@ function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThi
   var thinking='';
    var thinkingText=[showNativeThinking===false?'':String(nativeThinking||'').trim(),String(split.thinking||'').trim()].filter(Boolean).join('\n\n');
    if(thinkingText){
-    // 闭合标签丢了又没剩正文时默认展开：否则用户只看到一个空气泡，会以为回复整条丢了。
-    var thinkingCls=(split.unclosed&&!split.text)?'chat-thinking open':'chat-thinking';
-    var thinkingLabel=split.unclosed?'思考（未闭合）':'思考';
+    var thinkingCls='chat-thinking'+(thinkingTiming&&thinkingTiming.active?' is-thinking':'');
+    var thinkingLabel=thinkingTiming?chatThinkingCaption(thinkingTiming):(split.unclosed?'思考（未闭合）':'思考');
     var thinkingActions=(typeof messageIndex==='number'&&messageIndex>=0)
       ?('<div class="chat-thinking-actions"><button class="chat-thinking-copy" type="button" data-i="'+messageIndex+'">复制思考链</button></div>')
       :'';
-     thinking='<div class="'+thinkingCls+'"><button class="chat-thinking-head" type="button"><span>'+esc(thinkingLabel)+'</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(thinkingText)+thinkingActions+'</div></div>';
+     thinking='<div class="'+thinkingCls+'"><button class="chat-thinking-head" type="button" aria-expanded="false"><span class="chat-thinking-label">'+esc(thinkingLabel)+'</span><span class="chev">⌄</span></button><div class="chat-thinking-body">'+esc(thinkingText)+thinkingActions+'</div></div>';
   }
   return {thinking:thinking,toolTrace:toolTrace,body:body};
 }
@@ -8440,6 +8491,7 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
     var ts=i===0?firstReplyTs:Math.max(Date.now(),firstReplyTs+i);
      var msg={role:'assistant',text:part,recall:i===0?recallInfo:null,tools:i===0?tools:[],ts:ts,turnId:String(opts.turnId||'')};
      if(i===0&&nativeThinking)msg.thinking=nativeThinking;
+     if(i===0&&opts.thinkingDurationMs!==undefined)msg.thinkingDurationMs=Math.max(0,Number(opts.thinkingDurationMs)||0);
     if(i===parts.length-1&&userSentTs){
       msg.userSentTs=userSentTs;
       msg.firstReplyTs=firstReplyTs;
@@ -8952,7 +9004,7 @@ document.addEventListener('click',function(e){
   var rh=e.target.closest('.chat-recall-head');
   if(rh&&rh.parentNode){rh.parentNode.classList.toggle('open');return;}
   var th=e.target.closest('.chat-thinking-head');
-  if(th&&th.parentNode){th.parentNode.classList.toggle('open');return;}
+  if(th&&th.parentNode){th.parentNode.classList.toggle('open');th.setAttribute('aria-expanded',th.parentNode.classList.contains('open')?'true':'false');return;}
   var rvb=e.target.closest('.chat-reply-variant-btn');
   if(rvb){
     chatSwitchReplyVariant(parseInt(rvb.getAttribute('data-i'),10),Number(rvb.getAttribute('data-dir')||0)||0);
@@ -9502,7 +9554,7 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&chatShouldShowRecallBox()&&m.recall&&(m.recall.chars||m.recall.preview)){
     recall='<div class="chat-recall"><button class="chat-recall-head" type="button"><span>召回记忆'+(m.recall.chars?(' · '+m.recall.chars+' 字'):'')+'</span><span class="chev">⌄</span></button><div class="chat-recall-body">'+esc(m.recall.preview||'')+'</div></div>';
   }
-   var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i,m.thinking,chatShouldShowNativeThinking()):null;
+   var assistantParts=role==='assistant'?chatRenderAssistantParts(m.text||'',false,m.tools,i,m.thinking,chatShouldShowNativeThinking(),m.thinkingDurationMs!==undefined?{durationMs:m.thinkingDurationMs,active:false}:null):null;
   var thinking=assistantParts?assistantParts.thinking:'';
   var inner=assistantParts?(assistantParts.toolTrace+assistantParts.body):esc(m.text||'');
   if(role==='user')inner=chatRenderUserMessageContent(m,i);
@@ -10455,6 +10507,26 @@ async function chatSubmitPendingMessages(options){
   var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;
   var streamBubbles=out?[out]:[],streamShownCount=0,streamRevealTimer=0,streamNextRevealAt=0;
   var streamAux=null;
+  var streamPacer=chatCreateStreamPacer(),streamBodyTarget='',streamForceText=false;
+  var streamReducedMotion=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var thinkingStartedAt=0,thinkingTotalMs=0,thinkingSeen=false,thinkingTick=0,thinkingChars=0,thinkingBodyChars=0,taggedWasOpen=false;
+  function thinkingTiming(){return {durationMs:thinkingTotalMs+(thinkingStartedAt?Date.now()-thinkingStartedAt:0),active:!!thinkingStartedAt};}
+  function finishThinking(){if(thinkingStartedAt){thinkingTotalMs+=Date.now()-thinkingStartedAt;thinkingStartedAt=0;}}
+  function trackThinking(){
+    var split=chatSplitThinkingText(assistantText,{hideUnclosedThinking:true});
+    var count=nativeThinkingText.length+String(split.thinking||'').length,bodyCount=String(split.text||'').length;
+    if(count>thinkingChars){thinkingSeen=true;if(!thinkingStartedAt)thinkingStartedAt=Date.now();}
+    if(bodyCount>thinkingBodyChars||(taggedWasOpen&&!split.unclosed))finishThinking();
+    thinkingChars=count;thinkingBodyChars=bodyCount;taggedWasOpen=!!split.unclosed;
+    if(thinkingStartedAt&&!thinkingTick){
+      thinkingTick=setTimeout(function tick(){
+        thinkingTick=0;if(streamRenderStopped)return;
+        var label=streamAux&&streamAux.querySelector('.chat-thinking-label');
+        if(label)label.textContent=chatThinkingCaption(thinkingTiming());
+        if(thinkingStartedAt)thinkingTick=setTimeout(tick,100);
+      },100);
+    }
+  }
   function flushStreamRender(){
     if(streamRenderStopped||!out||!out.isConnected)return;
     streamRenderDirty=false;
@@ -10462,7 +10534,9 @@ async function chatSubmitPendingMessages(options){
     var allThinking=[nativeThinkingText,parsed.thinking].filter(Boolean).join('\n\n');
     chatRenderCurrentThinking({sessionId:cfg.sessionId,turnId:requestTurnId,text:allThinking});
     var visibleThinking=[cfg.nativeThinkingVisible===false?'':nativeThinkingText,parsed.thinking].filter(Boolean).join('\n\n');
-    var units=parsed.text?(cfg.splitAssistantReplies===false?[parsed.text]:chatNaturalUnits(parsed.text).map(function(unit){return unit.text})):[];
+    streamBodyTarget=String(parsed.text||'');
+    var visibleBody=streamPacer.next(streamBodyTarget,Date.now(),streamForceText||streamReducedMotion);
+    var units=visibleBody?(cfg.splitAssistantReplies===false?[visibleBody]:chatNaturalUnits(visibleBody).map(function(unit){return unit.text})):[];
     var now=Date.now();
     if(units.length&&!streamShownCount){streamShownCount=1;streamNextRevealAt=now+150;}
     if(units.length>streamShownCount&&now>=streamNextRevealAt){streamShownCount++;streamNextRevealAt=now+150;}
@@ -10474,12 +10548,8 @@ async function chatSubmitPendingMessages(options){
       out.parentNode.insertBefore(streamAux,out);
     }
     if(streamAux){
-      var previous=streamAux.querySelector('.chat-thinking');
-      var wasOpen=previous?previous.classList.contains('open'):true;
-      var auxParts=chatRenderAssistantParts('',false,toolEvents,undefined,visibleThinking,true);
-      streamAux.innerHTML=auxParts.thinking+auxParts.toolTrace;
-      var thought=streamAux.querySelector('.chat-thinking');
-      if(thought)thought.classList.toggle('open',wasOpen);
+      var auxParts=chatRenderAssistantParts('',false,toolEvents,undefined,visibleThinking,true,thinkingSeen?thinkingTiming():null);
+      chatPatchStreamMarkup(streamAux,auxParts.thinking+auxParts.toolTrace);
     }
     while(streamBubbles.length<shown){
       var row=document.createElement('div');
@@ -10495,13 +10565,14 @@ async function chatSubmitPendingMessages(options){
       bubble.classList.toggle('streaming-empty',!text);
       if(bubble.parentNode)bubble.parentNode.classList.toggle('streaming-empty-row',!text);
       var html=text?chatRenderAssistantContent(text,true,[],undefined,'',false):'';
-      if(bubble.innerHTML!==html)bubble.innerHTML=html;
+      chatPatchStreamMarkup(bubble,html);
     });
     if(shown)chatRecordFirstRenderedLatency(latencyTrace);
     chatFollowMessagesBottom(shouldStick,true,true);
     if(units.length>shown&&!streamRevealTimer){
       streamRevealTimer=setTimeout(function(){streamRevealTimer=0;scheduleStreamRender();},Math.max(1,streamNextRevealAt-Date.now()));
     }
+    if(visibleBody!==streamBodyTarget)scheduleStreamRender();
   }
   function scheduleStreamRender(){
     if(streamRenderStopped)return;
@@ -10513,6 +10584,8 @@ async function chatSubmitPendingMessages(options){
     });
   }
   function stopStreamRender(){
+    finishThinking();
+    if(thinkingTick){clearTimeout(thinkingTick);thinkingTick=0;}
     streamRenderStopped=true;
     if(streamRevealTimer){clearTimeout(streamRevealTimer);streamRevealTimer=0;}
     if(chatThinkingPreviewLive&&chatThinkingPreviewLive.turnId===requestTurnId)chatThinkingPreviewLive=null;
@@ -10575,11 +10648,13 @@ async function chatSubmitPendingMessages(options){
           if(deltaText)markFirstReplyTs();
           if(deltaText)chatStreamProgressSet('正在写');
           assistantText+=deltaText;
+          trackThinking();
           if(deltaText)scheduleStreamRender();
         }else if(ev==='thinking'){
           var thinkingDelta=typeof data==='string'?data:String((data&&data.text)||'');
           if(thinkingDelta){
             nativeThinkingText+=thinkingDelta;
+            trackThinking();
             markFirstReplyTs();
             chatStreamProgressSet('正在思考');
             scheduleStreamRender();
@@ -10606,6 +10681,7 @@ async function chatSubmitPendingMessages(options){
           if(ev==='done'&&data&&data.usage)data.usage=chatEnrichUsageRoute(data.usage,cfg);
           chatDebug(ev,data);
           if(ev==='tool'){
+            finishThinking();
             chatStreamProgressSet('工具'+(data&&data.name?('：'+data.name):''));
             markFirstReplyTs();
             toolEvents=chatUpsertToolEvent(toolEvents,data);
@@ -10688,11 +10764,18 @@ async function chatSubmitPendingMessages(options){
       }
     });
     if(requestState&&requestState.stopped)return;
+    finishThinking();
+    var smoothFinishUntil=Date.now()+140;
+    while(streamPacer.value()!==String(chatSplitThinkingText(assistantText,{hideUnclosedThinking:true}).text||'')&&Date.now()<smoothFinishUntil&&!(requestState&&requestState.stopped)){
+      scheduleStreamRender();await new Promise(function(resolve){setTimeout(resolve,16)});
+    }
+    if(requestState&&requestState.stopped)return;
+    streamForceText=true;flushStreamRender();
     stopStreamRender();
     chatStreamProgressStop();
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,alreadyShownCount:streamShownCount,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,alreadyShownCount:streamShownCount,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,thinkingDurationMs:thinkingSeen?thinkingTotalMs:undefined,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
     // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
     carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
     chatClearInFlightMarks(userMessageIndexes);
