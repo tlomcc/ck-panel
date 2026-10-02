@@ -10,7 +10,7 @@
  let store={ok:true,revision:0,topics:[]},failSave=false,conflict=false,probeFailure=false,holdProbe=null;
  const calls=[],response=(data,status=200)=>({ok:status<400,status,json:async()=>JSON.parse(JSON.stringify(data))});
  window.fetch=async(url,init={})=>{
-   const u=new URL(String(url)),body=init.body?JSON.parse(init.body):null;calls.push({path:u.pathname,query:u.search,body});
+   const u=new URL(String(url)),body=init.body?JSON.parse(init.body):null;u.pathname=u.pathname.replace(/^\/gateway(?=\/)/,'');calls.push({path:u.pathname,query:u.search,body});
    if(u.pathname==='/ck/memory-topics'){
      if(init.method==='POST'){
        if(body.action==='suggest')return response({ok:true,items:facts.filter(f=>!body.exclude_ids.includes(f.fact_id)).slice(0,3).map((f,i)=>({...f,stamp:'fixture-stamp',recommended:i<2})),scanned:5100,candidate_count:3,recommended_count:2,warnings:[]});

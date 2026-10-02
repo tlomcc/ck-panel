@@ -58,3 +58,20 @@ body #sub-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
 .mw-page .mw-check{display:flex;align-items:center;gap:8px;margin:14px 0}.mw-page .mw-check input,.mw-page .mw-pick input{width:auto;min-height:20px}.mw-page .mw-pick{flex:0 0 24px}.mw-page .mw-search-result>div{min-width:0;flex:1}
 
 .mw-page #mw-materials{max-height:520px;overflow:auto;overscroll-behavior:contain}@media(max-width:700px){.mw-page #mw-materials{max-height:360px}}
+
+.mw-page .mr-organizer{margin-top:18px}
+.mw-page .mr-badge{font-size:12px;padding:4px 10px;border-radius:20px;color:var(--nb-sage-ink);background:var(--nb-sage)}
+.mw-page .mr-tabs [aria-pressed="true"]{background:var(--nb-sage);border-color:var(--nb-sage-ink)}
+.mw-page .mr-content{display:grid;gap:16px;max-height:850px;overflow:auto;overscroll-behavior:contain;padding:3px}
+.mw-page .mr-proposal,.mw-page .mr-operation{border:1px solid var(--nb-line);padding:18px;border-radius:12px;min-width:0}
+.mw-page .mr-doubt{border-left:3px solid var(--nb-peach-ink);padding-left:12px;color:var(--nb-peach-ink)}
+.mw-page .mr-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.mw-page .mr-material{display:flex;align-items:flex-start;gap:12px;border-bottom:1px dashed var(--nb-line);padding:12px 0}
+.mw-page .mr-material>input{width:18px;flex:0 0 18px;margin-top:7px}
+.mw-page .mr-material>span{min-width:0;flex:1}
+.mw-page .mr-material small,.mw-page .mr-fact-text{display:block;white-space:pre-wrap;overflow-wrap:anywhere}
+.mw-page .mr-fact-text{font-size:13px;line-height:1.85;margin:6px 0}
+.mw-page .mr-adjust select{display:block;width:100%}
+.mw-page .mr-organizer blockquote{border-left:2px solid var(--nb-line);margin:12px 0;padding:3px 12px;color:var(--nb-muted);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.mw-page .mr-opinion{white-space:pre-wrap}
+@media(max-width:700px){.mw-page .mr-proposal,.mw-page .mr-operation{padding:13px}.mw-page .mr-settings-grid{grid-template-columns:minmax(0,1fr)}.mw-page .mr-content{max-height:900px}}

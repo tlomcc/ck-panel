@@ -3,6 +3,7 @@
   'use strict';
   var state={key:'',loaded:false,revision:0,topics:[],draft:null,dirty:false,busy:false,conflict:false,request:null,loadSeq:0,searchSeq:0,results:[],offset:0,more:false,searching:false};
   var lab={running:false,seq:0,results:{}};
+  var review=null;
   function el(id){return document.getElementById(id)}
   function clone(x){return JSON.parse(JSON.stringify(x))}
   function uid(){return window.crypto&&crypto.randomUUID?crypto.randomUUID():'topic_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)}
@@ -17,18 +18,25 @@
     catch(e){if(e.name==='AbortError')throw new Error('等待超时。服务端可能仍在处理，请稍后核对结果。');throw e}
     finally{clearTimeout(timer)}
     var data;try{data=await response.json()}catch(e){throw new Error('返回内容无法读取，请重试')}
+    if(!validKey(key))throw new Error('面板 Key 已变化，请重新进入本页。');
     if(!response.ok||!data||data.ok===false){var error=new Error(data&&data.error||(response.status===404?'请先更新 CK 网关，再使用此功能':'读取失败（HTTP '+response.status+'）'));error.status=response.status;throw error}
     return data;
   }
   function buildTopics(){
     var page=el('tab-topics');
     page.innerHTML=header('主题记忆','把同一段经历的 Fact 收在一起，随时沿着时间回看。','M5 4h14v16H5zM9 4v16M12 8h4M12 12h4M12 16h2')+
-      '<div class="mw-toolbar">'+button('new','新建主题')+button('reload','载入最新目录')+button('topic-api','主题 API')+'<span class="mw-note">输入主题 → 找材料 → 勾选保存 → 聊天选择 C</span></div>'+
-      '<p id="mw-status" class="mw-status" role="status">正在读取主题目录…</p><div class="mw-workspace"><aside class="mw-card mw-shelf" aria-label="主题目录"><h3>我的主题</h3><div id="mw-topics-list"></div></aside>'+
+      '<div class="mw-toolbar">'+button('new','新建主题')+button('reload','载入最新目录')+button('topic-api','主题 API')+'<span class="mw-note">后台整理 · 疑点审批 · 聊天选择 C 按需读取</span></div>'+
+      '<p id="mw-status" class="mw-status" role="status">正在读取主题目录…</p><div id="mw-organizer"></div><div class="mw-workspace"><aside class="mw-card mw-shelf" aria-label="主题目录"><h3>我的主题</h3><div id="mw-topics-list"></div></aside>'+
       '<div class="mw-detail"><div id="mw-topic-editor"></div><section id="mw-search" class="mw-card" hidden><h3>为主题找材料</h3><p class="mw-note">先填写主题名称和说明，再自动检索已有 Fact。每次最多显示 40 条候选；已加入的材料会排除，可继续检查新材料。无需整理全库。</p><div class="mw-toolbar">'+button('suggest','智能找材料／检查新材料')+button('local-suggest','仅关键词找材料')+button('add-selected','加入勾选材料')+'</div><p class="mw-cost">智能查找可能调用一次查询向量和一次主题选材模型；仅关键词不调用模型。模型建议仅预勾选，确认加入并保存后才生效。</p><form id="mw-search-form" class="mw-search-form"><label for="mw-query">搜索正文、人物或分类</label><div><input id="mw-query" type="search" maxlength="200" placeholder="例如：旅行、读书、某个项目" autocomplete="off"><button type="submit" class="btn btn-outline btn-sm">搜索 Fact</button></div></form><p class="mw-note" id="mw-search-status">只查询已有事实库，不调用模型。选中后，记得保存主题。</p><div id="mw-results"></div><div class="mw-toolbar">'+button('more','继续加载','id="mw-more" hidden')+'</div></section></div></div>';
     page.addEventListener('click',onTopicAction);
     page.addEventListener('input',function(e){if(!state.draft||state.busy)return;if(e.target.dataset.mwPick){var found=state.results.find(function(m){return m.fact_id===e.target.dataset.mwPick});if(found)found.picked=e.target.checked;return}if(['mw-title','mw-note','mw-aliases','mw-enabled'].indexOf(e.target.id)>=0){state.draft.title=el('mw-title').value;state.draft.note=el('mw-note').value;state.draft.aliases=el('mw-aliases').value.split(/[,，\n]/).map(function(x){return x.trim()}).filter(Boolean);state.draft.recall_enabled=el('mw-enabled').checked;++state.searchSeq;state.searching=false;markDirty()}});
     el('mw-search-form').addEventListener('submit',function(e){e.preventDefault();search(false)});
+    if(window.memoryReviewMount)review=window.memoryReviewMount({
+      canWrite:function(){return state.loaded&&!state.busy&&!state.dirty},revision:function(){return state.revision},
+      request:async function(body){state.busy=true;syncButtons();try{return await request('/ck/memory-topics',body)}finally{state.busy=false;syncButtons()}},
+      read:async function(){state.busy=true;syncButtons();try{return await request('/ck/memory-topics')}finally{state.busy=false;syncButtons()}},
+      apply:function(data){var selected=state.draft&&state.draft.id;state.topics=data.topics;state.revision=data.revision;state.conflict=false;state.request=null;state.draft=clone(state.topics.find(function(t){return t.id===selected})||state.topics[0]||null);renderList();renderEditor();if(review)review.update(data)}
+    });
   }
   function renderList(){
     el('mw-topics-list').innerHTML=state.topics.length?state.topics.map(function(t){return '<button type="button" class="mw-topic-link'+(state.draft&&state.draft.id===t.id?' selected':'')+'" data-mw="select" data-id="'+escAttr(t.id)+'" aria-pressed="'+!!(state.draft&&state.draft.id===t.id)+'"><b>'+esc(t.title)+'</b><small>'+t.materials.length+' 条材料'+(t.changed_count?' · '+t.changed_count+' 条有变化':'')+'</small></button>'}).join(''):'<p class="mw-empty">还没有主题。新建一个，收藏同一段经历中的小事。</p>';
@@ -70,6 +78,7 @@
       state.topics=data.topics;state.revision=data.revision;state.loaded=true;state.conflict=false;state.dirty=false;state.request=null;
       state.draft=clone(state.topics.find(function(t){return t.id===selected})||state.topics[0]||null);
       renderList();renderEditor();message('mw-status','目录已同步。保存到当前面板 Key 的主题目录，可跨设备读取。');
+      if(review)review.update(data);
     }catch(e){if(validKey(key))message('mw-status',e.message)}
     finally{if(seq===state.loadSeq&&validKey(key)){state.busy=false;syncButtons()}}
   }
@@ -86,6 +95,7 @@
       state.topics=data.topics;state.revision=data.revision;state.dirty=false;state.request=null;
       state.draft=clone(data.topics.find(function(t){return t.id===d.id})||data.topics[0]||null);
       renderList();renderEditor();message('mw-status',action==='delete'?'主题已删除，原始 Fact 保留。':'主题已保存。');
+      if(review)review.update(data);
     }catch(e){if(validKey(key)){state.conflict=e.status===409;message('mw-status',e.message+(state.conflict?' 可先复制目录保留草稿，再载入最新目录。':' 草稿已保留，可再次点击保存。'))}}
     finally{if(validKey(key)){state.busy=false;syncButtons()}}
   }
@@ -206,5 +216,5 @@
     if(tab==='topics'&&!state.loaded&&!state.busy)load(false);
     if(tab==='recall-lab')providerSummary();
   };
-  window.addEventListener('beforeunload',function(e){if(state.dirty){e.preventDefault();e.returnValue=''}});
+  window.addEventListener('beforeunload',function(e){if(state.dirty||(review&&review.hasDraft())){e.preventDefault();e.returnValue=''}});
 })();

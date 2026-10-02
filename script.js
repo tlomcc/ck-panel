@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v266-vps-primary';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v267-topic-organizer';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -11105,7 +11105,7 @@ var API_TABS=[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
   ]},
-  {key:'topics',label:'主题 API',info:'主题找材料直接复用现有 Fact 和向量。智能查找最多提交 40 条候选给选材模型；只在点击时调用，不在聊天中反复选材。查询向量复用“召回 → 向量化”，按需读取材料使用当前聊天模型。',groups:[{key:'topic_materials',label:'主题选材',info:'为智能找材料独立选择供应商和模型（OpenAI 兼容接口）。未配置或失败时保留检索候选供手选，不会重新提取 Fact。'}]},
+  {key:'topics',label:'主题 API',info:'手动找材料与后台自动整理共用主题模型，复用现有 Fact 和向量。开启自动整理后按预算分批运行，确定的直接归组，有疑点的交给你审批；后续整理会先参考你的处理意见。',groups:[{key:'topic_materials',label:'主题选材',info:'为主题选材和自动整理选择供应商与模型（OpenAI 兼容接口）。自动整理开关、每日调用上限与审批箱位于“主题记忆”；未配置模型时后台等待，不会重新提取 Fact。'}]},
   {key:'experiment',label:'实验 API',info:'召回实验复用下面两组 Fact 召回配置。修改后也会影响正常 Fact 召回；A/B/C 比较只在实验页点击运行时调用，可能产生模型费用。主题智能选材另在“主题 API”配置；C 聊天沿用召回 API。',sharedRecall:true},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
