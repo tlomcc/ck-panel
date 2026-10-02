@@ -93,9 +93,49 @@ function testPollingNoticeUsesActiveProvider(){
   assert.strictEqual(info.ttlMs,5*60*1000);
 }
 
+function testClaudeCodeCacheControlsFollowEffectivePanelConfig(){
+  const elements=new Map();
+  const element=id=>{
+    if(!elements.has(id))elements.set(id,{value:'native_stable',textContent:'',disabled:true});
+    return elements.get(id);
+  };
+  let cfg={cacheStrategy:'native_stable',mainRouteCacheStrategy:''};
+  const context=load({
+    console,
+    document:{getElementById:element,querySelector:()=>element('save-button')},
+    CKBackendRoute:{current:{mode:'vps',execution:'claude_code_api'}},
+    chatLoadConfig:()=>cfg,chatPollingView:()=>({enabled:false}),
+    chatRecallMeta:()=>({label:'test'}),chatRenderRecallState:()=>{},
+    chatRenderNcContextState:()=>{},chatRenderBackendSwitchNotificationState:()=>{},
+  },[
+    'chatNormalizeCacheStrategy','providerNormalizeCacheStrategy','chatPollingEnabledForConfig',
+    'chatCacheStrategyMeta','chatCacheStrategyTtlLabel','chatCacheStrategyTtlDetail',
+    'chatEffectiveCacheStrategy','chatRenderCacheStrategyState',
+  ]);
+  context.chatRenderCacheStrategyState();
+  assert.ok(element('chat-cache-saved-mode').textContent.includes('1 小时'));
+  assert.strictEqual(element('chat-cache-strategy').disabled,false);
+  assert.strictEqual(element('save-button').disabled,false);
+  cfg.mainRouteCacheStrategy='single_5m';
+  context.chatRenderCacheStrategyState('已保存','ok');
+  assert.ok(element('chat-cache-saved-mode').textContent.includes('5 分钟'));
+  assert.ok(element('chat-cache-saved-mode').textContent.includes('供应商自带策略'));
+  assert.strictEqual(element('chat-cache-save-status').textContent,'已保存');
+  cfg={cacheStrategy:'native_tiered'};
+  context.chatRenderCacheStrategyState();
+  assert.ok(element('chat-cache-saved-mode').textContent.includes('1 小时'));
+  cfg={cacheStrategy:'prefix_24h'};
+  context.chatRenderCacheStrategyState();
+  assert.ok(element('chat-cache-saved-mode').textContent.includes('上游自动缓存'));
+  context.CKBackendRoute.current.execution='direct_api';
+  context.chatRenderCacheStrategyState();
+  assert.ok(!element('chat-cache-saved-mode').textContent.includes('Claude Code'));
+}
+
 
 testProviderTypeNormalization();
 testNativeCacheRestoresClaudeTransport();
 testCacheNoticeUsesProviderStrategy();
 testPollingNoticeUsesActiveProvider();
+testClaudeCodeCacheControlsFollowEffectivePanelConfig();
 console.log('provider-api-cache-trim tests passed');

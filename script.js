@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v261-native-claude-smooth-stream';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v262-native-cache-continuity';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2955,15 +2955,16 @@ function chatRenderCacheStrategyState(statusText,statusKind){
     status.className='chat-cache-save-status'+(statusKind?' '+statusKind:'');
   }
   var ccNative=typeof CKBackendRoute==='object'&&CKBackendRoute.current.mode==='vps'&&CKBackendRoute.current.execution==='claude_code_api';
-  if(strategy)strategy.disabled=ccNative;
+  if(strategy)strategy.disabled=false;
   var cacheSave=document.querySelector('.chat-cache-mode-actions .chat-cache-save-btn');
-  if(cacheSave)cacheSave.disabled=ccNative;
+  if(cacheSave)cacheSave.disabled=false;
   if(ccNative){
-    var nativeNote='当前由 Claude Code 管理缓存，使用原生 5 分钟缓存。';
-    if(savedEl)savedEl.textContent=nativeNote;
+    var effectiveMeta=chatCacheStrategyMeta(chatEffectiveCacheStrategy(savedCfg));
+    var nativeTtl=effectiveMeta.ttl==='mixed'?'1h':effectiveMeta.ttl;
+    var nativeNote='Claude Code 缓存时长跟随 CK：'+(nativeTtl==='1h'?'1 小时':nativeTtl==='5m'?'5 分钟':'上游自动缓存（不加显式断点）')+'。';
+    if(savedEl)savedEl.textContent=nativeNote+boundText;
     if(debugMode)debugMode.textContent=nativeNote+'实际命中以本轮用量为准。';
-    if(detail)detail.textContent='模型、提示词、记忆和截断继续在 CK 配置。此路径的缓存断点由 Claude Code 生成；直接 API 的已保存策略是：'+savedMeta.label+'。';
-    if(status)status.textContent='切回直接 API 后可调整原来的缓存策略。';
+    if(detail)detail.textContent='当前选择：'+meta.label+'。时长使用 Claude Code 官方设置，断点由它生成；1h+5m 在此路径使用主会话 1h，上游自动缓存不保证固定时长。'+boundText;
   }
   chatRenderRecallState();
   chatRenderNcContextState();

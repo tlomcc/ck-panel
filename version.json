@@ -1,7 +1,7 @@
 {
-  "version": "chat-v261-native-claude-smooth-stream",
+  "version": "chat-v262-native-cache-continuity",
   "notes": [
-    "VPS Claude Code 改为官方原生请求，工具续接同样通过 Claude Code；提示词与上下文跟随 CK，使用原生 5 分钟缓存。",
-    "所有路径平滑显示流式正文，思考默认折叠并显示耗时，保留分段气泡。"
+    "修复 Claude Code 连续聊天反复重建长历史缓存的问题，编辑和截断仍以 CK 为准。",
+    "Claude Code 缓存时长跟随 CK 面板的 5 分钟或 1 小时设置。"
   ]
 }
