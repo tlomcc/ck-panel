@@ -74,6 +74,50 @@ function testMemoryAuthenticationSurvivesStorageFailure(){
   assert.strictEqual(context.isPanelAuthenticated(),true,'verified in-memory auth must survive localStorage failure');
 }
 
+async function testStartupConnectionRecovery(){
+  const context={console,panelAuthKey:'',panelAuthPromise:null,verified:[],prompts:0,cleared:[],delays:[],attempts:0,
+    readStoredPanelKey:()=> 'saved-key',isPanelAuthenticated:()=>false,setPanelAuthLocked(){},stopPanelDataTimers(){},
+    setTimeout(resolve,delay){context.delays.push(delay);resolve()},
+    promptPanelKey:async()=>{context.prompts++;return 'replacement-key'},
+    clearPanelAuthentication:key=>context.cleared.push(key),
+    saveVerifiedPanelKey:key=>context.verified.push(key)
+  };
+  vm.createContext(context);
+  vm.runInContext(extractFunction('ensurePanelAuthenticated'),context);
+  context.verifyPanelKey=async key=>{
+    assert.strictEqual(key,'saved-key');
+    if(++context.attempts<=5)throw new Error('temporary gateway outage');
+    return true;
+  };
+  const first=context.ensurePanelAuthenticated();
+  const concurrent=context.ensurePanelAuthenticated();
+  assert.strictEqual(await first,'saved-key');
+  assert.strictEqual(await concurrent,'saved-key');
+  assert.strictEqual(context.prompts,0,'network failures must not ask for a saved password again');
+  assert.deepStrictEqual(context.cleared,[],'network failures must preserve the saved password');
+  assert.deepStrictEqual(context.verified,['saved-key'],'concurrent startup checks share one verification loop');
+  assert.deepStrictEqual(context.delays,[1000,2000,4000,8000,10000]);
+  context.verifyPanelKey=async key=>key==='replacement-key';
+  assert.strictEqual(await context.ensurePanelAuthenticated(),'replacement-key');
+  assert.strictEqual(context.prompts,1,'confirmed authentication rejection must still request a replacement');
+  assert.deepStrictEqual(context.cleared,['saved-key']);
+}
+
+async function testVerificationTimeout(){
+  let timer,cleared=false;
+  const context={AbortController,Date,GRAPH_API_BASE:'https://gateway.test',urlWithPanelKey:url=>url,
+    setTimeout(fn,delay){assert.strictEqual(delay,15000);timer=fn;return 7},
+    clearTimeout(id){assert.strictEqual(id,7);cleared=true},
+    fetch:(url,opts)=>new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(new Error('timeout'))))
+  };
+  vm.createContext(context);
+  vm.runInContext(extractFunction('verifyPanelKey'),context);
+  const pending=context.verifyPanelKey('saved-key');
+  timer();
+  await assert.rejects(pending,/timeout/);
+  assert.strictEqual(cleared,true);
+}
+
 function testTrimConfigAndSystemPrompt(){
   const context={console,CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS:200,CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT:1000};
   vm.createContext(context);
@@ -96,7 +140,7 @@ function testTrimConfigAndSystemPrompt(){
 testMemoryAuthenticationSurvivesStorageFailure();
 testTrimConfigAndSystemPrompt();
 assert(html.includes('id="chat-system-enabled"'),'system prompt must have an independent toggle');
-testPanelDataFetch().then(()=>console.log('panel auth tests: OK')).catch(error=>{
+Promise.all([testPanelDataFetch(),testStartupConnectionRecovery(),testVerificationTimeout()]).then(()=>console.log('panel auth tests: OK')).catch(error=>{
   console.error(error);
   process.exit(1);
 });

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v279-subscription-readiness';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v280-auth-connection-retry';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -400,11 +400,13 @@ function verifyPanelKey(key){
   key=String(key||'').trim();
   if(!key)return Promise.resolve(false);
   var url=urlWithPanelKey(GRAPH_API_BASE+'/config?__ck_auth='+Date.now(),key);
-  return fetch(url,{cache:'no-store',headers:{'Cache-Control':'no-cache'}}).then(function(r){
+  var controller=typeof AbortController==='function'?new AbortController():null;
+  var timeout=controller?setTimeout(function(){controller.abort()},15000):null;
+  return fetch(url,{cache:'no-store',headers:{'Cache-Control':'no-cache'},signal:controller?controller.signal:undefined}).then(function(r){
     if(r.ok)return true;
     if(r.status===401||r.status===403)return false;
     throw new Error('CK 网关 Key 验证暂时不可用：HTTP '+r.status);
-  });
+  }).finally(function(){if(timeout!==null)clearTimeout(timeout)});
 }
 function promptPanelKey(label,message){
   var text=label||'CK 网关面板 Key';
@@ -432,6 +434,7 @@ function ensurePanelAuthenticated(opts){
   setPanelAuthLocked(true,'正在验证访问权限...');
   var candidate=opts.forcePrompt?'':String(opts.candidate||readStoredPanelKey()||'').trim();
   var message=opts.message||'';
+  var connectionFailures=0;
   panelAuthPromise=(async function(){
     while(true){
       if(!candidate){
@@ -449,9 +452,13 @@ function ensurePanelAuthenticated(opts){
       }catch(e){
         panelAuthKey='';
         stopPanelDataTimers();
-        setPanelAuthLocked(true,'网关暂时无法连接，数据仍保持锁定。');
-        message='暂时无法连接 CK 网关，未加载任何面板数据。请检查网络后重试。';
+        connectionFailures++;
+        var retryDelay=Math.min(10000,1000*Math.pow(2,Math.min(connectionFailures-1,4)));
+        setPanelAuthLocked(true,'网关暂时无法连接，'+Math.ceil(retryDelay/1000)+' 秒后自动重试，无需重新输入 Key。');
+        await new Promise(function(resolve){setTimeout(resolve,retryDelay)});
+        continue;
       }
+      connectionFailures=0;
       candidate='';
     }
   })();
