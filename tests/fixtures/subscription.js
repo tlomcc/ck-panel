@@ -23,6 +23,16 @@
  assert(!$('ck-sub-windows').querySelector('progress'),'no fake 0 percent');
  assert(!$('ck-sub-save').disabled,'save before subscription');
  assert($('ck-sub-warn').value==='70','default threshold');
+ state.auth.renewal={prepared:true,message:'登录维护已准备，等待官方授权',online_verified:false};
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-renewal').textContent.includes('已准备'),'prepared before first login');
+ state.auth.state='environment_error';state.auth.message='登录目录不可写';state.auth.renewal={prepared:false,message:'<img src=x onerror="window.pwned=true">'};
+ $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent==='订阅环境需检查');
+ assert($('ck-sub-detail').textContent==='登录目录不可写','environment failure is not a login instruction');
+ assert(!$('ck-sub-renewal').querySelector('img')&&!window.pwned,'renewal text escaped');
+ state.auth.state='unknown';$('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent==='登录状态待确认');
+ state.auth.state='login_required';state.auth.message='尚未登录';state.auth.renewal={prepared:true,message:'登录维护已准备，等待官方授权'};
+ $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent==='尚未登录订阅');
  $('ck-sub-stop').value='96';$('ck-sub-stop').dispatchEvent(new Event('input',{bubbles:true}));
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-stop').value==='96','poll must preserve unsaved settings');
@@ -55,6 +65,7 @@
  error=true;$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-error').hidden);
  assert($('ck-sub-updated').textContent.includes('上次观测'),'failed refresh clearly marks old data');
  assert($('ck-sub-save').disabled,'cannot save stale/unknown server settings');
+ assert($('ck-sub-renewal').textContent.includes('暂未确认'),'failed refresh invalidates readiness display');
  error=false;state.quota.blocked=false;state.quota.level='high';state.quota.reason='';
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-save').disabled);
  // A closed dialog must ignore the in-flight response.

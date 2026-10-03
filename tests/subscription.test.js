@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v278-subscription-accuracy/browser');
+const root=path.resolve(__dirname,'..'),out=path.resolve(__dirname,'../../0-工作间/v279-subscription-readiness/browser');
 fs.mkdirSync(out,{recursive:true});
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));

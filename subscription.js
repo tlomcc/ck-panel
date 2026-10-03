@@ -14,6 +14,7 @@
   dialog.innerHTML='<section class="modal ck-sub-card" role="dialog" aria-modal="true" aria-labelledby="ck-sub-title">'+
    '<header class="ck-sub-heading"><div><span class="ck-sub-kicker">专属用量与保护</span><h3 id="ck-sub-title">Claude 订阅</h3></div><button type="button" class="btn btn-outline btn-sm" id="ck-sub-close">关闭</button></header>'+
    '<div class="ck-sub-summary"><div><strong id="ck-sub-state" role="status" aria-live="polite">正在读取订阅状态</strong><p id="ck-sub-detail">还没有订阅也可以先了解和设置用量保护。</p></div><button class="btn btn-outline btn-sm" type="button" id="ck-sub-refresh">刷新状态</button></div>'+
+   '<p class="ck-sub-muted" id="ck-sub-renewal" role="status"></p>'+
    '<p class="ck-sub-error" id="ck-sub-error" role="alert" hidden></p>'+
    '<div class="ck-sub-route"><span id="ck-sub-route-label"></span><button class="btn btn-outline btn-sm" type="button" id="ck-sub-connect">连接设置</button><a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">官方用量 ↗</a></div>'+
    '<section aria-labelledby="ck-sub-quota-title"><h4 id="ck-sub-quota-title">官方额度</h4><div id="ck-sub-windows" class="ck-sub-windows"></div><p id="ck-sub-updated" class="ck-sub-muted">等待官方用量数据</p></section>'+
@@ -22,7 +23,7 @@
    '<div class="ck-sub-thresholds"><label>提醒<input id="ck-sub-warn" type="number" min="1" max="98" step="1" value="70" required><span>%</span></label><label>高用量提醒<input id="ck-sub-high" type="number" min="2" max="99" step="1" value="85" required><span>%</span></label><label>暂停请求<input id="ck-sub-stop" type="number" min="3" max="100" step="1" value="95" required><span>%</span></label></div>'+
    '<label class="ck-sub-check"><input id="ck-sub-paused" type="checkbox">手动暂停订阅请求</label></fieldset>'+
    '<div class="ck-sub-save"><button class="btn btn-blue btn-sm" id="ck-sub-save" type="submit" disabled>保存保护设置</button><span id="ck-sub-save-state" role="status" aria-live="polite">正在读取服务器设置</span></div></form>'+
-   '<details class="ck-sub-help"><summary>尚未订阅，之后怎么启用？</summary><ol><li>按已确定的 iOS 礼品卡方案，在官方 App 完成订阅。</li><li>在 VPS 的官方 Claude Code 中登录同一个 Claude 账号。</li><li>在 CK 的连接设置选择「Claude Code · 订阅」并验证切换。</li><li>开始正常聊天后，这里会展示官方实际返回的用量。</li></ol><p>刷新状态只读取本地观测，不发送聊天或消耗模型额度。登录凭据由官方客户端管理。</p></details>'+
+   '<details class="ck-sub-help"><summary>首次授权与登录维护</summary><ol><li>按已确定的 iOS 礼品卡方案，在官方 App 完成订阅。</li><li>在 VPS 的订阅专用环境发起官方登录，用手机或 iPad 打开授权链接，登录同一个 Claude 账号。</li><li>若出现一次性登录码，直接粘回发起登录的终端，不填入 CK。</li><li>在连接设置选择「Claude Code · 订阅」，开始正常聊天。</li></ol><p>登录信息保存在 VPS，由官方客户端负责续签。无需额外的定时刷新程序。登录到期且无法刷新时，需重新完成官方授权。</p><p>刷新状态只检查本地登录和用量观测，不发送聊天。已登录不代表续签已验证，也不代表订阅会自动续费。</p></details>'+
    '<p class="ck-sub-footnote">百分比可能延迟或暂缺，一次请求也可能跨过暂停线。阈值用于预留额度，不代表账号安全线。辅助总结、向量与 Fact 继续使用各自 API；额外付费开关以官方设置为准。</p></section>';
   document.body.append(dialog);
   $('ck-sub-close').onclick=close; $('ck-sub-refresh').onclick=function(){refresh(false)};
@@ -59,14 +60,16 @@
  function render(value){
   data=value;var q=value.quota,auth=value.auth;
   if(!q||!q.policy||!Array.isArray(q.windows)||!auth)throw Error('服务器尚未返回完整订阅监控数据');
-  var state=!auth.ready?'尚未登录订阅':q.blocked?'订阅请求已暂停':q.level==='high'?'订阅用量偏高':q.level==='warning'?'订阅额度提醒':q.level==='normal'?'订阅已连接':'已登录 · 等待用量';
-  var badge=$('ck-sub-nav-state');if(badge){badge.textContent=!auth.ready?'未登录':q.blocked?'已暂停':q.level==='high'||q.level==='warning'?'留意额度':'';badge.dataset.level=q.level}
+  var needsLogin=!auth.ready&&auth.state==='login_required';
+  var state=!auth.ready?(needsLogin?'尚未登录订阅':auth.state==='unknown'?'登录状态待确认':'订阅环境需检查'):q.blocked?'订阅请求已暂停':q.level==='high'?'订阅用量偏高':q.level==='warning'?'订阅额度提醒':q.level==='normal'?'订阅已连接':'已登录 · 等待用量';
+  var badge=$('ck-sub-nav-state');if(badge){badge.textContent=!auth.ready?(needsLogin?'未登录':'需检查'):q.blocked?'已暂停':q.level==='high'||q.level==='warning'?'留意额度':'';badge.dataset.level=q.level}
   if(selected()&&auth.ready&&['high','warning','paused'].includes(q.level)){
    var notice=q.level+':'+(q.reason||'');if(notified!==notice&&typeof toast==='function')toast('Claude 订阅：'+(q.reason||state));notified=notice;
   }else notified='';
   if(!dialog)return;
   $('ck-sub-state').textContent=state;$('ck-sub-state').dataset.level=q.level;
-  $('ck-sub-detail').textContent=!auth.ready?'还没有订阅也可以先保存保护设置；订阅后，在 VPS 官方 Claude Code 登录同一账号。':q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'接收官方用量观测，不按 token 估算剩余百分比。';
+  $('ck-sub-detail').textContent=!auth.ready?(auth.message||'订阅后，在 VPS 的订阅专用环境完成官方授权。'):q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'接收官方用量观测，不按 token 估算剩余百分比。';
+  $('ck-sub-renewal').textContent=auth.renewal?auth.renewal.message:'登录维护信息尚未提供，请更新服务器后检查。';
   $('ck-sub-route-label').textContent=(selected()?'当前聊天：Claude 订阅':'当前聊天未使用 Claude 订阅')+' · 保护状态按 '+(q.model||model())+' 显示';
   var body=$('ck-sub-windows');body.replaceChildren();
   var byKey={};q.windows.forEach(function(w){byKey[w.key]=w});
@@ -96,7 +99,7 @@
    if(dialog&&isSave)$('ck-sub-save-state').textContent='已保存，下次订阅请求起生效';
   }catch(e){
    if(token!==generation)return;
-   if(dialog){$('ck-sub-error').hidden=false;$('ck-sub-error').textContent=e.name==='AbortError'?'连接超时；如果正在保存，请刷新核对设置。':e.message;$('ck-sub-state').textContent='暂未取得最新状态';$('ck-sub-fields').disabled=true;$('ck-sub-save').disabled=true;$('ck-sub-updated').textContent=data?'下方为上次观测，当前连接不可用。':'等待连接订阅服务';if(isSave)$('ck-sub-save-state').textContent='保存结果未确认，请刷新核对'}
+   if(dialog){$('ck-sub-error').hidden=false;$('ck-sub-error').textContent=e.name==='AbortError'?'连接超时；如果正在保存，请刷新核对设置。':e.message;$('ck-sub-state').textContent='暂未取得最新状态';$('ck-sub-renewal').textContent='登录维护状态暂未确认，请恢复连接后刷新。';$('ck-sub-fields').disabled=true;$('ck-sub-save').disabled=true;$('ck-sub-updated').textContent=data?'下方为上次观测，当前连接不可用。':'等待连接订阅服务';if(isSave)$('ck-sub-save-state').textContent='保存结果未确认，请刷新核对'}
    var badge=$('ck-sub-nav-state');if(badge)badge.textContent='状态未知';
   }finally{clearTimeout(timeout);if(token===generation){controller=null;if(dialog)$('ck-sub-refresh').disabled=false;schedule()}}
  }
