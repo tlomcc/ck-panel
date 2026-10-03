@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v280-auth-connection-retry';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v281-independent-topic-recall';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2788,7 +2788,7 @@ function chatNormalizeTimeInjectionEveryRounds(value){
 }
 function chatFactRecallModeMeta(value){
   var mode=chatNormalizeFactRecallMode(value);
-  if(mode==='c')return {value:'c',label:'C（主题辅助）',shortLabel:'C',debugText:'明确主题时限定材料；其余沿用 B；相关主题附目录，按需读取最多 5 条。不重提取 Fact。'};
+  if(mode==='c')return {value:'c',label:'C（主题脉络）',shortLabel:'C',debugText:'使用主题 API，根据大、小主题摘要独立判断相关性，可零召回；按需分页读取时间线和明细，不调用 B。'};
   return mode==='b'
     ? {value:'b',label:'B（宽松）',shortLabel:'B',debugText:'宽松过滤 + 强制保底 + 模型精筛'}
     : {value:'a',label:'A（严格）',shortLabel:'A',debugText:'小模型先判定；PASS 立即停止；通过后最多注入 1 条高匹配 Fact'};

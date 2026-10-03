@@ -19,10 +19,10 @@
        if(failSave){failSave=false;return response({ok:false,error:'合成保存失败'},503)}
        if(conflict)return response({ok:false,error:'目录已有更新'},409);
        if(body.action==='delete')store.topics=store.topics.filter(t=>t.id!==body.id);
-       else{const t={id:body.id,title:body.title,group_title:body.group_title,note:body.note,aliases:body.aliases,recall_enabled:body.recall_enabled,materials:body.fact_ids.map(id=>facts.find(f=>f.fact_id===id)),changed_count:0};const at=store.topics.findIndex(x=>x.id===t.id);if(at<0)store.topics.unshift(t);else store.topics[at]=t}
+       else{const t={id:body.id,title:body.title,group_title:body.group_title,summary:'先计划旅行，后来落实出发 <script>window.bad=5</script>',note:body.note,aliases:body.aliases,recall_enabled:body.recall_enabled,materials:body.fact_ids.map(id=>facts.find(f=>f.fact_id===id)),changed_count:0};const at=store.topics.findIndex(x=>x.id===t.id);if(at<0)store.topics.unshift(t);else store.topics[at]=t}
        store.revision++;
      }
-     return response(store);
+     store.topic_groups=store.topics.length?[{title:store.topics[0].group_title,summary:'旅行计划与后续经历 <script>window.bad=6</script>'}]:[];return response(store);
    }
    if(u.pathname==='/entity-facts'){const start=Number(u.searchParams.get('offset')||0),limit=Number(u.searchParams.get('limit')||100),items=facts.slice(start,start+limit);return response({ok:true,items,source:'standalone',generation:'fixture',counts:{},facets:{},pagination:{total:31,next_offset:start+items.length,has_more:start+items.length<31}})}
    if(u.pathname.startsWith('/entity-facts/'))return response({ok:true,item:facts.find(f=>f.fact_id===decodeURIComponent(u.pathname.split('/').pop())),generation:'fixture'});
@@ -52,7 +52,7 @@
  check(failedBody===JSON.stringify(calls.filter(c=>c.body&&c.path==='/ck/memory-topics').at(-1).body),'Retry changed receipt');
  check(document.querySelectorAll('.mw-topic-link').length===1,'Saved topic missing');check(!window.bad&&!document.querySelector('#tab-topics img'),'Unescaped topic or fact content');
  check(document.querySelector('.mw-topic-group summary').textContent.includes('旅行与生活'),'Parent missing');
- check($('mw-group').value===store.topics[0].group_title,'Parent not persisted');
+ check($('mw-group').value===store.topics[0].group_title,'Parent not persisted');check(document.querySelector('.mw-group-summary').textContent.includes('后续经历'),'Group abstract missing');check(document.querySelector('.mw-topic-summary').textContent.includes('后来落实'),'Topic abstract missing');check(!window.bad&&!document.querySelector('.mw-topic-summary script'),'Abstract not escaped');
  const parent=document.querySelector('.mw-topic-group');check(parent.open,'Selected child must expand parent');parent.open=false;check(!parent.open,'Parent cannot collapse');parent.open=true;
  click('#mw-materials [data-mw="fact"]');await wait(()=>$('eg-detail-body').textContent.includes('六月讨论'));closeEntityDetail();
  input('mw-title','本机新草稿');conflict=true;click('#mw-save');await wait(()=>$('mw-status').textContent.includes('载入最新'));check($('mw-save').disabled&&$('mw-title').value==='本机新草稿','Conflict overwrote draft or allowed stale retry');
@@ -81,7 +81,7 @@
  click('[data-mw="topic-api"]');check(currentApiTab==='topics'&&document.querySelector('[data-group="topic_materials"]'),'Theme supplier selection missing');
  check(document.querySelector('[data-subtab="topics"].active'),'Theme API must also appear in API navigation');
  navTo('recall-lab');probeFailure=false;$('mw-lab-mode').value='all';$('mw-lab-form').requestSubmit();await wait(()=>$('mw-lab-status').textContent.includes('实验完成'));
- check($('mw-comparison').textContent.includes('C · 主题辅助'),'C comparison missing');
+ check($('mw-comparison').textContent.includes('C · 主题脉络'),'C comparison missing');
  check(calls.filter(c=>c.path==='/ck/recall-experiment').at(-1).body.path==='c','C request not sent');
  check(chatNormalizeFactRecallMode('c')==='c'&&chatFactRecallModeMeta('c').shortLabel==='C','C config normalized away');
  check(document.querySelector('input[name="chat-fact-recall-mode"][value="c"]'),'C chat selector missing');

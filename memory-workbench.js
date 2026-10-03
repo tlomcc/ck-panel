@@ -1,7 +1,7 @@
 /* Theme curation and recall C over existing Facts. */
 (function(){
   'use strict';
-  var state={key:'',loaded:false,revision:0,topics:[],draft:null,dirty:false,busy:false,conflict:false,request:null,loadSeq:0,searchSeq:0,results:[],offset:0,more:false,searching:false};
+  var state={key:'',loaded:false,revision:0,topics:[],groups:[],draft:null,dirty:false,busy:false,conflict:false,request:null,loadSeq:0,searchSeq:0,results:[],offset:0,more:false,searching:false};
   var lab={running:false,seq:0,results:{}};
   var review=null;
   function el(id){return document.getElementById(id)}
@@ -35,14 +35,14 @@
       canWrite:function(){return state.loaded&&!state.busy&&!state.dirty},revision:function(){return state.revision},
       request:async function(body){state.busy=true;syncButtons();try{return await request('/ck/memory-topics',body)}finally{state.busy=false;syncButtons()}},
       read:async function(){state.busy=true;syncButtons();try{return await request('/ck/memory-topics')}finally{state.busy=false;syncButtons()}},
-      apply:function(data){var selected=state.draft&&state.draft.id;state.topics=data.topics;state.revision=data.revision;state.conflict=false;state.request=null;state.draft=clone(state.topics.find(function(t){return t.id===selected})||state.topics[0]||null);renderList();renderEditor();if(review)review.update(data)}
+      apply:function(data){var selected=state.draft&&state.draft.id;state.topics=data.topics;state.groups=data.topic_groups||[];state.revision=data.revision;state.conflict=false;state.request=null;state.draft=clone(state.topics.find(function(t){return t.id===selected})||state.topics[0]||null);renderList();renderEditor();if(review)review.update(data)}
     });
   }
   function renderList(){
     var shelf=el('mw-topics-list'),opened=new Set(Array.from(shelf.querySelectorAll('details[open]')).map(function(n){return n.dataset.group})),groups=new Map();
     state.topics.forEach(function(t){var name=t.group_title||'';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(t)});
     shelf.innerHTML=Array.from(groups).map(function(entry){var name=entry[0],topics=entry[1],selected=topics.some(function(t){return state.draft&&state.draft.id===t.id});
-      return '<details class="mw-topic-group" data-group="'+escAttr(name)+'"'+(selected||opened.has(name)?' open':'')+'><summary><strong>'+esc(name||'待归入大主题')+'</strong><small>'+topics.length+' 个小主题</small></summary>'+button('new','添加小主题','data-group="'+escAttr(name)+'"')+topics.map(function(t){return '<button type="button" class="mw-topic-link'+(state.draft&&state.draft.id===t.id?' selected':'')+'" data-mw="select" data-id="'+escAttr(t.id)+'" aria-pressed="'+!!(state.draft&&state.draft.id===t.id)+'"><b>'+esc(t.title)+'</b><small>'+t.materials.length+' 条明细'+(t.changed_count?' · '+t.changed_count+' 条有变化':'')+'</small></button>'}).join('')+'</details>';
+      return '<details class="mw-topic-group" data-group="'+escAttr(name)+'"'+(selected||opened.has(name)?' open':'')+'><summary><strong>'+esc(name||'待归入大主题')+'</strong><small>'+topics.length+' 个小主题</small></summary><p class="mw-group-summary">'+esc((state.groups.find(function(g){return g.title===name})||{}).summary||'摘要待更新')+'</p>'+button('new','添加小主题','data-group="'+escAttr(name)+'"')+topics.map(function(t){return '<button type="button" class="mw-topic-link'+(state.draft&&state.draft.id===t.id?' selected':'')+'" data-mw="select" data-id="'+escAttr(t.id)+'" aria-pressed="'+!!(state.draft&&state.draft.id===t.id)+'"><b>'+esc(t.title)+'</b><small>'+t.materials.length+' 条明细'+(t.changed_count?' · '+t.changed_count+' 条有变化':'')+'</small></button>'}).join('')+'</details>';
     }).join('')||'<p class="mw-empty">还没有主题。先创建小主题，再填写所属大主题。</p>';
   }
   function materialMarkup(m,removable){
@@ -60,7 +60,7 @@
   function renderEditor(){
     var d=state.draft;el('mw-search').hidden=!d;
     if(!d){el('mw-topic-editor').innerHTML='<div class="mw-card mw-empty">选择一个主题，或新建主题开始整理。</div>';return}
-    el('mw-topic-editor').innerHTML='<section class="mw-card"><div class="mw-editor-head"><h3>主题内容</h3><span id="mw-draft-status" class="mw-note">已保存</span></div><fieldset id="mw-editor-fields"><label for="mw-group">所属大主题</label><input id="mw-group" maxlength="80" list="mw-group-options" value="'+escAttr(d.group_title||'')+'" placeholder="选择已有大主题，或填写新的名称"><datalist id="mw-group-options">'+Array.from(new Set(state.topics.map(function(t){return t.group_title}).filter(Boolean))).map(function(name){return '<option value="'+escAttr(name)+'"></option>'}).join('')+'</datalist><label for="mw-title">小主题名称</label><input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"><label for="mw-note">我的说明</label><textarea id="mw-note" rows="3" maxlength="2000" placeholder="这份目录想收下什么？">'+esc(d.note||'')+'</textarea><label for="mw-aliases">主题别名（逗号分隔，最多 12 个，每个至少 2 字）</label><input id="mw-aliases" maxlength="970" value="'+escAttr((d.aliases||[]).join('，'))+'" placeholder="例如：日本旅行、东京行程"><label class="mw-check"><input id="mw-enabled" type="checkbox" '+(d.recall_enabled!==false?'checked':'')+'>允许召回 C 使用这个主题</label></fieldset><div class="mw-toolbar">'+button('save','保存主题','id="mw-save"')+button('delete','删除主题','id="mw-delete"')+button('copy','复制目录')+'</div><p class="mw-note">保存只更新关联，不修改原始 Fact。聊天设置选择 C 后，提到主题名或别名会限定检索；普通问题命中相关材料时附目录。主题按时间展示当前有效材料，过期及被替代的版本不再收录。</p><h3 id="mw-material-count"></h3><div id="mw-materials" class="mw-timeline"></div></section>';
+    el('mw-topic-editor').innerHTML='<section class="mw-card"><div class="mw-editor-head"><h3>主题内容</h3><span id="mw-draft-status" class="mw-note">已保存</span></div><fieldset id="mw-editor-fields"><label for="mw-group">所属大主题</label><input id="mw-group" maxlength="80" list="mw-group-options" value="'+escAttr(d.group_title||'')+'" placeholder="选择已有大主题，或填写新的名称"><datalist id="mw-group-options">'+Array.from(new Set(state.topics.map(function(t){return t.group_title}).filter(Boolean))).map(function(name){return '<option value="'+escAttr(name)+'"></option>'}).join('')+'</datalist><label for="mw-title">小主题名称</label><input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"><h4>小主题摘要</h4><p class="mw-topic-summary">'+esc(d.summary||'摘要待更新')+'</p><label for="mw-note">我的补充说明</label><textarea id="mw-note" rows="3" maxlength="2000" placeholder="这份目录想收下什么？">'+esc(d.note||'')+'</textarea><label for="mw-aliases">主题别名（逗号分隔，最多 12 个，每个至少 2 字）</label><input id="mw-aliases" maxlength="970" value="'+escAttr((d.aliases||[]).join('，'))+'" placeholder="例如：日本旅行、东京行程"><label class="mw-check"><input id="mw-enabled" type="checkbox" '+(d.recall_enabled!==false?'checked':'')+'>允许召回 C 使用这个主题</label></fieldset><div class="mw-toolbar">'+button('save','保存主题','id="mw-save"')+button('delete','删除主题','id="mw-delete"')+button('copy','复制目录')+'</div><p class="mw-note">保存只更新关联，不修改原始 Fact。C 根据主题摘要独立选择相关内容，可以零召回；需要时继续读取小主题和时间线。摘要随材料更新。主题按时间展示当前有效材料，过期及被替代的版本不再收录。</p><h3 id="mw-material-count"></h3><div id="mw-materials" class="mw-timeline"></div></section>';
     renderMaterials();syncButtons();
   }
   function syncButtons(){
@@ -80,7 +80,7 @@
       var data=await request('/ck/memory-topics');if(seq!==state.loadSeq||!validKey(key))return;
       if(!Array.isArray(data.topics)||!Number.isInteger(data.revision))throw new Error('主题目录格式无效');
       var selected=state.draft&&state.draft.id;
-      state.topics=data.topics;state.revision=data.revision;state.loaded=true;state.conflict=false;state.dirty=false;state.request=null;
+      state.topics=data.topics;state.groups=data.topic_groups||[];state.revision=data.revision;state.loaded=true;state.conflict=false;state.dirty=false;state.request=null;
       state.draft=clone(state.topics.find(function(t){return t.id===selected})||state.topics[0]||null);
       renderList();renderEditor();message('mw-status','目录已同步。保存到当前面板 Key 的主题目录，可跨设备读取。');
       if(review)review.update(data);
@@ -97,7 +97,7 @@
     state.busy=true;syncButtons();message('mw-status','正在保存主题…');
     try{
       var data=await request('/ck/memory-topics',state.request.body);if(!validKey(key))return;
-      state.topics=data.topics;state.revision=data.revision;state.dirty=false;state.request=null;
+      state.topics=data.topics;state.groups=data.topic_groups||[];state.revision=data.revision;state.dirty=false;state.request=null;
       state.draft=clone(data.topics.find(function(t){return t.id===d.id})||data.topics[0]||null);
       renderList();renderEditor();message('mw-status',action==='delete'?'主题已删除，原始 Fact 保留。':'主题已保存。');
       if(review)review.update(data);
@@ -167,7 +167,7 @@
   function buildLab(){
     var page=el('tab-recall-lab');
     page.innerHTML=header('召回实验','用同一个问题，对照 A、B、C 会想起哪些 Fact。','M5 5h5v14H5zM14 5h5v14h-5M7 9h1M16 13h1')+
-      '<section class="mw-card"><form id="mw-lab-form"><label for="mw-lab-query">想测试的问题</label><textarea id="mw-lab-query" rows="3" maxlength="2000" required placeholder="例如：上次说的旅行安排是什么？"></textarea><details class="mw-context"><summary>补充前文（可选）</summary><label for="mw-lab-context">上一条用户消息</label><textarea id="mw-lab-context" rows="2" maxlength="2000" placeholder="用于理解“那个”“上次”等指代；不会读取聊天窗口历史。"></textarea></details><div class="mw-toolbar"><label for="mw-lab-mode">运行方案</label><select id="mw-lab-mode"><option value="both">A / B 对比</option><option value="all">A / B / C 对比</option><option value="c">只运行 C（主题辅助）</option><option value="a">只运行 A（严格）</option><option value="b">只运行 B（宽松）</option></select><button class="btn btn-blue btn-sm" id="mw-lab-run" type="submit">运行对比</button>'+button('api','选择供应商与模型')+'</div></form><p class="mw-cost">仅点击运行时调用现有召回 API，可能计费。A/B 对比各跑一次，B 可能包含改写和精筛两步；提前跳过或缓存命中时调用会减少。</p><p class="mw-note">使用“召回 → 意图改写、向量化”配置。实验不发送聊天回复、不记召回次数、不改变聊天设置；本页不模拟窗口冷却。C 会展示相关主题目录，实验不继续调用聊天模型展开材料。</p><p id="mw-provider-summary" class="mw-note"></p></section><p class="mw-status" id="mw-lab-status" role="status">填写问题后运行。模型结果可能波动，命中多不等于更相关。</p><div id="mw-comparison" class="mw-comparison"></div>';
+      '<section class="mw-card"><form id="mw-lab-form"><label for="mw-lab-query">想测试的问题</label><textarea id="mw-lab-query" rows="3" maxlength="2000" required placeholder="例如：上次说的旅行安排是什么？"></textarea><details class="mw-context"><summary>补充前文（可选）</summary><label for="mw-lab-context">上一条用户消息</label><textarea id="mw-lab-context" rows="2" maxlength="2000" placeholder="用于理解“那个”“上次”等指代；不会读取聊天窗口历史。"></textarea></details><div class="mw-toolbar"><label for="mw-lab-mode">运行方案</label><select id="mw-lab-mode"><option value="both">A / B 对比</option><option value="all">A / B / C 对比</option><option value="c">只运行 C（主题脉络）</option><option value="a">只运行 A（严格）</option><option value="b">只运行 B（宽松）</option></select><button class="btn btn-blue btn-sm" id="mw-lab-run" type="submit">运行对比</button>'+button('api','选择供应商与模型')+'</div></form><p class="mw-cost">仅点击运行时调用现有召回 API，可能计费。A/B 对比各跑一次，B 可能包含改写和精筛两步；提前跳过或缓存命中时调用会减少。</p><p class="mw-note">使用“召回 → 意图改写、向量化”配置。实验不发送聊天回复、不记召回次数、不改变聊天设置；本页不模拟窗口冷却。C 使用主题 API 独立选择摘要与目录，不调用 B；实验不继续展开材料。</p><p id="mw-provider-summary" class="mw-note"></p></section><p class="mw-status" id="mw-lab-status" role="status">填写问题后运行。模型结果可能波动，命中多不等于更相关。</p><div id="mw-comparison" class="mw-comparison"></div>';
     el('mw-lab-form').addEventListener('submit',function(e){e.preventDefault();runLab()});
     page.addEventListener('click',function(e){var b=e.target.closest('[data-mw]');if(!b)return;if(b.dataset.mw==='api'){navTo('apiconfig');switchApiTab('experiment')}if(b.dataset.mw==='fact')openFactDetail(b.dataset.id)});
     el('mw-lab-mode').addEventListener('change',function(){el('mw-lab-run').textContent=this.value==='both'?'运行对比':'运行模拟'});
@@ -177,13 +177,13 @@
     message('mw-provider-summary',['recall_rewrite','recall_vector'].map(function(group){var s=apiGroupSlot(group),p=findLibraryProvider(s.current);return (group==='recall_rewrite'?'改写／精筛':'向量')+'：'+(p?providerDisplayName(p)+' · '+(s.model||p.model||'未选模型'):'使用现有后端配置（请在 API 页核对）')}).join('；'));
   }
   function resultMarkup(path,result){
-    var label=path==='a'?'A · 严格':path==='c'?'C · 主题辅助':'B · 宽松';
+    var label=path==='a'?'A · 严格':path==='c'?'C · 主题脉络':'B · 宽松';
     if(result.pending)return '<section class="mw-card"><h3>'+label+'</h3><p class="mw-note">正在运行…</p></section>';
     if(result.error)return '<section class="mw-card"><h3>'+label+'</h3><p class="mw-status">'+esc(result.error)+'</p></section>';
-    var d=result.diag||{},items=result.items||[],candidates=d.candidate_preview||[];
-    var html='<section class="mw-card"><div class="mw-editor-head"><h3>'+label+'</h3><small>'+esc(result.elapsed_seconds)+' 秒</small></div><p class="mw-result-count">选中 '+items.length+' 条 Fact</p>';
+    var d=result.diag||{},items=result.items||[],candidates=d.candidate_preview||[],topics=result.topics||[];
+    var html='<section class="mw-card"><div class="mw-editor-head"><h3>'+label+'</h3><small>'+esc(result.elapsed_seconds)+' 秒</small></div><p class="mw-result-count">选中 '+(path==='c'?topics.length+' 个主题':items.length+' 条 Fact')+'</p>';
     (result.warnings||[]).forEach(function(w){html+='<p class="mw-cost">'+esc(w)+'</p>'});
-    html+=items.length?'<div class="mw-selected">'+items.map(function(m){var candidate=candidates.find(function(c){return c.fact_id===m.fact_id})||{};return '<article><p>'+esc(candidate.content_preview||m.situation||m.fact_id)+'</p>'+button('fact','查看 Fact','data-id="'+escAttr(m.fact_id)+'"')+'</article>'}).join('')+'</div>':'<p class="mw-empty">本次没有选中记忆。查看下方诊断，区分主动跳过与筛选未通过。</p>';
+    if(path==='c'){html+=topics.map(function(t){return '<article><h4>'+esc(t.title)+'</h4><p>'+esc(t.summary)+'</p></article>'}).join('')||(result.text?'':'<p class="mw-empty">本次没有相关主题。</p>')}else html+=items.length?'<div class="mw-selected">'+items.map(function(m){var candidate=candidates.find(function(c){return c.fact_id===m.fact_id})||{};return '<article><p>'+esc(candidate.content_preview||m.situation||m.fact_id)+'</p>'+button('fact','查看 Fact','data-id="'+escAttr(m.fact_id)+'"')+'</article>'}).join('')+'</div>':'<p class="mw-empty">本次没有选中记忆。查看下方诊断，区分主动跳过与筛选未通过。</p>';
     if(result.text)html+='<details><summary>将交给模型的记忆文本（预览）</summary><pre>'+esc(result.text)+'</pre></details>';
     html+='<details><summary>候选、分数与筛选原因</summary><p class="mw-note">这里是诊断保留的候选预览，未必包含全部候选；两种路径的分数不直接等价。</p>';
     html+=candidates.map(function(c){return '<article class="mw-candidate"><p>'+esc(c.content_preview||c.fact_id)+'</p><small>'+esc(c.selected?'选中':c.rejection_reason||'未选中')+' · 相似度 '+esc(c.similarity==null?'未记录':c.similarity)+' · 分数 '+esc(c.score==null?'未记录':c.score)+'</small></article>'}).join('');
@@ -216,7 +216,7 @@
   window.memoryWorkbenchEnter=function(tab){
     if(tab!=='topics'&&tab!=='recall-lab')return;
     var key=storedPanelKey();
-    if(state.key!==key){state={key:key,loaded:false,revision:0,topics:[],draft:null,dirty:false,busy:false,conflict:false,request:null,loadSeq:state.loadSeq+1,searchSeq:state.searchSeq+1,results:[],offset:0,more:false,searching:false};lab={running:false,seq:lab.seq+1,results:{}};el('tab-topics').replaceWith(el('tab-topics').cloneNode(false));el('tab-recall-lab').replaceWith(el('tab-recall-lab').cloneNode(false))}
+    if(state.key!==key){state={key:key,loaded:false,revision:0,topics:[],groups:[],draft:null,dirty:false,busy:false,conflict:false,request:null,loadSeq:state.loadSeq+1,searchSeq:state.searchSeq+1,results:[],offset:0,more:false,searching:false};lab={running:false,seq:lab.seq+1,results:{}};el('tab-topics').replaceWith(el('tab-topics').cloneNode(false));el('tab-recall-lab').replaceWith(el('tab-recall-lab').cloneNode(false))}
     if(!el('mw-status'))buildTopics();if(!el('mw-lab-form'))buildLab();
     if(tab==='topics'&&!state.loaded&&!state.busy)load(false);
     if(tab==='recall-lab')providerSummary();
