@@ -24,12 +24,12 @@
   }
   function buildTopics(){
     var page=el('tab-topics');
-    page.innerHTML=header('主题记忆','把同一段经历的 Fact 收在一起，随时沿着时间回看。','M5 4h14v16H5zM9 4v16M12 8h4M12 12h4M12 16h2')+
-      '<div class="mw-toolbar">'+button('new','新建主题')+button('reload','载入最新目录')+button('topic-api','主题 API')+'<span class="mw-note">后台整理 · 疑点审批 · 聊天选择 C 按需读取</span></div>'+
+    page.innerHTML=header('主题记忆','大主题收纳相似的小主题，小主题下按时间查看明细。','M5 4h14v16H5zM9 4v16M12 8h4M12 12h4M12 16h2')+
+      '<div class="mw-toolbar">'+button('new','新建小主题')+button('reload','载入最新目录')+button('topic-api','主题 API')+'<span class="mw-note">后台整理 · 疑点审批 · 聊天选择 C 按需读取</span></div>'+
       '<p id="mw-status" class="mw-status" role="status">正在读取主题目录…</p><div id="mw-organizer"></div><div class="mw-workspace"><aside class="mw-card mw-shelf" aria-label="主题目录"><h3>我的主题</h3><div id="mw-topics-list"></div></aside>'+
       '<div class="mw-detail"><div id="mw-topic-editor"></div><section id="mw-search" class="mw-card" hidden><h3>为主题找材料</h3><p class="mw-note">先填写主题名称和说明，再自动检索已有 Fact。每次最多显示 40 条候选；已加入的材料会排除，可继续检查新材料。无需整理全库。</p><div class="mw-toolbar">'+button('suggest','智能找材料／检查新材料')+button('local-suggest','仅关键词找材料')+button('add-selected','加入勾选材料')+'</div><p class="mw-cost">智能查找可能调用一次查询向量和一次主题选材模型；仅关键词不调用模型。模型建议仅预勾选，确认加入并保存后才生效。</p><form id="mw-search-form" class="mw-search-form"><label for="mw-query">搜索正文、人物或分类</label><div><input id="mw-query" type="search" maxlength="200" placeholder="例如：旅行、读书、某个项目" autocomplete="off"><button type="submit" class="btn btn-outline btn-sm">搜索 Fact</button></div></form><p class="mw-note" id="mw-search-status">只查询已有事实库，不调用模型。选中后，记得保存主题。</p><div id="mw-results"></div><div class="mw-toolbar">'+button('more','继续加载','id="mw-more" hidden')+'</div></section></div></div>';
     page.addEventListener('click',onTopicAction);
-    page.addEventListener('input',function(e){if(!state.draft||state.busy)return;if(e.target.dataset.mwPick){var found=state.results.find(function(m){return m.fact_id===e.target.dataset.mwPick});if(found)found.picked=e.target.checked;return}if(['mw-title','mw-note','mw-aliases','mw-enabled'].indexOf(e.target.id)>=0){state.draft.title=el('mw-title').value;state.draft.note=el('mw-note').value;state.draft.aliases=el('mw-aliases').value.split(/[,，\n]/).map(function(x){return x.trim()}).filter(Boolean);state.draft.recall_enabled=el('mw-enabled').checked;++state.searchSeq;state.searching=false;markDirty()}});
+    page.addEventListener('input',function(e){if(!state.draft||state.busy)return;if(e.target.dataset.mwPick){var found=state.results.find(function(m){return m.fact_id===e.target.dataset.mwPick});if(found)found.picked=e.target.checked;return}if(['mw-title','mw-note','mw-aliases','mw-enabled','mw-group'].indexOf(e.target.id)>=0){state.draft.group_title=el('mw-group').value;state.draft.title=el('mw-title').value;state.draft.note=el('mw-note').value;state.draft.aliases=el('mw-aliases').value.split(/[,，\n]/).map(function(x){return x.trim()}).filter(Boolean);state.draft.recall_enabled=el('mw-enabled').checked;++state.searchSeq;state.searching=false;markDirty()}});
     el('mw-search-form').addEventListener('submit',function(e){e.preventDefault();search(false)});
     if(window.memoryReviewMount)review=window.memoryReviewMount({
       canWrite:function(){return state.loaded&&!state.busy&&!state.dirty},revision:function(){return state.revision},
@@ -39,7 +39,11 @@
     });
   }
   function renderList(){
-    el('mw-topics-list').innerHTML=state.topics.length?state.topics.map(function(t){return '<button type="button" class="mw-topic-link'+(state.draft&&state.draft.id===t.id?' selected':'')+'" data-mw="select" data-id="'+escAttr(t.id)+'" aria-pressed="'+!!(state.draft&&state.draft.id===t.id)+'"><b>'+esc(t.title)+'</b><small>'+t.materials.length+' 条材料'+(t.changed_count?' · '+t.changed_count+' 条有变化':'')+'</small></button>'}).join(''):'<p class="mw-empty">还没有主题。新建一个，收藏同一段经历中的小事。</p>';
+    var shelf=el('mw-topics-list'),opened=new Set(Array.from(shelf.querySelectorAll('details[open]')).map(function(n){return n.dataset.group})),groups=new Map();
+    state.topics.forEach(function(t){var name=t.group_title||'';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(t)});
+    shelf.innerHTML=Array.from(groups).map(function(entry){var name=entry[0],topics=entry[1],selected=topics.some(function(t){return state.draft&&state.draft.id===t.id});
+      return '<details class="mw-topic-group" data-group="'+escAttr(name)+'"'+(selected||opened.has(name)?' open':'')+'><summary><strong>'+esc(name||'待归入大主题')+'</strong><small>'+topics.length+' 个小主题</small></summary>'+button('new','添加小主题','data-group="'+escAttr(name)+'"')+topics.map(function(t){return '<button type="button" class="mw-topic-link'+(state.draft&&state.draft.id===t.id?' selected':'')+'" data-mw="select" data-id="'+escAttr(t.id)+'" aria-pressed="'+!!(state.draft&&state.draft.id===t.id)+'"><b>'+esc(t.title)+'</b><small>'+t.materials.length+' 条明细'+(t.changed_count?' · '+t.changed_count+' 条有变化':'')+'</small></button>'}).join('')+'</details>';
+    }).join('')||'<p class="mw-empty">还没有主题。先创建小主题，再填写所属大主题。</p>';
   }
   function materialMarkup(m,removable){
     var missing=m.status==='missing',active=m.status==='active'||!m.status;
@@ -56,7 +60,7 @@
   function renderEditor(){
     var d=state.draft;el('mw-search').hidden=!d;
     if(!d){el('mw-topic-editor').innerHTML='<div class="mw-card mw-empty">选择一个主题，或新建主题开始整理。</div>';return}
-    el('mw-topic-editor').innerHTML='<section class="mw-card"><div class="mw-editor-head"><h3>主题内容</h3><span id="mw-draft-status" class="mw-note">已保存</span></div><fieldset id="mw-editor-fields"><label for="mw-title">主题名称</label><input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"><label for="mw-note">我的说明</label><textarea id="mw-note" rows="3" maxlength="2000" placeholder="这份目录想收下什么？">'+esc(d.note||'')+'</textarea><label for="mw-aliases">主题别名（逗号分隔，最多 12 个，每个至少 2 字）</label><input id="mw-aliases" maxlength="970" value="'+escAttr((d.aliases||[]).join('，'))+'" placeholder="例如：日本旅行、东京行程"><label class="mw-check"><input id="mw-enabled" type="checkbox" '+(d.recall_enabled!==false?'checked':'')+'>允许召回 C 使用这个主题</label></fieldset><div class="mw-toolbar">'+button('save','保存主题','id="mw-save"')+button('delete','删除主题','id="mw-delete"')+button('copy','复制目录')+'</div><p class="mw-note">保存只更新关联，不修改原始 Fact。聊天设置选择 C 后，提到主题名或别名会限定检索；普通问题命中相关材料时附目录。主题按时间展示当前有效材料，过期及被替代的版本不再收录。</p><h3 id="mw-material-count"></h3><div id="mw-materials" class="mw-timeline"></div></section>';
+    el('mw-topic-editor').innerHTML='<section class="mw-card"><div class="mw-editor-head"><h3>主题内容</h3><span id="mw-draft-status" class="mw-note">已保存</span></div><fieldset id="mw-editor-fields"><label for="mw-group">所属大主题</label><input id="mw-group" maxlength="80" list="mw-group-options" value="'+escAttr(d.group_title||'')+'" placeholder="选择已有大主题，或填写新的名称"><datalist id="mw-group-options">'+Array.from(new Set(state.topics.map(function(t){return t.group_title}).filter(Boolean))).map(function(name){return '<option value="'+escAttr(name)+'"></option>'}).join('')+'</datalist><label for="mw-title">小主题名称</label><input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"><label for="mw-note">我的说明</label><textarea id="mw-note" rows="3" maxlength="2000" placeholder="这份目录想收下什么？">'+esc(d.note||'')+'</textarea><label for="mw-aliases">主题别名（逗号分隔，最多 12 个，每个至少 2 字）</label><input id="mw-aliases" maxlength="970" value="'+escAttr((d.aliases||[]).join('，'))+'" placeholder="例如：日本旅行、东京行程"><label class="mw-check"><input id="mw-enabled" type="checkbox" '+(d.recall_enabled!==false?'checked':'')+'>允许召回 C 使用这个主题</label></fieldset><div class="mw-toolbar">'+button('save','保存主题','id="mw-save"')+button('delete','删除主题','id="mw-delete"')+button('copy','复制目录')+'</div><p class="mw-note">保存只更新关联，不修改原始 Fact。聊天设置选择 C 后，提到主题名或别名会限定检索；普通问题命中相关材料时附目录。主题按时间展示当前有效材料，过期及被替代的版本不再收录。</p><h3 id="mw-material-count"></h3><div id="mw-materials" class="mw-timeline"></div></section>';
     renderMaterials();syncButtons();
   }
   function syncButtons(){
@@ -87,7 +91,7 @@
     if(state.busy||!state.draft||state.conflict)return;
     if(action==='delete'&&!(await ckConfirmDialog('仅删除这个主题目录，原始 Fact 会保留。',{title:'删除主题',confirmText:'删除主题',danger:true})))return;
     var d=state.draft,key=state.key;
-    var body={action:action,id:d.id,expected_revision:state.revision,title:d.title,note:d.note,aliases:d.aliases||[],recall_enabled:d.recall_enabled!==false,material_stamps:Object.fromEntries(d.materials.filter(function(m){return m.stamp}).map(function(m){return [m.fact_id,m.stamp]})),fact_ids:d.materials.map(function(m){return m.fact_id})};
+    var body={action:action,id:d.id,expected_revision:state.revision,title:d.title,group_title:d.group_title||'',note:d.note,aliases:d.aliases||[],recall_enabled:d.recall_enabled!==false,material_stamps:Object.fromEntries(d.materials.filter(function(m){return m.stamp}).map(function(m){return [m.fact_id,m.stamp]})),fact_ids:d.materials.map(function(m){return m.fact_id})};
     var signature=JSON.stringify(body);
     if(!state.request||state.request.signature!==signature)state.request={signature:signature,body:Object.assign({request_id:uid()},body)};
     state.busy=true;syncButtons();message('mw-status','正在保存主题…');
@@ -144,7 +148,7 @@
     if(action==='reload'){await load(true);return}
     if(action==='new'||action==='select'){
       if(!state.loaded||!(await discard()))return;
-      state.draft=action==='new'?{id:uid(),title:'',note:'',materials:[]}:clone(state.topics.find(function(t){return t.id===id}));
+      state.draft=action==='new'?{id:uid(),title:'',group_title:b.dataset.group===undefined?(state.draft&&state.draft.group_title||''):b.dataset.group,note:'',materials:[]}:clone(state.topics.find(function(t){return t.id===id}));
       state.dirty=action==='new';state.request=null;state.conflict=false;state.results=[];state.more=false;state.searching=false;++state.searchSeq;
       renderList();renderEditor();renderResults();message('mw-status',action==='new'?'填写主题名称，再挑选材料。':'正在查看已保存的主题。');return;
     }

@@ -75,3 +75,9 @@ body #sub-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
 .mw-page .mr-organizer blockquote{border-left:2px solid var(--nb-line);margin:12px 0;padding:3px 12px;color:var(--nb-muted);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .mw-page .mr-opinion{white-space:pre-wrap}
 @media(max-width:700px){.mw-page .mr-proposal,.mw-page .mr-operation{padding:13px}.mw-page .mr-settings-grid{grid-template-columns:minmax(0,1fr)}.mw-page .mr-content{max-height:900px}}
+
+/* Parent directories contain subtopics; materials stay in their own editor. */
+.mw-topic-group { margin: 8px 0; min-width: 0; }
+.mw-topic-group > summary { cursor: pointer; padding: 10px 4px; overflow-wrap: anywhere; }
+.mw-topic-group > summary small { display: block; margin-top: 4px; opacity: .7; }
+.mw-topic-group > .mw-topic-link { margin-left: 8px; width: calc(100% - 8px); }

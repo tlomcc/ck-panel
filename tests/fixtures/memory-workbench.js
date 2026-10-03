@@ -19,7 +19,7 @@
        if(failSave){failSave=false;return response({ok:false,error:'合成保存失败'},503)}
        if(conflict)return response({ok:false,error:'目录已有更新'},409);
        if(body.action==='delete')store.topics=store.topics.filter(t=>t.id!==body.id);
-       else{const t={id:body.id,title:body.title,note:body.note,aliases:body.aliases,recall_enabled:body.recall_enabled,materials:body.fact_ids.map(id=>facts.find(f=>f.fact_id===id)),changed_count:0};const at=store.topics.findIndex(x=>x.id===t.id);if(at<0)store.topics.unshift(t);else store.topics[at]=t}
+       else{const t={id:body.id,title:body.title,group_title:body.group_title,note:body.note,aliases:body.aliases,recall_enabled:body.recall_enabled,materials:body.fact_ids.map(id=>facts.find(f=>f.fact_id===id)),changed_count:0};const at=store.topics.findIndex(x=>x.id===t.id);if(at<0)store.topics.unshift(t);else store.topics[at]=t}
        store.revision++;
      }
      return response(store);
@@ -38,6 +38,7 @@
  check(calls.length===1&&calls[0].path==='/ck/memory-topics','Opening topics must not call models');
  click('[data-mw="new"]');await wait(()=>$('mw-title'));
  check($('mw-save').disabled,'Empty title cannot save');input('mw-title','旅行手册 <script>window.bad=3</script>');input('mw-note','把出发前的计划与路上的小事放在一起。');
+ input('mw-group','旅行与生活 <script>window.bad=4</script>');
  input('mw-query','旅行');$('mw-search-form').requestSubmit();await wait(()=>document.querySelectorAll('.mw-search-result').length===30);
  check(calls.at(-1).query.includes('state=active'),'Topic search includes expired Facts');
  check(!$('mw-results').textContent.includes('已过期'),'Expired candidate visible');
@@ -50,6 +51,9 @@
  click('#mw-save');await wait(()=>$('mw-status').textContent==='主题已保存。');
  check(failedBody===JSON.stringify(calls.filter(c=>c.body&&c.path==='/ck/memory-topics').at(-1).body),'Retry changed receipt');
  check(document.querySelectorAll('.mw-topic-link').length===1,'Saved topic missing');check(!window.bad&&!document.querySelector('#tab-topics img'),'Unescaped topic or fact content');
+ check(document.querySelector('.mw-topic-group summary').textContent.includes('旅行与生活'),'Parent missing');
+ check($('mw-group').value===store.topics[0].group_title,'Parent not persisted');
+ const parent=document.querySelector('.mw-topic-group');check(parent.open,'Selected child must expand parent');parent.open=false;check(!parent.open,'Parent cannot collapse');parent.open=true;
  click('#mw-materials [data-mw="fact"]');await wait(()=>$('eg-detail-body').textContent.includes('六月讨论'));closeEntityDetail();
  input('mw-title','本机新草稿');conflict=true;click('#mw-save');await wait(()=>$('mw-status').textContent.includes('载入最新'));check($('mw-save').disabled&&$('mw-title').value==='本机新草稿','Conflict overwrote draft or allowed stale retry');
  click('[data-mw="reload"]');await wait(()=>ckDialogState.resolve);ckDialogSubmit();await wait(()=>$('mw-status').textContent.includes('目录已同步'));conflict=false;

@@ -24,7 +24,7 @@
     store.organizer.pending_count=store.organizer.pending.length;
     if(body.decision==='approve'){
      const target=store.topics.find(t=>t.id===body.target_topic_id);
-     if(target){if(body.rename_to)target.title=body.rename_to;if(p.kind!=='rename')target.materials.push(...p.materials)}
+     if(target){if(body.rename_to)target.title=body.rename_to;if(p.kind==='group')target.group_title=p.group_title;else if(p.kind!=='rename')target.materials.push(...p.materials)}
      else store.topics.push({id:'topic_approved',title:body.title,materials:facts.slice(),aliases:[],note:''});
     }
    }else if(body.action==='organizer_settings')store.organizer.settings=body.settings;
@@ -110,6 +110,13 @@
  check(document.querySelector('[data-proposal="proposal_4"] [data-mr-field="rename_to"]').value==='从寻找住处到安顿新家的经历','Conflict lost new name');
  click('[data-proposal="proposal_4"] [data-mr="approve"]');await wait(()=>!document.querySelector('[data-proposal="proposal_4"]'));
  check(existing.title==='从寻找住处到安顿新家的经历'&&existing.materials.length===3,'Rename-only changed membership');
+ store.organizer.pending=[{...proposal(6),kind:'group',target_topic_id:existing.id,group_title:'居住与生活',materials:[],reference_materials:facts}];store.organizer.pending_count=1;
+ click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_6"]'));
+ check(!document.querySelector('[data-proposal="proposal_6"] .mr-materials'),'Grouping reapproves existing facts');
+ check(!document.querySelector('[data-proposal="proposal_6"] [data-mr-field="rename_to"]'),'Grouping asks to rename child');
+ check(document.querySelector('[data-proposal="proposal_6"]').textContent.includes('居住与生活'),'Parent destination missing');
+ click('[data-proposal="proposal_6"] [data-mr="approve"]');await wait(()=>!document.querySelector('[data-proposal="proposal_6"]'));
+ check(existing.group_title==='居住与生活'&&existing.materials.length===3,'Grouping changed membership');
  // Leave the rename-only example visible for desktop/mobile screenshots.
  store.organizer.pending=[{...proposal(5),kind:'rename',target_topic_id:existing.id,rename_to:'从看房签约到在新家安顿的完整经历',materials:[],reference_materials:facts}];store.organizer.pending_count=1;
  click('[data-mr="refresh"]');await wait(()=>document.querySelector('[data-proposal="proposal_5"]'));
