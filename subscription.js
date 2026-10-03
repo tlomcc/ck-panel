@@ -6,6 +6,7 @@
  function node(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
  function opened(){return dialog&&dialog.classList.contains('show')}
  function selected(){return typeof CKBackendRoute==='object'&&CKBackendRoute.isSubscription()}
+ function model(){return CKBackendRoute.current.subscriptionModel||'sonnet'}
  function timeText(value){return typeof value==='number'&&isFinite(value)?new Date(value*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'尚未提供'}
  function make(){
   if(dialog)return;
@@ -48,7 +49,10 @@
   if(pct!==null){var progress=node('progress');progress.max=100;progress.value=pct;progress.setAttribute('aria-label',(labels[key]||'额度')+' 已用 '+pct+'%');card.append(progress)}
   else card.append(node('div','ck-sub-empty-bar'));
   var status=!w?'等待官方数据':w.expired?'周期已结束，等待新数据':w.status==='rejected'?'官方已限额':w.stale?'上次观测 · 非实时':pct===null?'官方暂未提供百分比':'已用额度';
+  if(w&&w.stale&&pct!==null&&status.indexOf('非实时')<0)status+=' · 上次观测，非实时';
+  if(w&&w.applies===false)status+=' · 不影响所选模型';
   card.append(node('p','ck-sub-muted',status),node('p','ck-sub-reset',w&&w.resets_at?'重置：'+timeText(w.resets_at):'重置时间尚未提供'));
+  if(pct!==null)card.append(node('p','ck-sub-muted','百分比观测：'+timeText(w.usage_observed_at||w.updated_at)));
   if(valid&&w.status==='rejected')card.dataset.level='paused';
   return card;
  }
@@ -63,11 +67,11 @@
   if(!dialog)return;
   $('ck-sub-state').textContent=state;$('ck-sub-state').dataset.level=q.level;
   $('ck-sub-detail').textContent=!auth.ready?'还没有订阅也可以先保存保护设置；订阅后，在 VPS 官方 Claude Code 登录同一账号。':q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'接收官方用量观测，不按 token 估算剩余百分比。';
-  $('ck-sub-route-label').textContent=selected()?'当前聊天：Claude 订阅 · '+CKBackendRoute.current.subscriptionModel:'当前聊天未使用 Claude 订阅';
+  $('ck-sub-route-label').textContent=(selected()?'当前聊天：Claude 订阅':'当前聊天未使用 Claude 订阅')+' · 保护状态按 '+(q.model||model())+' 显示';
   var body=$('ck-sub-windows');body.replaceChildren();
   var byKey={};q.windows.forEach(function(w){byKey[w.key]=w});
   ['five_hour','seven_day'].concat(Object.keys(byKey).filter(function(k){return k!=='five_hour'&&k!=='seven_day'})).forEach(function(key){body.append(quotaCard(key,byKey[key]))});
-  $('ck-sub-updated').textContent=q.last_observed_at?'最近官方观测：'+timeText(q.last_observed_at)+' · 刷新状态不会主动更新官方额度':'尚未收到官方用量，不表示已用 0%';
+  $('ck-sub-updated').textContent=q.last_observed_at?'最近状态事件：'+timeText(q.last_observed_at)+' · 百分比更新时间见各额度卡片；刷新不会主动更新官方额度':'尚未收到官方用量，不表示已用 0%';
   if(!dirty){$('ck-sub-enabled').checked=q.policy.enabled;$('ck-sub-paused').checked=q.policy.paused;$('ck-sub-warn').value=q.policy.warn_percent;$('ck-sub-high').value=q.policy.high_percent;$('ck-sub-stop').value=q.policy.stop_percent;$('ck-sub-save-state').textContent='已读取服务器设置'}
   $('ck-sub-fields').disabled=saving||q.storage_error;$('ck-sub-save').disabled=saving||q.storage_error;
  }
@@ -76,7 +80,7 @@
   if(!key)throw Error('请先登录 CK 面板，再读取订阅信息');
   var options={headers:{'x-api-key':key},cache:'no-store',signal:signal};
   if(body){options.method='POST';options.headers['Content-Type']='application/json';options.body=JSON.stringify(body)}
-  var response=await fetch(CKBackendRoute.current.gateway+'/ck/subscription/'+path,options);
+  var response=await fetch(CKBackendRoute.current.gateway+'/ck/subscription/'+path+'?model='+encodeURIComponent(model()),options);
   var value=await response.json().catch(function(){return {}});
   if(!response.ok)throw Error(response.status===404?'服务器尚未安装订阅信息板块，请先更新服务器。':response.status===403?'面板身份验证未通过，请重新登录。':value.error||'暂时无法连接订阅服务');
   return value;

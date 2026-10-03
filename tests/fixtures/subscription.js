@@ -11,6 +11,7 @@
   assert(url.includes('/ck/subscription/'),'no model or unrelated endpoint');
   assert(options.headers['x-api-key']==='fixture-panel','panel auth');
   assert(options.cache==='no-store','no HTTP caching');
+  assert(new URL(url,location.href).searchParams.get('model')===(CKBackendRoute.current.subscriptionModel||'sonnet'),'selected model forwarded for GET and POST');
   if(delay){const resolve=delay;delay=null;await new Promise(resolve)}
   if(error)return {ok:false,status:503,json:async()=>({error:'订阅服务暂不可用'})};
   if(options.method==='POST')state.quota.policy=JSON.parse(options.body);
@@ -42,6 +43,12 @@
  state.quota.windows[0].expired=true;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert(!$('ck-sub-windows').firstChild.querySelector('progress'),'expired data not shown as current');
+ state.quota.windows.push({key:'seven_day_opus',used_percent:98,resets_at:now+86400,updated_at:now,usage_observed_at:now-1800,status:'rejected',expired:false,stale:true,applies:false});
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-state').textContent==='订阅用量偏高','unrelated model does not pause selected model');
+ const opus=$('ck-sub-windows').lastChild.textContent;
+ assert(opus.includes('不影响所选模型')&&opus.includes('非实时')&&opus.includes('百分比观测：'),'model scope and stale rejected percentage labeled');
+ assert($('ck-sub-updated').textContent.includes('最近状态事件'),'status timestamp distinguished from percentage');
  state.quota.windows[0].expired=false;state.quota.blocked=true;state.quota.level='paused';state.quota.reason='<img src=x onerror="window.pwned=true">';
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent.includes('暂停'));
  assert(!$('ck-sub-detail').querySelector('img')&&!window.pwned,'server text escaped');
