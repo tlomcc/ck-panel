@@ -25,12 +25,25 @@
   stream.thinking('先核对这条消息。');await pause(70);
   assert(document.querySelector('.chat-stream-aux .chat-thinking-body')?.textContent.includes('先核对'),'thinking missing before text');
   const thought=document.querySelector('.chat-stream-aux .chat-thinking');
+  // The same caption must have the same folded geometry before/after completion.
+  const reference=document.createElement('div');reference.className='chat-turn-heading';
+  reference.innerHTML=thought.outerHTML;thought.closest('.chat-msg-row').append(reference);
+  const activeWidth=thought.getBoundingClientRect().width,finalWidth=reference.firstElementChild.getBoundingClientRect().width;
+  assert(Math.abs(activeWidth-finalWidth)<2,'streaming thinking width differs from completed: '+activeWidth+' / '+finalWidth);
+  reference.remove();
   const labelBox=thought.querySelector('.chat-thinking-label').getBoundingClientRect();
   assert(labelBox.height<24,'thinking label wrapped while streaming');
   assert(!thought.classList.contains('open'),'thinking must start collapsed');
   assert(getComputedStyle(thought.querySelector('.chat-thinking-body')).display==='none','thinking content visible while folded');
+  thought.querySelector('.chat-thinking-head').click();
+  assert(thought.classList.contains('open'),'thinking cannot expand while streaming');
+  stream.thinking(' https://example.invalid/'+('long-path-'.repeat(50)));await pause(40);
+  assert(thought.classList.contains('open'),'thinking closed during incremental update');
+  assert(thought.scrollWidth<=thought.clientWidth+2,'expanded thinking overflows');
+  thought.querySelector('.chat-thinking-head').click();
   await pause(160);
-  assert(/思考中.*0\.[12]/.test(thought.querySelector('.chat-thinking-label').textContent),'thinking timer did not advance');
+  const timerLabel=thought.querySelector('.chat-thinking-label').textContent;
+  assert(timerLabel.startsWith('思考中')&&Number(timerLabel.match(/([\d.]+) 秒/)?.[1])>=0.1,'thinking timer did not advance');
   stream.thinking('继续核对。');await pause(40);
   assert(document.querySelector('.chat-stream-aux .chat-thinking')===thought,'thinking card replaced during streaming');
   assert(!out.textContent.includes('先核对'),'thinking leaked into text bubble');

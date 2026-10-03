@@ -40,6 +40,7 @@ const server=http.createServer((req,res)=>{
     const result=await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/live-stream.js'),'utf8'));
     console.log(width+' '+dark,JSON.stringify(result));
     console.log('completion',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/stream-completion.js'),'utf8'))));
+    console.log('scroll',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/scroll-follow.js'),'utf8'))));
     console.log('status',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/server-status.js'),'utf8'))));
     await shot(width+'-'+dark+'-server-status');
     await evaluate('window.__closeStatusTest()');

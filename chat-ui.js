@@ -151,7 +151,7 @@ function chatCaptureActionScroll(){
   var box=chatMessagesBox();if(!box)return null;
   var top=box.getBoundingClientRect().top;
   var anchor=Array.from(box.querySelectorAll('.chat-msg-row[data-chat-index]')).find(function(row){return row.getBoundingClientRect().bottom>top+2});
-  return {session:chatActiveSessionId,bottom:chatHistoryRange().end===chatMessages.length&&chatIsMessagesNearBottom(),index:anchor&&anchor.getAttribute('data-chat-index'),offset:anchor?anchor.getBoundingClientRect().top-top:0};
+  return {session:chatActiveSessionId,bottom:chatShouldFollowMessages(),index:anchor&&anchor.getAttribute('data-chat-index'),offset:anchor?anchor.getBoundingClientRect().top-top:0};
 }
 function chatRestoreActionScroll(position){
   if(!position||position.session!==chatActiveSessionId)return;

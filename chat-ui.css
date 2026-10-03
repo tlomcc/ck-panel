@@ -180,8 +180,7 @@ body.chat-active .chat-head-actions .chat-quick-actions-toggle:focus-visible{out
 body.chat-active .chat-thinking-label{font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
 body.chat-active .chat-thinking-head{flex-wrap:nowrap!important;white-space:nowrap!important}
 body.chat-active .chat-stream-aux{min-width:0;width:100%;max-width:100%;align-self:flex-start}
-body.chat-active .chat-stream-aux .chat-thinking{width:fit-content!important;min-width:min(172px,100%);max-width:100%!important}
-body.chat-active .chat-stream-aux .chat-thinking.open{width:100%!important}
+body.chat-active .chat-stream-aux .chat-thinking{width:fit-content!important;min-width:0;max-width:var(--ck-aux-block-max-width)!important}
 body.chat-active .chat-thinking-head:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 @keyframes ck-thinking-breathe{0%,100%{opacity:1}50%{opacity:.58}}
 @media(prefers-reduced-motion:reduce){body.chat-active .chat-thinking.is-thinking .chat-thinking-label{animation:none}}

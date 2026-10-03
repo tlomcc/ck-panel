@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v274-topic-feedback-renaming';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v275-scroll-thinking-stability';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1565,6 +1565,8 @@ var CHAT_INDEXEDDB_SESSION_STORE='sessions';
 var CHAT_HISTORY_TOOLS=window.CKChatHistory||null;
 var CHAT_CACHE_NOTICE_TEXT='已超过5min，下一次会重新创建缓存';
 var CHAT_BOTTOM_THRESHOLD=100;
+var chatMessagesFollowPaused=false;
+var chatMessagesScrollEpoch=0;
 var CHAT_ASSISTANT_REVEAL_MIN_DELAY=800;
 var CHAT_ASSISTANT_REVEAL_MAX_DELAY=1200;
 var CHAT_REQUEST_RETRY_DELAYS=[500,1200,2000];
@@ -7875,8 +7877,12 @@ function chatKeepLatestVisible(opts){
   chatLayoutCompose();
   chatScrollMessagesBottom(true);
   if(opts.soft)return;
+  var scrollEpoch=chatMessagesScrollEpoch;
   [120,320,620].forEach(function(ms){
-    setTimeout(function(){chatLayoutCompose();chatScrollMessagesBottom(true)},ms);
+    setTimeout(function(){
+      if(scrollEpoch!==chatMessagesScrollEpoch||chatMessagesFollowPaused)return;
+      chatLayoutCompose();chatScrollMessagesBottom(true,true);scrollEpoch=chatMessagesScrollEpoch;
+    },ms);
   });
 }
 function chatStoreDraftMessage(opts){
@@ -9160,16 +9166,18 @@ function chatRevealScrollJumps(){if(!document.body.classList.contains('chat-acti
 function chatMarkScrollJumpManualIntent(){chatScrollJumpManualUntil=Date.now()+CHAT_SCROLL_JUMP_INTENT_MS}
 function chatHasScrollJumpManualIntent(){return chatScrollJumpManualUntil>=Date.now()}
 function chatBeginScrollJumpPointer(e){if(e&&e.button!==undefined&&e.button!==0)return;chatScrollJumpPointerActive=true;chatScrollJumpPointerX=Number(e&&e.clientX)||0;chatScrollJumpPointerY=Number(e&&e.clientY)||0}
-function chatContinueScrollJumpPointer(e){if(!chatScrollJumpPointerActive)return;var x=Number(e&&e.clientX)||0,y=Number(e&&e.clientY)||0;if(Math.abs(x-chatScrollJumpPointerX)<3&&Math.abs(y-chatScrollJumpPointerY)<3)return;chatScrollJumpPointerX=x;chatScrollJumpPointerY=y;chatMarkScrollJumpManualIntent()}
+function chatContinueScrollJumpPointer(e){if(!chatScrollJumpPointerActive)return;var x=Number(e&&e.clientX)||0,y=Number(e&&e.clientY)||0;if(Math.abs(x-chatScrollJumpPointerX)<3&&Math.abs(y-chatScrollJumpPointerY)<3)return;chatScrollJumpPointerX=x;chatScrollJumpPointerY=y;chatMarkScrollJumpManualIntent();if(e.pointerType==='mouse')chatPauseMessagesFollow()}
 function chatEndScrollJumpPointer(){chatScrollJumpPointerActive=false}
 function chatJumpToEdge(edge,event){
   if(event)event.preventDefault();var b=chatMessagesBox();if(!b)return;
   chatScrollJumpManualUntil=0;chatHistoryReset(edge);
   chatRenderMessages({respectUserScroll:true,preservePosition:true});
+  chatMessagesFollowPaused=edge==='top';
+  var scrollEpoch=++chatMessagesScrollEpoch;
   // Direct placement remains reliable across thousands of virtualized rows.
   b.style.setProperty('scroll-behavior','auto','important');
   b.scrollTop=edge==='top'?0:b.scrollHeight;
-  requestAnimationFrame(function(){b.scrollTop=edge==='top'?0:b.scrollHeight;b.style.removeProperty('scroll-behavior');chatUpdateScrollJumpState()});
+  requestAnimationFrame(function(){if(scrollEpoch===chatMessagesScrollEpoch)b.scrollTop=edge==='top'?0:b.scrollHeight;b.style.removeProperty('scroll-behavior');chatUpdateScrollJumpState()});
   if(edge!=='top')chatSetNewMessageHint(false);chatRevealScrollJumps();
 }
 function chatAttachScrollJumpControls(){var c=chatScrollJumpControls(),b=chatMessagesBox();if(!c||!b||c.__ckAttached)return;c.__ckAttached=true;b.addEventListener('wheel',chatMarkScrollJumpManualIntent,{passive:true});b.addEventListener('touchmove',chatMarkScrollJumpManualIntent,{passive:true});b.addEventListener('pointerdown',chatBeginScrollJumpPointer,{passive:true});window.addEventListener('pointermove',chatContinueScrollJumpPointer,{passive:true});window.addEventListener('pointerup',chatEndScrollJumpPointer,{passive:true});window.addEventListener('pointercancel',chatEndScrollJumpPointer,{passive:true})}
@@ -9182,6 +9190,17 @@ function chatIsMessagesNearBottom(threshold){
   var gap=box.scrollHeight-box.scrollTop-box.clientHeight;
   return gap<=((typeof threshold==='number')?threshold:CHAT_BOTTOM_THRESHOLD);
 }
+function chatShouldFollowMessages(){
+  return !chatMessagesFollowPaused&&chatIsMessagesNearBottom(2)&&chatHistoryRange().end===chatMessages.length;
+}
+function chatPauseMessagesFollow(){
+  var wasPaused=chatMessagesFollowPaused;
+  chatMessagesFollowPaused=true;
+  chatMessagesScrollEpoch++;
+  var box=chatMessagesBox();
+  // Cancel an in-flight smooth scroll before the user's wheel/touch takes effect.
+  if(!wasPaused&&box&&box.scrollTo)box.scrollTo({top:box.scrollTop,behavior:'instant'});
+}
 function chatSetNewMessageHint(show){
   chatNewMessageHintVisible=!!show;
   var tip=document.getElementById('chat-new-message-tip');
@@ -9192,22 +9211,56 @@ function chatSetNewMessageHint(show){
 }
 function chatHandleMessagesScroll(){
   var box=chatMessagesBox();
+  if(box){
+    var previous=box.__ckLastScrollTop;
+    var atBottom=chatIsMessagesNearBottom(2)&&chatHistoryRange().end===chatMessages.length;
+    if(typeof previous==='number'&&box.scrollTop<previous-1&&!atBottom)chatPauseMessagesFollow();
+    if(atBottom&&typeof previous==='number'&&box.scrollTop>previous&&chatHasScrollJumpManualIntent())chatMessagesFollowPaused=false;
+    box.__ckLastScrollTop=box.scrollTop;
+  }
   if(box&&chatHasScrollJumpManualIntent()){
     if(box.scrollTop<160)chatHistoryLoad('before');
     else if(box.scrollHeight-box.scrollTop-box.clientHeight<160)chatHistoryLoad('after');
   }
-  if(chatIsMessagesNearBottom())chatSetNewMessageHint(false);
+  if(chatShouldFollowMessages())chatSetNewMessageHint(false);
   if(chatHasScrollJumpManualIntent())chatRevealScrollJumps();else chatUpdateScrollJumpState();
 }
 function chatAttachMessagesScroll(){
   var box=chatMessagesBox();
   if(!box||box.__ckMessagesScrollAttached)return;
   box.__ckMessagesScrollAttached=true;
+  box.__ckLastScrollTop=box.scrollTop;
+  box.addEventListener('wheel',function(e){
+    if(e.ctrlKey)return;
+    chatMarkScrollJumpManualIntent();
+    if(e.deltaY<0)chatPauseMessagesFollow();
+  },{passive:true});
+  var touchY=null;
+  box.addEventListener('touchstart',function(e){touchY=e.touches.length===1?e.touches[0].clientY:null},{passive:true});
+  box.addEventListener('touchmove',function(e){
+    if(touchY===null||e.touches.length!==1)return;
+    var y=e.touches[0].clientY;
+    chatMarkScrollJumpManualIntent();
+    if(y>touchY)chatPauseMessagesFollow();
+    touchY=y;
+  },{passive:true});
+  box.addEventListener('touchend',function(){touchY=null},{passive:true});
+  box.addEventListener('touchcancel',function(){touchY=null},{passive:true});
+  box.addEventListener('keydown',function(e){
+    if(e.defaultPrevented||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+    if(['ArrowUp','PageUp','Home','ArrowDown','PageDown','End',' '].indexOf(e.key)<0)return;
+    chatMarkScrollJumpManualIntent();
+    if(['ArrowUp','PageUp','Home'].indexOf(e.key)>=0||(e.key===' '&&e.shiftKey))chatPauseMessagesFollow();
+  });
+  // Scrollbar dragging and selection must be able to interrupt a queued frame too.
+  box.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse'&&e.button===0&&e.clientX>=box.getBoundingClientRect().right-Math.max(12,box.offsetWidth-box.clientWidth)){chatMarkScrollJumpManualIntent();chatPauseMessagesFollow();}
+  },{passive:true});
   box.addEventListener('scroll',chatHandleMessagesScroll,{passive:true});
 }
 function chatFollowMessagesBottom(shouldStick,instant,showHint){
-  if(shouldStick){
-    chatScrollMessagesBottom(instant);
+  if(shouldStick&&!chatMessagesFollowPaused){
+    chatScrollMessagesBottom(instant,true);
     return true;
   }
   if(showHint)chatSetNewMessageHint(true);
@@ -9248,7 +9301,7 @@ function chatRenderMessages(opts){
   chatAttachPendingGestures();
   var openAuxBlocks=chatCaptureOpenAuxBlocks(box);
   var respectUserScroll=opts.respectUserScroll===true;
-  var shouldStick=opts.preservePosition!==true&&(!respectUserScroll||chatIsMessagesNearBottom());
+  var shouldStick=opts.preservePosition!==true&&(!respectUserScroll||chatShouldFollowMessages());
   var previousScrollTop=box.scrollTop;
   var title=document.getElementById('chat-title');
   if(title)title.textContent=chatCurrentSession().title||'聊天';
@@ -9297,7 +9350,7 @@ function chatRenderMessages(opts){
   chatRestoreOpenAuxBlocks(box,openAuxBlocks);
   chatRenderPendingBar();
   if(shouldStick){
-    chatScrollMessagesBottom(opts.smooth!==true);
+    chatScrollMessagesBottom(opts.smooth!==true,respectUserScroll);
   }else{
     box.scrollTop=previousScrollTop;
     if(opts.newMessage)chatSetNewMessageHint(true);
@@ -9347,30 +9400,27 @@ function chatMarkMessageFresh(m){
   chatFreshMessageKeys.add(key);
   setTimeout(function(){chatFreshMessageKeys.delete(key)},1200);
 }
-function chatScrollMessagesBottom(instant){
+function chatScrollMessagesBottom(instant,followOnly){
   var box=chatMessagesBox();
   if(!box)return;
+  if(followOnly&&chatMessagesFollowPaused)return;
+  if(!followOnly){chatMessagesFollowPaused=false;chatScrollJumpManualUntil=0;}
+  var scrollEpoch=++chatMessagesScrollEpoch;
   chatSetNewMessageHint(false);
-  var old=box.style.scrollBehavior;
-  if(instant)box.style.setProperty('scroll-behavior','auto','important');
-  if(!instant&&box.scrollTo){
+  function place(){
+    if(scrollEpoch!==chatMessagesScrollEpoch||chatMessagesFollowPaused)return;
+    var old=box.style.scrollBehavior,priority=box.style.getPropertyPriority('scroll-behavior');
+    if(instant)box.style.setProperty('scroll-behavior','auto','important');
     try{
-      box.scrollTo({top:box.scrollHeight,behavior:'smooth'});
-      requestAnimationFrame(function(){
-        try{box.scrollTo({top:box.scrollHeight,behavior:'smooth'});}
-        catch(e){box.scrollTop=box.scrollHeight}
-      });
-      return;
-    }catch(e){}
-  }
-  box.scrollTop=box.scrollHeight;
-  requestAnimationFrame(function(){
-    box.scrollTop=box.scrollHeight;
-    if(instant){
-      if(old)box.style.scrollBehavior=old;
-      else box.style.removeProperty('scroll-behavior');
+      if(!instant&&box.scrollTo)box.scrollTo({top:box.scrollHeight,behavior:'smooth'});
+      else box.scrollTop=box.scrollHeight;
+    }finally{
+      if(instant){if(old)box.style.setProperty('scroll-behavior',old,priority);else box.style.removeProperty('scroll-behavior');}
     }
-  });
+    box.__ckLastScrollTop=box.scrollTop;
+  }
+  place();
+  requestAnimationFrame(place);
 }
 function chatTimeReminderContext(session,messages,pending){
   session=session||{};
@@ -9890,6 +9940,7 @@ function chatPlaceAssistantBubbleBeforePending(bubble){
 function chatAddBubble(role,text,persist){
   var box=document.getElementById('chat-messages');
   if(!box)return null;
+  var shouldStick=chatShouldFollowMessages();
   if(box.querySelector('.empty-state')||box.querySelector('.chat-welcome'))box.innerHTML='';
   var tip=box.querySelector('.chat-cache-expired-tip:not(.persisted)');
   if(tip)tip.remove();
@@ -9922,7 +9973,8 @@ function chatAddBubble(role,text,persist){
   }
   if(role==='assistant')chatPlaceAssistantBubbleBeforePending(el);
   else box.appendChild(row);
-  chatScrollMessagesBottom(true);
+  if(role==='assistant')chatFollowMessagesBottom(shouldStick,true,!!text);
+  else chatScrollMessagesBottom(true);
   if(persist){
     var msg={role:role,text:text||'',ts:ts};
     if(role==='user')msg.cacheHit=false;
@@ -10298,7 +10350,7 @@ async function chatSubmitPendingMessages(options){
   pending.forEach(function(m){delete m.sendFailed;delete m.failedAt;chatMarkMessageFresh(m)});
   pending.forEach(function(m){chatUpdateMessageRowOnly(chatMessages.indexOf(m))});
   chatSaveLocalMessagesDeferred();
-  chatScrollMessagesBottom(true);
+  chatFollowMessagesBottom(chatShouldFollowMessages(),true,false);
   if(!out||!out.parentNode)out=chatAddBubble('assistant','',false);
   if(requestState)requestState.out=out;
   var route=await mainRouteReadyPromise;
@@ -10582,7 +10634,7 @@ async function chatSubmitPendingMessages(options){
     if(units.length&&!streamShownCount){streamShownCount=1;streamNextRevealAt=now+150;}
     if(units.length>streamShownCount&&now>=streamNextRevealAt){streamShownCount++;streamNextRevealAt=now+150;}
     var shown=Math.min(streamShownCount,units.length);
-    var shouldStick=chatIsMessagesNearBottom();
+    var shouldStick=chatShouldFollowMessages();
     if((visibleThinking||toolEvents.length)&&!streamAux&&out.parentNode){
       streamAux=document.createElement('div');
       streamAux.className='chat-stream-aux';
