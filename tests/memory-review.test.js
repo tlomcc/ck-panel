@@ -39,7 +39,7 @@ const server=http.createServer((req,res)=>{
    try{console.log(width,dark,await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/memory-review.js'),'utf8')))}
    catch(e){await shot('failure-'+width+'-'+dark);throw e}
    for(const destination of ['topics']){
-    await evaluate(destination==='topic-api'?"navTo('apiconfig');switchApiTab('topics')":destination==='experiment'?"navTo('apiconfig');switchApiTab('experiment')":`navTo('${destination}')`);
+    await evaluate(destination==='topic-api'?"navTo('apiconfig');switchApiTab('topics')":destination==='recall'?"navTo('apiconfig');switchApiTab('recall')":`navTo('${destination}')`);
     await pause(80);
     const geometry=await evaluate(`({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,duplicates:(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.length-new Set(ids).size})()})`);
     assert(geometry.scroll<=geometry.width+1,JSON.stringify({destination,width,...geometry}));assert.equal(geometry.duplicates,0);

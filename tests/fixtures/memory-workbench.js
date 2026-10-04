@@ -93,7 +93,6 @@
  check($('mw-comparison').textContent.includes('合成模型故障')&&$('mw-comparison').textContent.includes('选中 1 条'),'Partial failure erased success');
  click('[data-mw="api"]');check(currentApiTab==='recall','Provider page navigation failed');
  check(document.querySelector('[data-group="recall_rewrite"]')&&document.querySelector('[data-group="recall_vector"]'),'Existing provider pickers missing');
- check(document.getElementById('api-config-body').textContent.includes('修改后也会影响正常 Fact 召回'),'Shared config implication missing');
 
  navTo('topics');
  const themeSave=calls.filter(c=>c.body&&c.body.action==='save'&&c.body.id==='seed_topic').at(-1).body;

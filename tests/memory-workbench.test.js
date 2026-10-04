@@ -43,8 +43,8 @@ const server=http.createServer((req,res)=>{
     const g=await evaluate('({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth})');assert(g.scroll<=g.width+1,JSON.stringify({page,width,...g}));
     await shot('library-'+page+'-'+width+'-'+dark);
    }
-   for(const destination of ['recall-lab','topics','experiment','topic-api']){
-    await evaluate(destination==='topic-api'?"navTo('apiconfig');switchApiTab('topics')":destination==='experiment'?"navTo('apiconfig');switchApiTab('experiment')":`navTo('${destination}')`);
+   for(const destination of ['recall-lab','topics','recall','topic-api']){
+    await evaluate(destination==='topic-api'?"navTo('apiconfig');switchApiTab('topics')":destination==='recall'?"navTo('apiconfig');switchApiTab('recall')":`navTo('${destination}')`);
     await pause(80);
     const geometry=await evaluate(`({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,duplicates:(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.length-new Set(ids).size})()})`);
     assert(geometry.scroll<=geometry.width+1,JSON.stringify({destination,width,...geometry}));assert.equal(geometry.duplicates,0);
