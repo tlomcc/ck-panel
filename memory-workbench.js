@@ -25,9 +25,9 @@
   function buildTopics(){
     var page=el('tab-topics');state.view='groups';state.group='';state.query='';state.materialLimit=30;state.materialOrder='recent';state.materialQuery='';
     page.innerHTML=header('主题记忆','从一个主题，读回事情的前因后果。','M5 4h14v16H5zM9 4v16M12 8h4M12 12h4M12 16h2')+
-      '<div class="mw-library-toolbar"><label class="mw-directory-search"><span class="sr-only">搜索主题目录</span><input id="mw-directory-query" type="search" placeholder="搜索大主题、小主题或摘要" autocomplete="off"></label>'+button('new','新建小主题')+button('monitor','整理状态')+'<details class="mw-menu"><summary aria-label="更多目录操作">···</summary><div>'+button('reload','刷新目录')+button('topic-api','主题 API')+'</div></details></div>'+
-      '<p id="mw-status" class="mw-library-status" role="status">正在读取主题目录…</p><nav id="mw-breadcrumb" class="mw-breadcrumb" aria-label="主题路径"></nav><div id="mw-directory-heading"></div><div id="mw-topics-list" class="mw-directory-grid"></div><div id="mw-topic-editor"></div>'+
-      '<details class="mw-library-help"><summary>主题、摘要与召回如何使用</summary><p>大主题收纳小主题，小主题用摘要介绍脉络，下面保留可核对的明细。你可以直接改名、修改摘要与说明、移动归属、移出材料、关闭召回或暂停整理。自动处理记录可在状态页查看和撤销。编辑目录不会删除原始 Fact。</p></details>';
+      '<div class="mw-library-toolbar"><label class="mw-directory-search"><span class="sr-only">搜索主题目录</span><input id="mw-directory-query" type="search" placeholder="搜索大主题、小主题或摘要" autocomplete="off"></label>'+button('new','新建小主题')+button('monitor','整理状态')+button('events','全部事件')+'<details class="mw-menu"><summary aria-label="更多目录操作">···</summary><div>'+button('reload','刷新目录')+button('topic-api','主题 API')+'</div></details></div>'+
+      '<p id="mw-status" class="mw-library-status" role="status">正在读取主题目录…</p><nav id="mw-breadcrumb" class="mw-breadcrumb" aria-label="主题路径"></nav><div id="mw-directory-heading"></div><div id="mw-topics-list" class="mw-directory-grid"></div><div id="mw-topic-editor"></div><section id="mw-events" class="mw-reader" hidden></section>'+
+      '<details class="mw-library-help"><summary>主题、摘要与召回如何使用</summary><p>大主题收纳小主题，主题负责归类和浏览，事件记录事情的起因、变化和结果，Fact 保留原始证据。主题摘要用于目录介绍，C 召回以事件为准。你可以直接改名、修改摘要与说明、移动归属、移出材料、关闭召回或暂停整理。自动处理记录可在状态页查看和撤销。编辑目录不会删除原始 Fact。</p></details>';
     page.addEventListener('click',onTopicAction);
     page.addEventListener('input',function(e){
       var id=e.target.id;
@@ -102,7 +102,7 @@
     var fresh=!state.topics.some(function(t){return t.id===d.id});
     root.innerHTML='<section class="mw-reader"><header class="mw-reader-head"><div><span class="mw-directory-kicker">小主题</span><h3 tabindex="-1">'+esc(d.title||'新建小主题')+'</h3></div><label class="mw-recall-switch"><input id="mw-enabled" type="checkbox" role="switch" '+(d.recall_enabled!==false?'checked':'')+'><span class="mw-switch-track" aria-hidden="true"></span><span>允许召回</span></label></header>'+
       '<p class="mw-reader-summary">'+esc(d.summary||'摘要待更新。可以先阅读明细，或在下方编辑摘要。')+'</p><div class="mw-save-line"><span id="mw-draft-status" role="status">已保存</span>'+button('save','保存改动','id="mw-save"')+'</div>'+
-      '<details class="mw-edit-panel"'+(fresh||state.dirty?' open':'')+'><summary>编辑名称、摘要与归属</summary><fieldset id="mw-editor-fields"><div class="mw-form-pair"><label>小主题名称<input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"></label><label>所属大主题<input id="mw-group" maxlength="80" list="mw-group-options" value="'+escAttr(d.group_title||'')+'" placeholder="选择已有目录，或输入新名称"></label></div><datalist id="mw-group-options">'+Array.from(new Set(state.topics.map(function(t){return t.group_title}).filter(Boolean))).map(function(n){return '<option value="'+escAttr(n)+'"></option>'}).join('')+'</datalist><label>小主题摘要<textarea id="mw-summary" maxlength="360" rows="4" placeholder="简明写出事情的脉络">'+esc(d.summary||'')+'</textarea></label><label>补充说明<textarea id="mw-note" maxlength="2000" rows="3">'+esc(d.note||'')+'</textarea></label><label>别名<input id="mw-aliases" value="'+escAttr((d.aliases||[]).join('，'))+'" maxlength="970" placeholder="用逗号分隔"></label></fieldset><p class="mw-note">你的编辑直接生效。摘要随后仅在材料或目录内容发生变化时重新整理；后台处理可到状态页暂停。</p><div class="mw-toolbar">'+button('copy','复制主题内容')+button('delete','删除此主题','id="mw-delete"')+'</div></details></section>'+
+      '<details class="mw-edit-panel"'+(fresh||state.dirty?' open':'')+'><summary>编辑名称、摘要与归属</summary><fieldset id="mw-editor-fields"><div class="mw-form-pair"><label>小主题名称<input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"></label><label>所属大主题<input id="mw-group" maxlength="80" list="mw-group-options" value="'+escAttr(d.group_title||'')+'" placeholder="选择已有目录，或输入新名称"></label></div><datalist id="mw-group-options">'+Array.from(new Set(state.topics.map(function(t){return t.group_title}).filter(Boolean))).map(function(n){return '<option value="'+escAttr(n)+'"></option>'}).join('')+'</datalist><label>小主题摘要<textarea id="mw-summary" maxlength="360" rows="4" placeholder="简明写出事情的脉络">'+esc(d.summary||'')+'</textarea></label><label>补充说明<textarea id="mw-note" maxlength="2000" rows="3">'+esc(d.note||'')+'</textarea></label><label>别名<input id="mw-aliases" value="'+escAttr((d.aliases||[]).join('，'))+'" maxlength="970" placeholder="用逗号分隔"></label></fieldset><p class="mw-note">你的编辑直接生效。摘要随后仅在材料或目录内容发生变化时重新整理；后台处理可到状态页暂停。</p><div class="mw-toolbar">'+button('topic-events','查看相关事件')+button('copy','复制主题内容')+button('delete','删除此主题','id="mw-delete"')+'</div></details></section>'+
       '<section class="mw-material-section"><div class="mw-directory-heading"><h3 id="mw-material-count"></h3><label class="mw-order-label"><span class="sr-only">明细时间排序</span><select id="mw-material-order"><option value="recent"'+(state.materialOrder!=='oldest'?' selected':'')+'>最近在前</option><option value="oldest"'+(state.materialOrder==='oldest'?' selected':'')+'>从早到晚</option></select></label></div><label class="mw-material-filter"><span class="sr-only">搜索此主题的明细</span><input id="mw-material-query" type="search" value="'+escAttr(state.materialQuery||'')+'" placeholder="在这个小主题中搜索"></label><div id="mw-materials" class="mw-timeline"></div><div class="mw-more-row">'+button('material-more','继续显示','id="mw-material-more" hidden')+'<span id="mw-material-page"></span></div></section>';
     renderMaterials();syncButtons();
   }
@@ -146,6 +146,10 @@
     var b=e.target.closest('[data-mw]');if(!b||b.disabled)return;var action=b.dataset.mw,id=b.dataset.id;
     if(action==='topic-api'){navTo('apiconfig');switchApiTab('topics');return}
     if(action==='monitor'){navTo('status');if(window.ckSelectStatusTab)ckSelectStatusTab('topics');return}
+    if(action==='events'||action==='topic-events'){await showEvents(action==='topic-events'&&state.draft?state.draft.id:'',false);return}
+    if(action==='events-git'){await showEvents(state.eventTopic||'',true);return}
+    if(action==='events-vps'){await showEvents(state.eventTopic||'',false);return}
+    if(action==='events-close'){el('mw-events').hidden=true;return}
     if(action==='fact'){openFactDetail(id);return}
     if(action==='copy'){if(state.draft)ckCopyText(JSON.stringify(state.draft,null,2)).then(function(){toast('主题内容已复制')});return}
     if(action==='reload'){await load(true);return}
@@ -167,20 +171,34 @@
     if(action==='remove'){state.draft.materials=state.draft.materials.filter(function(m){return m.fact_id!==id});markDirty();renderMaterials();message('mw-status','已从草稿移出，保存后生效；原始 Fact 保留。');return}
   }
 
+  async function showEvents(topic,fromGit){
+    var key=state.key,seq=(state.eventSeq||0)+1;state.eventSeq=seq;state.eventTopic=topic;
+    var root=el('mw-events');root.hidden=false;root.textContent='正在读取事件记忆…';
+    try{
+      var data=await request('/ck/event-memories'+(fromGit?'?source=git':''));
+      if(!validKey(key)||state.eventSeq!==seq)return;
+      var events=data.events.filter(function(e){return !topic||(e.topic_ids||[]).includes(topic)});
+      var git=data.git||{},status=data.status||{};
+      root.innerHTML='<header class="mw-reader-head"><h3>事件记忆'+(fromGit?' · Git 备份':'')+'</h3>'+button('events-close','收起')+'</header><div class="mw-toolbar">'+button('events-vps','刷新 VPS 内容')+button('events-git','拉取 Git 备份')+'</div><p class="mw-note">'+esc(fromGit?'这是独立保存的备份，可能包含已失效的旧记录；聊天只召回当前证据有效的事件。':'这是 VPS 已预加载、当前可供 C 召回的事件。点击出处可核对原始 Fact。')+'</p><p role="status">'+events.length+' 条事件 · '+esc(git.status==='synced'?'Git 已同步':git.status==='restored'?'已从 Git 恢复':git.status==='retry'?'Git 同步待重试':'Git 同步待确认')+(status.manual_pending_scopes?' · '+status.manual_pending_scopes+' 组旧材料待人工整理':'')+'</p>'+
+        (events.map(function(event){return '<article class="mw-card"><h4>'+esc(event.title)+'</h4>'+event.beats.map(function(beat){return '<p>'+esc(beat.text)+'</p><div class="mw-toolbar">'+beat.fact_ids.map(function(fid){return button('fact','查看出处','data-id="'+escAttr(fid)+'"')}).join('')+'</div>'}).join('')+(event.unresolved?'<p class="mw-note">尚未确定：'+esc(event.unresolved)+'</p>':'')+'<details><summary>查看召回正文</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(event.injection)+'</pre><p class="mw-note">这是该事件的正文。实际注入可能包含其他命中事件，并使用网关统一的记忆边界包装。</p></details></article>'}).join('')||'<p>暂无可显示事件。旧材料正在分批人工整理，新变化由后台更新。</p>');
+      root.scrollIntoView({behavior:'smooth',block:'start'});
+    }catch(e){if(validKey(key)&&state.eventSeq===seq)root.textContent=e.message}
+  }
+
   function buildLab(){
     var page=el('tab-recall-lab');
     page.innerHTML=header('召回实验','用同一个问题，对照 A、B、C 会想起哪些 Fact。','M5 5h5v14H5zM14 5h5v14h-5M7 9h1M16 13h1')+
-      '<section class="mw-card"><form id="mw-lab-form"><label for="mw-lab-query">想测试的问题</label><textarea id="mw-lab-query" rows="3" maxlength="2000" required placeholder="例如：上次说的旅行安排是什么？"></textarea><details class="mw-context"><summary>补充前文（可选）</summary><label for="mw-lab-context">上一条用户消息</label><textarea id="mw-lab-context" rows="2" maxlength="2000" placeholder="用于理解“那个”“上次”等指代；不会读取聊天窗口历史。"></textarea></details><div class="mw-toolbar"><label for="mw-lab-mode">运行方案</label><select id="mw-lab-mode"><option value="both">A / B 对比</option><option value="all">A / B / C 对比</option><option value="c">只运行 C（主题脉络）</option><option value="a">只运行 A（严格）</option><option value="b">只运行 B（宽松）</option></select><button class="btn btn-blue btn-sm" id="mw-lab-run" type="submit">运行对比</button>'+button('api','选择供应商与模型')+'</div></form><p class="mw-cost">仅点击运行时调用现有召回 API，可能计费。A/B 对比各跑一次，B 可能包含改写和精筛两步；提前跳过或缓存命中时调用会减少。</p><p class="mw-note">使用“召回 → 意图改写、向量化”配置。实验不发送聊天回复、不记召回次数、不改变聊天设置；本页不模拟窗口冷却。C 使用主题 API 独立选择摘要与目录，不调用 B；实验不继续展开材料。</p><p id="mw-provider-summary" class="mw-note"></p></section><p class="mw-status" id="mw-lab-status" role="status">填写问题后运行。模型结果可能波动，命中多不等于更相关。</p><div id="mw-comparison" class="mw-comparison"></div>';
+      '<section class="mw-card"><form id="mw-lab-form"><label for="mw-lab-query">想测试的问题</label><textarea id="mw-lab-query" rows="3" maxlength="2000" required placeholder="例如：上次说的旅行安排是什么？"></textarea><details class="mw-context"><summary>补充前文（可选）</summary><label for="mw-lab-context">上一条用户消息</label><textarea id="mw-lab-context" rows="2" maxlength="2000" placeholder="用于理解“那个”“上次”等指代；不会读取聊天窗口历史。"></textarea></details><div class="mw-toolbar"><label for="mw-lab-mode">运行方案</label><select id="mw-lab-mode"><option value="both">A / B 对比</option><option value="all">A / B / C 对比</option><option value="c">只运行 C（事件脉络）</option><option value="a">只运行 A（严格）</option><option value="b">只运行 B（宽松）</option></select><button class="btn btn-blue btn-sm" id="mw-lab-run" type="submit">运行对比</button>'+button('api','选择供应商与模型')+'</div></form><p class="mw-cost">仅点击运行时调用现有召回 API，可能计费。A/B 对比各跑一次，B 可能包含改写和精筛两步；提前跳过或缓存命中时调用会减少。</p><p class="mw-note">使用“召回 → 意图改写、向量化”配置。实验不发送聊天回复、不记召回次数、不改变聊天设置；本页不模拟窗口冷却。C 从 VPS 预加载的事件中选择相关脉络，使用召回 API；事件整理在后台完成。尚未整理的旧材料暂时从内存中的 Fact 补充。</p><p id="mw-provider-summary" class="mw-note"></p></section><p class="mw-status" id="mw-lab-status" role="status">填写问题后运行。模型结果可能波动，命中多不等于更相关。</p><div id="mw-comparison" class="mw-comparison"></div>';
     el('mw-lab-form').addEventListener('submit',function(e){e.preventDefault();runLab()});
-    page.addEventListener('click',function(e){var b=e.target.closest('[data-mw]');if(!b)return;if(b.dataset.mw==='api'){navTo('apiconfig');switchApiTab('experiment')}if(b.dataset.mw==='fact')openFactDetail(b.dataset.id)});
+    page.addEventListener('click',function(e){var b=e.target.closest('[data-mw]');if(!b)return;if(b.dataset.mw==='api'){navTo('apiconfig');switchApiTab('recall')}if(b.dataset.mw==='fact')openFactDetail(b.dataset.id)});
     el('mw-lab-mode').addEventListener('change',function(){el('mw-lab-run').textContent=this.value==='both'?'运行对比':'运行模拟'});
   }
   function providerSummary(){
-    if(!apiProvidersLoaded){message('mw-provider-summary','供应商详情可在“实验 API”页查看和选择。');return}
+    if(!apiProvidersLoaded){message('mw-provider-summary','供应商详情可在“API → 召回”页查看和选择。');return}
     message('mw-provider-summary',['recall_rewrite','recall_vector'].map(function(group){var s=apiGroupSlot(group),p=findLibraryProvider(s.current);return (group==='recall_rewrite'?'改写／精筛':'向量')+'：'+(p?providerDisplayName(p)+' · '+(s.model||p.model||'未选模型'):'使用现有后端配置（请在 API 页核对）')}).join('；'));
   }
   function resultMarkup(path,result){
-    var label=path==='a'?'A · 严格':path==='c'?'C · 主题脉络':'B · 宽松';
+    var label=path==='a'?'A · 严格':path==='c'?'C · 事件脉络':'B · 宽松';
     if(result.pending)return '<section class="mw-card"><h3>'+label+'</h3><p class="mw-note">正在运行…</p></section>';
     if(result.error)return '<section class="mw-card"><h3>'+label+'</h3><p class="mw-status">'+esc(result.error)+'</p></section>';
     var d=result.diag||{},items=result.items||[],candidates=d.candidate_preview||[],topics=result.topics||[];

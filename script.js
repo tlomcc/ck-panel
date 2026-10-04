@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v284-topic-history-status';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v285-preloaded-event-memory';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2788,7 +2788,7 @@ function chatNormalizeTimeInjectionEveryRounds(value){
 }
 function chatFactRecallModeMeta(value){
   var mode=chatNormalizeFactRecallMode(value);
-  if(mode==='c')return {value:'c',label:'C（主题脉络）',shortLabel:'C',debugText:'使用主题 API，根据大、小主题摘要独立判断相关性，可零召回；按需分页读取时间线和明细，不调用 B。'};
+  if(mode==='c')return {value:'c',label:'C（事件脉络）',shortLabel:'C',debugText:'从 VPS 预加载事件中选择完整脉络，可零召回；使用召回 API，整理和加载在后台完成。未整理的旧材料暂从内存 Fact 补充。'};
   return mode==='b'
     ? {value:'b',label:'B（宽松）',shortLabel:'B',debugText:'宽松过滤 + 强制保底 + 模型精筛'}
     : {value:'a',label:'A（严格）',shortLabel:'A',debugText:'小模型先判定；PASS 立即停止；通过后最多注入 1 条高匹配 Fact'};
@@ -11208,7 +11208,6 @@ var API_TABS=[
     {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
   ]},
   {key:'topics',label:'主题 API',info:'手动找材料与后台自动整理共用主题模型，复用现有 Fact 和向量。开启自动整理后按预算分批运行，确定的直接归组，有疑点的交给你审批；后续整理会先参考你的处理意见。',groups:[{key:'topic_materials',label:'主题选材',info:'为主题选材和自动整理选择供应商与模型（OpenAI 兼容接口）。自动整理开关、每日调用上限与审批箱位于“主题记忆”；未配置模型时后台等待，不会重新提取 Fact。'}]},
-  {key:'experiment',label:'实验 API',info:'召回实验复用下面两组 Fact 召回配置。修改后也会影响正常 Fact 召回；A/B/C 比较只在实验页点击运行时调用，可能产生模型费用。主题智能选材另在“主题 API”配置；C 聊天沿用召回 API。',sharedRecall:true},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}
@@ -12559,7 +12558,7 @@ function renderApiAssignments(tab){
   var list=providerLibraryList();
   var html=apiPageHeadHtml(tab.label,'选择此类任务使用的供应商和模型。','');
   html+=renderApiIntro(tab);
-  var groups=tab.sharedRecall?findApiTab('recall').groups:(tab.groups||[]);
+  var groups=tab.groups||[];
   if(!list.length){
     html+='<div class="api-empty-callout"><b>先添加供应商</b><p>功能页只负责选择供应商；请到供应商页新增 API URL / Key。</p><button class="prov-add" type="button" onclick="switchApiTab(\'providers\')">去添加供应商</button></div>';
     return html;

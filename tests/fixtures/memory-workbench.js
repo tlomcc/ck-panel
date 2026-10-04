@@ -26,6 +26,7 @@
    }
    if(u.pathname==='/entity-facts'){const start=Number(u.searchParams.get('offset')||0),limit=Number(u.searchParams.get('limit')||100),items=facts.slice(start,start+limit);return response({ok:true,items,source:'standalone',generation:'fixture',counts:{},facets:{},pagination:{total:31,next_offset:start+items.length,has_more:start+items.length<31}})}
    if(u.pathname.startsWith('/entity-facts/'))return response({ok:true,item:facts.find(f=>f.fact_id===decodeURIComponent(u.pathname.split('/').pop())),generation:'fixture'});
+   if(u.pathname==='/ck/event-memories')return response({ok:true,events:[{title:'旅行 <img src=x onerror="window.bad=7">',topic_ids:['seed_topic'],beats:[{text:'原定出发，后来取消。',fact_ids:['fact-0']}],injection:'[相关记忆：旅行]\n原定出发，后来取消。'}],git:{status:'synced'},status:{manual_pending_scopes:12}});
    if(u.pathname==='/ck/recall-experiment'){
      if(holdProbe){const pending=holdProbe;holdProbe=null;await pending}
      if(probeFailure&&body.path==='b')return response({ok:false,error:'合成模型故障'},503);
@@ -48,6 +49,10 @@
    click('[data-mw="select"][data-id="seed_topic"]');await wait(()=>$('mw-title'));
  }
  await openSeed();check(document.querySelectorAll('#mw-materials .mw-material').length===30,'Initial material page must be bounded');
+ click('[data-mw="topic-events"]');await wait(()=>$('mw-events').textContent.includes('原定出发'));
+ check(!$('mw-events').querySelector('img')&&!window.bad,'Event narrative HTML was not escaped');
+ click('[data-mw="events-git"]');await wait(()=>calls.some(c=>c.path==='/ck/event-memories'&&c.query.includes('source=git')));
+ await wait(()=>$('mw-events').textContent.includes('Git 备份'));click('[data-mw="events-close"]');
  check(document.querySelector('#mw-materials time').textContent==='2026.10.2','Recent-first date sorting failed');
  click('#mw-material-more');check(document.querySelectorAll('#mw-materials .mw-material').length===31,'Material pagination failed');
  $('mw-material-order').value='oldest';$('mw-material-order').dispatchEvent(new Event('change',{bubbles:true}));
@@ -86,7 +91,7 @@
  check($('mw-lab-status').textContent.includes('只有 B 1 条'),'Comparison sets incorrect');check(!window.bad&&!document.querySelector('#mw-comparison script'),'Unescaped result');
  probeFailure=true;$('mw-lab-form').requestSubmit();await wait(()=>$('mw-lab-status').textContent.includes('1 个方案未成功'));
  check($('mw-comparison').textContent.includes('合成模型故障')&&$('mw-comparison').textContent.includes('选中 1 条'),'Partial failure erased success');
- click('[data-mw="api"]');check(currentApiTab==='experiment','Provider page navigation failed');
+ click('[data-mw="api"]');check(currentApiTab==='recall','Provider page navigation failed');
  check(document.querySelector('[data-group="recall_rewrite"]')&&document.querySelector('[data-group="recall_vector"]'),'Existing provider pickers missing');
  check(document.getElementById('api-config-body').textContent.includes('修改后也会影响正常 Fact 召回'),'Shared config implication missing');
 
@@ -96,7 +101,7 @@
  click('[data-mw="topic-api"]');check(currentApiTab==='topics'&&document.querySelector('[data-group="topic_materials"]'),'Theme supplier selection missing');
  check(document.querySelector('[data-subtab="topics"].active'),'Theme API navigation missing');
  navTo('recall-lab');probeFailure=false;$('mw-lab-mode').value='all';$('mw-lab-form').requestSubmit();await wait(()=>$('mw-lab-status').textContent.includes('实验完成'));
- check($('mw-comparison').textContent.includes('C · 主题脉络'),'C comparison missing');
+ check($('mw-comparison').textContent.includes('C · 事件脉络'),'C comparison missing');
  check(calls.filter(c=>c.path==='/ck/recall-experiment').at(-1).body.path==='c','C request not sent');
  check(chatNormalizeFactRecallMode('c')==='c'&&chatFactRecallModeMeta('c').shortLabel==='C','C config normalized away');
  check(document.querySelector('input[name="chat-fact-recall-mode"][value="c"]'),'C chat selector missing');
