@@ -2,7 +2,7 @@
 var ckStatusTab='fact';
 (function(){
   'use strict';
-  var timer=0,seq=0,controller=null,principal=null,state={topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null}};
+  var timer=0,seq=0,controller=null,principal=null,state={events:{rows:[],cursor:null,filter:'all',data:null},topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null}};
   function el(id){return document.getElementById(id)}
   function escape(value){return esc(String(value==null?'—':value))}
   function attr(value){return escAttr(String(value==null?'':value))}
@@ -17,9 +17,10 @@ var ckStatusTab='fact';
   function chip(text,kind){return '<span class="mm-state '+(kind||'')+'">'+escape(text)+'</span>'}
   function pairs(rows){return '<dl class="mm-fields">'+rows.map(function(r){return '<div><dt>'+escape(r[0])+'</dt><dd>'+escape(r[1])+'</dd></div>'}).join('')+'</dl>'}
   function statistic(title,value,detail){return '<div class="mm-stat"><span>'+escape(title)+'</span><b>'+escape(value)+'</b><small>'+escape(detail)+'</small></div>'}
-  function root(section){return el(section==='topics'?'ck-topic-monitor':'ck-digest-monitor')}
+  function root(section){return el(section==='events'?'ck-event-monitor':section==='topics'?'ck-topic-monitor':'ck-digest-monitor')}
   function build(section){
     if(root(section).querySelector('.mm-overview'))return;
+    if(section==='events'){root(section).innerHTML='<p class="mm-message" role="status">正在读取事件状态…</p><div class="mm-overview"></div>';return;}
     root(section).innerHTML='<p class="mm-message" role="status">正在读取最新状态…</p><div class="mm-overview"></div><section class="mm-history"><div class="mm-history-heading"><h3>整理记录</h3><span class="mm-history-help">上海时间 · 保留90天</span></div>'+(section==='topics'?'<div class="mm-filters" role="group" aria-label="记录类型">'+[['runs','整理进度'],['changes','更改明细'],['api','API 调用']].map(function(pair){return '<button type="button" data-mm-filter="'+pair[0]+'" aria-pressed="'+(pair[0]===state[section].filter)+'">'+pair[1]+'</button>'}).join('')+'</div>':'')+'<div class="mm-view-intro"></div><div class="mm-records" aria-live="polite"></div><button type="button" class="btn btn-outline btn-sm mm-more" hidden>加载更早记录</button><div class="mm-legacy"></div></section>';
     if(root(section).__mmBound)return;root(section).__mmBound=true;
     root(section).addEventListener('click',function(e){
@@ -40,6 +41,21 @@ var ckStatusTab='fact';
       var sessions=data.sessions||[],schedule=data.schedule||{},running=sessions.filter(function(s){return s.status==='running'}).length,pending=sessions.reduce(function(n,s){return n+(s.pending_groups||0)},0);
       box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div><p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；准备好也不会立即改变聊天，等 1 小时缓存过期后，在下一条消息发送前同步。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">打开聊天后，现有会话和待总结内容会自动同步到这里。</p>')+'</div>';
     }
+  }
+  function renderEvents(data){
+    var r=root('events'),p=data.progress||{},c=data.control||{},pre=data.preload||{},g=data.git||{},current=data.current||{},failures=data.failures||[];
+    var stages={model:'正在整理事件',audit:'正在核对证据',validate:'正在核对最新来源',updated:'已保存事件',retry:'等待重试',interrupted:'上次任务中断，等待后台检查',pause:'暂停自动整理',resume:'恢复自动整理',check:'请求后台检查',synced:'已同步',pending:'等待同步'};
+    function stage(v){return stages[v]||v||'等待新变化'}
+    var enabled=c.enabled!==false,active=['model','audit','validate'].includes(current.status),checked=p.checked_at||0;
+    var status=!enabled?'自动整理已暂停':pre.organizer_enabled===false?'主题整理总开关已暂停':active?stage(current.status):'自动整理已开启';
+    r.querySelector('.mm-message').textContent='观测于 '+clock(data.observed_at);
+    r.querySelector('.mm-overview').innerHTML='<div class="mm-summary-line"><h3>事件自动化</h3>'+chip(status,active?'live':'')+'</div><p class="mm-current-note">每分钟在 VPS 后台检查新变化，整理后核对证据并预加载。旧资料由人工梳理。聊天直接使用已经就绪的记忆。</p><div class="mm-stat-grid">'+statistic('已整理事件',num(p.events),'已就绪 '+num(p.ready_scopes)+' / '+num(p.scope_count)+' 组')+statistic('新增变化待自动整理',num(p.automatic_pending_scopes),'失败与冷却中的任务也计入待办')+statistic('旧资料待人工整理',num(p.manual_pending_scopes),'不会自动整批交给模型')+statistic('预加载',pre.ready?'已就绪':'尚未就绪',num(pre.events)+' 条事件 · '+num(pre.fallback_facts)+' 条原始记录过渡')+'</div>'+pairs([['最近后台检查',clock(checked)],['待检查请求',c.requested_at>checked?'已排队，下次后台检查处理':'无'],['当前 / 最近任务',stage(current.status)],['任务对象',current.scope||'—'],['最近任务耗时',current.duration_ms===undefined?'—':(current.duration_ms/1000).toFixed(2)+' 秒'],['今日整理调用',num(p.daily_calls)+' / 120'],['Git 独立备份',stage(g.status)],['Git 同步时间',clock(g.at)],['预加载时间',clock(pre.prepared_at)]])+'<div class="mw-toolbar"><button class="btn btn-outline btn-sm" data-event-action="check">请求后台检查</button><button class="btn btn-outline btn-sm" data-event-action="'+(enabled?'pause':'resume')+'">'+(enabled?'暂停自动整理':'恢复自动整理')+'</button><button class="btn btn-outline btn-sm" data-event-action="retry">重试失败任务</button></div><p class="mw-note">操作在下一次后台检查生效，通常不超过一分钟；有任务运行时须等当前步骤结束。暂停不影响已预加载的召回。</p><details><summary>自动化 API 与备份位置</summary>'+pairs([['事件整理模型（主题材料 API）',((data.api||{}).topic_materials||{}).model||'未配置'],['证据核对模型（召回 API）',((data.api||{}).recall_rewrite||{}).model||'未配置'],['Git 文件',g.path||'尚未同步'],['状态接口','GET /ck/event-automation'],['控制接口','POST /ck/event-automation'],['控制参数','action: check / pause / resume / retry']])+'<div class="mw-toolbar"><button class="btn btn-outline btn-sm" onclick="navTo(\'apiconfig\');switchApiTab(\'topics\')">配置整理模型</button><button class="btn btn-outline btn-sm" onclick="navTo(\'apiconfig\');switchApiTab(\'recall\')">配置核对模型</button></div><p class="mw-note">模型在 CK 的 API 设置中维护。接口使用当前面板 Key，后台任务与聊天独立执行。</p></details><details><summary>当前失败 / 待拆分 · '+failures.length+' 项</summary>'+failures.map(function(f){return pairs([['材料组',f.scope],['原因',f.error==='scope_needs_split'?'材料过大，需拆分后才能自动整理':f.error],['尝试次数',num(f.attempts)],['下次重试',clock(f.retry_at)]])}).join('')+'</details><details><summary>近期执行与操作记录 · 最多保留 200 条</summary>'+((c.history||[]).map(function(x){return '<p><time>'+escape(clock(x.at))+'</time> · '+escape(stage(x.status))+(x.scope?' · '+escape(x.scope):'')+(x.duration_ms!==undefined?' · '+escape((x.duration_ms/1000).toFixed(2))+' 秒':'')+(x.error?' · '+escape(x.error):'')+'</p>'}).join('')||'<p>暂无记录</p>')+'</details>';
+    r.querySelectorAll('[data-event-action]').forEach(function(button){button.onclick=async function(){
+      var key=storedPanelKey(),action=button.dataset.eventAction;button.disabled=true;
+      try{var response=await panelDataFetch(function(auth){if(auth!==key)throw new Error('连接已变化');return GRAPH_API_BASE+'/ck/event-automation'}, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action})},{label:'事件自动化'});var result=await response.json();if(!response.ok||result.ok===false)throw new Error(result.error||'操作失败');if(key===storedPanelKey()&&ckStatusTab==='events'){state.events.data=result;renderEvents(result);}}
+      catch(error){if(key===storedPanelKey())r.querySelector('.mm-message').textContent=error.message;}
+      finally{button.disabled=false;}
+    }});
   }
   function changeDetails(row){
     if(row.change==='summary')return '<div class="mm-diff"><section><h4>更改前</h4><p>'+escape(row.before||'空')+'</p></section><section><h4>更改后</h4><p>'+escape(row.after||'空')+'</p></section></div>';
@@ -88,6 +104,7 @@ var ckStatusTab='fact';
   }
   function render(section){
     var s=state[section],r=root(section);if(!s.data)return;
+    if(section==='events'){renderEvents(s.data);return;}
     var open=new Set(Array.from(r.querySelectorAll('[data-record][open]')).map(function(n){return n.dataset.record}));
     var details=r.querySelector('.mm-current-details'),showDetails=details&&details.open;
     var sessionsOpen=new Set(Array.from(r.querySelectorAll('[data-session][open]')).map(function(n){return n.dataset.session}));
@@ -109,7 +126,7 @@ var ckStatusTab='fact';
     var section=ckStatusTab,key=storedPanelKey(),mySeq=++seq;
     if(principal!==key){
       var changedPrincipal=principal!==null;principal=key;
-      ['topics','digest'].forEach(function(name){state[name]={rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null};root(name).innerHTML='';});
+      ['topics','digest','events'].forEach(function(name){state[name]={rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null};root(name).innerHTML='';});
       if(changedPrincipal&&el('ck-topic-controls').open&&typeof memoryWorkbenchEnter==='function')memoryWorkbenchEnter('topics');
       else if(changedPrincipal&&el('mw-organizer'))el('mw-organizer').innerHTML='';
     }
@@ -118,6 +135,7 @@ var ckStatusTab='fact';
     var signal=requestController.signal,timeout=setTimeout(function(){requestController.abort()},15000);
     build(section);var r=root(section);r.querySelector('.mm-message').textContent='正在刷新…';
     var path='/ck/maintenance/status?section='+section+'&kind='+s.filter+(more&&s.cursor?'&before='+s.cursor:'')+(force?'&refresh=1':'');
+    if(section==='events')path='/ck/event-automation';
     try{
       var response=await panelDataFetch(function(auth){if(auth!==key)throw new Error('连接已变化');return GRAPH_API_BASE+path},{cache:'no-store',signal:signal},{label:'整理状态'});
       var data=await response.json();if(!response.ok||data.ok===false)throw new Error(data.error||'状态读取失败');
@@ -135,16 +153,16 @@ var ckStatusTab='fact';
     finally{clearTimeout(timeout);if(seq===mySeq){controller=null;schedule();}}
   };
   window.ckSelectStatusTab=function(tab){
-    ckStatusTab=['topics','digest'].includes(tab)?tab:'fact';++seq;if(controller)controller.abort();clearTimeout(timer);
-    ['fact','topics','digest'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
-    el('status-sub').textContent=ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'后台准备 · 缓存过期后同步';
+    ckStatusTab=['topics','digest','events'].includes(tab)?tab:'fact';++seq;if(controller)controller.abort();clearTimeout(timer);
+    ['fact','topics','digest','events'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
+    el('status-sub').textContent=ckStatusTab==='events'?'事件整理、Git 备份与预加载':ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'后台准备 · 缓存过期后同步';
     if(ckStatusTab==='fact'){loadDailyStatus(false);startDailyStatusRealtime();}else{stopDailyStatusRealtime();build(ckStatusTab);ckRefreshMaintenance(false);}
   };
   window.ckStatusEnter=function(){ckSelectStatusTab(ckStatusTab)};
   window.ckRefreshStatus=function(){if(ckStatusTab==='fact')loadDailyStatus(true);else ckRefreshMaintenance(true)};
   el('ck-status-tabs').addEventListener('keydown',function(e){
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
-    var tabs=['fact','topics','digest'],index=tabs.indexOf(ckStatusTab);index=e.key==='Home'?0:e.key==='End'?2:(index+(e.key==='ArrowLeft'?2:1))%3;
+    var tabs=['fact','topics','digest','events'],index=tabs.indexOf(ckStatusTab);index=e.key==='Home'?0:e.key==='End'?3:(index+(e.key==='ArrowLeft'?3:1))%4;
     ckSelectStatusTab(tabs[index]);el('ck-status-tab-'+tabs[index]).focus();
   });
   el('ck-topic-controls').addEventListener('toggle',function(){if(this.open&&typeof memoryWorkbenchEnter==='function')memoryWorkbenchEnter('topics')});

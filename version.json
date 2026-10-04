@@ -1,7 +1,7 @@
 {
-  "version": "chat-v286-memory-view-tabs",
+  "version": "chat-v287-event-automation-status",
   "notes": [
-    "主题记忆拆分为“大主题”和“事件”两个独立小tab。",
-    "事件tab保留VPS刷新、Git备份和出处查看；切换tab保留主题草稿。"
+    "状态新增事件整理：后台开关、队列、失败重试、Git同步与预加载状态。",
+    "事件支持搜索和分批查看，整理与证据核对模型可在API设置维护。"
   ]
 }

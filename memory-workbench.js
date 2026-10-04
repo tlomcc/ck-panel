@@ -153,6 +153,7 @@
     if(action==='topic-api'){navTo('apiconfig');switchApiTab('topics');return}
     if(action==='monitor'){navTo('status');if(window.ckSelectStatusTab)ckSelectStatusTab('topics');return}
     if(action==='memory-groups'||action==='memory-events'){await switchMemoryTab(action==='memory-events'?'events':'groups');return}
+    if(action==='events-status'){navTo('status');ckSelectStatusTab('events');return}
     if(action==='events-git'){await showEvents(state.eventTopic||'',true);return}
     if(action==='events-vps'){await showEvents(state.eventTopic||'',false);return}
     if(action==='fact'){openFactDetail(id);return}
@@ -192,10 +193,21 @@
       if(!validKey(key)||state.eventSeq!==seq)return;
       var events=data.events.filter(function(e){return !topic||(e.topic_ids||[]).includes(topic)});
       var git=data.git||{},status=data.status||{};
-      root.innerHTML='<header class="mw-reader-head"><h3>事件记忆'+(fromGit?' · Git 备份':'')+'</h3></header><div class="mw-toolbar">'+button('events-vps','刷新 VPS 内容')+button('events-git','拉取 Git 备份')+'</div><p class="mw-note">'+esc(fromGit?'这是独立保存的备份，可能包含已失效的旧记录；聊天只召回当前证据有效的事件。':'这是 VPS 已预加载、当前可供 C 召回的事件。点击出处可核对原始 Fact。')+'</p><p role="status">'+events.length+' 条事件 · '+esc(git.status==='synced'?'Git 已同步':git.status==='restored'?'已从 Git 恢复':git.status==='retry'?'Git 同步待重试':'Git 同步待确认')+(status.manual_pending_scopes?' · '+status.manual_pending_scopes+' 组旧材料待人工整理':'')+'</p>'+
-        (events.map(function(event){return '<article class="mw-card"><h4>'+esc(event.title)+'</h4>'+event.beats.map(function(beat){return '<p>'+esc(beat.text)+'</p><div class="mw-toolbar">'+beat.fact_ids.map(function(fid){return button('fact','查看出处','data-id="'+escAttr(fid)+'"')}).join('')+'</div>'}).join('')+(event.unresolved?'<p class="mw-note">尚未确定：'+esc(event.unresolved)+'</p>':'')+'<details><summary>查看召回正文</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(event.injection)+'</pre><p class="mw-note">这是该事件的正文。实际注入可能包含其他命中事件，并使用网关统一的记忆边界包装。</p></details></article>'}).join('')||'<p>暂无可显示事件。旧材料正在分批人工整理，新变化由后台更新。</p>');
+      root.innerHTML='<header class="mw-reader-head"><h3>事件记忆'+(fromGit?' · Git 备份':'')+'</h3></header><div class="mw-toolbar">'+button('events-vps','刷新 VPS 内容')+button('events-git','拉取 Git 备份')+button('events-status','自动化与状态')+'</div><p class="mw-note">'+esc(fromGit?'这是独立保存的备份，可能包含已失效的旧记录；聊天只召回当前证据有效的事件。':'这是 VPS 已预加载、当前可供 C 召回的事件。点击出处可核对原始 Fact。')+'</p><p role="status">'+events.length+' 条事件 · '+esc(git.status==='synced'?'Git 已同步':git.status==='restored'?'已从 Git 恢复':git.status==='retry'?'Git 同步待重试':'Git 同步待确认')+(status.manual_pending_scopes?' · '+status.manual_pending_scopes+' 组旧材料待人工整理':'')+'</p>'+
+        '<label for="mw-event-search">查找事件</label><input id="mw-event-search" type="search" placeholder="输入事件、人物或细节"><p id="mw-event-count" class="mw-note"></p><div id="mw-event-cards"></div><button class="btn btn-outline btn-sm" id="mw-event-more" type="button" hidden>显示更多事件</button>';
+      var limit=30;
+      function renderCards(){
+        var query=el('mw-event-search').value.trim().toLowerCase();
+        var matched=events.filter(function(event){return !query||(event.title+' '+event.beats.map(function(b){return b.text}).join(' ')).toLowerCase().includes(query)});
+        el('mw-event-cards').innerHTML=matched.slice(0,limit).map(function(event){return '<article class="mw-card"><h4>'+esc(event.title)+'</h4>'+event.beats.map(function(beat){return '<p>'+esc(beat.text)+'</p><div class="mw-toolbar">'+beat.fact_ids.map(function(fid){return button('fact','查看出处','data-id="'+escAttr(fid)+'"')}).join('')+'</div>'}).join('')+(event.unresolved?'<p class="mw-note">尚未确定：'+esc(event.unresolved)+'</p>':'')+'<details><summary>查看召回正文</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(event.injection)+'</pre><p class="mw-note">这是该事件的正文。实际注入可能包含其他命中事件，并使用网关统一的记忆边界包装。</p></details></article>'}).join('')||'<p>暂无匹配事件。</p>';
+        el('mw-event-count').textContent='显示 '+Math.min(limit,matched.length)+' / '+matched.length+' 条';
+        el('mw-event-more').hidden=limit>=matched.length;
+      }
+      el('mw-event-search').oninput=function(){limit=30;renderCards()};
+      el('mw-event-more').onclick=function(){limit+=30;renderCards()};
+      renderCards();
 
-    }catch(e){if(validKey(key)&&state.eventSeq===seq)root.textContent=e.message}
+    }catch(e){if(validKey(key)&&state.eventSeq===seq)root.innerHTML='<p role="alert">'+esc(e.message)+'</p>'+button('events-vps','重新读取')}
   }
 
   function buildLab(){
