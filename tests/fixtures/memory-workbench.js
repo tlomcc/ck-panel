@@ -49,10 +49,12 @@
    click('[data-mw="select"][data-id="seed_topic"]');await wait(()=>$('mw-title'));
  }
  await openSeed();check(document.querySelectorAll('#mw-materials .mw-material').length===30,'Initial material page must be bounded');
- click('[data-mw="topic-events"]');await wait(()=>$('mw-events').textContent.includes('原定出发'));
+ click('[data-mw="memory-events"]');await wait(()=>$('mw-events').textContent.includes('原定出发'));
+ check($('mw-groups-panel').hidden&&!$('mw-events').hidden,'Events and directory must be separate tabs');
  check(!$('mw-events').querySelector('img')&&!window.bad,'Event narrative HTML was not escaped');
  click('[data-mw="events-git"]');await wait(()=>calls.some(c=>c.path==='/ck/event-memories'&&c.query.includes('source=git')));
- await wait(()=>$('mw-events').textContent.includes('Git 备份'));click('[data-mw="events-close"]');
+ await wait(()=>$('mw-events').textContent.includes('Git 备份'));click('[data-mw="memory-groups"]');
+ check(!$('mw-groups-panel').hidden&&$('mw-events').hidden,'Returning to directory must hide events');
  check(document.querySelector('#mw-materials time').textContent==='2026.10.2','Recent-first date sorting failed');
  click('#mw-material-more');check(document.querySelectorAll('#mw-materials .mw-material').length===31,'Material pagination failed');
  $('mw-material-order').value='oldest';$('mw-material-order').dispatchEvent(new Event('change',{bubbles:true}));

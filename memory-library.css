@@ -82,3 +82,10 @@
   #tab-topics .mw-material p{font-size:14px}
 }
 @media(prefers-reduced-motion:reduce){#tab-topics .mw-directory-card,#tab-topics .mw-switch-track,#tab-topics .mw-switch-track:after{transition:none}}
+
+/* The directory and event reader are separate views. */
+#tab-topics .mw-subpage[hidden]{display:none}
+#tab-topics .mw-memory-tabs{display:flex;gap:4px;border-bottom:1px solid var(--nb-line);margin:20px 0}
+#tab-topics .mw-memory-tabs button{appearance:none;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--nb-muted);font:inherit;padding:10px 22px;min-height:44px;cursor:pointer}
+#tab-topics .mw-memory-tabs button[aria-selected="true"]{border-bottom-color:var(--nb-ink);color:var(--nb-ink);font-weight:600}
+#tab-topics .mw-memory-tabs button:focus-visible{outline:2px solid var(--nb-ink);outline-offset:2px}

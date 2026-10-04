@@ -1,7 +1,7 @@
 {
-  "version": "chat-v285-preloaded-event-memory",
+  "version": "chat-v286-memory-view-tabs",
   "notes": [
-    "主题负责归类，C从预加载事件中召回完整脉络；旧材料分批人工整理。",
-    "事件独立备份到Git，支持后台恢复；主题页可查看相关事件和Git备份。"
+    "主题记忆拆分为“大主题”和“事件”两个独立小tab。",
+    "事件tab保留VPS刷新、Git备份和出处查看；切换tab保留主题草稿。"
   ]
 }
