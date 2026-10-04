@@ -25,7 +25,7 @@ function chatNightlyBase(session){var staged=chatDigestStage(session,chatLoadCon
 function chatNightlyConfig(cfg){return Object.assign(chatDigestOptions(cfg),{enabled:cfg.dailyDigestEnabled!==false});}
 function chatNightlyBaseStamp(cfg,session){return chatDigestStamp([chatNightlyBase(session),chatNightlyConfig(cfg)]);}
 function chatNightlyScope(cfg){return chatDigestStamp([cfg.gatewayUrl,cfg.panelKey]);}
-function chatNightlyEndpoint(cfg){return chatDailyDigestEndpoint(cfg).replace(/\/prepare$/,'/queue')+'?key='+encodeURIComponent(cfg.panelKey||'');}
+function chatNightlyEndpoint(cfg){return chatDailyDigestEndpoint(cfg).replace(/\/prepare$/,'/queue')+'?policy=cache-safe-v2&key='+encodeURIComponent(cfg.panelKey||'');}
 function chatRenderNightlyStatus(session){
   session=session||chatCurrentSession();if(!session)return;
   var scope=chatNightlyScope(chatLoadConfig()),state=chatNightlyStatus[session.id]||session.digestSchedule||{};
