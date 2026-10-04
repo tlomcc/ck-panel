@@ -7,7 +7,7 @@ const chrome=process.env.CK_CHROME||'C:\\Program Files\\Google\\Chrome\\Applicat
 if(!fs.existsSync(chrome)){console.log('settings browser: SKIP (Chrome unavailable)');process.exit(0)}
 fs.mkdirSync(out,{recursive:true});
 for(const name of fs.readdirSync(root))if(name.endsWith('.css'))fs.copyFileSync(path.join(root,name),path.join(out,name));
-fs.writeFileSync(path.join(out,'runtime.js'),['chat-ui.js','chat-history.js','chat-digest.js','chat-digest-schedule.js','script.js'].map(name=>fs.readFileSync(path.join(root,name),'utf8').replace(/^init\(\);\s*$/m,'')).join('\n'));
+fs.writeFileSync(path.join(out,'runtime.js'),['chat-ui.js','chat-history.js','chat-digest.js','chat-digest-activation.js','chat-digest-schedule.js','script.js'].map(name=>fs.readFileSync(path.join(root,name),'utf8').replace(/^init\(\);\s*$/m,'')).join('\n'));
 let base=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[\s\S]*?<\/script>/g,'');
 const probe=String.raw`
 window.addEventListener('load',function(){
@@ -134,8 +134,8 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 let socket;
 try{
   let portFile=path.join(profile,'DevToolsActivePort');
-  for(let i=0;i<100&&!fs.existsSync(portFile);i++)await pause(50);
-  const port=fs.readFileSync(portFile,'utf8').split('\n')[0];
+  let port;for(let i=0;i<150;i++){try{port=fs.readFileSync(portFile,'utf8').split('\n')[0];if(port)break}catch(e){if(!['ENOENT','EBUSY','EPERM'].includes(e.code))throw e}await pause(50)}
+  if(!port)throw Error('Chrome debugging port unavailable');
   const targets=await (await fetch('http://127.0.0.1:'+port+'/json/list')).json();
   socket=new WebSocket(targets.find(x=>x.type==='page').webSocketDebuggerUrl);
   await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject});

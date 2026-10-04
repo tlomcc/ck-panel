@@ -17,7 +17,7 @@ function setup(){
   };
   function response(body){return {ok:true,json:async()=>body?{ok:true,status:'queued',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:1,source_stamp:body.base_stamp,base:body.base,result:null}}:{ok:true,sessions:[{status:'queued',snapshot:{revision:1,source_stamp:ctx.chatNightlyBaseStamp(cfg,session),base:ctx.chatNightlyBase(session),result:null}}]}}}
   vm.createContext(ctx);
-  for(const name of ['chat-digest.js','chat-digest-schedule.js'])vm.runInContext(fs.readFileSync(require.resolve('../'+name),'utf8'),ctx);
+  for(const name of ['chat-digest.js','chat-digest-activation.js','chat-digest-schedule.js'])vm.runInContext(fs.readFileSync(require.resolve('../'+name),'utf8'),ctx);
   ctx.chatRenderDailyDigest=()=>{};ctx.chatRenderNightlyStatus=()=>{};
   return {ctx,cfg,session,calls,storage,timers,advance:ms=>now+=ms,response,sync:()=>ctx.chatSyncNightlyDigest(cfg)};
 }
@@ -25,9 +25,9 @@ function result(x,body,revision=2){
   return {ok:true,status:'succeeded',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision,source_stamp:body.base_stamp,
     base:{entries:[{dayKey:'2026-10-03',startTs:x.session.messages[0].ts,endTs:x.session.messages[1].ts,text:'我记下了她的安排。',covered:body.groups.map(g=>g.key)}],rollup:null,omitted:[]},result:{day:'2026-10-04'}}};
 }
-test('Shanghai window is 04:00 inclusive to 07:00 exclusive',()=>{
+test('Shanghai preparation runs all day starting at midnight',()=>{
   const x=setup();
-  for(const [time,expected] of [['03:59:59',false],['04:00:00',true],['06:59:59',true],['07:00:00',false]])assert.equal(x.ctx.chatNightlyWindow(Date.parse('2026-10-04T'+time+'+08:00')).inWindow,expected);
+  for(const [time,expected] of [['00:00:00',true],['03:59:59',true],['07:00:00',true],['23:59:59',true]])assert.equal(x.ctx.chatNightlyWindow(Date.parse('2026-10-04T'+time+'+08:00')).inWindow,expected);
 });
 test('trimming archives complete sources durably before any network work',()=>{
   const x=setup();assert.equal(x.ctx.chatArchiveDigestSources(x.session,x.session.messages),true);
@@ -61,7 +61,8 @@ test('a nightly result arriving during chat waits until the chat finishes',async
   const work=x.sync();x.ctx.chatSending=true;const payload=result(x,body);finish({ok:true,json:async()=>payload});await work;
   assert.equal(x.session.dailyDigests.length,0);
   x.ctx.chatSending=false;x.ctx.fetch=async()=>({ok:true,json:async()=>payload});await x.sync();
-  assert.equal(x.session.dailyDigests[0].text,'我记下了她的安排。');assert.equal(x.session.digestRemote.revision,2);
+  assert.equal(x.session.dailyDigests.length,0);assert.equal(x.session.digestStaged.revision,2);
+  assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),true);assert.equal(x.session.dailyDigests[0].text,'我记下了她的安排。');
 });
 test('an open summary editor is never replaced by a background result',async()=>{
   const x=setup();x.ctx.chatDigestEditors[x.session.id+':detail']={value:'草稿'};
@@ -76,7 +77,7 @@ test('explicit manual edits carry durable priority until acknowledged',async()=>
 test('normal date pruning can adopt an advanced known result without losing manual drafts',async()=>{
   const x=setup();x.session.digestRemote={scope:x.ctx.chatNightlyScope(x.cfg),revision:1};
   x.ctx.fetch=async(u,o)=>{const payload=result(x,JSON.parse(o.body));payload.conflict=true;payload.snapshot.source_stamp='yesterday';return {ok:true,json:async()=>payload}};
-  assert.equal(await x.sync(),true);assert.equal(x.session.dailyDigests.length,1);assert.equal(x.session.digestRemoteConflict,undefined);
+  assert.equal(await x.sync(),true);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.session.digestStaged.revision,2);assert.equal(x.session.digestRemoteConflict,undefined);
 });
 test('an unknown device conflict is visible and preserves local content',async()=>{
   const x=setup();x.ctx.fetch=async(u,o)=>{const payload=result(x,JSON.parse(o.body));payload.conflict=true;payload.snapshot.source_stamp='another-device';return {ok:true,json:async()=>payload}};
@@ -95,4 +96,26 @@ test('network failures retain the outbox and back off before retrying',async()=>
   const x=setup();x.ctx.chatArchiveDigestSources(x.session,x.session.messages);let count=0;
   x.ctx.fetch=async()=>{count++;throw Error('offline')};await x.sync();await x.sync();assert.equal(count,1);assert.equal(x.session.digestPending.length,1);
   x.advance(31000);await x.sync();assert.equal(count,2);assert.equal(JSON.parse([...x.storage.values()][0]).length,1);
+});
+test('background completion and midnight do not change the byte-exact active prompt',async()=>{
+  const x=setup();x.session.dailyDigests=[{dayKey:'2026-10-03',text:'昨天定稿',covered:[]}];
+  const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);x.session.cacheLastReadAt=x.ctx.Date.now();
+  x.ctx.fetch=async(u,o)=>({ok:true,json:async()=>result(x,JSON.parse(o.body))});await x.sync();
+  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),false);
+  x.advance(3599999);assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),false);
+  x.advance(1);assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),true);assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/安排/);
+  const activated=x.ctx.chatDailyDigestPack(x.cfg,x.session);x.advance(86400000);
+  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),activated);
+});
+test('renewed reads defer a ready snapshot, including after restoring saved session state',async()=>{
+  const x=setup();x.ctx.chatDailyDigestPack(x.cfg,x.session);x.session.cacheLastReadAt=x.ctx.Date.now();
+  x.ctx.fetch=async(u,o)=>({ok:true,json:async()=>result(x,JSON.parse(o.body))});await x.sync();
+  const restored=copy(x.session);Object.assign(x.session,restored);x.advance(3500000);x.session.cacheLastReadAt=x.ctx.Date.now();x.advance(100001);
+  assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),false);assert.equal(x.session.digestActivePack.text,'');
+  x.advance(3500000);assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),true);
+});
+test('canceling immediate sync preserves the active snapshot and shows a cache warning',async()=>{
+  const x=setup();x.session.cacheLastReadAt=x.ctx.Date.now();x.ctx.fetch=async(u,o)=>({ok:true,json:async()=>result(x,JSON.parse(o.body))});await x.sync();
+  let prompt;x.ctx.ckConfirmDialog=async(message,options)=>{prompt={message,options};return false};
+  assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.match(prompt.message,/打断现有缓存/);assert.equal(x.session.dailyDigests.length,0);assert.ok(x.session.digestStaged);
 });

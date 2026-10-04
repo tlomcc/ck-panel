@@ -86,3 +86,43 @@
   .ck-status-tabs>button{font-size:13px;padding:11px 4px}
 }
 @media(prefers-reduced-motion:reduce){.ck-status-tabs>button,.chat-compact-tabs>button,.ck-maintenance .mm-progress>span{transition:none}}
+
+/* A task occupies one row; evidence unfolds underneath that same task. */
+.ck-maintenance .mm-history{background:var(--ck-surface);border:1px solid var(--ck-line);border-radius:16px;padding:22px;margin-top:20px}
+.ck-maintenance .mm-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:5px;background:var(--ck-surface-soft);border-radius:11px}
+.ck-maintenance .mm-filters button{min-height:44px;border-color:transparent;background:transparent;font-size:13px}
+.ck-maintenance .mm-filters button[aria-pressed="true"]{background:var(--ck-surface);border-color:var(--ck-accent-soft);box-shadow:0 2px 5px #00000009;font-weight:650}
+.ck-maintenance .mm-view-intro{margin:23px 0 18px}.ck-maintenance .mm-view-intro h4{margin:0;font:600 17px/1.6 var(--ck-font-display)}
+.ck-maintenance .mm-view-intro p{margin:6px 0 0;color:var(--ck-muted);font:12px/1.8 var(--ck-font-body)}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card){margin:0 0 10px;border:1px solid var(--ck-line);border-radius:12px;background:var(--ck-surface);overflow:hidden;padding:0}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card)>summary{display:flex;gap:14px;align-items:center;list-style:none;padding:17px;cursor:pointer;margin:0}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card)>summary::-webkit-details-marker{display:none}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card)>summary>span:nth-last-child(3){flex:1;min-width:0}
+.ck-maintenance .mm-change-card>summary>span:first-child{flex:1;min-width:0}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card) strong{display:block;font:600 14px/1.7 var(--ck-font-body);overflow-wrap:anywhere}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card) small{display:block;color:var(--ck-muted);font:11px/1.8 var(--ck-font-body)}
+.ck-maintenance .mm-change-card>summary>span>span{font-size:12px;color:var(--ck-text-soft);display:block;margin-top:5px}
+.ck-maintenance .mm-run-mark{width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:grid;place-items:center;background:var(--ck-accent-wash);color:var(--ck-accent-strong);font:20px var(--ck-font-data)}
+.ck-maintenance .mm-chevron{color:var(--ck-muted);font-size:18px}.ck-maintenance details[open]>summary>.mm-chevron{transform:rotate(180deg)}
+.ck-maintenance :is(.mm-run-body,.mm-change-body,.mm-call-body){padding:0 20px 17px;border-top:1px solid var(--ck-line-soft)}
+.ck-maintenance .mm-step-list{padding:18px 0 10px;margin:0;list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.ck-maintenance .mm-step-list li{border-top:3px solid var(--ck-line);padding-top:9px;font:12px/1.8 var(--ck-font-body);color:var(--ck-muted)}
+.ck-maintenance .mm-step-list li.done{border-color:var(--ck-accent);color:var(--ck-text)}
+.ck-maintenance .mm-run-events p{display:grid;grid-template-columns:120px 100px minmax(0,1fr);gap:12px;margin:0;padding:9px 0;border-top:1px solid var(--ck-line-soft);font:12px/1.8 var(--ck-font-body)}
+.ck-maintenance .mm-run-events time{color:var(--ck-muted);font:11px/1.8 var(--ck-font-data)}
+.ck-maintenance .mm-run-events b{font-weight:500}.ck-maintenance .mm-run-events span{overflow-wrap:anywhere}
+.ck-maintenance .mm-call-result{flex:none;text-align:right}.ck-maintenance .mm-call-result small{margin-top:5px}
+.ck-maintenance .mm-diff>section{border:1px solid var(--ck-line);border-radius:9px;padding:15px;min-width:0}
+.ck-maintenance .mm-diff>section:last-child{background:var(--ck-accent-wash);border-color:var(--ck-accent-soft)}
+.ck-maintenance .mm-diff p{margin:0;overflow-wrap:anywhere;max-height:360px;overflow:auto}
+.ck-maintenance .mm-empty-state,.ck-maintenance .mm-loading{padding:32px 18px;text-align:center;color:var(--ck-muted);font:13px/1.8 var(--ck-font-body);background:var(--ck-surface-soft);border-radius:12px}
+.ck-maintenance .mm-empty-state b{font-size:15px;color:var(--ck-text-soft)}.ck-maintenance .mm-empty-state p{margin:8px 0 0}
+.ck-maintenance .mm-problem{font-size:13px;line-height:1.8;color:var(--ck-amber)}
+.ck-maintenance button:focus-visible,.ck-maintenance summary:focus-visible{outline:2px solid var(--ck-accent);outline-offset:2px}
+@media(max-width:650px){
+ .ck-maintenance .mm-history{padding:15px 12px}.ck-maintenance .mm-filters button{padding:8px 3px;font-size:12px;white-space:normal}
+ .ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card)>summary{padding:14px 12px;gap:9px}
+ .ck-maintenance .mm-run-mark{display:none}.ck-maintenance .mm-step-list{grid-template-columns:1fr 1fr}
+ .ck-maintenance .mm-run-events p{grid-template-columns:1fr auto;gap:3px 10px}.ck-maintenance .mm-run-events span{grid-column:1/-1}
+ .ck-maintenance :is(.mm-run-body,.mm-change-body,.mm-call-body){padding:0 12px 14px}
+}

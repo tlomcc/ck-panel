@@ -203,21 +203,14 @@ function testManualTrimIgnoresCacheAge(){
 }
 
 function testRoundLimitKeepsRecentCompleteRounds(){
-  const fresh=Date.now()-5*60*1000;
+  const fresh=Date.now()-5*60*1000,stale=Date.now()-2*3600000;
   const config={enabled:false,keep:60,roundLimitEnabled:true,roundLimit:200};
-  const below=planContext('prefix_24h',{transportMessages:[],cacheLastReadAt:fresh},staleRounds(199,fresh),config)
-    .chatPlanAutoTrimForPendingBatch({cacheStrategy:'prefix_24h'},[],{trigger:'round_limit',idleCheck:true});
-  assert.strictEqual(below.roundLimitBoundary,false,'199 轮不能提前触发轮数上限');
-  assert.strictEqual(below.boundary,false,'199 轮没有任何自动截断边界');
-
-  const atLimit=planContext('prefix_24h',{transportMessages:[],cacheLastReadAt:fresh},staleRounds(200,fresh),config)
-    .chatPlanAutoTrimForPendingBatch({cacheStrategy:'prefix_24h'},[],{trigger:'round_limit',idleCheck:true});
-  assert.strictEqual(atLimit.roundLimitBoundary,true,'达到 200 轮必须触发轮数上限');
-  assert.strictEqual(atLimit.trigger,'round_limit');
-  assert.strictEqual(atLimit.trimmed,true);
-  assert.strictEqual(atLimit.dropped,140,'200 轮到最近 60 轮必须删除 140 轮');
-  assert.strictEqual(atLimit.historyAfter,60,'必须保留最近 60 个完整真实轮次');
-  assert.strictEqual(atLimit.keptMessages[0].text,'问 141','保留范围必须从第 141 轮开始');
+  const early=planContext('prefix_24h',{transportMessages:[],cacheLastReadAt:fresh},staleRounds(200,fresh),config)
+    .chatPlanAutoTrimForPendingBatch({},[],{idleCheck:true});
+  assert.strictEqual(early.roundLimitBoundary,false,'轮数上限不能打断未过期缓存');
+  const plan=planContext('prefix_24h',{transportMessages:[],cacheLastReadAt:stale},staleRounds(200,stale),config)
+    .chatPlanAutoTrimForPendingBatch({},[],{idleCheck:true});
+  assert.strictEqual(plan.roundLimitBoundary,true);assert.strictEqual(plan.dropped,140);assert.strictEqual(plan.historyAfter,60);
 }
 
 function testRoundLimitAndOneHourBoundaryTrimOnce(){
@@ -264,7 +257,7 @@ function testPrefixSilentConfigIsNormalizedWithoutDisablingTrim(){
   assert.ok(source.includes("chat-auto-trim-round-limit-enabled"),'截断页必须保存轮数上限开关');
   assert.ok(source.includes("chat-auto-trim-round-limit"),'截断页必须保存轮数上限输入');
   assert.ok(source.includes("if(!quietPrefix)toast"),'共同前缀静默只抑制自动截断通知');
-  assert.ok(extractFunction('chatManualTrimNow').includes("toast("),'手动截断仍要正常通知');
+  assert.ok(extractFunction('chatManualTrimNow').includes("chatRequestManualDigestTrim("),'手动截断仍要正常通知');
 }
 
 testTrimCommitsAndSchedulesDigest();

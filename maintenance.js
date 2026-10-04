@@ -2,7 +2,7 @@
 var ckStatusTab='fact';
 (function(){
   'use strict';
-  var timer=0,seq=0,controller=null,principal=null,state={topics:{rows:[],cursor:null,filter:'all',data:null},digest:{rows:[],cursor:null,filter:'all',data:null}};
+  var timer=0,seq=0,controller=null,principal=null,state={topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null}};
   function el(id){return document.getElementById(id)}
   function escape(value){return esc(String(value==null?'—':value))}
   function attr(value){return escAttr(String(value==null?'':value))}
@@ -12,7 +12,7 @@ var ckStatusTab='fact';
     return new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(date);
   }
   function num(value){return value===undefined||value===null?'—':Number(value).toLocaleString('zh-CN')}
-  var names={running:'正在整理',retry:'等待重试',queued:'等待开始',paused:'已暂停',ok:'本轮完成',succeeded:'更新完成',summaries_updated:'摘要已更新',changed:'按最新内容重排',up_to_date:'当前已整理完毕',needs_model:'等待配置 API',daily_limit:'今日预算已用完',review_limit:'等待处理审批',waiting_window:'等待04:00',empty:'暂无待办',outside_window:'等待夜间时段',idle:'等待新材料',context:'准备材料',model:'调用模型',validate:'校验结果',refresh_facts:'核对最新材料',save:'保存更改',saved:'保存完成',finished:'本轮结束',deferred:'暂让出处理',failed:'本轮未成功',started:'已开始',summaries:'整理摘要',organize:'归类材料'};
+  var names={running:'正在整理',retry:'等待重试',queued:'等待开始',paused:'已暂停',ok:'本轮完成',succeeded:'更新完成',summaries_updated:'摘要已更新',changed:'按最新内容重排',up_to_date:'当前已整理完毕',needs_model:'等待配置 API',daily_limit:'今日预算已用完',review_limit:'等待处理审批',waiting_window:'等待后台重试',empty:'暂无待办',outside_window:'等待下次检查',idle:'等待新材料',context:'准备材料',model:'调用模型',validate:'校验结果',refresh_facts:'核对最新材料',save:'保存更改',saved:'保存完成',finished:'本轮结束',deferred:'暂让出处理',failed:'本轮未成功',started:'已开始',summaries:'整理摘要',organize:'归类材料'};
   function label(value){return names[value]||value||'等待新任务'}
   function chip(text,kind){return '<span class="mm-state '+(kind||'')+'">'+escape(text)+'</span>'}
   function pairs(rows){return '<dl class="mm-fields">'+rows.map(function(r){return '<div><dt>'+escape(r[0])+'</dt><dd>'+escape(r[1])+'</dd></div>'}).join('')+'</dl>'}
@@ -20,11 +20,11 @@ var ckStatusTab='fact';
   function root(section){return el(section==='topics'?'ck-topic-monitor':'ck-digest-monitor')}
   function build(section){
     if(root(section).querySelector('.mm-overview'))return;
-    root(section).innerHTML='<p class="mm-message" role="status">正在读取最新状态…</p><div class="mm-overview"></div><section class="mm-history"><div class="mm-history-heading"><h3>更新与调用记录</h3><span class="mm-history-help">上海时间 · 保留90天</span></div>'+(section==='topics'?'<div class="mm-filters" role="group" aria-label="记录类型">'+[['all','全部'],['runs','整理进度'],['changes','更改明细'],['api','API调用']].map(function(pair){return '<button type="button" data-mm-filter="'+pair[0]+'" aria-pressed="'+(pair[0]==='all')+'">'+pair[1]+'</button>'}).join('')+'</div>':'')+'<div class="mm-records"></div><button type="button" class="btn btn-outline btn-sm mm-more" hidden>加载更早记录</button><div class="mm-legacy"></div></section>';
+    root(section).innerHTML='<p class="mm-message" role="status">正在读取最新状态…</p><div class="mm-overview"></div><section class="mm-history"><div class="mm-history-heading"><h3>整理记录</h3><span class="mm-history-help">上海时间 · 保留90天</span></div>'+(section==='topics'?'<div class="mm-filters" role="group" aria-label="记录类型">'+[['runs','整理进度'],['changes','更改明细'],['api','API 调用']].map(function(pair){return '<button type="button" data-mm-filter="'+pair[0]+'" aria-pressed="'+(pair[0]===state[section].filter)+'">'+pair[1]+'</button>'}).join('')+'</div>':'')+'<div class="mm-view-intro"></div><div class="mm-records" aria-live="polite"></div><button type="button" class="btn btn-outline btn-sm mm-more" hidden>加载更早记录</button><div class="mm-legacy"></div></section>';
     if(root(section).__mmBound)return;root(section).__mmBound=true;
     root(section).addEventListener('click',function(e){
       var button=e.target.closest('[data-mm-filter]');
-      if(button){var current=state[section];current.filter=button.dataset.mmFilter;current.rows=[];current.cursor=null;ckRefreshMaintenance(true);}
+      if(button){var current=state[section];if(current.filter===button.dataset.mmFilter)return;current.filter=button.dataset.mmFilter;current.rows=[];current.cursor=null;render(section);root(section).querySelector('.mm-records').innerHTML='<p class="mm-loading" role="status">正在读取'+button.textContent+'…</p>';ckRefreshMaintenance(false);}
       if(e.target.closest('.mm-more'))ckRefreshMaintenance(false,true);
     });
   }
@@ -38,7 +38,7 @@ var ckStatusTab='fact';
       box.innerHTML='<div class="mm-summary-line"><h3>主题整理</h3>'+chip(label(status),o.running?'live':status==='retry'?'attention':'')+'<small>观测于 '+escape(clock(data.observed_at))+'</small></div><div class="mm-stat-grid">'+statistic('材料整理',num(checked)+' / '+num(total),'剩余 '+num(progress.remaining)+' 份有效材料')+statistic('主题摘要',num(summary.ready)+' / '+num(summary.total),'共 '+num(data.topic_count)+' 个小主题')+statistic('今日 API 调用',num(todayCalls)+' / '+num(settings.daily_calls),usage.date&&usage.date!==today?'最近记账 '+usage.date+' · '+num(usage.calls)+' 次':today+' · 上海时间')+'</div><div class="mm-progress" role="progressbar" aria-label="材料整理进度" aria-valuemin="0" aria-valuemax="'+total+'" aria-valuenow="'+checked+'"><span style="width:'+pct+'%"></span></div><p class="mm-current-note">'+escape(last.message||'等待新增材料或新的处理意见')+'</p><details class="mm-current-details"><summary>本轮状态与下一步</summary>'+pairs([['当前阶段',o.running&&latestStage?label(latestStage.phase):label(last.stage||last.status)],['最近运行',clock(last.at)],['下一次重试',last.retry_after?clock(last.retry_after):'按后台调度检查'],['API 配置',api.configured?'可调用':'等待配置'],['供应商 / 模型',[api.provider,api.model].filter(Boolean).join(' / ')||'尚未选择'],['待审批',num(o.pending_count)+' 项'],['每批材料',num(settings.batch_size)+' 份'],['你的控制',settings.enabled===false?'自动整理已暂停':'可编辑、暂停、修改预算和撤销自动处理']])+'</details>';
     }else{
       var sessions=data.sessions||[],schedule=data.schedule||{},running=sessions.filter(function(s){return s.status==='running'}).length,pending=sessions.reduce(function(n,s){return n+(s.pending_groups||0)},0);
-      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'夜间更新时段':'等待04:00',running?'live':'')+'</div><p class="mm-current-note">每天04:00开始，失败自动重试至07:00；之后保留旧版，次日再继续。聊天不会等待总结。</p><div class="mm-stat-grid">'+statistic('下一次开始',clock(schedule.next_window),'Asia/Shanghai')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'下个夜间窗口'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">打开聊天后，现有会话和待总结内容会自动同步到这里。</p>')+'</div>';
+      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div><p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；准备好也不会立即改变聊天，等 1 小时缓存过期后，在下一条消息发送前同步。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">打开聊天后，现有会话和待总结内容会自动同步到这里。</p>')+'</div>';
     }
   }
   function changeDetails(row){
@@ -56,7 +56,31 @@ var ckStatusTab='fact';
     var detail=row.kind==='topic_change'?changeDetails(row):pairs([['执行结果',ok],['任务阶段',label(row.stage||row.phase)],['HTTP 状态',row.http_status||diagnostic.http_status||'—'],['耗时',duration||'—'],['失败原因',row.error||diagnostic.error||({timeout:'调用超时',http_error:'供应商返回错误',connection_error:'无法连接供应商'}[row.error_code])||row.error_code||'无'],['请求编号',row.call_id||diagnostic.request_id||row.run_id||'—']]);
     if(row.usage)detail+=pairs([['输入 token',num(row.usage.prompt_tokens)],['输出 token',num(row.usage.completion_tokens)],['合计 token',num(row.usage.total_tokens)]]);
     if(diagnostic.attempts&&diagnostic.attempts.length)detail+='<details><summary>API 尝试明细 · '+diagnostic.attempts.length+' 次</summary>'+diagnostic.attempts.map(function(a){return pairs([['第几次',a.number],['HTTP 状态',a.http_status||'—'],['耗时',a.duration_ms===undefined?'—':a.duration_ms+' ms'],['结束原因',a.finish_reason||a.error_code||'—'],['调用模型',diagnostic.model||'—']])}).join('')+'</details>';
-    return '<details class="mm-record" data-record="'+attr(row.id)+'"'+(open?' open':'')+'><summary><time>'+escape(clock(row.at))+'</time>'+chip(ok,row.ok===false?'attention':'')+'<strong>'+escape(title)+'</strong><span class="mm-duration">'+escape(duration)+'</span></summary><div class="mm-record-body">'+detail+'<details><summary>完整记录字段</summary><pre>'+escape(JSON.stringify(row,null,2))+'</pre></details></div></details>';
+    return '<details class="mm-record" data-record="'+attr(row.id)+'"'+(open?' open':'')+'><summary><time>'+escape(clock(row.at))+'</time>'+chip(ok,row.ok===false?'attention':'')+'<strong>'+escape(title)+'</strong><span class="mm-duration">'+escape(duration)+'</span></summary><div class="mm-record-body">'+detail+'</div></details>';
+  }
+  function readableRun(rows,open){
+    var latest=rows[0],oldest=rows[rows.length-1],failed=rows.find(function(r){return r.ok===false||r.phase==='failed'});
+    var done=rows.some(function(r){return r.phase==='finished'||r.phase==='saved'}),status=failed?'需要重试':done?'已完成':'进行中';
+    var task=label(latest.task),steps=[['context','准备材料'],['model','归类 / 生成摘要'],['validate','检查结果'],['save','保存更新']];
+    var phases=new Set(rows.map(function(r){return r.phase}));
+    return '<details class="mm-run-card" data-record="'+attr(latest.run_id||latest.id)+'"'+(open?' open':'')+'><summary><span class="mm-run-mark" aria-hidden="true">'+(failed?'!':done?'✓':'·')+'</span><span><strong>'+escape(task)+'</strong><small>'+escape(clock(oldest.at))+' · '+rows.length+' 个已记录步骤</small></span>'+chip(status,failed?'attention':done?'':'live')+'<span class="mm-chevron" aria-hidden="true">⌄</span></summary><div class="mm-run-body"><ol class="mm-step-list">'+steps.map(function(step){var hit=phases.has(step[0]);return '<li class="'+(hit?'done':'')+'"><span>'+escape(step[1])+'</span><small>'+(hit?'已记录':done?'本轮未单独记录':'等待 / 本轮不需要')+'</small></li>'}).join('')+'</ol>'+(failed?'<p class="mm-problem">'+escape(failed.error||failed.message||'本轮未完成，后台将按调度重试。')+'</p>':'')+'<div class="mm-run-events">'+rows.slice().reverse().map(function(r){return '<p><time>'+escape(clock(r.at))+'</time><b>'+escape(label(r.phase))+'</b><span>'+escape(r.message||r.error||(r.count!==undefined?'处理 '+num(r.count)+' 项':''))+'</span></p>'}).join('')+'</div></div></details>';
+  }
+  function topicRecords(s,open){
+    if(s.filter==='runs'){
+      var runs=new Map();s.rows.forEach(function(r){var key=r.run_id||String(r.id);if(!runs.has(key))runs.set(key,[]);runs.get(key).push(r)});
+      return Array.from(runs.values()).map(function(rows){return readableRun(rows,open.has(String(rows[0].run_id||rows[0].id)))}).join('');
+    }
+    if(s.filter==='changes')return s.rows.map(function(row){
+      if(row.kind!=='topic_change')return record(row,open.has(String(row.id)));
+      var type=row.change==='summary'?'更新摘要':!row.before?'新增主题':!row.after?'删除主题':'调整主题';
+      var detail=row.change==='summary'?'摘要内容已更新':('新增 '+(row.added||[]).length+' 条材料 · 移出 '+(row.removed||[]).length+' 条');
+      return '<details class="mm-change-card" data-record="'+attr(row.id)+'"'+(open.has(String(row.id))?' open':'')+'><summary><span><small>'+escape(type)+' · '+escape(clock(row.at))+'</small><strong>'+escape(row.title||'主题')+'</strong><span>'+escape(detail)+'</span></span><span class="mm-chevron" aria-hidden="true">⌄</span></summary><div class="mm-change-body">'+changeDetails(row)+'</div></details>';
+    }).join('');
+    var calls=new Map();s.rows.forEach(function(r){var key=r.call_id||String(r.id);if(!calls.has(key)||calls.get(key).phase==='started')calls.set(key,r)});
+    return '<div class="mm-call-list">'+Array.from(calls.values()).map(function(r){
+      var done=r.phase!=='started',duration=r.duration_ms===undefined?'—':(r.duration_ms/1000).toLocaleString('zh-CN',{maximumFractionDigits:2})+' 秒';
+      return '<details class="mm-call-card" data-record="'+attr(r.id)+'"'+(open.has(String(r.id))?' open':'')+'><summary><span><strong>'+escape(r.model||'当前模型')+'</strong><small>'+escape(r.provider||'当前供应商')+' · '+escape(clock(r.at))+'</small></span><span class="mm-call-result">'+chip(!done?'调用中':r.ok===false?'失败':'成功',r.ok===false?'attention':!done?'live':'')+'<small>'+escape(duration)+'</small></span><span class="mm-chevron" aria-hidden="true">⌄</span></summary><div class="mm-call-body">'+pairs([['用途',label(r.task)],['耗时',duration],['输入 / 输出 token',num((r.usage||{}).prompt_tokens)+' / '+num((r.usage||{}).completion_tokens)],['HTTP 状态',r.http_status||'等待返回'],['结果',r.ok===false?({timeout:'调用超时，后台会继续重试',http_error:'供应商返回错误',connection_error:'暂时无法连接供应商'}[r.error_code]||r.error||'调用失败'):done?'已返回结果':'等待供应商响应']])+'</div></details>';
+    }).join('')+'</div>';
   }
   function render(section){
     var s=state[section],r=root(section);if(!s.data)return;
@@ -66,7 +90,9 @@ var ckStatusTab='fact';
     renderOverview(section,s.data);r.querySelectorAll('[data-session]').forEach(function(n){n.open=sessionsOpen.has(n.dataset.session)});if(showDetails&&r.querySelector('.mm-current-details'))r.querySelector('.mm-current-details').open=true;
     r.querySelector('.mm-message').textContent='已刷新 · '+clock(Date.now());
     r.querySelectorAll('[data-mm-filter]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mmFilter===s.filter))});
-    r.querySelector('.mm-records').innerHTML=s.rows.map(function(row){return record(row,open.has(String(row.id)))}).join('')||'<p class="mw-empty">暂无此类记录。后续运行的进度、结果和调用会显示在这里。</p>';
+    var intro=section==='topics'?{runs:['每一轮整理，看到完整过程','按整理任务合并步骤，展开一轮可查看处理过程与结果。'],changes:['具体改了什么','按主题查看名称、材料关联和摘要的前后变化。'],api:['每一次调用，结果与用量','同一次请求的开始和结束合并显示，展开查看耗时、用量与失败原因。']}[s.filter]:['后台准备记录','总结准备好后仍会等待缓存边界，才在本机启用。'];
+    r.querySelector('.mm-view-intro').innerHTML='<h4>'+escape(intro[0])+'</h4><p>'+escape(intro[1])+'</p>';
+    r.querySelector('.mm-records').innerHTML=(section==='topics'?topicRecords(s,open):s.rows.map(function(row){return record(row,open.has(String(row.id)))}).join(''))||'<div class="mm-empty-state"><b>暂无'+(section==='topics'?{runs:'整理任务',changes:'主题更改',api:'API 调用'}[s.filter]:'总结记录')+'</b><p>后续产生的记录会自动显示在这里。</p></div>';
     r.querySelector('.mm-more').hidden=!s.cursor;
     var legacy=r.querySelector('.mm-legacy');
     if(section==='topics'&&s.data.legacy_operations&&s.data.legacy_operations.length&&!legacy.innerHTML){
@@ -79,7 +105,7 @@ var ckStatusTab='fact';
     var section=ckStatusTab,key=storedPanelKey(),mySeq=++seq;
     if(principal!==key){
       var changedPrincipal=principal!==null;principal=key;
-      ['topics','digest'].forEach(function(name){state[name]={rows:[],cursor:null,filter:'all',data:null};root(name).innerHTML='';});
+      ['topics','digest'].forEach(function(name){state[name]={rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null};root(name).innerHTML='';});
       if(changedPrincipal&&el('ck-topic-controls').open&&typeof memoryWorkbenchEnter==='function')memoryWorkbenchEnter('topics');
       else if(changedPrincipal&&el('mw-organizer'))el('mw-organizer').innerHTML='';
     }
@@ -107,7 +133,7 @@ var ckStatusTab='fact';
   window.ckSelectStatusTab=function(tab){
     ckStatusTab=['topics','digest'].includes(tab)?tab:'fact';++seq;if(controller)controller.abort();clearTimeout(timer);
     ['fact','topics','digest'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
-    el('status-sub').textContent=ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'04:00–07:00 · 夜间更新与失败重试';
+    el('status-sub').textContent=ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'后台准备 · 缓存过期后同步';
     if(ckStatusTab==='fact'){loadDailyStatus(false);startDailyStatusRealtime();}else{stopDailyStatusRealtime();build(ckStatusTab);ckRefreshMaintenance(false);}
   };
   window.ckStatusEnter=function(){ckSelectStatusTab(ckStatusTab)};

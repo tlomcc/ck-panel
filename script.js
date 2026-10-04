@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v282-maintenance-recall';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v283-seamless-digest';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2864,8 +2864,8 @@ function chatRenderQuickRecallControls(cfg){
   var recall=cfg.recall!==false;
   var factMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   var factButton=document.getElementById('chat-quick-fact-toggle');
-  var factOn=recall&&(factMode==='b'||factMode==='c');
-  var quickLabel=factMode==='c'?'C':'B';
+  var factOn=recall&&factMode==='b';
+  var quickLabel='B';
   if(factButton){
     factButton.classList.toggle('is-on',factOn);
     factButton.classList.toggle('is-off',!factOn);
@@ -2878,10 +2878,10 @@ function chatRenderQuickRecallControls(cfg){
 function chatQuickToggleFactMode(){
   var cfg=chatLoadConfig()||{};
   var mode=chatNormalizeFactRecallMode(cfg.factRecallMode);
-  var factOn=cfg.recall!==false&&(mode==='b'||mode==='c');
+  var factOn=cfg.recall!==false&&mode==='b';
   var recallInput=document.getElementById('chat-recall-enabled');
   if(recallInput)recallInput.checked=!factOn;
-  chatSetFactRecallModeField(mode==='c'?'c':'b');
+  chatSetFactRecallModeField('b');
   return chatSaveRecallSetting(true);
 }
 function chatRenderRecallState(statusText,statusKind){
@@ -4330,6 +4330,10 @@ function chatNormalizeSession(s){
     digestRetryAfter:Number(s.digestRetryAfter)||0,
     digestPending:Array.isArray(s.digestPending)?s.digestPending:[],
     digestRemote:s.digestRemote||null,
+    digestStaged:s.digestStaged||null,
+    digestManualTrim:s.digestManualTrim||null,
+    digestActivePack:s.digestActivePack||null,
+    digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
     digestManualPending:s.digestManualPending||null,
     digestSettingsPending:s.digestSettingsPending||null,
@@ -6362,6 +6366,7 @@ function chatRenderTrimState(cfg){
   cfg=cfg||chatLoadConfig();
   var trim=chatAutoTrimConfigFrom(cfg);
   var count=chatCurrentConversationRoundCount();
+  var pendingManual=(chatCurrentSession()||{}).digestManualTrim;
   if(current)current.textContent='当前 '+count+' 个真实轮次'+(trim.roundLimitEnabled?'｜上限 '+trim.roundLimit+' 轮':'');
   if(manual){
     manual.disabled=chatSending||chatTrimBusy||count<=0;
@@ -6372,6 +6377,7 @@ function chatRenderTrimState(cfg){
         :'当前不足 '+trim.keep+' 个真实轮次，不会删除内容');
   }
   if(!next)return;
+  if(pendingManual){next.textContent='手动截断已预约：后台准备完成、当前回复结束后立即执行，将中断缓存。你可以继续聊天或取消待执行截断。';return;}
   if(!trim.enabled&&!trim.roundLimitEnabled){
     next.textContent='1h 缓存边界与轮数上限自动截断均已关闭；仍可手动同步并按需截断。';
     return;
@@ -6379,10 +6385,10 @@ function chatRenderTrimState(cfg){
   var retryAt=Number((chatCurrentSession()||{}).trimRetryAfter||0);
   if(retryAt>Date.now()){next.textContent='上次总结未完成，原对话已保留；约 '+Math.ceil((retryAt-Date.now())/60000)+' 分钟后恢复自动检查。';return}
   var roundLimitText=trim.roundLimitEnabled
-    ?('轮数上限：达到 '+trim.roundLimit+' 轮时，自动整理并保留最近 '+trim.keep+' 个完整真实轮次。')
+    ?('轮数上限：达到 '+trim.roundLimit+' 轮后也会等待缓存过期，再保留最近 '+trim.keep+' 个完整真实轮次。')
     :'轮数上限自动截断已关闭。';
   if(trim.roundLimitEnabled&&count>=trim.roundLimit){
-    next.textContent='已达到 '+trim.roundLimit+' 轮上限；整理完成后保留最近 '+trim.keep+' 个完整真实轮次。'+(trim.enabled?' 1h 缓存边界也保持启用。':'');
+    next.textContent='已达到 '+trim.roundLimit+' 轮上限；后台准备总结，缓存过期后在下一次发送前保留最近 '+trim.keep+' 轮。未准备好则继续使用原上下文。';
     return;
   }
   if(!trim.enabled){
@@ -6395,9 +6401,9 @@ function chatRenderTrimState(cfg){
   var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
   if(expired){
     if(count>trim.keep){
-      next.textContent='已到 1h 缓存边界：自动整理完成后'+'保留最近 '+trim.keep+' 个真实轮次。 '+roundLimitText;
+      next.textContent='缓存已过期：下一次发送前使用已就绪总结并保留最近 '+trim.keep+' 轮；未准备好则保留原上下文。 '+roundLimitText;
     }else{
-      next.textContent='已到 1h 缓存边界：自动整理完成后'+'真实轮次不足 '+trim.keep+'，不删除内容。 '+roundLimitText;
+      next.textContent='缓存已过期：下一次发送前同步已就绪总结；当前不足 '+trim.keep+' 轮，不删除内容。 '+roundLimitText;
     }
   }else{
     var remaining=referenceTs?Math.max(0,CHAT_AUTO_TRIM_IDLE_MS-(Date.now()-referenceTs)):CHAT_AUTO_TRIM_IDLE_MS;
@@ -6405,7 +6411,7 @@ function chatRenderTrimState(cfg){
     var sourceText=reference.source==='cache_read'
       ?'按最近一次成功缓存读取续期'
       :(reference.source==='full_create'?'按最近一次完整缓存创建计时':'尚无缓存用量记录，暂按最近消息估算');
-    next.textContent=sourceText+'；约 '+minutes+' 分钟后自动检查 1h 边界，整理完成后保留最近 '+trim.keep+' 个完整真实轮次。 '+roundLimitText;
+    next.textContent=sourceText+'；距缓存过期约 '+minutes+' 分钟。过期后在下一次发送前同步已就绪总结，保留最近 '+trim.keep+' 轮。 '+roundLimitText;
   }
 }
 function chatNowTitle(){
@@ -6583,6 +6589,10 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestRetryAfter:Number(s.digestRetryAfter)||0,
     digestPending:Array.isArray(s.digestPending)?s.digestPending:[],
     digestRemote:s.digestRemote||null,
+    digestStaged:s.digestStaged||null,
+    digestManualTrim:s.digestManualTrim||null,
+    digestActivePack:s.digestActivePack||null,
+    digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
     digestManualPending:s.digestManualPending||null,
     digestSettingsPending:s.digestSettingsPending||null,
@@ -7080,10 +7090,10 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     trim.enabled&&(selected.size>0||opts.idleCheck===true)&&
     cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
   );
-  // 轮数上限和 1h 边界彼此独立、可以同时开启；两者复用同一个 keep，
-  // 因而无论哪条先满足，都只会按完整真实轮次裁到同一保留值。
+  // A round limit prepares the cut early; automatic activation still waits for
+  // a full hour since the latest successful cache read/create.
   var roundLimitBoundary=!!(
-    trim.roundLimitEnabled&&(selected.size>0||opts.idleCheck===true)&&
+    trim.roundLimitEnabled&&cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS&&(selected.size>0||opts.idleCheck===true)&&
     historyRounds>=trim.roundLimit
   );
   var retryBlocked=!manual&&Number(session&&session.trimRetryAfter||0)>Date.now();
@@ -7170,7 +7180,9 @@ function chatCommitAutoTrimPlan(cfg,plan){
   if(plan.digestPrepared){
     s.dailyDigests=plan.digestPrepared.entries;
     s.digestWork=null;
+    s.digestReadyTrims=(s.digestReadyTrims||[]).filter(function(t){return !(plan.digestPrepared.used||[]).includes(t)});
     s.digestRollup=plan.digestPrepared.rollup;
+    chatDigestResetPack(cfg,s);
     s.digestRetryAfter=0;
     chatDailyDigestLastError='';
   }
@@ -7254,27 +7266,35 @@ function chatShowTrimFailure(message,syncOnly){
 async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestState,opts){
   // Both the idle timer and a new send share this barrier.
   while(chatTrimTransaction)await chatTrimTransaction;
+  var activationSession=chatCurrentSession();
+  chatDigestFreezePack(cfg,activationSession);
+  if(!(requestState&&requestState.stopped)&&!(opts&&opts.idleCheck)&&chatDigestActivate(activationSession,cfg,false)){chatSaveSessions();chatRenderDailyDigest(cfg);}
   var plan=chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
+  if(opts&&opts.idleCheck){chatScheduleNightlySync();return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});}
   if(!plan.boundary||(requestState&&requestState.stopped)){
     chatRenderTrimState(cfg);
     return Object.assign({},plan,{trimmed:false,dropped:0,after:plan.before});
   }
   plan.session=chatCurrentSession();
   var session=plan.session;
-  var dropped=(plan.droppedMessages||[]).concat(plan.droppedTransportMessages||[]);
-  var snapshot=JSON.stringify(dropped);
-  var job={prepareOnly:true,cancelled:false};
   var release;
   chatTrimTransaction=new Promise(function(resolve){release=resolve});
   try{
     if(plan.trimmed&&cfg.dailyDigestEnabled!==false){
+      var prepared=chatDigestPreparedTrim(session,cfg,plan);
+      if(!prepared){
+        chatScheduleNightlySync(0);
+        chatDailyDigestSetStatus('后台正在准备总结，本轮继续使用原上下文，不等待。');
+        return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
+      }
+      plan.digestPrepared=prepared;
       if(!chatArchiveDigestSources(session,plan.droppedMessages||[])){
         chatDailyDigestSetStatus('本机存储空间不足，已保留原对话并跳过截断。聊天可继续。','error');
         chatDigestLog('trim_result',{ok:false,session_id:session.id,trigger:plan.trigger,error:'local_outbox_full',history_preserved:true});
         return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
       }
-      plan.digestWaited='queued';
-      chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'04:00–07:00 Asia/Shanghai'});
+      plan.digestWaited='prepared';
+      chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'后台准备，缓存过期后同步'});
     }
     var result=chatCommitAutoTrimPlan(cfg,plan);
     result.sessionId=session.id;
@@ -7288,50 +7308,8 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     release();
   }
 }
-async function chatManualTrimNow(){
-  chatInit();
-  if(chatSending){toast('当前正在回复，完成后再手动截断');return}
-  if(chatTrimBusy){toast('正在截断，请等待本次完成');return}
-  var cfg=chatSaveConfig(true);
-  var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
-  if(plan.historyBefore<=0){
-    toast('当前没有可处理的对话');
-    chatRenderTrimState(cfg);
-    return;
-  }
-  var session=chatCurrentSession();
-  var fullCreateAge=Number(session&&session.cacheFullCreatedAt||0)?Date.now()-Number(session.cacheFullCreatedAt):0;
-  if(plan.historyBefore>plan.keep&&fullCreateAge>0&&fullCreateAge<10*60*1000){
-    var proceed=await ckConfirmDialog(
-      '这份缓存刚刚完整创建过。现在截断会让保留后的历史再次建立缓存。',
-      {title:'刚刚创建过缓存',confirmText:'仍然截断',cancelText:'先不截断'}
-    );
-    if(!proceed)return;
-  }
-  chatTrimBusy=true;
-  chatRenderTrimState(cfg);
-  var button=document.getElementById('chat-manual-trim-btn');
-  if(button){button.disabled=true;button.textContent='正在截断...'}
-  try{
-    var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_trim'});
-    if(result&&result.trimmed){
-      chatSaveLocalMessages();
-      chatRenderMessages();
-      toast('已保留最近 '+result.historyAfter+' 个完整真实轮次；下一条消息建立新缓存',5000);
-      chatSetStatus('已截断，下一条消息重建缓存');
-    }else if(result&&result.cacheBoundary){
-      toast('当前 '+result.historyAfter+' 个真实轮次，未删除历史',5000);
-      chatSetStatus('已准备');
-    }
-    chatRenderTrimState(cfg);
-  }catch(error){
-    chatSetStatus('手动操作失败');
-    chatDebug('auto_trim_idle_error',{error:chatFriendlyError(error)});
-  }finally{
-    chatTrimBusy=false;
-    if(button){button.textContent='立即截断';chatRenderTrimState(cfg)}
-  }
-}
+async function chatManualTrimNow(){return chatRequestManualDigestTrim();}
+
 // 截断后把裁剪结果同步到网关 session。
 // 复用既有的 /ck/clean-history：它本来就是"用面板提供的历史覆盖网关侧 session"的幂等接口，
 // 用同一份历史重复调用不会二次破坏，因此不需要为截断另开一个新接口。

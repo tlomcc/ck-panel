@@ -108,7 +108,8 @@ function chatDailyDigestNormalize(list){
     var text=String(row.text||'').trim();if(!text)return;
     var end=Number(row.endTs!=null?row.endTs:row.end_ts)||0;
     var start=Number(row.startTs!=null?row.startTs:row.start_ts)||end;
-    var day=chatDailyDigestDayKey(end)||String(row.dayKey||row.day_key||'');
+    var explicit=String(row.dayKey||row.day_key||'');
+    var day=chatDigestValidDay(explicit)?explicit:chatDailyDigestDayKey(end);
     if(!chatDigestValidDay(day))return;
     if(!end)end=new Date(day+'T12:00:00+08:00').getTime();
     if(!start)start=end;
@@ -181,6 +182,11 @@ function chatDigestRollupText(cfg,session){
   return text?'【'+source.range.start+'-'+source.range.end+'】\n'+text:'';
 }
 function chatDailyDigestPack(cfg,session){
+  cfg=cfg||chatLoadConfig();session=session||chatCurrentSession();
+  if(cfg.dailyDigestEnabled===false)return '';
+  return typeof chatDigestFreezePack==='function'?chatDigestFreezePack(cfg,session):chatDailyDigestBuildPack(cfg,session);
+}
+function chatDailyDigestBuildPack(cfg,session){
   cfg=cfg||chatLoadConfig();session=session||chatCurrentSession();
   if(cfg.dailyDigestEnabled===false)return '';
   var range=chatDigestRange(cfg),parts=[],rollup=chatDigestRollupText(cfg,session);
@@ -315,7 +321,7 @@ function chatSaveDigestEditor(kind){
   }
   session.dailyDigests=chatDailyDigestNormalize(next);session.updated=Date.now();session.digestRetryAfter=0;
   if(typeof chatNightlyManualPriority==='function')chatNightlyManualPriority(session);
-  delete chatDigestEditors[key];chatSaveSessions();chatRenderDailyDigest(cfg);chatDailyDigestSetStatus('总结已保存，下一轮使用已保存内容。','ok');toast('总结已保存');
+  delete chatDigestEditors[key];if(typeof chatDigestResetPack==='function')chatDigestResetPack(cfg,session);chatSaveSessions();chatRenderDailyDigest(cfg);chatDailyDigestSetStatus('总结已保存，下一轮使用已保存内容。','ok');toast('总结已保存');
   if(typeof chatScheduleNightlySync==='function')chatScheduleNightlySync();
   return true;
 }
@@ -486,6 +492,7 @@ async function chatMaybeRollDigestAtDayBoundary(){
     for(var session of chatSessions.slice()){
       if(chatSending||chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}
       await chatRefreshRollingDigest(cfg,{session:session});
+      if(typeof chatDigestFinishManualTrim==='function')await chatDigestFinishManualTrim(cfg,session);
     }
   }finally{chatDigestMaintenanceBusy=false;}
 }

@@ -34,8 +34,8 @@ for(const mode of ['a','b','c'])for(const enabled of [true,false]){
   const sandbox={chatLoadConfig:()=>({factRecallMode:mode,recall:enabled}),chatNormalizeFactRecallMode:v=>v,
     document:{getElementById:()=>input},chatSetFactRecallModeField:v=>chosen=v,chatSaveRecallSetting:v=>saved=v};
   vm.runInNewContext(toggle+';chatQuickToggleFactMode()',sandbox);
-  assert(chosen===(mode==='c'?'c':'b'),'Quick toggle must preserve configured C');
-  assert(input.checked===!(enabled&&mode!=='a')&&saved,'Quick toggle must save correct on/off state');
+  assert(chosen==='b','Quick toggle must always select B');
+  assert(input.checked===!(enabled&&mode==='b')&&saved,'Quick toggle must save correct on/off state');
 }
 assert(script.includes("+' Fact '+quickLabel+' 召回'"),'Quick toggle label must identify current mode');
 assert(/name="chat-fact-recall-mode" value="c"/.test(html),'C option missing');

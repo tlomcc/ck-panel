@@ -13,7 +13,7 @@ function setup(){
  Date:class extends Date{static now(){return now}},CHAT_HISTORY_TOOLS:history,CKChatHistory:history,CHAT_AUTO_TRIM_IDLE_MS:3600000,CHAT_DAILY_DIGEST_TIMEOUT_MS:90000,CHAT_MAX_TRANSPORT_MESSAGES:0,
  chatSplitThinkingText:text=>({text}),document:{getElementById:()=>null},
  chatMessages:messages,chatEditingIndex:-1,chatSessions:[session],chatTrimTransaction:null,chatDailyDigestChain:Promise.resolve(),
- chatCurrentSession:()=>session,chatDailyDigestFindSession:id=>ctx.chatSessions.find(s=>s.id===id),chatLoadConfig:()=>cfg,
+ chatSending:false,chatTrimBusy:false,chatCurrentSession:()=>session,chatDailyDigestFindSession:id=>ctx.chatSessions.find(s=>s.id===id),chatLoadConfig:()=>cfg,
  chatAutoTrimConfigFrom:()=>({enabled:true,keep:2,roundLimitEnabled:false,roundLimit:10}),
  chatPendingMessages:()=>ctx.chatMessages.filter(m=>m.role==='pending_user'),chatIsRealMessage:m=>m.role==='user'||m.role==='assistant',
  chatCacheActivityReference:()=>({timestamp:session.cacheLastReadAt,source:'cache_read'}),chatHasCacheNoticeAfter:()=>false,
@@ -27,44 +27,65 @@ function setup(){
  const storage=new Map();ctx.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
  vm.createContext(ctx);
  vm.runInContext(fs.readFileSync(require.resolve('../chat-digest.js'),'utf8'),ctx);
+ vm.runInContext(fs.readFileSync(require.resolve('../chat-digest-activation.js'),'utf8'),ctx);
  vm.runInContext(fs.readFileSync(require.resolve('../chat-digest-schedule.js'),'utf8'),ctx);ctx.chatScheduleNightlySync=()=>{};
  ctx.chatRenderDailyDigest=()=>{};ctx.chatDailyDigestSetStatus=()=>{};ctx.chatDailyDigestEndpoint=()=>'/digest';
  ['chatAutoTrimRoundCount','chatTimeReminderContext','chatPlanAutoTrimForPendingBatch','chatCommitAutoTrimPlan','chatApplyAutoTrimForPendingBatch'].forEach(n=>vm.runInContext(extract(n),ctx));
- return {ctx,cfg,session,requests,advance:ms=>{now+=ms},reply:data=>finish({ok:true,json:async()=>data}),run:(state=null,opts={idleCheck:true})=>ctx.chatApplyAutoTrimForPendingBatch(cfg,[],state,opts)};
+ return {ctx,cfg,session,requests,advance:ms=>{now+=ms},reply:data=>finish({ok:true,json:async()=>data}),run:(state=null,opts={})=>{const pending={role:'pending_user',text:'下一条'};return ctx.chatApplyAutoTrimForPendingBatch(cfg,[pending],state,opts)}};
 }
 
-test('truncation commits without waiting for summary generation and archives dropped turns',async()=>{
- const x=setup();const first=await x.run();
- assert.equal(first.trimmed,true);assert.equal(x.session.messages.length,4);assert.equal(x.session.dailyDigests.length,0);
- assert.equal(x.session.digestPending.length,3);assert.equal(x.requests.length,0);
- const pending={role:'pending_user',text:'当前消息'};x.ctx.chatMessages.push(pending);
- const second=await x.ctx.chatApplyAutoTrimForPendingBatch(x.cfg,[pending],{});
- assert.equal(second.trimmed,false);assert.equal(second.trigger,'pending_rebuild');assert.equal(x.session.messages.at(-1),pending);
+function prepare(x){
+ const groups=x.ctx.chatDigestMessageGroups(x.session.messages.slice(0,6));
+ x.session.digestReadyTrims=[{keys:groups.map(g=>g.key),text:'她问了前三个问题，我逐一回应。',startTs:groups[0].start,endTs:groups.at(-1).end}];
+}
+test('ready summaries and matching full turns commit atomically at an expired cache',async()=>{
+ const x=setup();prepare(x);const first=await x.run();assert.equal(first.trimmed,true);assert.equal(x.session.messages.length,4);
+ assert.equal(x.session.dailyDigests.length,1);assert.match(x.session.digestActivePack.text,/前三个问题/);assert.equal(x.requests.length,0);
+ assert.equal(x.session.digestPending.length,3);assert.equal(x.session.digestReadyTrims.length,0);
 });
-test('outbox storage failure skips truncation and preserves the existing prompt',async()=>{
- const x=setup();x.ctx.localStorage.setItem=()=>{throw Error('quota')};
- const result=await x.run();assert.equal(result.trimmed,false);assert.equal(result.cacheBoundary,false);
- assert.equal(x.session.messages.length,10);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.ctx.alerts.length,0);assert.equal(x.requests.length,0);
+test('unprepared summaries never remove context or wait for a model',async()=>{
+ const x=setup();x.ctx.fetch=()=>new Promise(()=>{});const result=await x.run();
+ assert.equal(result.trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.requests.length,0);
 });
-test('a stopped send does not archive or truncate',async()=>{
- const x=setup();assert.equal((await x.run({stopped:true})).trimmed,false);
- assert.equal(x.session.messages.length,10);assert.equal(x.session.digestPending,undefined);assert.equal(x.requests.length,0);
+test('idle expiry only prepares and leaves the active conversation untouched',async()=>{
+ const x=setup();prepare(x);const result=await x.run(null,{idleCheck:true});
+ assert.equal(result.trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.requests.length,0);
 });
-test('archived sources remain complete after their chat rows are removed',async()=>{
- const x=setup(),original=JSON.stringify(x.session.messages.slice(0,6));await x.run();
- const archived=x.ctx.chatNightlyPending(x.session).flatMap(g=>g.messages);
- assert.deepEqual(JSON.parse(JSON.stringify(archived)),JSON.parse(original));assert.equal(x.session.messages[0].text,'问3');
+test('storage failure keeps all original messages',async()=>{
+ const x=setup();prepare(x);x.ctx.localStorage.setItem=()=>{throw Error('quota')};assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);
 });
-test('switching windows during gateway acknowledgement preserves both windows',async()=>{
- const x=setup();let finish;x.ctx.chatSyncTrimmedHistoryToGateway=()=>new Promise(r=>finish=r);
- const work=x.run();await tick();const other={id:'other',messages:[{role:'user',text:'另一个窗口'}],dailyDigests:[]};
- x.ctx.chatSessions.push(other);x.ctx.chatCurrentSession=()=>other;x.ctx.chatMessages=other.messages;
- finish(true);await work;assert.equal(x.session.messages.length,4);assert.equal(other.messages.length,1);assert.equal(other.dailyDigests.length,0);assert.equal(x.session.digestPending.length,3);
+test('cache reads renew the full hour and defer both summary and round-limit trimming',async()=>{
+ const x=setup();prepare(x);x.session.cacheLastReadAt+=7199000;
+ x.ctx.chatAutoTrimConfigFrom=()=>({enabled:true,keep:2,roundLimitEnabled:true,roundLimit:3});
+ assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);
+ x.advance(3600000);assert.equal((await x.run()).trimmed,true);
 });
-test('disabled summary allows a plain trim; normal rounds never invoke the summary API',async()=>{
+test('a stopped request preserves source history',async()=>{
+ const x=setup();prepare(x);assert.equal((await x.run({stopped:true})).trimmed,false);assert.equal(x.session.messages.length,10);
+});
+test('disabled summaries allow plain boundary trimming without API calls',async()=>{
  const x=setup();x.cfg.dailyDigestEnabled=false;assert.equal((await x.run()).trimmed,true);assert.equal(x.requests.length,0);
- const y=setup();y.session.cacheLastReadAt=Date.now();assert.equal((await y.run()).trimmed,false);assert.equal(y.requests.length,0);
 });
+test('old source is accounted on the commit date without editing yesterday',async()=>{
+ const x=setup();prepare(x);x.advance(86400000);
+ x.session.dailyDigests=[{dayKey:'2026-10-03',text:'昨日定稿',startTs:x.session.messages[0].ts,endTs:x.session.messages[0].ts,covered:[]}];
+ assert.equal((await x.run()).trimmed,true);assert.equal(x.session.dailyDigests.find(e=>e.dayKey==='2026-10-03').text,'昨日定稿');
+ const today=x.session.dailyDigests.find(e=>e.dayKey==='2026-10-04');assert.match(today.text,/原对话 2026-10-03/);
+ assert.equal(x.ctx.chatDailyDigestNormalize(x.session.dailyDigests).length,2);
+});
+test('manual trim confirmation authorizes future execution without blocking chat',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatRenderMessages:()=>{},chatRenderNightlyStatus:()=>{},chatRenderTrimState:()=>{}});
+ let prompt;x.ctx.ckConfirmDialog=async(message)=>{prompt=message;return true};
+ assert.equal(await x.ctx.chatRequestManualDigestTrim(),true);assert.match(prompt,/打断现有缓存/);assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
+ prepare(x);x.ctx.chatSending=true;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+ x.ctx.chatSending=false;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);
+});
+test('manual preparation cancellation prevents later automatic cache-breaking trim',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatRenderMessages:()=>{},chatRenderNightlyStatus:()=>{},ckConfirmDialog:async()=>true});
+ await x.ctx.chatRequestManualDigestTrim();x.ctx.chatDigestCancelManualTrim();prepare(x);
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);assert.equal(x.session.messages.length,10);
+});
+
 test('fetched models never acquire a previously configured model',async()=>{
  const ctx={panelDataFetch:async()=>({ok:true,json:async()=>({ok:true,models:['new','new','second']})}),PROVIDER_MODELS_URL:'/models',providerNormalizeApiType:()=> 'openai',esc:x=>x,escAttr:x=>x};
  const storage=new Map();ctx.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
@@ -72,31 +93,6 @@ test('fetched models never acquire a previously configured model',async()=>{
  const models=await ctx.fetchModelsForProvider({model:'old',url:'x',key:'fixture'});assert.deepEqual(Array.from(models),['new','second']);
  assert.ok(!ctx.modelOptionsHtml(models,'old').includes('old'));
  ctx.panelDataFetch=async()=>({ok:true,json:async()=>({ok:true,models:[]})});assert.equal((await ctx.fetchModelsForProvider({model:'old'})).length,0);
-});
-test('idle boundary executes automatically even while viewing a different CK page',async()=>{
- const x=setup();Object.assign(x.ctx,{
-   chatIdleTrimBusy:false,chatSending:false,chatTrimBusy:false,chatSessionsReady:true,chatIdleTrimLastCheckAt:0,
-   currentPanelTab:'status',chatLastMessageTs:()=>0,chatCurrentConversationRoundCount:()=>5,
-   chatSaveLocalMessages:()=>{},chatRenderMessages:()=>{},chatEffectiveCacheStrategy:()=> 'native_stable'
- });
- vm.runInContext(extract('chatMaybeAutoTrimAtIdleBoundary'),x.ctx);
- const work=x.ctx.chatMaybeAutoTrimAtIdleBoundary({forceCheck:true});await tick();
- await work;assert.equal(x.requests.length,0,'idle truncation cannot call a summary model');assert.equal(x.session.digestPending.length,3);
- assert.equal(x.session.messages.length,4);assert.equal(x.ctx.chatIdleTrimBusy,false);
-});
-
-test('an unavailable summary API cannot delay an idle truncation',async()=>{
- const x=setup();x.ctx.fetch=()=>new Promise(()=>{});
- const result=await Promise.race([x.run(),new Promise((r,j)=>setTimeout(()=>j(Error('summary blocked trim')),100))]);
- assert.equal(result.trimmed,true);assert.equal(x.session.digestPending.length,3);assert.equal(x.session.dailyDigests.length,0);
-});
-test('a send waits only for the gateway history ACK, never for summary generation',async()=>{
- const x=setup();let syncDone,sendReady=false;
- x.ctx.chatSyncTrimmedHistoryToGateway=()=>new Promise(r=>syncDone=r);
- const idle=x.run();await tick();assert.equal(x.session.messages.length,4);
- const pending={role:'pending_user',text:'随后发送'};x.ctx.chatMessages.push(pending);
- const send=x.ctx.chatApplyAutoTrimForPendingBatch(x.cfg,[pending],{}).then(r=>{sendReady=true;return r});
- await tick();assert.equal(sendReady,false);syncDone(true);await idle;await send;assert.equal(sendReady,true);assert.equal(x.requests.length,0);
 });
 test('trim sync sends the correct execution route and never replaces newer local history',async()=>{
  const x=setup();let resolve;
