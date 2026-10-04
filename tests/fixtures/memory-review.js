@@ -12,6 +12,8 @@
  const response=(data,status=200)=>({ok:status<400,status,json:async()=>JSON.parse(JSON.stringify(data))});
  window.fetch=async(url,init={})=>{
   const u=new URL(url);u.pathname=u.pathname.replace(/^\/gateway(?=\/)/,'');
+  if(u.pathname==='/ck/maintenance/status')return response({ok:true,overview:store.organizer,topic_count:store.topics.length,summaries:{total:store.topics.length,ready:0},history:{items:[],next_cursor:null}});
+  if(u.pathname==='/ck/fact-daily/status')return response({ok:true});
   if(u.pathname!='/ck/memory-topics')throw Error('Unexpected '+u.pathname);
   if(init.body){const body=JSON.parse(init.body);requests.push(body);
    if(fail){fail=false;return response({ok:false,error:'合成保存失败'},503)}
@@ -34,7 +36,7 @@
   }
   return response(store);
  };
- navTo('topics');await wait(()=>$('mw-organizer').textContent.includes('2 项待审批'));
+ navTo('topics');await wait(()=>$('mw-organizer').textContent.includes('2 项待审批'));navTo('status');ckSelectStatusTab('topics');$('ck-topic-controls').open=true;await pause(30);
  check(document.querySelectorAll('[data-proposal]').length===2,'Cards missing');
  check($('mw-organizer').textContent.includes('待加入材料（尚未加入目标主题）'),'Candidate membership ambiguous');
  check(document.querySelector('.mr-materials input').getClientRects().length>0,'Candidates hidden');
@@ -64,7 +66,7 @@
  click(second+'[data-mr="approve"]');await wait(()=>store.topics.length===1&&document.querySelectorAll('[data-proposal]').length===0);
  check(requests.at(-1).opinion==='','Opinion must be optional');
  check(requests.at(-1).fact_ids.length===2,'Batch approval lost members');
- check(document.querySelectorAll('.mw-topic-link').length===1,'Approved theme not refreshed');
+ check(document.querySelectorAll('.mw-group-card').length===1,'Approved theme not refreshed');
  check(!window.bad,'Opinion HTML executed');
  // Settings remain editable across refreshes, failures and concurrent worker writes.
  document.querySelector('.mr-settings').open=true;

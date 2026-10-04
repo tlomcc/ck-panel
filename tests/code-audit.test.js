@@ -61,7 +61,9 @@ function streamContext(){
     markFirstReplyTs:noop,recordFirstDeltaLatency:noop,chatStreamProgressSet:noop,chatDebug:noop,
     chatApplyPollingLiveState:noop,chatStoreSessionRecall:noop,chatPollingLiveState:null,
     chatCurrentSession:()=>({}),chatScheduleSessionSave:noop,timeReminderContext:{round:1},chatSetStatus:noop,cfg:{},responseUserTs:1,requestTurnId:'turn',recallInfo:null,
-    CHAT_PLATFORM_EXIT_ERROR:'Function process exited',chatUpsertToolEvent:(old,data)=>old.concat(data),scheduleStreamRender:noop},
+    CHAT_PLATFORM_EXIT_ERROR:'Function process exited',chatUpsertToolEvent:(old,data)=>old.concat(data),scheduleStreamRender:noop,
+    trackThinking:noop,finishThinking:noop,chatStreamProgressStop:noop,
+    streamFinalMetadata:false,streamMetadataReceivedAt:0,streamForceText:false},
     ['chatParseSse','chatContainsPlatformExitError','chatCreateRequestFailure','chatMarkNetworkFailure']);
   const marker='},async function(resp,attemptState){';
   const start=source.indexOf(marker)+2,end=source.indexOf('\n    });\n    if(requestState&&requestState.stopped)return;',start);

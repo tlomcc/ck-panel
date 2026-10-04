@@ -10,6 +10,9 @@
   window.memoryReviewMount=function(hooks){
     if(active&&active.dispose)active.dispose();
     var root=document.getElementById('mw-organizer');
+    // This host lives on Status and survives rebuilding the topic page.
+    // Replace it on remount so an old principal cannot retain event handlers.
+    var cleanRoot=root.cloneNode(false);root.replaceWith(cleanRoot);root=cleanRoot;
     var refreshTimer=null;
     var state={data:null,topics:[],tab:'pending',drafts:{},settingsDraft:null,settingsOpen:false,busy:false,request:null,message:''};
     var instance={update:update,hasDraft:function(){return !!state.settingsDraft||Object.keys(state.drafts).length>0},dispose:function(){clearTimeout(refreshTimer)}};
@@ -70,7 +73,8 @@
         if(active!==instance||!root.isConnected)return;
         var focused=document.activeElement;
         var editing=root.contains(focused)&&/^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName);
-        if(!state.busy&&hooks.canWrite()&&root.closest('.panel-tab').classList.contains('active')&&document.visibilityState==='visible'&&
+        var controls=root.closest('details'),pane=root.closest('[role="tabpanel"]');
+        if(!state.busy&&hooks.canWrite()&&root.closest('.panel-tab').classList.contains('active')&&(!controls||controls.open)&&(!pane||!pane.hidden)&&document.visibilityState==='visible'&&
             !editing&&!instance.hasDraft())await refresh(true);
         scheduleRefresh();
       },delay);

@@ -7,7 +7,7 @@ const chrome=process.env.CK_CHROME||'C:\\Program Files\\Google\\Chrome\\Applicat
 if(!fs.existsSync(chrome)){console.log('settings browser: SKIP (Chrome unavailable)');process.exit(0)}
 fs.mkdirSync(out,{recursive:true});
 for(const name of fs.readdirSync(root))if(name.endsWith('.css'))fs.copyFileSync(path.join(root,name),path.join(out,name));
-fs.writeFileSync(path.join(out,'runtime.js'),['chat-ui.js','chat-history.js','chat-digest.js','script.js'].map(name=>fs.readFileSync(path.join(root,name),'utf8').replace(/^init\(\);\s*$/m,'')).join('\n'));
+fs.writeFileSync(path.join(out,'runtime.js'),['chat-ui.js','chat-history.js','chat-digest.js','chat-digest-schedule.js','script.js'].map(name=>fs.readFileSync(path.join(root,name),'utf8').replace(/^init\(\);\s*$/m,'')).join('\n'));
 let base=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[\s\S]*?<\/script>/g,'');
 const probe=String.raw`
 window.addEventListener('load',function(){
@@ -30,20 +30,21 @@ try{
   const destinations={model:'chat-system',thinking:'chat-thinking-mode',worldbook:'chat-worldbook-content',
     gateway:'chat-window-api-editor',display:'chat-cost-defaults',tools:'chat-use-mcp',memory:'chat-recall-enabled',
     cache:'chat-cache-strategy',cleanup:'chat-auto-clean-enabled',digest:'chat-daily-digest-pack',
-    trim:'chat-window-trim-override',debug:'chat-debug'};
+    trim:'chat-daily-digest-pack',debug:'chat-debug'};
   const geometry=[];
   for(const [key,field] of Object.entries(destinations)){
     const nav=document.getElementById('chat-settings-nav');nav.value=key;nav.dispatchEvent(new Event('change'));
     const active=document.querySelectorAll('.chat-side-panel.active');
-    check(active.length===1&&active[0].id==='chat-side-'+key,'Wrong destination '+key);
+    const target=key==='tools'?'display':key==='trim'?'digest':key;
+    check(active.length===1&&active[0].id==='chat-side-'+target,'Wrong destination '+key);
     check(active[0].contains(document.getElementById(field)),'Misfiled control '+field);
-    check(document.getElementById('chat-settings-title').textContent===chatSettingTitle(key),'Wrong title '+key);
+    check(document.getElementById('chat-settings-title').textContent===chatSettingTitle(target),'Wrong title '+key);
     check(getComputedStyle(active[0]).display==='flex','Hidden destination '+key);
     check(active[0].scrollWidth<=active[0].clientWidth+2,'Horizontal overflow '+key);
     geometry.push({key,height:active[0].clientHeight,scroll:active[0].scrollHeight});
   }
-  check(document.querySelectorAll('#chat-plus-grid>button').length===16,'Missing tray buttons');
-  for(const [legacy,target,field] of [['billing','display','chat-billing-enabled'],['history','display','chat-retain-recall-history'],['time','display','chat-time-injection-every-rounds'],['session','tools','chat-session-id']]){
+  check(document.querySelectorAll('#chat-plus-grid>button').length===14,'Missing tray buttons');
+  for(const [legacy,target,field] of [['billing','display','chat-billing-enabled'],['history','display','chat-retain-recall-history'],['time','display','chat-time-injection-every-rounds'],['session','display','chat-session-id']]){
     cfg=chatLoadConfig();cfg.chatSideTab=legacy;chatWriteForm(cfg);
     const active=document.querySelector('.chat-side-panel.active');
     check(active.id==='chat-side-'+target&&active.contains(document.getElementById(field)),'Saved destination not migrated: '+legacy);
@@ -62,7 +63,7 @@ try{
   chatStorePrompt('system',systemDraft,true);
   chatSaveConfig(true);chatWriteForm(chatLoadConfig());
   check(document.getElementById('chat-system').value===systemDraft,'Long prompt save lost text');
-  check([...document.querySelectorAll('.chat-setting-help')].every(x=>!x.open),'Explanations must start collapsed');
+  check([...document.querySelectorAll('.chat-setting-help:not(#chat-tools-settings)')].every(x=>!x.open),'Explanations must start collapsed');
   chatOpenSettingTab('trim');
   check(document.getElementById('chat-trim-default-section').hidden,'Defaults should be separate');
   check(document.getElementById('chat-window-trim-fields').hidden,'Inherited controls must be collapsed');

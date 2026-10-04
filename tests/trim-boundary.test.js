@@ -45,6 +45,7 @@ function commitContext(session){
     chatSaveSessions:()=>{},
     chatRenderSessions:()=>{},
     chatRenderTrimState:()=>{},
+    chatDigestLog:()=>{},
     // 当日截断总结在提交点挂钩；这里记录调用，供下面断言"只有真的丢历史才生成总结"。
     chatDailyDigestScheduleForTrim:(cfg,plan)=>{digestCalls.push(plan)}
   };

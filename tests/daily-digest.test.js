@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
 const source=fs.readFileSync(require.resolve('../chat-digest.js'),'utf8');
 const history=require('../chat-history.js');
 const plain=value=>JSON.parse(JSON.stringify(value));
-const stamp=(day,time='12:00')=>new Date(day+'T'+time+':00').getTime();
+const stamp=(day,time='12:00')=>new Date(day+'T'+time+':00+08:00').getTime();
 function setup(){
   let now=stamp('2026-09-30'),reply;
   const cfg={panelKey:'fixture',gatewayUrl:'https://fixture.invalid',dailyDigestEnabled:true,dailyDigestRetentionDays:3,dailyDigestDetailDays:1,dailyDigestRollupDays:2};
@@ -27,36 +27,62 @@ function setup(){
   };
 }
 
-test('no truncation today is normal; explicit refresh reports no source and never calls model',async()=>{
-  const x=setup(),notices=[];x.ctx.toast=text=>notices.push(text);
-  x.nodes['chat-daily-digest-save-status']={};
-  x.session.messages.push(...x.turn('2026-09-30','today'));
-  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true,notify:true}),true);
-  assert.equal(x.calls.length,0);assert.equal(x.session.dailyDigests.length,0);
-  assert.match(notices[0],/暂无摘要/);assert.match(notices[0],/正常状态/);
+test('summary logs separate generation, checkpoints, reuse and final saved summaries',async()=>{
+  const x=setup(),events=[];x.ctx.chatDebug=(event,data)=>events.push({event,data:plain(data)});
+  x.cfg.dailyDigestRollupDays=0;
+  const raw=x.turn('2026-09-30','private-content');
+  const prepared=await x.run(raw);assert.ok(prepared);
+  assert.deepEqual(events.filter(e=>e.event==='digest_batch').map(e=>e.data.phase),['started','generated','checkpoint']);
+  assert.ok(!events.some(e=>e.event==='digest_result'&&e.data.ok),'prepare is not a committed summary');
+  assert.ok(!JSON.stringify(events).includes('private-content'));assert.ok(!JSON.stringify(events).includes('fixture'));
+  events.length=0;await x.run(raw);
+  assert.equal(events.find(e=>e.event==='digest_batch').data.phase,'reused');
+  x.session.messages.push(...raw);
+  const count=x.calls.length;let synced=0;x.ctx.chatSyncNightlyDigest=async()=>{synced++;return true};
+  await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true,includeToday:true});
+  assert.equal(synced,1);assert.equal(x.calls.length,count);assert.ok(!events.some(e=>e.event==='digest_result'&&e.data.phase==='saved'),'a queue synchronization is not a generated summary');
 });
 
-test('rollover errors report the actual day and batch size; rollup errors do not pretend messages were lost',async()=>{
+test('batch failures retain response diagnostics and local timeouts settle once',async()=>{
+  const x=setup(),events=[];x.ctx.chatDebug=(event,data)=>events.push({event,data:plain(data)});
+  x.ctx.fetch=async()=>({ok:false,status:503,json:async()=>({ok:false,error:'HTTP 403 token=secret-value',diagnostic:{request_id:'dg-test',provider:'test',model:'test-model',attempt_count:2,retry_count:1,attempts:[{number:1,http_status:403,duration_ms:5,max_tokens:16000,timeout_seconds:180}],error_code:'upstream_http_403'}})});
+  assert.equal(await x.run(x.turn('2026-09-30','a')),null);
+  const failure=events.find(e=>e.event==='digest_batch'&&e.data.phase==='failed').data;
+  assert.equal(failure.http_status,503);assert.equal(failure.request_id,'dg-test');assert.equal(failure.attempt_count,2);
+  assert.ok(!JSON.stringify(events).includes('secret-value'));assert.equal(x.session.dailyDigests.length,0);
+  events.length=0;x.ctx.CHAT_DAILY_DIGEST_TIMEOUT_MS=5;x.ctx.fetch=()=>new Promise(()=>{});
+  assert.equal(await x.run(x.turn('2026-09-30','b')),null);
+  assert.equal(events.filter(e=>e.event==='digest_batch'&&e.data.phase==='failed').length,1);
+  assert.equal(events.find(e=>e.event==='digest_batch'&&e.data.phase==='failed').data.error_code,'client_timeout');
+});
+
+
+test('explicit refresh synchronizes pending work without an immediate model call',async()=>{
+  const x=setup();x.session.messages.push(...x.turn('2026-09-30','today'));let options;
+  x.ctx.chatSyncNightlyDigest=async(cfg,value)=>{options=value;return true};
+  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true,notify:true}),true);
+  assert.equal(options.notify,true);assert.equal(x.calls.length,0);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.session.messages.length,2);
+});
+test('batch failure diagnostics identify source messages without changing saved summaries',async()=>{
   for(const rollup of [false,true]){
     const x=setup(),events=[];x.ctx.chatDebug=(event,data)=>events.push({event,data});
     if(rollup){x.session.dailyDigests=[x.entry('2026-09-27','旧摘要')];x.session.dailyDigests[0].detail={source:x.ctx.chatDigestStamp('旧摘要'),text:'旧摘要'};}
     else x.session.messages.push(...x.turn('2026-09-29','yesterday'));
     x.reply(()=>({ok:false,error:'incomplete output'}));
-    assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),false);
-    const error=events.find(e=>e.event==='daily_digest').data;
-    assert.equal(error.messages,rollup?null:2);assert.match(error.error,rollup?/y 天大总结压缩/:/跨日补总结（2026-09-29）/);
-    assert.equal(x.session.dailyDigests.length,rollup?1:0);
+    assert.equal(await x.run(x.session.messages),null);
+    const failures=events.filter(e=>e.event==='digest_batch'&&e.data.phase==='failed');
+    assert.equal(failures.length,1);assert.equal(failures[0].data.day_key,rollup?'2026-09-27':'2026-09-29');
+    assert.equal(failures[0].data.input_messages,rollup?0:2);assert.equal(x.session.dailyDigests.length,rollup?1:0);
   }
 });
-
 test('old automatic rollups are recompressed once; hand edited rollups stay intact',async()=>{
   for(const edited of [false,true]){
     const x=setup();x.session.dailyDigests=[x.entry('2026-09-27','旧摘要')];
     const source=x.ctx.chatDigestRollupSource(x.cfg,x.session);
     x.session.digestRollup={start:source.range.start,end:source.range.end,text:'旧版大总结',source:source.legacyStamp,edited};
-    assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),true);
+    x.commit(await x.run([]));
     assert.equal(x.calls.length,edited?1:2);
-    assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg,{force:true}),true);
+    x.commit(await x.run([]));
     assert.equal(x.calls.length,edited?1:2);
   }
 });
@@ -108,12 +134,14 @@ test('y is summarized per source day, and the same day is reused when the window
   assert.equal(next.rollup.start,'2026-09-28');assert.equal(next.rollup.end,'2026-09-29');
 });
 
-test('midnight maintenance completes unsummarized days, leaves today for its own box, and survives reload',async()=>{
-  const x=setup();x.cfg.dailyDigestRollupDays=0;x.session.messages.push(...x.turn('2026-09-29','yesterday'),...x.turn('2026-09-30','today'));
-  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);assert.equal(x.calls.length,2);assert.equal(x.calls[0].day_key,'2026-09-29');
-  x.session.dailyDigests=plain(x.session.dailyDigests);x.advance(1);assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);
-  assert.equal(x.calls.length,4);assert.equal(x.calls[2].day_key,'2026-09-30');assert.equal(x.session.messages.length,4,'maintenance never truncates conversation');
-  assert.equal(await x.ctx.chatRefreshRollingDigest(x.cfg),true);assert.equal(x.calls.length,4);
+
+test('crossing midnight only queues work and retains today and yesterday original text',async()=>{
+  const x=setup();x.session.messages.push(...x.turn('2026-09-29','yesterday'),...x.turn('2026-09-30','today'));
+  const original=plain(x.session.messages),queued=[];
+  x.ctx.chatSyncNightlyDigest=async(cfg,options)=>{queued.push(options.session.id);return true};
+  Object.assign(x.ctx,{chatSending:false,chatTrimBusy:false,chatTrimTransaction:null});
+  await x.ctx.chatMaybeRollDigestAtDayBoundary();x.advance(1);await x.ctx.chatMaybeRollDigestAtDayBoundary();
+  assert.deepEqual(queued,['s','s']);assert.equal(x.calls.length,0);assert.deepEqual(plain(x.session.messages),original);assert.equal(x.session.dailyDigests.length,0);
 });
 test('API failure, invalid output, key changes and concurrent edits cannot commit partial updates',async()=>{
   for(const behavior of ['failure','incomplete','key','edit']){
