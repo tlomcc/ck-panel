@@ -47,7 +47,7 @@ var ckStatusTab='fact';
       box.innerHTML='<div class="mm-summary-line"><h3>主题整理</h3>'+chip(label(status),o.running?'live':status==='retry'?'attention':'')+'<small>观测于 '+escape(clock(data.observed_at))+'</small></div><div class="mm-stat-grid">'+statistic('材料整理',num(checked)+' / '+num(total),'剩余 '+num(progress.remaining)+' 份有效材料')+statistic('主题摘要',num(summary.ready)+' / '+num(summary.total),'共 '+num(data.topic_count)+' 个小主题')+statistic('今日 API 调用',num(todayCalls)+' / '+num(settings.daily_calls),usage.date&&usage.date!==today?'最近记账 '+usage.date+' · '+num(usage.calls)+' 次':today+' · 上海时间')+'</div><div class="mm-progress" role="progressbar" aria-label="材料整理进度" aria-valuemin="0" aria-valuemax="'+total+'" aria-valuenow="'+checked+'"><span style="width:'+pct+'%"></span></div><p class="mm-current-note">'+escape(last.message||'等待新增材料或新的处理意见')+'</p><details class="mm-current-details"><summary>本轮状态与下一步</summary>'+pairs([['当前阶段',o.running&&latestStage?label(latestStage.phase):label(last.stage||last.status)],['最近运行',clock(last.at)],['下一次重试',last.retry_after?clock(last.retry_after):'按后台调度检查'],['API 配置',api.configured?'可调用':'等待配置'],['供应商 / 模型',[api.provider,api.model].filter(Boolean).join(' / ')||'尚未选择'],['待审批',num(o.pending_count)+' 项'],['每批材料',num(settings.batch_size)+' 份'],['你的控制',settings.enabled===false?'自动整理已暂停':'可编辑、暂停、修改预算和撤销自动处理']])+'</details>';
     }else{
       var sessions=data.sessions||[],schedule=data.schedule||{},running=sessions.filter(function(s){return s.status==='running'}).length,pending=sessions.reduce(function(n,s){return n+(s.pending_groups||0)},0);
-      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div>'+manualCards(sessions)+'<p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；自动任务等 1 小时缓存过期后随下一轮发送同步；手动任务准备完成后随下一轮发送同步，无须等缓存过期。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">打开聊天后，现有会话和待总结内容会自动同步到这里。</p>')+'</div>';
+      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div>'+manualCards(sessions)+'<p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；自动任务等 1 小时缓存过期后随下一轮发送同步；手动任务准备完成后随下一轮发送同步，无须等缓存过期。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个本机已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">本机现有窗口暂无截断任务。空白窗口不创建总结任务，已删除窗口不再显示。</p>')+'</div>';
     }
   }
   function renderEvents(data){
@@ -132,6 +132,7 @@ var ckStatusTab='fact';
   window.ckRefreshMaintenance=async function(force,more){
     if(ckStatusTab==='fact'||currentPanelTab!=='status')return;
     var section=ckStatusTab,key=storedPanelKey(),mySeq=++seq;
+    if(section==='digest'&&!chatSessionsReady){chatLoadSessions();await chatEnsureSessionsReady();if(mySeq!==seq||key!==storedPanelKey()||section!==ckStatusTab)return;}
     if(principal!==key){
       var changedPrincipal=principal!==null;principal=key;
       ['topics','digest','events'].forEach(function(name){state[name]={rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null};root(name).innerHTML='';});
@@ -148,6 +149,12 @@ var ckStatusTab='fact';
       var response=await panelDataFetch(function(auth){if(auth!==key)throw new Error('连接已变化');return GRAPH_API_BASE+path},{cache:'no-store',signal:signal},{label:'整理状态'});
       var data=await response.json();if(!response.ok||data.ok===false)throw new Error(data.error||'状态读取失败');
       if(seq!==mySeq||key!==storedPanelKey()||section!==ckStatusTab)return;
+      if(section==='digest'){
+        var cfg=chatLoadConfig(),visible=new Set(chatSessions.filter(function(session){return !chatDigestIsDeleted(session.id,cfg)&&chatDigestHasContent(session)}).map(function(session){return String(session.id)}));
+        data.sessions=(data.sessions||[]).filter(function(session){return visible.has(String(session.session_id))});
+        data.history=Object.assign({},data.history,{items:((data.history||{}).items||[]).filter(function(row){return visible.has(String(row.session_id))})});
+        s.rows=s.rows.filter(function(row){return visible.has(String(row.session_id))});
+      }
       s.data=data;
       var rows=data.history&&data.history.items||[];
       var overlap=rows.some(function(row){return s.rows.some(function(old){return old.id===row.id})});

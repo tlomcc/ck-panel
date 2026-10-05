@@ -97,6 +97,30 @@ test('network failures retain the outbox and back off before retrying',async()=>
   x.ctx.fetch=async()=>{count++;throw Error('offline')};await x.sync();await x.sync();assert.equal(count,1);assert.equal(x.session.digestPending.length,1);
   x.advance(31000);await x.sync();assert.equal(count,2);assert.equal(JSON.parse([...x.storage.values()][0]).length,1);
 });
+
+test('blank fallback windows do not create background summary jobs',async()=>{
+  const x=setup();x.session.messages=[];x.ctx.chatMessages=[];
+  assert.equal(await x.sync(),false);assert.equal(x.calls.length,0);
+});
+
+test('deletion survives offline reload and retries only under the matching principal',async()=>{
+  const x=setup();x.ctx.chatArchiveDigestSources(x.session,x.session.messages);
+  x.ctx.fetch=async()=>{throw Error('offline')};x.ctx.chatDigestForgetSession(x.session.id,x.cfg);
+  await x.ctx.chatFlushDigestDeletes(x.cfg);
+  assert.equal(x.ctx.chatDigestIsDeleted(x.session.id,x.cfg),true);
+  assert.equal(x.storage.has(x.ctx.chatNightlyOutboxKey(x.session)),false);
+  assert.equal(await x.sync(),false);
+  let calls=0;x.ctx.fetch=async(u,o)=>{calls++;assert.equal(JSON.parse(o.body).action,'delete');return {ok:true,json:async()=>({ok:true,deleted:true})}};
+  x.cfg.panelKey='other';await x.ctx.chatFlushDigestDeletes(x.cfg);assert.equal(calls,0);
+  x.cfg.panelKey='fixture-key';await x.ctx.chatFlushDigestDeletes(x.cfg);assert.equal(calls,1);
+  assert.equal(x.ctx.chatDigestDeletionRecords()[0].ack,true);
+});
+
+test('an in-flight source upload cannot restore a deleted local session',async()=>{
+  const x=setup();let finish,body;x.ctx.fetch=async(u,o)=>{body=JSON.parse(o.body);return new Promise(r=>finish=r)};
+  const pending=x.sync();x.ctx.chatSessions=[];
+  finish({ok:true,json:async()=>result(x,body)});assert.equal(await pending,false);assert.equal(x.session.digestStaged,undefined);
+});
 test('background completion and midnight do not change the byte-exact active prompt',async()=>{
   const x=setup();x.session.dailyDigests=[{dayKey:'2026-10-03',text:'昨天定稿',covered:[]}];
   const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);x.session.cacheLastReadAt=x.ctx.Date.now();

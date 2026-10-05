@@ -96,6 +96,15 @@ test('manual preparation preserves new rounds and waits without changing either 
  assert.equal((await x.run()).trimmed,true);assert.equal(x.session.messages.length,6);assert.equal(x.session.messages.at(-1).text,'新回复');
 });
 
+test('ready manual cut still commits when an earlier send left a pending cache rebuild',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderNightlyStatus:()=>{}});
+ x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);x.session.cacheRebuildPending=true;
+ const plan=x.ctx.chatDigestManualPlan(x.session,x.cfg,x.session.digestManualTrim,[]);
+ assert.equal(plan.manualValid,true);assert.ok(x.ctx.chatDigestManualPrepared(x.session,x.cfg,plan));
+ const result=await x.run();assert.equal(result.trimmed,true);assert.equal(x.session.transportMessages.length,4);
+});
+
 test('manual cut refuses edited sources and storage failures without publishing a staged summary',async()=>{
  for(const fail of ['edit','storage']){
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderNightlyStatus:()=>{}});

@@ -1,5 +1,45 @@
 /* Durable source outbox and nightly results. Never awaited by chat generation. */
 var chatNightlySyncs=new Map(),chatNightlyTimer=0,chatNightlyStatus={},chatNightlySynced={};
+var chatDigestDeleteSyncs=new Map();
+function chatDigestDeletionRecords(){
+  try{var rows=JSON.parse(localStorage.getItem('ck_digest_deleted_v1')||'[]');return Array.isArray(rows)?rows.filter(function(r){return r&&typeof r.id==='string'&&typeof r.scope==='string'}):[]}catch(e){return []}
+}
+function chatDigestIsDeleted(id,cfg){return chatDigestDeletionRecords().some(function(r){return r.id===String(id)&&r.scope===chatNightlyScope(cfg)})}
+function chatDigestForgetSession(id,cfg){
+  cfg=cfg||chatLoadConfig();var scope=chatNightlyScope(cfg),rows=chatDigestDeletionRecords();
+  if(!rows.some(function(r){return r.id===String(id)&&r.scope===scope}))rows.push({id:String(id),scope:scope,at:Date.now(),ack:false});
+  try{localStorage.setItem('ck_digest_deleted_v1',JSON.stringify(rows));localStorage.removeItem(chatNightlyOutboxKey({id:id}))}catch(e){toast('删除记录暂未持久保存，请保持页面联网以完成后台清理',5000)}
+  delete chatNightlyStatus[id];delete chatNightlySynced[scope+':'+id];
+  chatFlushDigestDeletes(cfg);chatScheduleNightlySync(0);
+}
+function chatFlushDigestDeletes(cfg){
+  cfg=cfg||chatLoadConfig();var scope=chatNightlyScope(cfg);
+  if(!cfg.panelKey)return Promise.resolve(false);
+  if(chatDigestDeleteSyncs.has(scope))return chatDigestDeleteSyncs.get(scope);
+  var pending=chatDigestDeletionRecords().filter(function(r){return r.scope===scope&&!r.ack});
+  if(!pending.length)return Promise.resolve(true);
+  var task=(async function(){
+    try{
+      for(var row of pending){
+        if(chatNightlyScope(chatLoadConfig())!==scope)return false;
+        var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},10000);
+        try{
+          var response=await fetch(chatNightlyEndpoint(cfg),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',session_id:row.id}),signal:controller.signal});
+          var data=await response.json();if(!response.ok||!data||data.deleted!==true)throw Error('delete_pending');
+          var latest=chatDigestDeletionRecords();latest.forEach(function(r){if(r.id===row.id&&r.scope===scope)r.ack=true});
+          localStorage.setItem('ck_digest_deleted_v1',JSON.stringify(latest));
+        }finally{clearTimeout(timer)}
+      }
+      return true;
+    }catch(e){chatScheduleNightlySync(30000);return false}
+    finally{chatDigestDeleteSyncs.delete(scope);if(chatNightlyScope(chatLoadConfig())===scope&&chatDigestDeletionRecords().some(function(r){return r.scope===scope&&!r.ack}))chatScheduleNightlySync(2000)}
+  })();
+  chatDigestDeleteSyncs.set(scope,task);return task;
+}
+function chatDigestHasContent(session){
+  return !!((session.messages||[]).some(function(m){return m&&['user','assistant'].includes(m.role)&&(String(m.text||'').trim()||(m.images||[]).length)})||
+    (session.dailyDigests||[]).length||(session.digestRollup||{}).text||(session.digestPending||[]).length||session.digestManualTrim||session.digestStaged);
+}
 function chatNightlyWindow(now){
   now=Number(now)||Date.now();var shifted=new Date(now+8*3600000),day=shifted.toISOString().slice(0,10);
   var start=Date.parse(day+'T00:00:00+08:00'),end=start+24*3600000;
@@ -58,6 +98,7 @@ function chatScheduleNightlySync(delay){
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
+  if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
   var scope=chatNightlyScope(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
@@ -79,6 +120,7 @@ function chatSyncNightlyDigest(cfg,options){
     try{
       var response=await fetch(chatNightlyEndpoint(cfg)+(body?'':'&session_id='+encodeURIComponent(session.id)),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal}:{cache:'no-store',signal:controller.signal});
       var data=await response.json();if(!response.ok||!data||data.ok!==true)throw new Error(data&&data.error||'夜间队列暂时不可用');
+      if(data.deleted){chatDigestForgetSession(session.id,cfg);return false;}
       if(!body){if(!data.sessions||!data.sessions.length){delete chatNightlySynced[syncKey];chatScheduleNightlySync(1500);return false}data=Object.assign({ok:true},data.sessions[0]);}
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;
       chatNightlySynced[syncKey]={signature:signature,at:Date.now()};

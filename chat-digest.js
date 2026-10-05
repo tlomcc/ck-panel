@@ -488,6 +488,7 @@ async function chatMaybeRollDigestAtDayBoundary(){
   if(chatDigestMaintenanceBusy||chatTrimBusy||chatTrimTransaction||!chatSessionsReady)return;
   var cfg=chatLoadConfig();
   chatDigestMaintenanceBusy=true;
+  if(typeof chatFlushDigestDeletes==='function')chatFlushDigestDeletes(cfg);
   try{
     for(var session of chatSessions.slice()){
       if(chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v289-manual-trim-background';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v290-recall-cache-and-digest-lifecycle';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6806,8 +6806,9 @@ async function chatDeleteSession(id,event){
   chatFlushAssistantRevealQueue();
   var s=chatSessions.find(function(x){return x.id===id});
   var title=(s&&s.title)||'这个对话';
-  var confirmed=await ckConfirmDialog('删除“'+title+'”后，本机中的这段对话将无法恢复。',{title:'删除对话',confirmText:'删除',danger:true});
+  var confirmed=await ckConfirmDialog('删除“'+title+'”后，本机对话及其后台截断任务、总结状态记录将一并移除。',{title:'删除对话',confirmText:'删除',danger:true});
   if(!confirmed)return;
+  chatDigestForgetSession(id,chatLoadConfig());
   chatDeletedSessionIds[id]=true;
   chatSessions=chatSessions.filter(function(x){return x.id!==id});
   if(!chatSessions.length){
@@ -7111,7 +7112,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     if(chatIsRealMessage(message)){lastActivityTs=Number(message.ts||0)||0;break}
   }
   var manual=opts.force===true||opts.trigger==='manual';
-  var pendingBoundary=!!(selected.size>0&&session&&session.cacheRebuildPending===true);
+  var pendingBoundary=!!(!manual&&selected.size>0&&session&&session.cacheRebuildPending===true);
   var cacheReference=chatCacheActivityReference(session,lastActivityTs);
   var cacheReferenceTs=cacheReference.timestamp;
   var cacheAgeMs=cacheReferenceTs?Math.max(0,Date.now()-cacheReferenceTs):0;
@@ -7338,6 +7339,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     }
     if(manualSend){chatDigestActivate(session,cfg,true);delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now()};}
     var result=chatCommitAutoTrimPlan(cfg,plan);
+    if(result.trimmed&&requestState){requestState.transportSnapshot={messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),updated:Number(session.transportUpdated)||0};}
     result.sessionId=session.id;
     if(result.trimmed&&!manualSend&&(plan.manual||(opts&&opts.idleCheck)))await chatSyncTrimmedHistoryToGateway(cfg,result);
     return result;
