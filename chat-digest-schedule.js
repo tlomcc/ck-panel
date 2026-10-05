@@ -26,27 +26,39 @@ function chatNightlyConfig(cfg){return Object.assign(chatDigestOptions(cfg),{ena
 function chatNightlyBaseStamp(cfg,session){return chatDigestStamp([chatNightlyBase(session),chatNightlyConfig(cfg)]);}
 function chatNightlyScope(cfg){return chatDigestStamp([cfg.gatewayUrl,cfg.panelKey]);}
 function chatNightlyEndpoint(cfg){return chatDailyDigestEndpoint(cfg).replace(/\/prepare$/,'/queue')+'?policy=cache-safe-v2&key='+encodeURIComponent(cfg.panelKey||'');}
+function chatDigestManualStatus(session,cfg){
+  var req=session.digestManualTrim,state=chatNightlyStatus[session.id]||session.digestSchedule||{};
+  if(state.scope!==chatNightlyScope(cfg))state={};
+  var plan=chatDigestManualPlan(session,cfg,req,[]),ready=plan.manualValid&&chatDigestManualPrepared(session,cfg,plan);
+  var prefix='本次截断 '+req.dropRounds+' 轮 · 保留点击时最近 '+req.keep+' 轮及之后的新对话。';
+  if(!plan.manualValid)return prefix+' 待截断原文已变化，暂不执行；可取消后重新准备。';
+  if(ready)return prefix+' 总结已就绪 · 下一轮发送时一次性截断并同步总结，仅这次切换重建缓存。';
+  var names={running:'正在生成总结',retry:'准备失败，后台自动重试',queued:'已提交后台，等待处理',paused:'总结已暂停',succeeded:'正在核对本次总结覆盖范围'};
+  var batches=Number(state.checkpoint_batches)||Number(state.progress&&state.progress.completed_batches)||0;
+  return prefix+' '+(state.local_error||names[state.status]||'正在提交后台')+(batches?' · 已完成 '+batches+' 批':'')+(state.last_error?' · '+state.last_error:'')+'。继续聊天不等待，原上下文与缓存保持。';
+}
 function chatRenderNightlyStatus(session){
-  session=session||chatCurrentSession();if(!session)return;
-  var scope=chatNightlyScope(chatLoadConfig()),state=chatNightlyStatus[session.id]||session.digestSchedule||{};
+  session=session||chatCurrentSession();if(!session||session!==chatCurrentSession())return;
+  var cfg=chatLoadConfig(),scope=chatNightlyScope(cfg),state=chatNightlyStatus[session.id]||session.digestSchedule||{};
   if(state.scope!==scope)state={};
   var names={queued:'等待后台整理',waiting_window:'等待后台重试',running:'后台正在整理',retry:'失败后等待重试',succeeded:'后台准备已完成',empty:'暂无待更新内容',paused:'已暂停'};
   var node=document.getElementById('chat-digest-schedule-status');
-  var ready=chatDigestStage(session,chatLoadConfig())||(session.digestReadyTrims||[]).length;
+  var ready=chatDigestStage(session,cfg)||(session.digestReadyTrims||[]).length;
   ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var cancel=document.getElementById(id);if(cancel)cancel.hidden=!session.digestManualTrim});
-  if(session.digestManualTrim)state=Object.assign({},state,{local_error:'手动截断已预约：后台准备完成、当前回复结束后立即执行；可随时取消'});
-  var button=document.getElementById('chat-digest-sync-now');if(button){button.hidden=!ready;button.disabled=chatSending||chatTrimBusy;}
-  if(ready&&!state.local_error)state=Object.assign({},state,{local_error:'总结已就绪，等待缓存过期后的下一条消息同步'});
-  if(node)node.textContent=(state.local_error||names[state.status]||'资料会自动同步到夜间队列')+' · 零点后后台准备'+(state.pending_groups?' · 待整理 '+state.pending_groups+' 轮':'')+(state.last_error?' · '+state.last_error:'');
+  var button=document.getElementById('chat-digest-sync-now');if(button){button.hidden=!ready||!!session.digestManualTrim;button.disabled=chatTrimBusy;}
+  var text=session.digestManualTrim?chatDigestManualStatus(session,cfg):(state.local_error||names[state.status]||'后台自动准备总结')+(ready?' · 已就绪，等待缓存过期后的下一轮发送同步':'')+(state.pending_groups?' · 待整理 '+state.pending_groups+' 轮':'')+(state.last_error?' · '+state.last_error:'');
+  if(!session.digestManualTrim&&session.digestManualCompleted)text='上次手动截断 '+session.digestManualCompleted.rounds+' 轮已随发送同步。'+text;
+  if(node)node.textContent=text;
+  var next=document.getElementById('chat-trim-next');if(next&&session.digestManualTrim)next.textContent=text;
 }
 function chatScheduleNightlySync(delay){
-  if(chatNightlyTimer)return;
+  if(chatNightlyTimer){if(delay!==0)return;clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
   chatNightlyTimer=setTimeout(function(){chatNightlyTimer=0;chatMaybeRollDigestAtDayBoundary()},delay===undefined?800:delay);
 }
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
-  if(chatSending||chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
+  if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
   var scope=chatNightlyScope(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
   if(chatNightlySyncs.has(syncKey))return chatNightlySyncs.get(syncKey);
@@ -55,12 +67,12 @@ function chatSyncNightlyDigest(cfg,options){
   var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
   var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim]);
   var previous=chatNightlySynced[syncKey]||{},now=Date.now(),unchanged=previous.signature===signature;
-  if(!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(chatNightlyWindow().inWindow?60000:300000)))return Promise.resolve(true);
+  if(!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(session.digestManualTrim?2000:60000)))return Promise.resolve(true);
   var body=null;
   if(!unchanged){
     var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
     chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
-    body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope};
+    body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope};
   }
   var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},12000);
   var task=(async function(){
@@ -95,9 +107,11 @@ function chatSyncNightlyDigest(cfg,options){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(1500);
       }
       if(body&&body.settings_override&&JSON.stringify(chatNightlyConfig(chatLoadConfig()))===JSON.stringify(body.config))delete session.digestSettingsPending;
-      session.digestSchedule={scope:scope,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',completed_at:data.completed_at||0,next_retry:data.next_retry||0};
+      session.digestSchedule={scope:scope,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
       chatSaveSessions({sessionIds:[session.id]});
-      if(session.digestManualTrim&&!chatSending)chatDigestFinishManualTrim(cfg,session).catch(function(){chatRenderNightlyStatus(session)});
+      if(session.digestManualTrim)chatScheduleNightlySync(2000);
+      chatRenderNightlyStatus(session);
+      if(session===chatCurrentSession())chatRenderTrimState(cfg);
       if(session===chatCurrentSession()&&!chatSending){chatRenderDailyDigest(chatLoadConfig());chatRenderNightlyStatus(session);}
       if(options.notify)toast('已同步后台任务；准备完成后仍会等待缓存边界');
       return !data.conflict||!!knownAdvance;

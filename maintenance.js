@@ -29,6 +29,14 @@ var ckStatusTab='fact';
       if(e.target.closest('.mm-more'))ckRefreshMaintenance(false,true);
     });
   }
+  function manualCards(sessions){
+    return sessions.filter(function(s){return !!s.manual}).map(function(s){
+      var m=s.manual,ready=m.rounds>0&&m.ready_rounds===m.rounds;
+      var local=typeof chatSessions!=='undefined'&&chatSessions.find(function(x){return String(x.id)===s.session_id});
+      var applied=local&&local.digestManualCompleted&&local.digestManualCompleted.at>=Number(m.id)&&!local.digestManualTrim;
+      return '<section class="mm-current-details" role="status"><div class="mm-summary-line"><h3>手动截断 · '+escape(s.title||s.session_id)+'</h3>'+chip(applied?'已随发送同步':ready?'已就绪 · 等待下一轮发送':label(s.status),applied?'':ready?'live':'attention')+'</div><div class="mm-stat-grid">'+statistic('本次准备截断',num(m.rounds)+' 轮','只处理点击时选中的旧对话')+statistic('总结已准备',num(m.ready_rounds)+' / '+num(m.rounds)+' 轮','已保存 '+num(s.checkpoint_batches)+' 个批次')+'</div><p class="mm-current-note">'+escape(applied?'本次总结与截断已一起应用。':ready?'下一轮发送时一次性截断并同步总结；现在仍使用原上下文。':'后台准备中，聊天照常，不等待总结。'+(s.last_error?' '+s.last_error:''))+'</p></section>';
+    }).join('');
+  }
   function renderOverview(section,data){
     var box=root(section).querySelector('.mm-overview');
     if(section==='topics'){
@@ -39,7 +47,7 @@ var ckStatusTab='fact';
       box.innerHTML='<div class="mm-summary-line"><h3>主题整理</h3>'+chip(label(status),o.running?'live':status==='retry'?'attention':'')+'<small>观测于 '+escape(clock(data.observed_at))+'</small></div><div class="mm-stat-grid">'+statistic('材料整理',num(checked)+' / '+num(total),'剩余 '+num(progress.remaining)+' 份有效材料')+statistic('主题摘要',num(summary.ready)+' / '+num(summary.total),'共 '+num(data.topic_count)+' 个小主题')+statistic('今日 API 调用',num(todayCalls)+' / '+num(settings.daily_calls),usage.date&&usage.date!==today?'最近记账 '+usage.date+' · '+num(usage.calls)+' 次':today+' · 上海时间')+'</div><div class="mm-progress" role="progressbar" aria-label="材料整理进度" aria-valuemin="0" aria-valuemax="'+total+'" aria-valuenow="'+checked+'"><span style="width:'+pct+'%"></span></div><p class="mm-current-note">'+escape(last.message||'等待新增材料或新的处理意见')+'</p><details class="mm-current-details"><summary>本轮状态与下一步</summary>'+pairs([['当前阶段',o.running&&latestStage?label(latestStage.phase):label(last.stage||last.status)],['最近运行',clock(last.at)],['下一次重试',last.retry_after?clock(last.retry_after):'按后台调度检查'],['API 配置',api.configured?'可调用':'等待配置'],['供应商 / 模型',[api.provider,api.model].filter(Boolean).join(' / ')||'尚未选择'],['待审批',num(o.pending_count)+' 项'],['每批材料',num(settings.batch_size)+' 份'],['你的控制',settings.enabled===false?'自动整理已暂停':'可编辑、暂停、修改预算和撤销自动处理']])+'</details>';
     }else{
       var sessions=data.sessions||[],schedule=data.schedule||{},running=sessions.filter(function(s){return s.status==='running'}).length,pending=sessions.reduce(function(n,s){return n+(s.pending_groups||0)},0);
-      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div><p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；准备好也不会立即改变聊天，等 1 小时缓存过期后，在下一条消息发送前同步。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">打开聊天后，现有会话和待总结内容会自动同步到这里。</p>')+'</div>';
+      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div>'+manualCards(sessions)+'<p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；自动任务等 1 小时缓存过期后随下一轮发送同步；手动任务准备完成后随下一轮发送同步，无须等缓存过期。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">打开聊天后，现有会话和待总结内容会自动同步到这里。</p>')+'</div>';
     }
   }
   function renderEvents(data){
@@ -111,7 +119,7 @@ var ckStatusTab='fact';
     renderOverview(section,s.data);r.querySelectorAll('[data-session]').forEach(function(n){n.open=sessionsOpen.has(n.dataset.session)});if(showDetails&&r.querySelector('.mm-current-details'))r.querySelector('.mm-current-details').open=true;
     r.querySelector('.mm-message').textContent='已刷新 · '+clock(Date.now());
     r.querySelectorAll('[data-mm-filter]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mmFilter===s.filter))});
-    var intro=section==='topics'?{runs:['每一轮整理，看到完整过程','按整理任务合并步骤，展开一轮可查看处理过程与结果。'],changes:['具体改了什么','按主题查看名称、材料关联和摘要的前后变化。'],api:['每一次调用，结果与用量','同一次请求的开始和结束合并显示，展开查看耗时、用量与失败原因。']}[s.filter]:['后台准备记录','总结准备好后仍会等待缓存边界，才在本机启用。'];
+    var intro=section==='topics'?{runs:['每一轮整理，看到完整过程','按整理任务合并步骤，展开一轮可查看处理过程与结果。'],changes:['具体改了什么','按主题查看名称、材料关联和摘要的前后变化。'],api:['每一次调用，结果与用量','同一次请求的开始和结束合并显示，展开查看耗时、用量与失败原因。']}[s.filter]:['后台准备记录','手动准备完成后随下一轮发送启用；自动任务仍等待缓存过期。'];
     r.querySelector('.mm-view-intro').innerHTML='<h4>'+escape(intro[0])+'</h4><p>'+escape(intro[1])+'</p>';
     r.querySelector('.mm-records').innerHTML=(section==='topics'?topicRecords(s,open):s.rows.map(function(row){return record(row,open.has(String(row.id)))}).join(''))||'<div class="mm-empty-state"><b>暂无'+(section==='topics'?{runs:'整理任务',changes:'主题更改',api:'API 调用'}[s.filter]:'总结记录')+'</b><p>后续产生的记录会自动显示在这里。</p></div>';
     r.querySelector('.mm-more').hidden=!s.cursor;
@@ -120,7 +128,7 @@ var ckStatusTab='fact';
       legacy.innerHTML='<details><summary>此前的自动处理与意见 · '+s.data.legacy_operations.length+' 条处理记录</summary><p class="mw-note">需要撤销或补充意见，可展开下方整理控制。</p>'+s.data.legacy_operations.map(function(op){return '<details><summary>'+escape(clock(op.at))+' · '+escape(op.title||op.kind||'主题处理')+'</summary><pre>'+escape(JSON.stringify(op,null,2))+'</pre></details>'}).join('')+'<details><summary>已保存的处理意见</summary><pre>'+escape(JSON.stringify(s.data.legacy_decisions||[],null,2))+'</pre></details></details>';
     }
   }
-  function schedule(){clearTimeout(timer);if(ckStatusTab==='fact')return;timer=setTimeout(function(){if(currentPanelTab==='status'&&!document.hidden)ckRefreshMaintenance(false);else schedule()},15000);}
+  function schedule(){clearTimeout(timer);if(ckStatusTab==='fact')return;timer=setTimeout(function(){if(currentPanelTab==='status'&&!document.hidden)ckRefreshMaintenance(false);else schedule()},ckStatusTab==='digest'&&state.digest.data&&(state.digest.data.sessions||[]).some(function(s){return s.manual})?2000:15000);}
   window.ckRefreshMaintenance=async function(force,more){
     if(ckStatusTab==='fact'||currentPanelTab!=='status')return;
     var section=ckStatusTab,key=storedPanelKey(),mySeq=++seq;

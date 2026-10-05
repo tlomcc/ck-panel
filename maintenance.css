@@ -62,7 +62,9 @@
 .ck-maintenance-controls .mr-content{max-height:none;overflow:visible}
 .ck-maintenance-controls .mr-proposal>details,.ck-maintenance-controls .mr-settings>fieldset{max-width:100%}
 .chat-nightly-info{border:1px solid var(--ck-line);border-radius:12px;padding:16px;margin:16px 0 20px;background:var(--ck-accent-wash);color:var(--ck-text)}
-.chat-nightly-info b{font-size:14px}.chat-nightly-info p{font-size:12px;line-height:1.8;margin:8px 0}.chat-nightly-info small{display:block;color:var(--ck-muted);font-size:11px;line-height:1.8;margin-bottom:12px}
+.chat-nightly-info b{font-size:14px}.chat-nightly-info p{font-size:12px;line-height:1.8;margin:8px 0}.chat-nightly-info small{display:block;color:var(--ck-muted);font-size:13px;line-height:1.8;margin-bottom:12px}
+#chat-trim-next{font-size:13px!important;line-height:1.9!important;white-space:pre-line}
+#chat-digest-schedule-status{white-space:pre-line;color:var(--ck-text)}
 .chat-tools-settings>summary{font-weight:600;font-size:14px}
 @media(max-width:650px){
   .ck-maintenance .mm-overview{padding:18px 15px}

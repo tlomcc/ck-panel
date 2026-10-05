@@ -14,25 +14,25 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v4-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v4.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="style.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="polish.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="chat.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="wechat.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="shell.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="components.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="daily-status.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="settings.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="chat-ui.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="server-status.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="subscription.css?v=chat-v288-first-response-send">
-<script>window.CK_PANEL_VERSION='chat-v288-first-response-send';</script>
-<script>window.CK_PANEL_RELEASE_NOTES=["收到VPS首个数据片段就立即恢复发送按钮，无须等待正文解析或渲染完成。", "接收回复时可继续提交消息，排队发送且保留尚未提交的草稿。"];</script>
-<link rel="stylesheet" href="notebook.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="memory-workbench.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="memory-library.css?v=chat-v288-first-response-send">
-<link rel="stylesheet" href="maintenance.css?v=chat-v288-first-response-send">
+<link rel="stylesheet" href="tokens.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="style.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="polish.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="chat.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="wechat.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="shell.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="components.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="daily-status.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="settings.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="chat-ui.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="server-status.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="subscription.css?v=chat-v289-manual-trim-background">
+<script>window.CK_PANEL_VERSION='chat-v289-manual-trim-background';</script>
+<script>window.CK_PANEL_RELEASE_NOTES=["手动截断立即后台准备，完成后随下一轮发送一次性同步；聊天不等待总结。", "显示本次截断轮数、后台进度和待同步状态；重复点击不重开任务。", "X/Y 日期、压缩、合并和注入逻辑保持不变。"];</script>
+<link rel="stylesheet" href="notebook.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="memory-workbench.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="memory-library.css?v=chat-v289-manual-trim-background">
+<link rel="stylesheet" href="maintenance.css?v=chat-v289-manual-trim-background">
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><img src="icons/app-icon-v4.svg" alt=""></div><div class="startup-name">CK</div><div class="startup-subtitle">小小日常，慢慢收藏</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -41,7 +41,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><img src="icons/app-icon-v4.svg" alt=""></button><div><h1>CK</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v288" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v288-first-response-send</button>
+<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v289" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v289-manual-trim-background</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -226,7 +226,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v288-first-response-send" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v288</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v289-manual-trim-background" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v289</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option><option value="cleanup">清理</option><option value="gateway">API 连接</option></optgroup><optgroup label="显示与管理"><option value="display">设置</option><option value="tools">工具</option><option value="debug">调试</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13 5 5l7 4 7-4-1 8a7 7 0 1 1-12 0Z"/><path d="M9 15v1m6-1v1m-5 3q2 2 4 0"/></svg></span><div><h2>系统提示词</h2><p>给小克一张角色小卡片。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
@@ -289,8 +289,8 @@
 </section>
 </div>
 <div class="chat-side-panel" id="chat-side-digest" data-notebook="sage"><header class="ck-notebook-heading" data-scope="window"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="m3 8 9 7 9-7M8 3h8"/></svg></span><div><h2>截断与总结</h2><p>控制对话长度，夜间整理记忆。</p></div><span class="chat-scope-badge">当前窗口</span></header><div class="chat-compact-tabs" role="tablist" aria-label="截断与总结"><button id="chat-compact-tab-trim" role="tab" aria-controls="chat-compact-trim" aria-selected="false" tabindex="-1" type="button" onclick="chatSelectCompactTab('trim')">截断规则</button><button id="chat-compact-tab-digest" role="tab" aria-controls="chat-compact-digest" aria-selected="true" type="button" onclick="chatSelectCompactTab('digest')">截断总结</button></div><section id="chat-compact-trim" role="tabpanel" aria-labelledby="chat-compact-tab-trim" hidden>
-<div class="chat-memory-card chat-trim-state"><b id="chat-trim-current">当前 0 轮</b><p id="chat-trim-next">到达 1h 缓存边界后自动整理，完成后保留最近 200 轮。</p></div><div class="chat-scope-tabs" role="group" aria-label="截断设置作用范围"><button type="button" data-trim-view="window" aria-pressed="true" onclick="chatSelectTrimScope('window')">当前窗口</button><button type="button" data-trim-view="default" aria-pressed="false" onclick="chatSelectTrimScope('default')">通用默认</button></div>
-<section id="chat-trim-window-section" class="chat-setting-group" data-scope="window"><div class="chat-scope-heading" data-scope="window"><span class="chat-scope-badge">当前窗口</span><div><b>本窗口的独立设置</b></div></div><div class="chat-memory-card chat-window-trim-card"><b>当前窗口截断</b><details class="chat-setting-help"><summary>说明与用法</summary><p>打开后，本窗口使用下面这组独立设置；关闭时跟随下方默认截断。</p></details><label class="chat-switch"><input id="chat-window-trim-override" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口使用独立截断设置</span></label><fieldset id="chat-window-trim-fields" class="chat-trim-fields"><legend class="sr-only">本窗口独立截断参数</legend><label class="chat-switch"><input id="chat-window-trim-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用当前窗口 1h 缓存边界自动截断</span></label><label>当前窗口至少保留真实轮数<input id="chat-window-trim-keep" type="number" min="1" step="1" value="200" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-round-limit-enabled" type="checkbox" onchange="chatSaveConfig(true)"><span>启用当前窗口轮数上限自动截断</span></label><label>当前窗口达到轮数上限<input id="chat-window-trim-round-limit" type="number" min="2" step="1" value="1000" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-prefix-silent" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口共同前缀模式静默通知</span></label></fieldset><p class="chat-field-hint" id="chat-window-trim-hint">当前窗口跟随默认截断。</p></div><div class="chat-actions"><button class="btn btn-outline btn-sm" id="chat-manual-trim-btn" type="button" onclick="chatManualTrimNow()">立即截断</button><button class="btn btn-outline btn-sm" id="chat-trim-cancel-btn" type="button" hidden onclick="chatCancelDigestWork()">停止总结（保留进度）</button></div><button id="chat-trim-cancel-manual" class="btn btn-outline btn-sm" type="button" hidden onclick="chatDigestCancelManualTrim()">取消待执行截断</button><button class="chat-setting-link" type="button" onclick="chatSelectCompactTab('digest')">查看本窗口截断总结 →</button></section>
+<div class="chat-memory-card chat-trim-state"><b id="chat-trim-current">当前 0 轮</b><p id="chat-trim-next" role="status" aria-live="polite">到达 1h 缓存边界后自动整理，完成后保留最近 200 轮。</p></div><div class="chat-scope-tabs" role="group" aria-label="截断设置作用范围"><button type="button" data-trim-view="window" aria-pressed="true" onclick="chatSelectTrimScope('window')">当前窗口</button><button type="button" data-trim-view="default" aria-pressed="false" onclick="chatSelectTrimScope('default')">通用默认</button></div>
+<section id="chat-trim-window-section" class="chat-setting-group" data-scope="window"><div class="chat-scope-heading" data-scope="window"><span class="chat-scope-badge">当前窗口</span><div><b>本窗口的独立设置</b></div></div><div class="chat-memory-card chat-window-trim-card"><b>当前窗口截断</b><details class="chat-setting-help"><summary>说明与用法</summary><p>打开后，本窗口使用下面这组独立设置；关闭时跟随下方默认截断。</p></details><label class="chat-switch"><input id="chat-window-trim-override" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口使用独立截断设置</span></label><fieldset id="chat-window-trim-fields" class="chat-trim-fields"><legend class="sr-only">本窗口独立截断参数</legend><label class="chat-switch"><input id="chat-window-trim-enabled" type="checkbox" checked onchange="chatSaveConfig(true)"><span>启用当前窗口 1h 缓存边界自动截断</span></label><label>当前窗口至少保留真实轮数<input id="chat-window-trim-keep" type="number" min="1" step="1" value="200" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-round-limit-enabled" type="checkbox" onchange="chatSaveConfig(true)"><span>启用当前窗口轮数上限自动截断</span></label><label>当前窗口达到轮数上限<input id="chat-window-trim-round-limit" type="number" min="2" step="1" value="1000" onchange="chatSaveConfig(true)"></label><label class="chat-switch"><input id="chat-window-trim-prefix-silent" type="checkbox" onchange="chatSaveConfig(true)"><span>当前窗口共同前缀模式静默通知</span></label></fieldset><p class="chat-field-hint" id="chat-window-trim-hint">当前窗口跟随默认截断。</p></div><div class="chat-actions"><button class="btn btn-outline btn-sm" id="chat-manual-trim-btn" type="button" onclick="chatManualTrimNow()">手动截断</button><button class="btn btn-outline btn-sm" id="chat-trim-cancel-btn" type="button" hidden onclick="chatCancelDigestWork()">停止总结（保留进度）</button></div><button id="chat-trim-cancel-manual" class="btn btn-outline btn-sm" type="button" hidden onclick="chatDigestCancelManualTrim()">取消待执行截断</button><button class="chat-setting-link" type="button" onclick="chatSelectCompactTab('digest')">查看本窗口截断总结 →</button></section>
 <section id="chat-trim-default-section" class="chat-setting-group" data-scope="default" hidden><div class="chat-scope-heading" data-scope="default"><span class="chat-scope-badge">通用默认</span><div><b>所有跟随默认的窗口</b><p>启用独立设置的窗口不受这里影响。</p></div></div><div class="chat-memory-card"><b>默认截断</b><details class="chat-setting-help"><summary>说明与用法</summary><p>所有没有启用独立截断设置的窗口都使用这里的配置。</p></details></div>
 <label class="chat-switch"><input id="chat-auto-trim-enabled" type="checkbox" checked><span>启用 1h 缓存边界自动截断</span></label>
 <label>至少保留真实轮数<input id="chat-auto-trim-keep" type="number" min="1" step="1" value="200"></label>
@@ -299,7 +299,7 @@
 <label>达到轮数上限<input id="chat-auto-trim-round-limit" type="number" min="2" step="1" value="1000"></label>
 <div class="chat-memory-card"><b>通知方式</b><details class="chat-setting-help"><summary>说明与用法</summary><p>勾选后，共同前缀模式仍会执行 1h 边界和轮数上限截断，但不显示自动截断提示；其他缓存策略和手动截断照常通知。</p></details></div>
 <label class="chat-switch"><input id="chat-auto-trim-prefix-silent" type="checkbox"><span>共同前缀模式静默通知</span></label><button class="chat-wide-btn" type="button" onclick="chatSaveConfig()">保存截断设置</button></section><details class="chat-setting-help"><summary>截断如何计算</summary><p>按真实请求与回复计算轮次，只在完整轮次边界裁剪模型历史。1h 从最近一次成功缓存读取或完整缓存创建计时；无用量记录时按最近消息估算。后台提前准备待截断内容；缓存过期后的下一次发送才切换，未准备好则保留原上下文继续聊天。轮数上限同样等待缓存过期。1h 边界和轮数上限可同时启用，上限必须大于保留轮数。</p></details>
-</section><section id="chat-compact-digest" role="tabpanel" aria-labelledby="chat-compact-tab-digest"><div class="chat-nightly-info"><b>零点开始准备，缓存过期后同步</b><p>后台整理昨天的总结并持续重试。准备好后，等 1 小时缓存过期，在下一条消息发送前同步；未准备好就继续使用原上下文。</p><button id="chat-digest-sync-now" class="btn btn-outline btn-sm" type="button" hidden onclick="chatDigestSyncNow()">立即同步已就绪总结</button><button id="chat-digest-cancel-manual" class="btn btn-outline btn-sm" type="button" hidden onclick="chatDigestCancelManualTrim()">取消待执行截断</button><small id="chat-digest-schedule-status" role="status">正在同步夜间队列</small><button class="btn btn-outline btn-sm" type="button" onclick="chatToggleSettings(false);navTo('status');ckSelectStatusTab('digest')">查看更新状态</button></div>
+</section><section id="chat-compact-digest" role="tabpanel" aria-labelledby="chat-compact-tab-digest"><div class="chat-nightly-info"><b>零点开始准备，缓存过期后同步</b><p>后台整理昨天的总结并持续重试。准备好后，等 1 小时缓存过期，在下一条消息发送前同步；未准备好就继续使用原上下文。手动截断会立即后台准备，准备好后随下一轮发送同步，不用等缓存过期。</p><button id="chat-digest-sync-now" class="btn btn-outline btn-sm" type="button" hidden onclick="chatDigestSyncNow()">立即同步已就绪总结</button><button id="chat-digest-cancel-manual" class="btn btn-outline btn-sm" type="button" hidden onclick="chatDigestCancelManualTrim()">取消待执行截断</button><small id="chat-digest-schedule-status" role="status">正在同步夜间队列</small><button class="btn btn-outline btn-sm" type="button" onclick="chatToggleSettings(false);navTo('status');ckSelectStatusTab('digest')">查看更新状态</button></div>
 <section class="chat-setting-group" data-scope="window"><h3>本窗口的总结</h3>
 <details class="chat-digest-reserve"><summary>滚动总结备选框 <small>过去 n 天，不含今天</small></summary>
 <label>滚动详细总结<textarea id="chat-digest-detail" rows="16" placeholder="【2026-05-21】&#10;这一天的详细总结" oninput="chatDigestEditorChanged('detail')"></textarea><small class="chat-field-count" id="chat-digest-detail-count">当前 0 字</small></label>
@@ -383,20 +383,20 @@
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
 <aside id="panel-version-notes" class="panel-version-notes" aria-label="本次更新" hidden></aside>
-<script src="chat-ui.js?v=chat-v288-first-response-send"></script>
-<script src="chat-history.js?v=chat-v288-first-response-send"></script>
-<script src="chat-digest.js?v=chat-v288-first-response-send"></script>
-<script src="chat-digest-activation.js?v=chat-v288-first-response-send"></script>
-<script src="chat-digest-schedule.js?v=chat-v288-first-response-send"></script>
-<script src="backend-route.js?v=chat-v288-first-response-send"></script>
-<script src="server-status.js?v=chat-v288-first-response-send"></script>
-<script src="subscription.js?v=chat-v288-first-response-send"></script>
-<script src="script.js?v=chat-v288-first-response-send"></script>
-<script src="memory-review.js?v=chat-v288-first-response-send"></script>
-<script src="memory-workbench.js?v=chat-v288-first-response-send"></script>
-<script src="maintenance.js?v=chat-v288-first-response-send"></script>
-<script src="script-extra.js?v=chat-v288-first-response-send"></script>
-<script src="pwa.js?v=chat-v288-first-response-send"></script>
-<script src="select-ui.js?v=chat-v288-first-response-send"></script>
+<script src="chat-ui.js?v=chat-v289-manual-trim-background"></script>
+<script src="chat-history.js?v=chat-v289-manual-trim-background"></script>
+<script src="chat-digest.js?v=chat-v289-manual-trim-background"></script>
+<script src="chat-digest-activation.js?v=chat-v289-manual-trim-background"></script>
+<script src="chat-digest-schedule.js?v=chat-v289-manual-trim-background"></script>
+<script src="backend-route.js?v=chat-v289-manual-trim-background"></script>
+<script src="server-status.js?v=chat-v289-manual-trim-background"></script>
+<script src="subscription.js?v=chat-v289-manual-trim-background"></script>
+<script src="script.js?v=chat-v289-manual-trim-background"></script>
+<script src="memory-review.js?v=chat-v289-manual-trim-background"></script>
+<script src="memory-workbench.js?v=chat-v289-manual-trim-background"></script>
+<script src="maintenance.js?v=chat-v289-manual-trim-background"></script>
+<script src="script-extra.js?v=chat-v289-manual-trim-background"></script>
+<script src="pwa.js?v=chat-v289-manual-trim-background"></script>
+<script src="select-ui.js?v=chat-v289-manual-trim-background"></script>
 </body>
 </html>

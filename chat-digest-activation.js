@@ -85,48 +85,43 @@ async function chatDigestSyncNow(){
 function chatDigestCancelManualTrim(){
   var session=chatCurrentSession();delete session.digestManualTrim;
   chatSaveSessions();chatRenderNightlyStatus(session);chatScheduleNightlySync();
+  chatRenderTrimState(chatLoadConfig());
   toast('已取消待执行截断，原对话保留');
 }
-function chatDigestManualConfig(session,cfg,request){
-  var count=typeof chatConversationRoundCount==='function'?chatConversationRoundCount(chatMessages,session.transportMessages||[]):CKChatHistory.localTurnGroups(chatMessages).length;
-  var keep=Math.max(request.keep,count-request.dropRounds);
-  return Object.assign({},cfg,{windowTrimOverride:true,windowTrimConfig:Object.assign({},chatAutoTrimConfigFrom(cfg),{keep:keep})});
+function chatDigestManualPlan(session,cfg,request,pending){
+  var zero=Object.assign({},cfg,{windowTrimOverride:true,windowTrimConfig:Object.assign({},chatAutoTrimConfigFrom(cfg),{keep:0})});
+  var total=chatPlanAutoTrimForPendingBatch(zero,pending||[],{force:true,trigger:'manual_trim'}).before;
+  var manualCfg=Object.assign({},zero,{windowTrimConfig:Object.assign({},zero.windowTrimConfig,{keep:Math.max(request.keep,total-request.dropRounds)})});
+  var plan=chatPlanAutoTrimForPendingBatch(manualCfg,pending||[],{force:true,trigger:'manual_trim'});
+  var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
+  plan.manualValid=plan.trimmed&&groups.length===request.keys.length&&groups.every(function(g,i){return g.key===request.keys[i]});
+  return plan;
+}
+function chatDigestManualPrepared(session,cfg,plan){
+  var stage=chatDigestStage(session,cfg);
+  var virtual=stage?Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup,digestOmittedCovered:stage.base.omitted,digestReadyTrims:stage.trims||[]}):session;
+  return cfg.dailyDigestEnabled===false?{}:chatDigestCanActivate(session,cfg)&&chatDigestPreparedTrim(virtual,cfg,plan);
 }
 async function chatRequestManualDigestTrim(){
   chatInit();
-  if(chatSending||chatTrimBusy||chatTrimTransaction){toast('当前正在回复或处理截断，请结束后再操作');return false;}
-  var cfg=chatSaveConfig(true),session=chatCurrentSession(),plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
+  var cfg=chatSaveConfig(true),session=chatCurrentSession();
+  if(session.digestManualTrim&&session.digestManualTrim.scope===chatDigestActiveScope(cfg)){
+    chatRenderNightlyStatus(session);toast('本次截断已在后台准备，完成后在下一轮发送时同步；无需重复点击');return true;
+  }
+  var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(!plan.trimmed){toast('当前轮数未超过保留数量，无需截断');return false;}
-  var groups=chatDigestMessageGroups(plan.droppedMessages||[]),stage=chatDigestStage(session,cfg);
-  var virtual=stage?Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup,digestReadyTrims:stage.trims||[]}):session;
-  var ready=cfg.dailyDigestEnabled===false||!!chatDigestPreparedTrim(virtual,cfg,plan);
-  var answer=await ckConfirmDialog(ready?'总结已准备好。现在截断会替换上下文并打断现有缓存，下一条消息重新建立缓存。':'总结还未准备好。确认后会在后台准备并自动重试；准备好且当前回复结束后立即截断，这会打断现有缓存。期间可以继续聊天，也可以取消。',
-    {title:ready?'立即截断会中断缓存':'后台准备后立即截断',confirmText:ready?'确认截断':'后台准备并截断',cancelText:'暂不截断'});
-  if(!answer||session!==chatCurrentSession()||chatSending||chatTrimBusy||chatDigestActiveScope(cfg)!==chatDigestActiveScope(chatLoadConfig()))return false;
+  var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
+  if(!groups.length||plan.canonicalTransport&&plan.transportDropped>groups.length){toast('本机旧对话尚不完整，请先同步历史后再准备截断');return false;}
+  chatDigestFreezePack(cfg,session);
   session.digestManualTrim={scope:chatDigestActiveScope(cfg),keys:groups.map(function(g){return g.key}),keep:plan.keep,dropRounds:plan.dropped,requestedAt:Date.now()};
-  chatSaveSessions();chatRenderNightlyStatus(session);
-  if(!await chatDigestFinishManualTrim(cfg,session)){delete chatNightlySynced[chatNightlyScope(cfg)+':'+session.id];chatScheduleNightlySync(0);toast('正在后台准备，可继续聊天或取消待执行截断');}
+  chatSaveSessions();chatRenderNightlyStatus(session);chatRenderTrimState(cfg);
+  delete chatNightlySynced[chatNightlyScope(cfg)+':'+session.id];
+  chatSyncNightlyDigest(cfg,{session:session}).catch(function(){});
+  chatScheduleNightlySync(2000);
+  toast('已开始后台准备 '+plan.dropped+' 轮；准备好后随下一轮消息同步，期间照常聊天');
   return true;
 }
-async function chatDigestFinishManualTrim(cfg,session){
-  var request=session.digestManualTrim;
-  if(!request||request.scope!==chatDigestActiveScope(cfg)||session!==chatCurrentSession()||chatSending||chatTrimBusy||chatTrimTransaction)return false;
-  if(!chatDigestCanActivate(session,cfg)&&cfg.dailyDigestEnabled!==false)return false;
-  var manualCfg=chatDigestManualConfig(session,cfg,request),plan=chatPlanAutoTrimForPendingBatch(manualCfg,[],{force:true,trigger:'manual_trim'});
-  var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
-  if(!plan.trimmed||groups.some(function(g){return !request.keys.includes(g.key)})){
-    delete session.digestManualTrim;chatSaveSessions();chatRenderNightlyStatus(session);
-    toast('待截断的对话已变化，已取消原预约；需要时可重新发起手动截断');return false;
-  }
-  var stage=chatDigestStage(session,cfg),virtual=stage?Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup,digestReadyTrims:stage.trims||[]}):session;
-  if(cfg.dailyDigestEnabled!==false&&!chatDigestPreparedTrim(virtual,cfg,plan))return false;
-  chatTrimBusy=true;
-  try{
-    chatDigestFreezePack(cfg,session);chatDigestActivate(session,cfg,true);
-    var result=await chatApplyAutoTrimForPendingBatch(manualCfg,[],null,{force:true,trigger:'manual_trim'});
-    if(!result.trimmed)return false;
-    delete session.digestManualTrim;session.cacheRebuildPending=true;
-    chatSaveSessions();chatRenderMessages();chatRenderDailyDigest(cfg);chatScheduleNightlySync();
-    toast('手动截断已完成，下一条消息重新建立缓存');return true;
-  }finally{chatTrimBusy=false;chatRenderTrimState(cfg);chatRenderNightlyStatus(session);}
+// Background observers only report readiness. Activation belongs to the send transaction.
+function chatDigestFinishManualTrim(cfg,session){
+  chatRenderNightlyStatus(session);return false;
 }

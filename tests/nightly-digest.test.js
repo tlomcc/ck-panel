@@ -12,7 +12,7 @@ function setup(){
     setTimeout:(callback,delay)=>{timers.set(++sequence,{callback,delay});return sequence},clearTimeout:id=>timers.delete(id),
     localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     chatSessions:[session],chatMessages:session.messages,chatCurrentSession:()=>session,chatLoadConfig:()=>cfg,
-    chatSaveSessions:()=>{},chatSplitThinkingText:text=>({text}),chatDebug:()=>{},toast:()=>{},
+    chatSaveSessions:()=>{},chatRenderTrimState:()=>{},chatSplitThinkingText:text=>({text}),chatDebug:()=>{},toast:()=>{},
     fetch:async(url,init={})=>{const body=init.body?JSON.parse(init.body):null;calls.push({url,body,init});return response(body)}
   };
   function response(body){return {ok:true,json:async()=>body?{ok:true,status:'queued',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:1,source_stamp:body.base_stamp,base:body.base,result:null}}:{ok:true,sessions:[{status:'queued',snapshot:{revision:1,source_stamp:ctx.chatNightlyBaseStamp(cfg,session),base:ctx.chatNightlyBase(session),result:null}}]}}}
@@ -45,8 +45,8 @@ test('disabling summaries is sent for every session, without generating summarie
   assert.equal(x.calls.length,2);
   for(const call of x.calls){assert.match(call.url,/\/queue\?/);assert.equal(call.body.config.enabled,false);assert.equal(call.body.settings_override,true);}
 });
-test('chat activity defers synchronization immediately',async()=>{
-  const x=setup();x.ctx.chatSending=true;assert.equal(await x.sync(),false);assert.equal(x.calls.length,0);assert.ok(x.timers.size);
+test('chat activity permits background synchronization without changing the active summary',async()=>{
+  const x=setup();x.ctx.chatSending=true;assert.equal(await x.sync(),true);assert.equal(x.calls.length,1);assert.equal(x.session.dailyDigests.length,0);
 });
 test('acknowledgement clears only sources durably accepted by the server',async()=>{
   const x=setup();x.ctx.chatArchiveDigestSources(x.session,x.session.messages);let finish;

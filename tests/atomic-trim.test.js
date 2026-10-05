@@ -14,7 +14,7 @@ function setup(){
  chatSplitThinkingText:text=>({text}),document:{getElementById:()=>null},
  chatMessages:messages,chatEditingIndex:-1,chatSessions:[session],chatTrimTransaction:null,chatDailyDigestChain:Promise.resolve(),
  chatSending:false,chatTrimBusy:false,chatCurrentSession:()=>session,chatDailyDigestFindSession:id=>ctx.chatSessions.find(s=>s.id===id),chatLoadConfig:()=>cfg,
- chatAutoTrimConfigFrom:()=>({enabled:true,keep:2,roundLimitEnabled:false,roundLimit:10}),
+ chatAutoTrimConfigFrom:cfg=>cfg&&cfg.windowTrimOverride?cfg.windowTrimConfig:({enabled:true,keep:2,roundLimitEnabled:false,roundLimit:10}),
  chatPendingMessages:()=>ctx.chatMessages.filter(m=>m.role==='pending_user'),chatIsRealMessage:m=>m.role==='user'||m.role==='assistant',
  chatCacheActivityReference:()=>({timestamp:session.cacheLastReadAt,source:'cache_read'}),chatHasCacheNoticeAfter:()=>false,
  chatDailyDigestRequestMessages:list=>list.map(m=>({...m})),chatDailyDigestFirstDay:()=> '2000-01-01',
@@ -73,15 +73,43 @@ test('old source is accounted on the commit date without editing yesterday',asyn
  const today=x.session.dailyDigests.find(e=>e.dayKey==='2026-10-04');assert.match(today.text,/原对话 2026-10-03/);
  assert.equal(x.ctx.chatDailyDigestNormalize(x.session.dailyDigests).length,2);
 });
-test('manual trim confirmation authorizes future execution without blocking chat',async()=>{
+test('manual click starts preparation during chat and commits only with the next send',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatRenderMessages:()=>{},chatRenderNightlyStatus:()=>{},chatRenderTrimState:()=>{}});
- let prompt;x.ctx.ckConfirmDialog=async(message)=>{prompt=message;return true};
- assert.equal(await x.ctx.chatRequestManualDigestTrim(),true);assert.match(prompt,/打断现有缓存/);assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
+ let queued=0;x.ctx.chatSyncNightlyDigest=async()=>{queued++;return true};x.ctx.chatSending=true;
+ assert.equal(await x.ctx.chatRequestManualDigestTrim(),true);assert.equal(queued,1);assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
+ const request=JSON.stringify(x.session.digestManualTrim);
+ await x.ctx.chatRequestManualDigestTrim();assert.equal(queued,1);assert.equal(JSON.stringify(x.session.digestManualTrim),request);
+ x.session.cacheLastReadAt=x.ctx.Date.now();
  prepare(x);x.ctx.chatSending=true;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
- x.ctx.chatSending=false;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);
+ x.ctx.chatSending=false;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);assert.equal(x.session.messages.length,10);
+ let clean=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{clean++};
+ assert.equal((await x.run()).trimmed,true);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);assert.equal(clean,0);
+ x.session.cacheRebuildPending=false;
+ const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);assert.equal((await x.run()).trimmed,false);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),pack);
+});
+
+test('manual preparation preserves new rounds and waits without changing either prompt component',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderNightlyStatus:()=>{}});
+ const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);await x.ctx.chatRequestManualDigestTrim();
+ assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);
+ prepare(x);x.session.messages.push({role:'user',text:'新问题',turnId:'new',ts:x.ctx.Date.now()},{role:'assistant',text:'新回复',turnId:'new',ts:x.ctx.Date.now()+1});
+ assert.equal((await x.run()).trimmed,true);assert.equal(x.session.messages.length,6);assert.equal(x.session.messages.at(-1).text,'新回复');
+});
+
+test('manual cut refuses edited sources and storage failures without publishing a staged summary',async()=>{
+ for(const fail of ['edit','storage']){
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderNightlyStatus:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);
+ const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);
+ x.session.digestStaged={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),base:{entries:[],rollup:null,omitted:[]},trims:x.session.digestReadyTrims,result:{day:'2026-10-03'},revision:2};
+ x.session.digestReadyTrims=[];
+ if(fail==='edit')x.session.messages[0].text='编辑过的原文';else x.ctx.localStorage.setItem=()=>{throw Error('full')};
+ assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);assert.ok(x.session.digestStaged);
+ }
 });
 test('manual preparation cancellation prevents later automatic cache-breaking trim',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatRenderMessages:()=>{},chatRenderNightlyStatus:()=>{},ckConfirmDialog:async()=>true});
+ x.ctx.chatSyncNightlyDigest=async()=>true;
  await x.ctx.chatRequestManualDigestTrim();x.ctx.chatDigestCancelManualTrim();prepare(x);
  assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);assert.equal(x.session.messages.length,10);
 });

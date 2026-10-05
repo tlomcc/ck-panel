@@ -485,16 +485,16 @@ function chatRefreshRollingDigest(cfg,options){
   return typeof chatSyncNightlyDigest==='function'?chatSyncNightlyDigest(cfg,options):Promise.resolve(false);
 }
 async function chatMaybeRollDigestAtDayBoundary(){
-  if(chatDigestMaintenanceBusy||chatSending||chatTrimBusy||chatTrimTransaction||!chatSessionsReady||document.hidden)return;
+  if(chatDigestMaintenanceBusy||chatTrimBusy||chatTrimTransaction||!chatSessionsReady)return;
   var cfg=chatLoadConfig();
   chatDigestMaintenanceBusy=true;
   try{
     for(var session of chatSessions.slice()){
-      if(chatSending||chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}
+      if(chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}
       await chatRefreshRollingDigest(cfg,{session:session});
       if(typeof chatDigestFinishManualTrim==='function')await chatDigestFinishManualTrim(cfg,session);
     }
-  }finally{chatDigestMaintenanceBusy=false;}
+  }finally{chatDigestMaintenanceBusy=false;if(chatSessions.some(function(s){return s.digestManualTrim}))chatScheduleNightlySync(2000);}
 }
 async function chatRefreshDigestNow(kind){
   if(chatLoadConfig().dailyDigestEnabled===false){toast('请先启用截断总结');return false;}

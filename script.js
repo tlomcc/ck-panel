@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v288-first-response-send';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v289-manual-trim-background';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4332,6 +4332,7 @@ function chatNormalizeSession(s){
     digestRemote:s.digestRemote||null,
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
+    digestManualCompleted:s.digestManualCompleted||null,
     digestActivePack:s.digestActivePack||null,
     digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
@@ -6369,7 +6370,8 @@ function chatRenderTrimState(cfg){
   var pendingManual=(chatCurrentSession()||{}).digestManualTrim;
   if(current)current.textContent='当前 '+count+' 个真实轮次'+(trim.roundLimitEnabled?'｜上限 '+trim.roundLimit+' 轮':'');
   if(manual){
-    manual.disabled=chatSending||chatTrimBusy||count<=0;
+    manual.disabled=chatTrimBusy||count<=0;
+    manual.textContent=pendingManual?'查看准备状态':'手动截断';
     manual.title=count<=0
       ?'当前没有可处理的对话'
       :(count>trim.keep
@@ -6377,7 +6379,7 @@ function chatRenderTrimState(cfg){
         :'当前不足 '+trim.keep+' 个真实轮次，不会删除内容');
   }
   if(!next)return;
-  if(pendingManual){next.textContent='手动截断已预约：后台准备完成、当前回复结束后立即执行，将中断缓存。你可以继续聊天或取消待执行截断。';return;}
+  if(pendingManual){next.textContent=chatDigestManualStatus(chatCurrentSession(),cfg);return;}
   if(!trim.enabled&&!trim.roundLimitEnabled){
     next.textContent='1h 缓存边界与轮数上限自动截断均已关闭；仍可手动同步并按需截断。';
     return;
@@ -6591,6 +6593,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestRemote:s.digestRemote||null,
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
+    digestManualCompleted:s.digestManualCompleted||null,
     digestActivePack:s.digestActivePack||null,
     digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
@@ -7299,8 +7302,14 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   while(chatTrimTransaction)await chatTrimTransaction;
   var activationSession=chatCurrentSession();
   chatDigestFreezePack(cfg,activationSession);
-  if(!(requestState&&requestState.stopped)&&!(opts&&opts.idleCheck)&&chatDigestActivate(activationSession,cfg,false)){chatSaveSessions();chatRenderDailyDigest(cfg);}
-  var plan=chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
+  if(!(requestState&&requestState.stopped)&&!(opts&&opts.idleCheck)&&!activationSession.digestManualTrim&&chatDigestActivate(activationSession,cfg,false)){chatSaveSessions();chatRenderDailyDigest(cfg);}
+  var manualRequest=activationSession.digestManualTrim;
+  var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&submittedPending.length&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
+  var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
+  if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
+    chatScheduleNightlySync(0);chatRenderNightlyStatus(activationSession);
+    return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});
+  }
   if(opts&&opts.idleCheck){chatScheduleNightlySync();return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});}
   if(!plan.boundary||(requestState&&requestState.stopped)){
     chatRenderTrimState(cfg);
@@ -7312,7 +7321,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   chatTrimTransaction=new Promise(function(resolve){release=resolve});
   try{
     if(plan.trimmed&&cfg.dailyDigestEnabled!==false){
-      var prepared=chatDigestPreparedTrim(session,cfg,plan);
+      var prepared=manualSend?chatDigestManualPrepared(session,cfg,plan):chatDigestPreparedTrim(session,cfg,plan);
       if(!prepared){
         chatScheduleNightlySync(0);
         chatDailyDigestSetStatus('后台正在准备总结，本轮继续使用原上下文，不等待。');
@@ -7327,9 +7336,10 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       plan.digestWaited='prepared';
       chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'后台准备，缓存过期后同步'});
     }
+    if(manualSend){chatDigestActivate(session,cfg,true);delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now()};}
     var result=chatCommitAutoTrimPlan(cfg,plan);
     result.sessionId=session.id;
-    if(result.trimmed&&(plan.manual||(opts&&opts.idleCheck)))await chatSyncTrimmedHistoryToGateway(cfg,result);
+    if(result.trimmed&&!manualSend&&(plan.manual||(opts&&opts.idleCheck)))await chatSyncTrimmedHistoryToGateway(cfg,result);
     return result;
   }catch(error){
     chatShowTrimFailure('截断操作失败：'+chatFriendlyError(error));
