@@ -86,10 +86,19 @@ function chatRenderNightlyStatus(session){
   var ready=chatDigestStage(session,cfg)||(session.digestReadyTrims||[]).length;
   ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var cancel=document.getElementById(id);if(cancel)cancel.hidden=!session.digestManualTrim});
   var button=document.getElementById('chat-digest-sync-now');if(button){button.hidden=!ready||!!session.digestManualTrim;button.disabled=chatTrimBusy;}
-  var text=session.digestManualTrim?chatDigestManualStatus(session,cfg):(state.local_error||names[state.status]||'后台自动准备总结')+(ready?' · 已就绪，等待缓存过期后的下一轮发送同步':'')+(state.pending_groups?' · 待整理 '+state.pending_groups+' 轮':'')+(state.last_error?' · '+state.last_error:'');
+  var text=session.digestManualTrim?chatDigestManualStatus(session,cfg):(state.local_error||names[state.status]||'后台自动准备总结')+(state.pending_groups?' · 待整理 '+state.pending_groups+' 轮':'')+(state.last_error?' · '+state.last_error:'');
+  if(!session.digestManualTrim&&typeof chatPlanAutoTrimForPendingBatch==='function'){
+    var plan=chatPlanAutoTrimForPendingBatch(cfg,chatPendingMessages(),{force:true,trigger:'preview'});
+    var prepared=chatDigestAutoPreparedPlan(session,cfg,plan,chatPendingMessages());
+    text+=' · 目标截断 '+plan.dropped+' 轮，已就绪 '+(prepared&&prepared.trimmed?prepared.dropped:0)+' 轮';
+    if(prepared&&prepared.trimmed)text+=' · 缓存过期后的新一轮发送时同步';
+    else if(plan.dropped)text+=' · 原上下文保留，后台继续准备';
+  }
+  var decision=session.digestTrimDecision,reasons={manual_scope_mismatch:'本次请求与后台任务的连接设置不一致',manual_source_changed:'待截断原文与预约范围不一致',history_coverage_mismatch:'本机原文与实际发送历史的轮数不一致，尚不能确认总结覆盖',summary_not_ready:'本次待截断范围尚未有完整总结'};
+  if(decision)text+='。上次发送未截断：'+(reasons[decision.reason]||decision.reason)+'（本机 '+decision.localRounds+' 轮／发送历史 '+decision.transportRounds+' 轮）。';
   if(!session.digestManualTrim&&session.digestManualCompleted)text='上次手动截断 '+session.digestManualCompleted.rounds+' 轮已随发送同步。'+text;
   if(node)node.textContent=text;
-  var next=document.getElementById('chat-trim-next');if(next&&session.digestManualTrim)next.textContent=text;
+  var next=document.getElementById('chat-trim-next');if(next)next.textContent=text;
 }
 function chatScheduleNightlySync(delay){
   if(chatNightlyTimer){if(delay!==0)return;clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}

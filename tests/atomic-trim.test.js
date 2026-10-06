@@ -73,6 +73,36 @@ test('old source is accounted on the commit date without editing yesterday',asyn
  const today=x.session.dailyDigests.find(e=>e.dayKey==='2026-10-04');assert.match(today.text,/原对话 2026-10-03/);
  assert.equal(x.ctx.chatDailyDigestNormalize(x.session.dailyDigests).length,2);
 });
+test('automatic expiry commits the prepared prefix even when new rounds grew beyond it',async()=>{
+ const x=setup();prepare(x);
+ x.session.messages.push({role:'user',text:'新问题',turnId:'new',ts:x.ctx.Date.now()-1000},{role:'assistant',text:'新回复',turnId:'new',ts:x.ctx.Date.now()-900});
+ x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));
+ const pending={role:'pending_user',text:'本次消息',ts:x.ctx.Date.now()};x.session.messages.push(pending);
+ const result=await x.ctx.chatApplyAutoTrimForPendingBatch(x.cfg,[pending],{});
+ assert.equal(result.trimmed,true);assert.equal(result.dropped,3);assert.equal(result.after,3);
+ assert.equal(x.session.transportMessages.length,6);assert.ok(x.session.messages.includes(pending));assert.equal(x.requests.length,0);
+ x.session.cacheRebuildPending=false;x.session.cacheLastReadAt=x.ctx.Date.now();
+ const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);assert.equal((await x.run()).trimmed,false);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),pack);
+});
+test('automatic expiry cannot publish staged summary when archival storage fails',async()=>{
+ const x=setup();prepare(x);const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);
+ x.session.digestStaged={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),base:{entries:[{dayKey:'2026-10-02',text:'待启用',covered:[]}],rollup:null,omitted:[]},trims:x.session.digestReadyTrims,result:{day:'2026-10-03'},revision:2};
+ x.session.digestReadyTrims=[];x.ctx.localStorage.setItem=()=>{throw Error('full')};
+ assert.equal((await x.run()).trimmed,false);assert.ok(x.session.digestStaged);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),pack);
+});
+test('expired pending rebuild no longer suppresses a prepared automatic cut',async()=>{
+ const x=setup();prepare(x);x.session.cacheRebuildPending=true;
+ assert.equal((await x.run()).trimmed,true);assert.equal(x.session.messages.length,4);
+});
+test('incomplete history coverage stays intact and records a concrete skip reason',async()=>{
+ const x=setup();prepare(x);x.session.transportMessages=Array.from({length:8},(_,i)=>[{role:'user',content:'u'+i},{role:'assistant',content:'a'+i}]).flat();
+ assert.equal((await x.run()).trimmed,false);assert.equal(x.session.transportMessages.length,16);assert.equal(x.session.messages.length,10);
+ assert.equal(x.session.digestTrimDecision.reason,'history_coverage_mismatch');
+});
+test('a ready batch that extends into retained history is never partially consumed',async()=>{
+ const x=setup();prepare(x);const all=x.ctx.chatDigestMessageGroups(x.session.messages);x.session.digestReadyTrims[0].keys=all.map(g=>g.key);
+ assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.digestReadyTrims.length,1);
+});
 test('manual click starts preparation during chat and commits only with the next send',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatRenderMessages:()=>{},chatRenderNightlyStatus:()=>{},chatRenderTrimState:()=>{}});
  let queued=0;x.ctx.chatSyncNightlyDigest=async()=>{queued++;return true};x.ctx.chatSending=true;

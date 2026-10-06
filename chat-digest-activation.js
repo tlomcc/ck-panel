@@ -69,6 +69,38 @@ function chatDigestPreparedTrim(session,cfg,plan){
   });
   return {entries:entries.filter(function(e){return e.text}),rollup:session.digestRollup,used:used};
 }
+function chatDigestPreparedSession(session,cfg){
+  var stage=chatDigestStage(session,cfg);
+  return stage?Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup,digestOmittedCovered:stage.base.omitted,digestReadyTrims:stage.trims||[]}):session;
+}
+// A growing conversation must not invalidate a completed, fully covered prefix.
+// Re-plan both histories with the same retained-round count and prove coverage
+// again before committing. Never split a summary batch or drop unknown history.
+function chatDigestAutoPreparedPlan(session,cfg,plan,pending){
+  if(!plan.trimmed||cfg.dailyDigestEnabled===false)return plan;
+  if(!chatDigestCanActivate(session,cfg))return null;
+  var virtual=chatDigestPreparedSession(session,cfg);
+  var prepared=chatDigestPreparedTrim(virtual,cfg,plan);
+  if(prepared)return Object.assign({},plan,{digestPrepared:prepared});
+  var groups=chatDigestMessageGroups(plan.droppedMessages||[]),covered=new Set();
+  chatDailyDigestNormalize(virtual.dailyDigests).forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
+  chatDigestOmittedCoverage(virtual.digestOmittedCovered).forEach(function(r){covered.add(r.key)});
+  (virtual.digestReadyTrims||[]).forEach(function(t){t.keys.forEach(function(k){covered.add(k)})});
+  var prefix=0;while(prefix<groups.length&&covered.has(groups[prefix].key))prefix++;
+  for(var drop=prefix;drop>0;drop--){
+    var smaller=Object.assign({},cfg,{windowTrimOverride:true,windowTrimConfig:Object.assign({},chatAutoTrimConfigFrom(cfg),{keep:Math.max(plan.keep,plan.before-drop)})});
+    var candidate=chatPlanAutoTrimForPendingBatch(smaller,pending||[],{force:true,trigger:plan.trigger});
+    if(!candidate.trimmed)continue;
+    prepared=chatDigestPreparedTrim(virtual,cfg,candidate);
+    if(prepared)return Object.assign({},candidate,{manual:plan.manual,digestPrepared:prepared,targetDrop:plan.dropped});
+  }
+  return null;
+}
+function chatDigestRecordTrimDecision(session,plan,reason){
+  session.digestTrimDecision={at:Date.now(),reason:reason,before:plan.before,target:plan.dropped||0,cacheAgeMs:plan.cacheAgeMs||0,localRounds:plan.localBefore||0,transportRounds:plan.transportBefore||0};
+  chatDigestLog('trim_result',Object.assign({ok:false,skipped:true,session_id:session.id,trigger:plan.trigger},session.digestTrimDecision));
+  chatSaveSessions();chatRenderNightlyStatus(session);
+}
 async function chatDigestSyncNow(){
   var session=chatCurrentSession(),cfg=chatLoadConfig();
   if(chatSending||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后同步');return false;}

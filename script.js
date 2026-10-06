@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v290-recall-cache-and-digest-lifecycle';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v291-atomic-auto-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4333,6 +4333,7 @@ function chatNormalizeSession(s){
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
+    digestTrimDecision:s.digestTrimDecision||null,
     digestActivePack:s.digestActivePack||null,
     digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
@@ -6594,6 +6595,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
+    digestTrimDecision:s.digestTrimDecision||null,
     digestActivePack:s.digestActivePack||null,
     digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
@@ -7163,7 +7165,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   };
   if(!boundary)return base;
 
-  var shouldTrim=!pendingBoundary&&opts.skipTrim!==true&&historyRounds>trim.keep;
+  var shouldTrim=(!pendingBoundary||cacheAgeBoundary||roundLimitBoundary)&&opts.skipTrim!==true&&historyRounds>trim.keep;
   var keptMessages=shouldTrim?localPlan.keptMessages:working.slice();
   var droppedMessages=shouldTrim?localPlan.droppedMessages:[];
   var keptTransportMessages=shouldTrim&&canonicalTransport?transportPlan.keptMessages:transportMessages.slice();
@@ -7303,11 +7305,11 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   while(chatTrimTransaction)await chatTrimTransaction;
   var activationSession=chatCurrentSession();
   chatDigestFreezePack(cfg,activationSession);
-  if(!(requestState&&requestState.stopped)&&!(opts&&opts.idleCheck)&&!activationSession.digestManualTrim&&chatDigestActivate(activationSession,cfg,false)){chatSaveSessions();chatRenderDailyDigest(cfg);}
   var manualRequest=activationSession.digestManualTrim;
   var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&submittedPending.length&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
+    if(!(opts&&opts.idleCheck)&&submittedPending&&submittedPending.length)chatDigestRecordTrimDecision(activationSession,plan,!manualSend?'manual_scope_mismatch':!plan.manualValid?'manual_source_changed':'summary_not_ready');
     chatScheduleNightlySync(0);chatRenderNightlyStatus(activationSession);
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});
   }
@@ -7322,12 +7324,15 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   chatTrimTransaction=new Promise(function(resolve){release=resolve});
   try{
     if(plan.trimmed&&cfg.dailyDigestEnabled!==false){
-      var prepared=manualSend?chatDigestManualPrepared(session,cfg,plan):chatDigestPreparedTrim(session,cfg,plan);
+      var readyPlan=manualSend?null:chatDigestAutoPreparedPlan(session,cfg,plan,submittedPending);
+      var prepared=manualSend?chatDigestManualPrepared(session,cfg,plan):readyPlan&&readyPlan.digestPrepared;
       if(!prepared){
         chatScheduleNightlySync(0);
         chatDailyDigestSetStatus('后台正在准备总结，本轮继续使用原上下文，不等待。');
+        chatDigestRecordTrimDecision(session,plan,plan.transportDropped>chatDigestMessageGroups(plan.droppedMessages||[]).length?'history_coverage_mismatch':'summary_not_ready');
         return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
       }
+      if(readyPlan){plan=readyPlan;plan.session=session;}
       plan.digestPrepared=prepared;
       if(!chatArchiveDigestSources(session,plan.droppedMessages||[])){
         chatDailyDigestSetStatus('本机存储空间不足，已保留原对话并跳过截断。聊天可继续。','error');
@@ -7337,7 +7342,9 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       plan.digestWaited='prepared';
       chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'后台准备，缓存过期后同步'});
     }
-    if(manualSend){chatDigestActivate(session,cfg,true);delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now()};}
+    if(plan.digestPrepared||!plan.trimmed&&chatDigestCacheExpired(session))chatDigestActivate(session,cfg,true);
+    if(manualSend){delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now()};}
+    delete session.digestTrimDecision;
     var result=chatCommitAutoTrimPlan(cfg,plan);
     if(result.trimmed&&requestState){requestState.transportSnapshot={messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),updated:Number(session.transportUpdated)||0};}
     result.sessionId=session.id;
@@ -10588,6 +10595,17 @@ async function chatSubmitPendingMessages(options){
       first_user_ts:currentSession.firstUserTs||0
     },
     client_cache_generation:Number(currentSession.cacheGeneration||0)||0,
+    client_panel_version:CK_PANEL_VERSION,
+    client_trim_diagnostic:{
+      enabled:chatAutoTrimConfigFrom(cfg).enabled,
+      keep:chatAutoTrimConfigFrom(cfg).keep,
+      before:trimResult.before||0,after:trimResult.after||0,
+      local_rounds:trimResult.localBefore||0,transport_rounds:trimResult.transportBefore||0,
+      trimmed:trimResult.trimmed===true,
+      reason:currentSession.digestTrimDecision&&currentSession.digestTrimDecision.reason||'',
+      manual_pending:!!currentSession.digestManualTrim,
+      cache_age_ms:trimResult.cacheAgeMs||0
+    },
     client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0
   };
   // Native thinking is a top-level Anthropic option. Keep it out of system/messages
