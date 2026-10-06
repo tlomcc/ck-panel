@@ -104,15 +104,24 @@ function chatDigestRecordTrimDecision(session,plan,reason){
 async function chatDigestSyncNow(){
   var session=chatCurrentSession(),cfg=chatLoadConfig();
   if(chatSending||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后同步');return false;}
-  if(!chatDigestStage(session,cfg)&&!(session.digestReadyTrims||[]).length){toast('总结尚未准备好，后台会继续处理');return false;}
-  var accepted=await ckConfirmDialog('立即同步会替换当前上下文，打断现有缓存；下一条消息将重新建立缓存。也可以继续等待，系统会在 1 小时缓存过期后自动同步。',{title:'同步后缓存会中断',confirmText:'立即同步',cancelText:'等缓存过期'});
-  if(!accepted||session!==chatCurrentSession()||chatSending||chatTrimBusy||chatTrimTransaction)return false;
-  chatDigestFreezePack(cfg,session);
-  chatDigestActivate(session,cfg,true);
-  var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync'});
-  session.cacheRebuildPending=true;chatDigestResetPack(cfg,session);
+  if(!chatDigestImmediateReady(session,cfg)){toast('当前范围尚未准备好，后台会继续处理；无需等待模型');chatScheduleNightlySync(0);return false;}
+  var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync',commitPrepared:true});
+  if(!result.cacheBoundary){chatRenderNightlyStatus(session);return false;}
   chatSaveSessions();chatRenderDailyDigest(cfg);chatRenderMessages();chatScheduleNightlySync();
-  toast('已同步准备好的总结，下一条消息建立新缓存');return true;
+  if(result.gatewaySynced===false){toast('本机已截断并保存总结，网关暂未同步；下一次发送会携带已截断历史');return true;}
+  toast(result.trimmed?'已立刻截断 '+result.dropped+' 轮并同步总结，下一条消息建立新缓存':'已立刻同步总结，下一条消息建立新缓存');return true;
+}
+function chatDigestImmediateReady(session,cfg){
+  if(!chatDigestCanActivate(session,cfg))return false;
+  var req=session.digestManualTrim;
+  if(req){
+    if(req.scope!==chatDigestActiveScope(cfg))return false;
+    var manual=chatDigestManualPlan(session,cfg,req,chatPendingMessages());
+    return !!(manual.manualValid&&chatDigestManualPrepared(session,cfg,manual));
+  }
+  var plan=chatPlanAutoTrimForPendingBatch(cfg,chatPendingMessages(),{force:true,trigger:'manual_digest_sync'});
+  if(plan.trimmed)return !!chatDigestAutoPreparedPlan(session,cfg,plan,chatPendingMessages());
+  return !!chatDigestStage(session,cfg);
 }
 function chatDigestCancelManualTrim(){
   var session=chatCurrentSession();delete session.digestManualTrim;
@@ -137,15 +146,16 @@ function chatDigestManualPrepared(session,cfg,plan){
 async function chatRequestManualDigestTrim(){
   chatInit();
   var cfg=chatSaveConfig(true),session=chatCurrentSession();
-  if(session.digestManualTrim&&session.digestManualTrim.scope===chatDigestActiveScope(cfg)){
-    chatRenderNightlyStatus(session);toast('本次截断已在后台准备，完成后在下一轮发送时同步；无需重复点击');return true;
-  }
+  var previous=session.digestManualTrim;
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(!plan.trimmed){toast('当前轮数未超过保留数量，无需截断');return false;}
   var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
   if(!groups.length||plan.canonicalTransport&&plan.transportDropped>groups.length){toast('本机旧对话尚不完整，请先同步历史后再准备截断');return false;}
+  if(previous&&previous.scope===chatDigestActiveScope(cfg)&&previous.keep===plan.keep&&JSON.stringify(previous.keys)===JSON.stringify(groups.map(function(g){return g.key}))){
+    chatRenderNightlyStatus(session);toast(chatDigestImmediateReady(session,cfg)?'总结已就绪，可点击「立刻同步」，不必等缓存过期':'本次范围正在后台准备；新增轮次后可继续准备');return true;
+  }
   chatDigestFreezePack(cfg,session);
-  session.digestManualTrim={scope:chatDigestActiveScope(cfg),keys:groups.map(function(g){return g.key}),keep:plan.keep,dropRounds:plan.dropped,requestedAt:Date.now()};
+  session.digestManualTrim={scope:chatDigestActiveScope(cfg),keys:groups.map(function(g){return g.key}),keep:plan.keep,dropRounds:plan.dropped,requestedAt:Math.max(Date.now(),Number(previous&&previous.requestedAt||0)+1)};
   chatSaveSessions();chatRenderNightlyStatus(session);chatRenderTrimState(cfg);
   delete chatNightlySynced[chatNightlyScope(cfg)+':'+session.id];
   chatSyncNightlyDigest(cfg,{session:session}).catch(function(){});

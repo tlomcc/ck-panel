@@ -152,6 +152,23 @@ test('manual preparation cancellation prevents later automatic cache-breaking tr
  await x.ctx.chatRequestManualDigestTrim();x.ctx.chatDigestCancelManualTrim();prepare(x);
  assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);assert.equal(x.session.messages.length,10);
 });
+test('ready manual task can synchronize immediately during a warm cache without a model or confirmation',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);x.session.cacheLastReadAt=x.ctx.Date.now();
+ let synced=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{synced++;return true};x.ctx.ckConfirmDialog=()=>{throw Error('unexpected dialog')};
+ assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(synced,1);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);assert.equal(x.requests.length,0);
+ assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(synced,1);
+});
+test('ready preparation remains reusable and can extend to newly added rounds',async()=>{
+ const x=setup();let queued=0;Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>{queued++},chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);const first=x.session.digestManualTrim;
+ await x.ctx.chatRequestManualDigestTrim();assert.equal(queued,1);assert.equal(x.session.digestManualTrim,first);
+ x.session.messages.push({role:'user',text:'新增',turnId:'new',ts:x.ctx.Date.now()},{role:'assistant',text:'新答',turnId:'new',ts:x.ctx.Date.now()+1});
+ await x.ctx.chatRequestManualDigestTrim();assert.equal(queued,2);assert.equal(x.session.digestManualTrim.dropRounds,4);assert.ok(x.session.digestManualTrim.requestedAt>first.requestedAt);
+ assert.equal(x.session.digestReadyTrims.length,1);assert.equal(x.session.messages.length,12);assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),false);
+ const g=x.ctx.chatDigestMessageGroups(x.session.messages.slice(6,8))[0];x.session.digestReadyTrims.push({keys:[g.key],text:'补充总结',startTs:g.start,endTs:g.end});
+ assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(x.session.messages.length,4);
+});
 
 test('fetched models never acquire a previously configured model',async()=>{
  const ctx={panelDataFetch:async()=>({ok:true,json:async()=>({ok:true,models:['new','new','second']})}),PROVIDER_MODELS_URL:'/models',providerNormalizeApiType:()=> 'openai',esc:x=>x,escAttr:x=>x};

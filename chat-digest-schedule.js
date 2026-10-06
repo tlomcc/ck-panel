@@ -71,8 +71,8 @@ function chatDigestManualStatus(session,cfg){
   if(state.scope!==chatNightlyScope(cfg))state={};
   var plan=chatDigestManualPlan(session,cfg,req,[]),ready=plan.manualValid&&chatDigestManualPrepared(session,cfg,plan);
   var prefix='本次截断 '+req.dropRounds+' 轮 · 保留点击时最近 '+req.keep+' 轮及之后的新对话。';
-  if(!plan.manualValid)return prefix+' 待截断原文已变化，暂不执行；可取消后重新准备。';
-  if(ready)return prefix+' 总结已就绪 · 下一轮发送时一次性截断并同步总结，仅这次切换重建缓存。';
+  if(!plan.manualValid)return prefix+' 待截断原文已变化；点「继续后台准备截断」更新范围。';
+  if(ready)return prefix+' 总结已就绪 · 可点「立刻同步」，不必等1小时；也可在下一轮发送时一次性截断并同步。';
   var names={running:'正在生成总结',retry:'准备失败，后台自动重试',queued:'已提交后台，等待处理',paused:'总结已暂停',succeeded:'正在核对本次总结覆盖范围'};
   var batches=Number(state.checkpoint_batches)||Number(state.progress&&state.progress.completed_batches)||0;
   return prefix+' '+(state.local_error||names[state.status]||'正在提交后台')+(batches?' · 已完成 '+batches+' 批':'')+(state.last_error?' · '+state.last_error:'')+'。继续聊天不等待，原上下文与缓存保持。';
@@ -85,7 +85,9 @@ function chatRenderNightlyStatus(session){
   var node=document.getElementById('chat-digest-schedule-status');
   var ready=chatDigestStage(session,cfg)||(session.digestReadyTrims||[]).length;
   ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var cancel=document.getElementById(id);if(cancel)cancel.hidden=!session.digestManualTrim});
-  var button=document.getElementById('chat-digest-sync-now');if(button){button.hidden=!ready||!!session.digestManualTrim;button.disabled=chatTrimBusy;}
+  var immediate=typeof chatPlanAutoTrimForPendingBatch==='function'&&chatDigestImmediateReady(session,cfg);
+  ['chat-digest-sync-now','chat-trim-sync-now'].forEach(function(id){var button=document.getElementById(id);if(button){button.hidden=false;button.disabled=!!(chatSending||chatTrimBusy||chatTrimTransaction||!immediate);button.textContent=chatSending?'回复结束后立刻同步':immediate?'立刻同步':'立刻同步（尚未就绪）';button.title=immediate?'不等1小时；立即应用总结与截断，下一条消息重建一次缓存':'总结准备好后即可点击，无需等缓存过期';}});
+  var prepare=document.getElementById('chat-digest-prepare');if(prepare){prepare.hidden=false;prepare.disabled=!!chatTrimBusy;prepare.textContent=session.digestManualTrim?'继续后台准备截断':'后台准备截断';}
   var text=session.digestManualTrim?chatDigestManualStatus(session,cfg):(state.local_error||names[state.status]||'后台自动准备总结')+(state.pending_groups?' · 待整理 '+state.pending_groups+' 轮':'')+(state.last_error?' · '+state.last_error:'');
   if(!session.digestManualTrim&&typeof chatPlanAutoTrimForPendingBatch==='function'){
     var plan=chatPlanAutoTrimForPendingBatch(cfg,chatPendingMessages(),{force:true,trigger:'preview'});
@@ -96,7 +98,7 @@ function chatRenderNightlyStatus(session){
   }
   var decision=session.digestTrimDecision,reasons={manual_scope_mismatch:'本次请求与后台任务的连接设置不一致',manual_source_changed:'待截断原文与预约范围不一致',history_coverage_mismatch:'本机原文与实际发送历史的轮数不一致，尚不能确认总结覆盖',summary_not_ready:'本次待截断范围尚未有完整总结'};
   if(decision)text+='。上次发送未截断：'+(reasons[decision.reason]||decision.reason)+'（本机 '+decision.localRounds+' 轮／发送历史 '+decision.transportRounds+' 轮）。';
-  if(!session.digestManualTrim&&session.digestManualCompleted)text='上次手动截断 '+session.digestManualCompleted.rounds+' 轮已随发送同步。'+text;
+  if(!session.digestManualTrim&&session.digestManualCompleted)text='上次手动截断 '+session.digestManualCompleted.rounds+' 轮'+(session.digestManualCompleted.mode==='immediate'?'已立即同步。':'已随发送同步。')+text;
   if(node)node.textContent=text;
   var next=document.getElementById('chat-trim-next');if(next)next.textContent=text;
 }

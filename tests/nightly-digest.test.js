@@ -138,8 +138,8 @@ test('renewed reads defer a ready snapshot, including after restoring saved sess
   assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),false);assert.equal(x.session.digestActivePack.text,'');
   x.advance(3500000);assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),true);
 });
-test('canceling immediate sync preserves the active snapshot and shows a cache warning',async()=>{
+test('immediate sync during an active reply preserves the staged snapshot',async()=>{
   const x=setup();x.session.cacheLastReadAt=x.ctx.Date.now();x.ctx.fetch=async(u,o)=>({ok:true,json:async()=>result(x,JSON.parse(o.body))});await x.sync();
-  let prompt;x.ctx.ckConfirmDialog=async(message,options)=>{prompt={message,options};return false};
-  assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.match(prompt.message,/打断现有缓存/);assert.equal(x.session.dailyDigests.length,0);assert.ok(x.session.digestStaged);
+  x.ctx.chatSending=true;
+  assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(x.session.dailyDigests.length,0);assert.ok(x.session.digestStaged);
 });

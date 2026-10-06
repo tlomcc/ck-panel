@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v291-atomic-auto-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v292-immediate-trim-controls';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6372,50 +6372,15 @@ function chatRenderTrimState(cfg){
   if(current)current.textContent='当前 '+count+' 个真实轮次'+(trim.roundLimitEnabled?'｜上限 '+trim.roundLimit+' 轮':'');
   if(manual){
     manual.disabled=chatTrimBusy||count<=0;
-    manual.textContent=pendingManual?'查看准备状态':'手动截断';
+    manual.hidden=false;
+    manual.textContent=pendingManual?'继续后台准备截断':'后台准备截断';
     manual.title=count<=0
       ?'当前没有可处理的对话'
       :(count>trim.keep
         ?'保留最近 '+trim.keep+' 个完整真实轮次'
         :'当前不足 '+trim.keep+' 个真实轮次，不会删除内容');
   }
-  if(!next)return;
-  if(pendingManual){next.textContent=chatDigestManualStatus(chatCurrentSession(),cfg);return;}
-  if(!trim.enabled&&!trim.roundLimitEnabled){
-    next.textContent='1h 缓存边界与轮数上限自动截断均已关闭；仍可手动同步并按需截断。';
-    return;
-  }
-  var retryAt=Number((chatCurrentSession()||{}).trimRetryAfter||0);
-  if(retryAt>Date.now()){next.textContent='上次总结未完成，原对话已保留；约 '+Math.ceil((retryAt-Date.now())/60000)+' 分钟后恢复自动检查。';return}
-  var roundLimitText=trim.roundLimitEnabled
-    ?('轮数上限：达到 '+trim.roundLimit+' 轮后也会等待缓存过期，再保留最近 '+trim.keep+' 个完整真实轮次。')
-    :'轮数上限自动截断已关闭。';
-  if(trim.roundLimitEnabled&&count>=trim.roundLimit){
-    next.textContent='已达到 '+trim.roundLimit+' 轮上限；后台准备总结，缓存过期后在下一次发送前保留最近 '+trim.keep+' 轮。未准备好则继续使用原上下文。';
-    return;
-  }
-  if(!trim.enabled){
-    next.textContent=roundLimitText;
-    return;
-  }
-  var session=chatCurrentSession();
-  var reference=chatCacheActivityReference(session,chatLastMessageTs());
-  var referenceTs=reference.timestamp;
-  var expired=!!(referenceTs&&Date.now()-referenceTs>=CHAT_AUTO_TRIM_IDLE_MS);
-  if(expired){
-    if(count>trim.keep){
-      next.textContent='缓存已过期：下一次发送前使用已就绪总结并保留最近 '+trim.keep+' 轮；未准备好则保留原上下文。 '+roundLimitText;
-    }else{
-      next.textContent='缓存已过期：下一次发送前同步已就绪总结；当前不足 '+trim.keep+' 轮，不删除内容。 '+roundLimitText;
-    }
-  }else{
-    var remaining=referenceTs?Math.max(0,CHAT_AUTO_TRIM_IDLE_MS-(Date.now()-referenceTs)):CHAT_AUTO_TRIM_IDLE_MS;
-    var minutes=Math.max(1,Math.ceil(remaining/60000));
-    var sourceText=reference.source==='cache_read'
-      ?'按最近一次成功缓存读取续期'
-      :(reference.source==='full_create'?'按最近一次完整缓存创建计时':'尚无缓存用量记录，暂按最近消息估算');
-    next.textContent=sourceText+'；距缓存过期约 '+minutes+' 分钟。过期后在下一次发送前同步已就绪总结，保留最近 '+trim.keep+' 轮。 '+roundLimitText;
-  }
+  chatRenderNightlyStatus(chatCurrentSession());
 }
 function chatNowTitle(){
   var d=new Date();
@@ -7306,7 +7271,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   var activationSession=chatCurrentSession();
   chatDigestFreezePack(cfg,activationSession);
   var manualRequest=activationSession.digestManualTrim;
-  var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&submittedPending.length&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
+  var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
     if(!(opts&&opts.idleCheck)&&submittedPending&&submittedPending.length)chatDigestRecordTrimDecision(activationSession,plan,!manualSend?'manual_scope_mismatch':!plan.manualValid?'manual_source_changed':'summary_not_ready');
@@ -7342,13 +7307,13 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       plan.digestWaited='prepared';
       chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'后台准备，缓存过期后同步'});
     }
-    if(plan.digestPrepared||!plan.trimmed&&chatDigestCacheExpired(session))chatDigestActivate(session,cfg,true);
-    if(manualSend){delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now()};}
+    if(plan.digestPrepared||!plan.trimmed&&(chatDigestCacheExpired(session)||opts&&opts.commitPrepared))chatDigestActivate(session,cfg,true);
+    if(manualSend){delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now(),mode:opts&&opts.commitPrepared?'immediate':'send'};}
     delete session.digestTrimDecision;
     var result=chatCommitAutoTrimPlan(cfg,plan);
     if(result.trimmed&&requestState){requestState.transportSnapshot={messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),updated:Number(session.transportUpdated)||0};}
     result.sessionId=session.id;
-    if(result.trimmed&&!manualSend&&(plan.manual||(opts&&opts.idleCheck)))await chatSyncTrimmedHistoryToGateway(cfg,result);
+    if(result.trimmed&&((opts&&opts.commitPrepared)||!manualSend&&(plan.manual||(opts&&opts.idleCheck))))result.gatewaySynced=await chatSyncTrimmedHistoryToGateway(cfg,result);
     return result;
   }catch(error){
     chatShowTrimFailure('截断操作失败：'+chatFriendlyError(error));

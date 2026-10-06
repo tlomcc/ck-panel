@@ -1,5 +1,16 @@
 /* Readable maintenance monitoring: current state, durable history, explicit controls. */
 var ckStatusTab='fact';
+async function ckRunDigestAction(id,action){
+  await chatEnsureSessionsReady();
+  var session=chatSessions.find(function(s){return String(s.id)===String(id)});
+  if(!session){toast('该窗口已删除');return false;}
+  if(chatCurrentSession()!==session){
+    if(chatSending||chatTrimTransaction){toast('当前回复结束后可操作其他窗口');return false;}
+    chatSelectSession(session.id);
+  }
+  var result=action==='sync'?await chatDigestSyncNow():await chatManualTrimNow();
+  ckRefreshMaintenance(false);return result;
+}
 (function(){
   'use strict';
   var timer=0,seq=0,controller=null,principal=null,state={events:{rows:[],cursor:null,filter:'all',data:null},topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null}};
@@ -24,6 +35,8 @@ var ckStatusTab='fact';
     root(section).innerHTML='<p class="mm-message" role="status">正在读取最新状态…</p><div class="mm-overview"></div><section class="mm-history"><div class="mm-history-heading"><h3>整理记录</h3><span class="mm-history-help">上海时间 · 保留90天</span></div>'+(section==='topics'?'<div class="mm-filters" role="group" aria-label="记录类型">'+[['runs','整理进度'],['changes','更改明细'],['api','API 调用']].map(function(pair){return '<button type="button" data-mm-filter="'+pair[0]+'" aria-pressed="'+(pair[0]===state[section].filter)+'">'+pair[1]+'</button>'}).join('')+'</div>':'')+'<div class="mm-view-intro"></div><div class="mm-records" aria-live="polite"></div><button type="button" class="btn btn-outline btn-sm mm-more" hidden>加载更早记录</button><div class="mm-legacy"></div></section>';
     if(root(section).__mmBound)return;root(section).__mmBound=true;
     root(section).addEventListener('click',function(e){
+      var action=e.target.closest('[data-mm-digest-action]');
+      if(action){ckRunDigestAction(action.dataset.mmSession,action.dataset.mmDigestAction);return;}
       var button=e.target.closest('[data-mm-filter]');
       if(button){var current=state[section];if(current.filter===button.dataset.mmFilter)return;current.filter=button.dataset.mmFilter;current.rows=[];current.cursor=null;render(section);root(section).querySelector('.mm-records').innerHTML='<p class="mm-loading" role="status">正在读取'+button.textContent+'…</p>';ckRefreshMaintenance(false);}
       if(e.target.closest('.mm-more'))ckRefreshMaintenance(false,true);
@@ -34,7 +47,7 @@ var ckStatusTab='fact';
       var m=s.manual,ready=m.rounds>0&&m.ready_rounds===m.rounds;
       var local=typeof chatSessions!=='undefined'&&chatSessions.find(function(x){return String(x.id)===s.session_id});
       var applied=local&&local.digestManualCompleted&&local.digestManualCompleted.at>=Number(m.id)&&!local.digestManualTrim;
-      return '<section class="mm-current-details" role="status"><div class="mm-summary-line"><h3>手动截断 · '+escape(s.title||s.session_id)+'</h3>'+chip(applied?'已随发送同步':ready?'已就绪 · 等待下一轮发送':label(s.status),applied?'':ready?'live':'attention')+'</div><div class="mm-stat-grid">'+statistic('本次准备截断',num(m.rounds)+' 轮','只处理点击时选中的旧对话')+statistic('总结已准备',num(m.ready_rounds)+' / '+num(m.rounds)+' 轮','已保存 '+num(s.checkpoint_batches)+' 个批次')+'</div><p class="mm-current-note">'+escape(applied?'本次总结与截断已一起应用。':ready?'下一轮发送时一次性截断并同步总结；现在仍使用原上下文。':'后台准备中，聊天照常，不等待总结。'+(s.last_error?' '+s.last_error:''))+'</p></section>';
+      return '<section class="mm-current-details" role="status"><div class="mm-summary-line"><h3>手动截断 · '+escape(s.title||s.session_id)+'</h3>'+chip(applied?'已同步':ready?'已就绪 · 可立刻同步':label(s.status),applied?'':ready?'live':'attention')+'</div><div class="mm-stat-grid">'+statistic('本次准备截断',num(m.rounds)+' 轮','再次准备可纳入新增轮次')+statistic('总结已准备',num(m.ready_rounds)+' / '+num(m.rounds)+' 轮','已保存 '+num(s.checkpoint_batches)+' 个批次')+'</div><p class="mm-current-note">'+escape(applied?'本次总结与截断已一起应用，可继续准备新增轮次。':ready?'可点立刻同步，不必等1小时；下一条消息重建一次缓存。也可等下一轮发送同步。':'后台准备中，聊天照常，不等待总结。'+(s.last_error?' '+s.last_error:''))+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(s.session_id)+'">继续后台准备截断</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(s.session_id)+'"'+(!ready||applied?' disabled':'')+'>立刻同步'+(!ready?'（尚未就绪）':'')+'</button></div></section>';
     }).join('');
   }
   function renderOverview(section,data){
