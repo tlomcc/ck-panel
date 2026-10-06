@@ -99,6 +99,37 @@ test('incomplete history coverage stays intact and records a concrete skip reaso
  assert.equal((await x.run()).trimmed,false);assert.equal(x.session.transportMessages.length,16);assert.equal(x.session.messages.length,10);
  assert.equal(x.session.digestTrimDecision.reason,'history_coverage_mismatch');
 });
+test('legacy extra transport history is summarized in background and joins a ready manual cut',async()=>{
+ const x=setup();prepare(x);
+ const old=[{role:'user',content:'旧问A'},{role:'assistant',content:'旧答A'},{role:'user',content:'旧问B'},{role:'assistant',content:'旧答B'}];
+ x.session.transportMessages=old.concat(x.session.messages.map(m=>({role:m.role,content:m.text+(m.role==='user'?'\n<ck_gateway_context>召回内容</ck_gateway_context>':'')})));
+ x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),keys:x.session.digestReadyTrims[0].keys,dropRounds:5,keep:2,requestedAt:x.ctx.Date.now()};
+ const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);
+ assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.transportMessages.length,14);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);
+ const groups=x.ctx.chatDigestCandidateGroups(x.session,x.cfg,x.session.messages),extra=groups.filter(g=>g.key.startsWith('tr:'));
+ assert.equal(groups.length,5);assert.equal(extra.length,2);assert.equal(groups.filter(g=>x.session.digestReadyTrims[0].keys.includes(g.key)).length,3);
+ assert.ok(!JSON.stringify(groups).includes('召回内容'));
+ assert.equal(JSON.stringify(groups.map(g=>g.key)),JSON.stringify(x.ctx.chatDigestCandidateGroups(x.session,x.cfg,x.session.messages).map(g=>g.key)));
+ x.session.digestReadyTrims.push({keys:extra.map(g=>g.key),text:'额外旧发送历史总结',startTs:extra[0].start,endTs:extra.at(-1).end});
+ assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);
+ const epoch=x.session.digestTransportEpoch;const result=await x.run();assert.equal(result.trimmed,true);assert.equal(result.dropped,5);
+ assert.equal(x.session.messages.length,4);assert.equal(x.session.transportMessages.length,4);assert.notEqual(x.session.digestTransportEpoch,epoch);
+ assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/额外旧发送历史总结/);assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/原始时间未保存/);
+ assert.equal(x.session.digestPending.length,5);assert.equal(x.requests.length,0);
+});
+test('different transport answers cannot borrow coverage from local answers',async()=>{
+ const x=setup();prepare(x);x.session.transportMessages=[{role:'user',content:'额外旧问'},{role:'assistant',content:'额外旧答'}].concat(x.session.messages.map(m=>({role:m.role,content:m.text})));
+ x.session.transportMessages[3].content='不同的真实发送答案';
+ const groups=x.ctx.chatDigestCandidateGroups(x.session,x.cfg,x.session.messages);
+ assert.equal(groups.filter(g=>g.key.startsWith('tr:')).length,2);assert.ok(groups.some(g=>g.messages.some(m=>m.text==='不同的真实发送答案')));
+ assert.equal((await x.run()).trimmed,false);
+});
+test('manual prepare accepts extra transport and queues all required sources instead of demanding a reload',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true});
+ x.session.transportMessages=[{role:'user',content:'旧问'},{role:'assistant',content:'旧答'}].concat(x.session.messages.map(m=>({role:m.role,content:m.text})));
+ assert.equal(await x.ctx.chatRequestManualDigestTrim(),true);assert.equal(x.session.digestManualTrim.dropRounds,4);
+ assert.equal(x.ctx.chatDigestCandidateGroups(x.session,x.cfg,x.session.messages).length,4);assert.equal(x.session.messages.length,10);
+});
 test('a ready batch that extends into retained history is never partially consumed',async()=>{
  const x=setup();prepare(x);const all=x.ctx.chatDigestMessageGroups(x.session.messages);x.session.digestReadyTrims[0].keys=all.map(g=>g.key);
  assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.digestReadyTrims.length,1);

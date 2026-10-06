@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v292-immediate-trim-controls';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v293-transport-summary-coverage';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4334,6 +4334,8 @@ function chatNormalizeSession(s){
     digestManualTrim:s.digestManualTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestTrimDecision:s.digestTrimDecision||null,
+    digestTransportEpoch:s.digestTransportEpoch||null,
+    digestTransportSourceAt:Number(s.digestTransportSourceAt)||0,
     digestActivePack:s.digestActivePack||null,
     digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
@@ -6561,6 +6563,8 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestManualTrim:s.digestManualTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestTrimDecision:s.digestTrimDecision||null,
+    digestTransportEpoch:s.digestTransportEpoch||null,
+    digestTransportSourceAt:Number(s.digestTransportSourceAt)||0,
     digestActivePack:s.digestActivePack||null,
     digestReadyTrims:Array.isArray(s.digestReadyTrims)?s.digestReadyTrims:[],
     digestRemoteConflict:s.digestRemoteConflict||null,
@@ -7203,6 +7207,7 @@ function chatCommitAutoTrimPlan(cfg,plan){
       s.transportUpdated=0;
     }
   }
+  if(trimCommitted&&s.digestTransportEpoch){s.digestTransportEpoch=String(Date.now())+'-'+Math.random().toString(36).slice(2,9);s.digestTransportSourceAt=Date.now();}
   if(plan.cacheBoundary)s.cacheRebuildPending=true;
   chatResetSessionAnchorFromMessages(s);
   s.updated=Date.now();
@@ -7274,7 +7279,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
-    if(!(opts&&opts.idleCheck)&&submittedPending&&submittedPending.length)chatDigestRecordTrimDecision(activationSession,plan,!manualSend?'manual_scope_mismatch':!plan.manualValid?'manual_source_changed':'summary_not_ready');
+    if(!(opts&&opts.idleCheck)&&submittedPending&&submittedPending.length)chatDigestRecordTrimDecision(activationSession,plan,!manualSend?'manual_scope_mismatch':!plan.manualValid?'manual_source_changed':plan.transportBefore!==plan.localBefore?'history_coverage_mismatch':'summary_not_ready');
     chatScheduleNightlySync(0);chatRenderNightlyStatus(activationSession);
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});
   }
@@ -7299,7 +7304,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       }
       if(readyPlan){plan=readyPlan;plan.session=session;}
       plan.digestPrepared=prepared;
-      if(!chatArchiveDigestSources(session,plan.droppedMessages||[])){
+      if(!chatArchiveDigestSources(session,plan.droppedMessages||[],plan.digestSourceGroups)){
         chatDailyDigestSetStatus('本机存储空间不足，已保留原对话并跳过截断。聊天可继续。','error');
         chatDigestLog('trim_result',{ok:false,session_id:session.id,trigger:plan.trigger,error:'local_outbox_full',history_preserved:true});
         return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});

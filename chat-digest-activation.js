@@ -10,16 +10,68 @@ function chatDigestStage(session,cfg){
   var stage=session.digestStaged;
   return stage&&stage.scope===chatDigestActiveScope(cfg)&&stage.config===chatDigestConfigStamp(cfg)&&!session.digestManualPending?stage:null;
 }
+function chatDigestTransportText(content){
+  if(typeof content==='string')return content;
+  if(!Array.isArray(content))return '';
+  return content.map(function(b){
+    if(typeof b==='string')return b;
+    if(!b)return '';
+    if(b.type==='text')return String(b.text||'');
+    if(b.type==='tool_result')return '【工具结果】'+chatDigestTransportText(b.content);
+    if(b.type==='tool_use')return '【工具调用 '+String(b.name||'')+'】'+JSON.stringify(b.input||{});
+    if(b.type==='image')return '[发送了 1 张图片，文字记录不包含图片内容]';
+    if(b.type==='document')return '[附件内容未包含在文字记录中]';
+    return '';
+  }).filter(Boolean).join('\n');
+}
+function chatDigestTransportRows(messages){
+  return messages.map(function(m){
+    var text=chatDigestTransportText(m.content).replace(/\s*<ck_gateway_context>[\s\S]*?<\/ck_gateway_context>\s*/g,'\n\n').replace(/\s*<ck_gateway_context>[\s\S]*$/g,'').replace(/\n{3,}/g,'\n\n').trim();
+    if(m.role==='assistant')text=String((chatSplitThinkingText(text,{suppressThinking:true,hideUnclosedThinking:true})||{}).text||'').trim();
+    return {role:m.role,text:text};
+  }).filter(function(m){return (m.role==='user'||m.role==='assistant')&&m.text});
+}
+// Older clients sometimes trimmed visible rows without trimming the transport.
+// Reuse a local summary only when its complete turn exactly matches the aligned
+// transport turn. Every unmatched transport turn needs its own proven coverage.
+function chatDigestTransportSources(session,rows,localSelected,drop){
+  var transport=session.transportMessages||[],turns=CKChatHistory.transportTurnGroups(transport),local=chatDigestMessageGroups(rows);
+  if(!drop||turns.length===local.length)return null;
+  if(!session.digestTransportEpoch){session.digestTransportEpoch=String(Date.now())+'-'+Math.random().toString(36).slice(2,9);session.digestTransportSourceAt=Date.now();}
+  var stamp=Number(session.digestTransportSourceAt)||Date.now(),offset=turns.length-local.length,merged=new Map();
+  function signature(messages){return JSON.stringify(messages.map(function(m){return {role:m.role,text:m.text}}))}
+  turns.slice(0,drop).forEach(function(turn,i){
+    var source=chatDigestTransportRows(transport.slice(turn.startIndex,turn.endIndex)),match=local[i-offset],group;
+    if(match&&signature(source)===signature(match.messages))group=match;
+    else{
+      if(!source.length)source=[{role:'user',text:'[此轮仅含非文字内容]'}];
+      var key='tr:'+chatDigestStamp([session.digestTransportEpoch,i,source]);
+      group={key:key,day:chatDailyDigestDayKey(stamp),start:stamp,end:stamp,messages:source.map(function(m){return Object.assign({},m,{ts:stamp,turnId:key})})};
+    }
+    merged.set(group.key,group);
+  });
+  localSelected.forEach(function(g){merged.set(g.key,g)});
+  return Array.from(merged.values());
+}
+function chatDigestPlanSources(session,plan){
+  if(!plan.digestSourceGroups&&plan.canonicalTransport){
+    var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
+    plan.digestSourceGroups=chatDigestTransportSources(session,rows,chatDigestMessageGroups(plan.droppedMessages||[]),plan.transportDropped);
+  }
+  return plan.digestSourceGroups||chatDigestMessageGroups(plan.droppedMessages||[]);
+}
 function chatDigestCandidateGroups(session,cfg,rows){
   var trim=typeof chatWindowTrimConfigFromSession==='function'&&chatWindowTrimConfigFromSession(session);
   if(!trim&&typeof chatAutoTrimConfigFrom==='function')trim=chatAutoTrimConfigFrom(Object.assign({},cfg,{windowTrimOverride:false}));
   var request=session.digestManualTrim;
   if(request&&request.scope===chatDigestActiveScope(cfg)){
-    return chatDigestMessageGroups(rows).filter(function(g){return request.keys.includes(g.key)}).map(function(g){return Object.assign({},g,{candidate:true})});
+    var selected=chatDigestMessageGroups(rows).filter(function(g){return request.keys.includes(g.key)});
+    return (chatDigestTransportSources(session,rows,selected,request.dropRounds)||selected).map(function(g){return Object.assign({},g,{candidate:true})});
   }
   if(!trim||(!trim.enabled&&!trim.roundLimitEnabled))return [];
   var plan=CKChatHistory.trimLocalTurns(rows,trim.keep);
-  return chatDigestMessageGroups(plan.droppedMessages).map(function(g){return Object.assign({},g,{candidate:true})});
+  var selected=chatDigestMessageGroups(plan.droppedMessages),transport=CKChatHistory.trimTransportTurns(session.transportMessages||[],trim.keep);
+  return (chatDigestTransportSources(session,rows,selected,transport.dropped)||selected).map(function(g){return Object.assign({},g,{candidate:true})});
 }
 function chatDigestFreezePack(cfg,session){
   var scope=chatDigestActiveScope(cfg);
@@ -49,7 +101,7 @@ function chatDigestActivate(session,cfg,force){
   return true;
 }
 function chatDigestPreparedTrim(session,cfg,plan){
-  var groups=chatDigestMessageGroups(plan.droppedMessages||[]),keys=new Set(groups.map(function(g){return g.key}));
+  var groups=chatDigestPlanSources(session,plan),keys=new Set(groups.map(function(g){return g.key}));
   // With only transport history available we cannot safely prove coverage.
   if(!groups.length||plan.canonicalTransport&&plan.transportDropped>groups.length)return null;
   var covered=new Set();chatDailyDigestNormalize(session.dailyDigests).forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
@@ -62,7 +114,7 @@ function chatDigestPreparedTrim(session,cfg,plan){
   if(!entry){entry={id:'dg-'+today,dayKey:today,kind:'daily',text:'',covered:[],rounds:0,startTs:0,endTs:0};entries.push(entry)}
   used.forEach(function(t){
     if(t.keys.every(function(k){return entry.covered.includes(k)}))return;
-    var source='【原对话 '+chatDailyDigestRangeLabel(t)+'；归档 '+today+'】';
+    var source=t.keys.some(function(k){return k.indexOf('tr:')===0})?'【历史发送记录（原始时间未保存）；归档 '+today+'】':'【原对话 '+chatDailyDigestRangeLabel(t)+'；归档 '+today+'】';
     entry.text+=(entry.text?'\n\n':'')+source+'\n'+t.text;
     entry.startTs=entry.startTs?Math.min(entry.startTs,t.startTs):t.startTs;entry.endTs=Math.max(entry.endTs,t.endTs);
     entry.covered=Array.from(new Set(entry.covered.concat(t.keys)));entry.rounds+=t.keys.length;entry.detail=null;entry.brief=null;
@@ -79,15 +131,16 @@ function chatDigestPreparedSession(session,cfg){
 function chatDigestAutoPreparedPlan(session,cfg,plan,pending){
   if(!plan.trimmed||cfg.dailyDigestEnabled===false)return plan;
   if(!chatDigestCanActivate(session,cfg))return null;
+  chatDigestPlanSources(session,plan);
   var virtual=chatDigestPreparedSession(session,cfg);
   var prepared=chatDigestPreparedTrim(virtual,cfg,plan);
   if(prepared)return Object.assign({},plan,{digestPrepared:prepared});
-  var groups=chatDigestMessageGroups(plan.droppedMessages||[]),covered=new Set();
+  var groups=chatDigestPlanSources(session,plan),covered=new Set();
   chatDailyDigestNormalize(virtual.dailyDigests).forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
   chatDigestOmittedCoverage(virtual.digestOmittedCovered).forEach(function(r){covered.add(r.key)});
   (virtual.digestReadyTrims||[]).forEach(function(t){t.keys.forEach(function(k){covered.add(k)})});
   var prefix=0;while(prefix<groups.length&&covered.has(groups[prefix].key))prefix++;
-  for(var drop=prefix;drop>0;drop--){
+  for(var drop=Math.min(prefix,plan.dropped);drop>0;drop--){
     var smaller=Object.assign({},cfg,{windowTrimOverride:true,windowTrimConfig:Object.assign({},chatAutoTrimConfigFrom(cfg),{keep:Math.max(plan.keep,plan.before-drop)})});
     var candidate=chatPlanAutoTrimForPendingBatch(smaller,pending||[],{force:true,trigger:plan.trigger});
     if(!candidate.trimmed)continue;
@@ -139,9 +192,18 @@ function chatDigestManualPlan(session,cfg,request,pending){
   return plan;
 }
 function chatDigestManualPrepared(session,cfg,plan){
+  chatDigestPlanSources(session,plan);
   var stage=chatDigestStage(session,cfg);
   var virtual=stage?Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup,digestOmittedCovered:stage.base.omitted,digestReadyTrims:stage.trims||[]}):session;
   return cfg.dailyDigestEnabled===false?{}:chatDigestCanActivate(session,cfg)&&chatDigestPreparedTrim(virtual,cfg,plan);
+}
+function chatDigestPreparationProgress(session,cfg){
+  var req=session.digestManualTrim;if(!req)return null;
+  var plan=chatDigestManualPlan(session,cfg,req,chatPendingMessages()),groups=chatDigestPlanSources(session,plan),virtual=chatDigestPreparedSession(session,cfg),covered=new Set();
+  chatDailyDigestNormalize(virtual.dailyDigests).forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
+  chatDigestOmittedCoverage(virtual.digestOmittedCovered).forEach(function(r){covered.add(r.key)});
+  (virtual.digestReadyTrims||[]).forEach(function(t){t.keys.forEach(function(k){covered.add(k)})});
+  return {rounds:req.dropRounds,sources:groups.length,prepared:groups.filter(function(g){return covered.has(g.key)}).length,ready:!!(req.scope===chatDigestActiveScope(cfg)&&plan.manualValid&&chatDigestManualPrepared(session,cfg,plan))};
 }
 async function chatRequestManualDigestTrim(){
   chatInit();
@@ -150,7 +212,7 @@ async function chatRequestManualDigestTrim(){
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(!plan.trimmed){toast('当前轮数未超过保留数量，无需截断');return false;}
   var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
-  if(!groups.length||plan.canonicalTransport&&plan.transportDropped>groups.length){toast('本机旧对话尚不完整，请先同步历史后再准备截断');return false;}
+  if(!chatDigestPlanSources(session,plan).length){toast('没有可准备的历史内容');return false;}
   if(previous&&previous.scope===chatDigestActiveScope(cfg)&&previous.keep===plan.keep&&JSON.stringify(previous.keys)===JSON.stringify(groups.map(function(g){return g.key}))){
     chatRenderNightlyStatus(session);toast(chatDigestImmediateReady(session,cfg)?'总结已就绪，可点击「立刻同步」，不必等缓存过期':'本次范围正在后台准备；新增轮次后可继续准备');return true;
   }

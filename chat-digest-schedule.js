@@ -52,9 +52,9 @@ function chatNightlyPending(session){
   var groups=new Map();values.forEach(function(g){if(g&&typeof g.key==='string'&&Array.isArray(g.messages))groups.set(g.key,g)});
   return Array.from(groups.values());
 }
-function chatArchiveDigestSources(session,messages){
+function chatArchiveDigestSources(session,messages,sourceGroups){
   var merged=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
-  chatDigestMessageGroups(messages).forEach(function(g){merged.set(g.key,g)});
+  (sourceGroups||chatDigestMessageGroups(messages)).forEach(function(g){merged.set(g.key,g)});
   var pending=Array.from(merged.values());
   // This small durable write precedes removing any original chat messages.
   // If local storage is full, keep the original history and continue chatting.
@@ -71,6 +71,7 @@ function chatDigestManualStatus(session,cfg){
   if(state.scope!==chatNightlyScope(cfg))state={};
   var plan=chatDigestManualPlan(session,cfg,req,[]),ready=plan.manualValid&&chatDigestManualPrepared(session,cfg,plan);
   var prefix='本次截断 '+req.dropRounds+' 轮 · 保留点击时最近 '+req.keep+' 轮及之后的新对话。';
+  if(plan.transportBefore!==plan.localBefore)prefix+=' 实际发送历史 '+plan.transportBefore+' 轮，本机 '+plan.localBefore+' 轮；后台正在补齐额外发送历史的总结覆盖。';
   if(!plan.manualValid)return prefix+' 待截断原文已变化；点「继续后台准备截断」更新范围。';
   if(ready)return prefix+' 总结已就绪 · 可点「立刻同步」，不必等1小时；也可在下一轮发送时一次性截断并同步。';
   var names={running:'正在生成总结',retry:'准备失败，后台自动重试',queued:'已提交后台，等待处理',paused:'总结已暂停',succeeded:'正在核对本次总结覆盖范围'};
