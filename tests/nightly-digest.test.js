@@ -25,6 +25,19 @@ function result(x,body,revision=2){
   return {ok:true,status:'succeeded',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision,source_stamp:body.base_stamp,
     base:{entries:[{dayKey:'2026-10-03',startTs:x.session.messages[0].ts,endTs:x.session.messages[1].ts,text:'我记下了她的安排。',covered:body.groups.map(g=>g.key)}],rollup:null,omitted:[]},result:{day:'2026-10-04'}}};
 }
+
+test('expanding x waits for compact summaries instead of freezing a 24k source fallback',()=>{
+  const x=setup();x.cfg.dailyDigestDetailDays=3;x.cfg.dailyDigestRollupDays=0;
+  const raw='详细底稿'.repeat(6000);
+  x.session.dailyDigests=[{dayKey:'2026-10-02',text:raw}];
+  x.session.digestActivePack={scope:x.ctx.chatDigestActiveScope(x.cfg),text:'已启用的五千字摘要',at:1};
+  assert.equal(x.ctx.chatDigestResetPack(x.cfg,x.session),false);
+  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'已启用的五千字摘要');
+  x.session.dailyDigests[0].detail={source:x.ctx.chatDigestStamp(raw),text:'压缩后摘要'};
+  assert.equal(x.ctx.chatDigestResetPack(x.cfg,x.session),true);
+  assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/压缩后摘要/);
+  assert.ok(!x.ctx.chatDailyDigestPack(x.cfg,x.session).includes(raw));
+});
 test('Shanghai preparation runs all day starting at midnight',()=>{
   const x=setup();
   for(const [time,expected] of [['00:00:00',true],['03:59:59',true],['07:00:00',true],['23:59:59',true]])assert.equal(x.ctx.chatNightlyWindow(Date.parse('2026-10-04T'+time+'+08:00')).inWindow,expected);

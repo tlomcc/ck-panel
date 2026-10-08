@@ -244,14 +244,14 @@ function chatRenderDailyDigest(cfg){
     chatSetFieldValue('chat-daily-digest-retention-days',range.n);chatSetFieldValue('chat-digest-detail-days',range.x);chatSetFieldValue('chat-digest-rollup-days',range.y);
   }
   var hint=document.getElementById('chat-daily-digest-hint');
-  if(hint)hint.textContent=cfg.dailyDigestEnabled===false?'已关闭：保留已有总结，不生成也不注入。':'注入顺序：'+range.y+' 天大总结 → '+range.x+' 天详细总结 → 当日新总结；直接读取已保存的内容。';
+  if(hint)hint.textContent=cfg.dailyDigestEnabled===false?'已关闭：保留已有总结，不生成也不注入。':'注入顺序：'+range.y+' 天大总结 → '+range.x+' 天逐日摘要 → 当日新总结；当前实际注入 '+Array.from(chatDailyDigestPack(cfg,session)).length+' 字。'+(typeof chatDigestPackReady==='function'&&!chatDigestPackReady(cfg,session)?'新范围的摘要尚未就绪，保持已启用的总结，不用长底稿替代。':'');
   var detail=document.getElementById('chat-digest-detail-hint');
   if(detail)detail.textContent='x 每天最多2500字，y 每天最多1500字，都不凑字；当天不设字数预算。滚动范围：'+chatDigestShiftDay(range.today,-range.n)+' 至 '+chatDigestShiftDay(range.today,-1)+'。每天一条，表头固定为【YYYY-MM-DD】；跨日内容归入结束日期。';
   var roll=document.getElementById('chat-digest-rollup-hint'),fresh=chatDigestRollupFresh(cfg,session),rollSource=chatDigestRollupSource(cfg,session);
   var rollSaved=chatNormalizeDigestRollup(session.digestRollup);
   if(roll)roll.textContent=!range.y?'y=0，不注入大总结。':('合并范围：'+range.start+' 至 '+range.end+'。'+(!rollSource.entries.length?'范围内暂无摘要，无需压缩。':fresh?
     (rollSaved.edited?'使用手工保存的总结：':'已压缩：')+rollSource.entries.reduce(function(n,row){return n+Array.from(row.text).length},0)+' → '+Array.from(rollSaved.text).length+' 字。':
-    '尚未完成压缩，实际注入暂用这些日期的原摘要；生成成功后替换。'));
+    '尚未完成压缩，保持已启用的总结；后台准备完成后再同步。'));
   if(!chatDigestSettingsDirty)chatDigestValidateSettings(false);
   chatRenderDigestCounts();if(typeof chatRenderNightlyStatus==='function')chatRenderNightlyStatus(session);return pruned.entries;
 }
@@ -272,7 +272,7 @@ function chatSaveDailyDigestSetting(auto){
   cfg.dailyDigestEnabled=chatFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
   chatSaveConfigObject(cfg);chatRenderDailyDigest(cfg);chatDailyDigestSetStatus('总结设置已保存','ok');
   if(!auto)toast('总结设置已保存');
-  if(cfg.dailyDigestEnabled!==false){chatDailyDigestSetStatus('已保存：每天04:00后台更新，失败重试到07:00。','ok');}
+  if(cfg.dailyDigestEnabled!==false){chatDailyDigestSetStatus('已保存：后台准备摘要，完整就绪后在缓存边界或立刻同步时启用。','ok');}
   else chatDailyDigestSetStatus('设置已保存：总结已关闭，不生成也不注入。','ok');
   chatNightlySettingsPriority(cfg);
   return cfg;

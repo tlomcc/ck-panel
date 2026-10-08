@@ -1,4 +1,5 @@
 (async()=>{
+ await chatEnsureSessionsReady();
  const assert=(ok,message)=>{if(!ok)throw Error(message)};
  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const until=async check=>{for(let i=0;i<100;i++){if(check())return;await pause(10)}throw Error('Timed out waiting for response receipt')};
@@ -70,6 +71,7 @@
    input.value='';chatSubmitPendingMessages=original.submit;
   }
   // Exercise the complete submission path for two sequential turns, including transport.
+  chatSessionsReady=true; // This fixture supplies its own fully loaded session.
   chatMessages=[];chatSessions=[{id:'queued-rounds',messages:chatMessages,transportMessages:[],updated:Date.now()}];chatActiveSessionId='queued-rounds';
   const cfg=chatDefaultConfig();cfg.sessionId='queued-rounds';cfg.panelKey='fixture';cfg.recall=false;cfg.autoTrimEnabled=false;
   chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});

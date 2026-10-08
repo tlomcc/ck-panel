@@ -76,12 +76,22 @@ function chatDigestCandidateGroups(session,cfg,rows){
 function chatDigestFreezePack(cfg,session){
   var scope=chatDigestActiveScope(cfg);
   if(!session.digestActivePack||session.digestActivePack.scope!==scope){
+    if(!chatDigestPackReady(cfg,session))return '';
     session.digestActivePack={scope:scope,text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
   }
   return session.digestActivePack.text;
 }
 function chatDigestResetPack(cfg,session){
+  if(!chatDigestPackReady(cfg,session))return false;
   session.digestActivePack={scope:chatDigestActiveScope(cfg),text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
+  return true;
+}
+function chatDigestPackReady(cfg,session){
+  var range=chatDigestRange(cfg),entries=chatDailyDigestEntries(session,range.today,cfg);
+  var xReady=entries.filter(function(row){return row.dayKey>=range.detailStart&&row.dayKey<range.today}).every(function(row){
+    return row.edited||Array.from(row.text).length<=2500||(row.detail&&row.detail.source===chatDigestStamp(row.text));
+  });
+  return xReady&&chatDigestRollupFresh(cfg,session);
 }
 function chatDigestCanActivate(session,cfg){
   return cfg.dailyDigestEnabled!==false&&!session.digestManualPending&&!['detail','rollup','today'].some(function(k){return !!chatDigestEditors[session.id+':'+k]});
@@ -90,6 +100,7 @@ function chatDigestActivate(session,cfg,force){
   if(!chatDigestCanActivate(session,cfg)||(!force&&!chatDigestCacheExpired(session)))return false;
   var stage=chatDigestStage(session,cfg);
   if(!stage)return false;
+  if(!chatDigestPackReady(cfg,Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup})))return false;
   session.dailyDigests=chatDailyDigestNormalize(stage.base.entries);
   session.digestRollup=chatNormalizeDigestRollup(stage.base.rollup);
   session.digestOmittedCovered=chatDigestOmittedCoverage(stage.base.omitted);
