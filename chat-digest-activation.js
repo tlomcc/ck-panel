@@ -77,13 +77,13 @@ function chatDigestFreezePack(cfg,session){
   var scope=chatDigestActiveScope(cfg);
   if(!session.digestActivePack||session.digestActivePack.scope!==scope){
     if(!chatDigestPackReady(cfg,session))return '';
-    session.digestActivePack={scope:scope,text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
+    session.digestActivePack={scope:scope,config:chatDigestConfigStamp(cfg),text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
   }
   return session.digestActivePack.text;
 }
 function chatDigestResetPack(cfg,session){
   if(!chatDigestPackReady(cfg,session))return false;
-  session.digestActivePack={scope:chatDigestActiveScope(cfg),text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
+  session.digestActivePack={scope:chatDigestActiveScope(cfg),config:chatDigestConfigStamp(cfg),text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
   return true;
 }
 function chatDigestPackReady(cfg,session){
@@ -109,7 +109,26 @@ function chatDigestActivate(session,cfg,force){
   session.digestRemote={scope:stage.scope,revision:stage.revision};
   delete session.digestStaged;session.digestWork=null;
   chatDigestResetPack(cfg,session);
+  if(session.digestSettingsRequest&&session.digestSettingsRequest.config===chatDigestConfigStamp(cfg))delete session.digestSettingsRequest;
   return true;
+}
+function chatDigestSettingsReady(session,cfg){
+  return !!(session.digestSettingsRequest&&session.digestSettingsRequest.scope===chatDigestActiveScope(cfg)&&chatDigestStage(session,cfg)&&chatDigestPackReady(cfg,chatDigestPreparedSession(session,cfg)));
+}
+function chatDigestPendingSync(session,cfg){
+  var record=session.digestLastSync;
+  return record&&record.scope===chatDigestActiveScope(cfg)&&record.status!=='synced'?record:null;
+}
+function chatDigestRecordSync(session,cfg,result){
+  var record={id:String(Date.now())+'-'+Math.random().toString(36).slice(2,8),scope:chatDigestActiveScope(cfg),at:Date.now(),rounds:Number(result.dropped)||0,status:'pending',trigger:result.trigger};
+  session.digestLastSync=record;result.syncId=record.id;
+  chatSaveSessions({sessionIds:[session.id]});return record;
+}
+function chatDigestConfirmSync(session,cfg,id,turnId){
+  var record=chatDigestPendingSync(session,cfg);
+  if(!record||id&&record.id!==id||turnId&&record.turnId!==turnId||!id&&!turnId)return false;
+  record.status='synced';record.syncedAt=Date.now();
+  chatSaveSessions({sessionIds:[session.id]});chatRenderNightlyStatus(session);return true;
 }
 function chatDigestPreparedTrim(session,cfg,plan){
   var groups=chatDigestPlanSources(session,plan),keys=new Set(groups.map(function(g){return g.key}));
@@ -168,15 +187,22 @@ function chatDigestRecordTrimDecision(session,plan,reason){
 async function chatDigestSyncNow(){
   var session=chatCurrentSession(),cfg=chatLoadConfig();
   if(chatSending||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后同步');return false;}
+  var pendingSync=chatDigestPendingSync(session,cfg);
+  if(pendingSync){
+    var synced=await chatSyncTrimmedHistoryToGateway(cfg,{sessionId:session.id,syncId:pendingSync.id,dropped:pendingSync.rounds,trigger:'retry_sync'});
+    chatRenderNightlyStatus(session);if(synced)toast('同步完成，本次截断 '+pendingSync.rounds+' 轮');return synced;
+  }
   if(!chatDigestImmediateReady(session,cfg)){toast('当前范围尚未准备好，后台会继续处理；无需等待模型');chatScheduleNightlySync(0);return false;}
   var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync',commitPrepared:true});
   if(!result.cacheBoundary){chatRenderNightlyStatus(session);return false;}
   chatSaveSessions();chatRenderDailyDigest(cfg);chatRenderMessages();chatScheduleNightlySync();
-  if(result.gatewaySynced===false){toast('本机已截断并保存总结，网关暂未同步；下一次发送会携带已截断历史');return true;}
+  if(result.gatewaySynced===false){toast('本机已保存，网关尚未同步；可重试同步，或在下次发送时自动同步');return true;}
   toast(result.trimmed?'已立刻截断 '+result.dropped+' 轮并同步总结，下一条消息建立新缓存':'已立刻同步总结，下一条消息建立新缓存');return true;
 }
 function chatDigestImmediateReady(session,cfg){
+  if(chatDigestPendingSync(session,cfg))return true;
   if(!chatDigestCanActivate(session,cfg))return false;
+  if(chatDigestSettingsReady(session,cfg))return true;
   var req=session.digestManualTrim;
   if(req){
     if(req.scope!==chatDigestActiveScope(cfg))return false;

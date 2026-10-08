@@ -111,6 +111,32 @@ test('network failures retain the outbox and back off before retrying',async()=>
   x.advance(31000);await x.sync();assert.equal(count,2);assert.equal(JSON.parse([...x.storage.values()][0]).length,1);
 });
 
+test('changing XY during an upload rejects the old range and queues the new settings',async()=>{
+  const x=setup();let finish,body;
+  x.ctx.fetch=async(u,o)=>{body=JSON.parse(o.body);return new Promise(r=>finish=r)};
+  const work=x.sync();
+  x.cfg.dailyDigestDetailDays=2;x.cfg.dailyDigestRollupDays=0;
+  x.ctx.chatNightlySettingsPriority(x.cfg);
+  const old=result(x,body);old.snapshot.config=body.config;
+  finish({ok:true,json:async()=>old});
+  assert.equal(await work,false);assert.equal(x.session.digestStaged,undefined);
+  assert.equal(x.session.digestSettingsPending,x.ctx.chatNightlyScope(x.cfg));
+  assert.ok([...x.timers.values()].some(t=>t.delay===0));
+});
+
+test('accepted XY changes preserve a newer server baseline on the next upload',async()=>{
+  const x=setup();x.cfg.dailyDigestDetailDays=2;x.cfg.dailyDigestRollupDays=0;x.ctx.chatNightlySettingsPriority(x.cfg);
+  const serverBase={entries:[{dayKey:'2026-10-02',text:'后台刚保存的新底稿',covered:['archived']}],rollup:null,omitted:[]};
+  let firstBody;
+  x.ctx.fetch=async(u,o)=>{firstBody=JSON.parse(o.body);return {ok:true,json:async()=>({ok:true,conflict:true,settings_accepted:true,status:'queued',snapshot:{revision:8,config:firstBody.config,source_stamp:'server-newer',base:serverBase,result:null}})}};
+  assert.equal(await x.sync(),true);
+  assert.deepEqual(copy(x.ctx.chatNightlyBase(x.session)),serverBase);
+  assert.equal(x.session.digestRemote.revision,8);assert.equal(x.session.digestRemoteConflict,undefined);
+  x.session.updated++;let nextBody;
+  x.ctx.fetch=async(u,o)=>{nextBody=JSON.parse(o.body);return {ok:true,json:async()=>({ok:true,status:'queued'})}};
+  await x.sync();assert.deepEqual(nextBody.base,serverBase);assert.equal(nextBody.revision,8);
+});
+
 test('blank fallback windows do not create background summary jobs',async()=>{
   const x=setup();x.session.messages=[];x.ctx.chatMessages=[];
   assert.equal(await x.sync(),false);assert.equal(x.calls.length,0);

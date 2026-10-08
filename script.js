@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v294-durable-stream-recovery';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v295-clear-sync-cache-expiry';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4331,9 +4331,14 @@ function chatNormalizeSession(s){
     digestRetryAfter:Number(s.digestRetryAfter)||0,
     digestPending:Array.isArray(s.digestPending)?s.digestPending:[],
     digestRemote:s.digestRemote||null,
+    digestPreparingBase:s.digestPreparingBase||null,
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
+    digestLastSync:s.digestLastSync||null,
+    digestSettingsRequest:s.digestSettingsRequest||null,
+    nativeThinkingCleanedAt:Number(s.nativeThinkingCleanedAt)||0,
+    nativeThinkingSyncPending:Number(s.nativeThinkingSyncPending)||0,
     digestTrimDecision:s.digestTrimDecision||null,
     digestTransportEpoch:s.digestTransportEpoch||null,
     digestTransportSourceAt:Number(s.digestTransportSourceAt)||0,
@@ -5050,7 +5055,9 @@ function chatStreamProgressStart(){
 function chatStreamProgressSet(stage){
   if(!chatStreamProgress)return;
   var next=String(stage||'');
-  if(!next||next===chatStreamProgress.stage)return;
+  if(!next)return;
+  chatStreamProgress.updatedTs=Date.now();
+  if(next===chatStreamProgress.stage)return;
   chatStreamProgress.stage=next;
   chatStreamProgressRender();
 }
@@ -5062,6 +5069,8 @@ function chatStreamProgressStop(){
 function chatStreamProgressText(){
   if(!chatStreamProgress)return '';
   var seconds=Math.max(0,Math.round((Date.now()-chatStreamProgress.startTs)/1000));
+  var idle=Math.max(0,Math.round((Date.now()-(chatStreamProgress.updatedTs||chatStreamProgress.startTs))/1000));
+  if(idle>=15&&['正在写','正在思考'].includes(chatStreamProgress.stage))return '等待上游继续 '+idle+'s';
   return chatStreamProgress.stage+' '+seconds+'s';
 }
 function chatStreamProgressRender(){
@@ -6562,9 +6571,14 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestRetryAfter:Number(s.digestRetryAfter)||0,
     digestPending:Array.isArray(s.digestPending)?s.digestPending:[],
     digestRemote:s.digestRemote||null,
+    digestPreparingBase:s.digestPreparingBase||null,
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
+    digestLastSync:s.digestLastSync||null,
+    digestSettingsRequest:s.digestSettingsRequest||null,
+    nativeThinkingCleanedAt:Number(s.nativeThinkingCleanedAt)||0,
+    nativeThinkingSyncPending:Number(s.nativeThinkingSyncPending)||0,
     digestTrimDecision:s.digestTrimDecision||null,
     digestTransportEpoch:s.digestTransportEpoch||null,
     digestTransportSourceAt:Number(s.digestTransportSourceAt)||0,
@@ -7281,12 +7295,18 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   var manualRequest=activationSession.digestManualTrim;
   var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
+  var stageBoundary=!!(chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||submittedPending&&submittedPending.length&&chatDigestCacheExpired(activationSession)));
+  function summaryOnlyPlan(source){return Object.assign({},source,{boundary:true,cacheBoundary:true,trimmed:false,dropped:0,after:source.before,historyAfter:source.before,localAfter:source.localBefore,transportAfter:source.transportBefore,transportDropped:0,localDropped:0,droppedMessages:[],droppedTransportMessages:[],trigger:'digest_sync',forceCacheRebuild:true});}
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
+    if(stageBoundary&&chatDigestSettingsReady(activationSession,cfg)){plan=summaryOnlyPlan(plan);manualSend=false;}
+    else{
     if(!(opts&&opts.idleCheck)&&submittedPending&&submittedPending.length)chatDigestRecordTrimDecision(activationSession,plan,!manualSend?'manual_scope_mismatch':!plan.manualValid?'manual_source_changed':plan.transportBefore!==plan.localBefore?'history_coverage_mismatch':'summary_not_ready');
     chatScheduleNightlySync(0);chatRenderNightlyStatus(activationSession);
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});
+    }
   }
   if(opts&&opts.idleCheck){chatScheduleNightlySync();return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});}
+  if(!plan.boundary&&stageBoundary)plan=summaryOnlyPlan(plan);
   if(!plan.boundary||(requestState&&requestState.stopped)){
     chatRenderTrimState(cfg);
     return Object.assign({},plan,{trimmed:false,dropped:0,after:plan.before});
@@ -7300,14 +7320,17 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       var readyPlan=manualSend?null:chatDigestAutoPreparedPlan(session,cfg,plan,submittedPending);
       var prepared=manualSend?chatDigestManualPrepared(session,cfg,plan):readyPlan&&readyPlan.digestPrepared;
       if(!prepared){
+        if(stageBoundary&&chatDigestSettingsReady(session,cfg))plan=summaryOnlyPlan(plan);
+        else{
         chatScheduleNightlySync(0);
         chatDailyDigestSetStatus('后台正在准备总结，本轮继续使用原上下文，不等待。');
         chatDigestRecordTrimDecision(session,plan,plan.transportDropped>chatDigestMessageGroups(plan.droppedMessages||[]).length?'history_coverage_mismatch':'summary_not_ready');
         return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
+        }
       }
       if(readyPlan){plan=readyPlan;plan.session=session;}
       plan.digestPrepared=prepared;
-      if(!chatArchiveDigestSources(session,plan.droppedMessages||[],plan.digestSourceGroups)){
+      if(plan.trimmed&&!chatArchiveDigestSources(session,plan.droppedMessages||[],plan.digestSourceGroups)){
         chatDailyDigestSetStatus('本机存储空间不足，已保留原对话并跳过截断。聊天可继续。','error');
         chatDigestLog('trim_result',{ok:false,session_id:session.id,trigger:plan.trigger,error:'local_outbox_full',history_preserved:true});
         return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
@@ -7315,13 +7338,15 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       plan.digestWaited='prepared';
       chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'后台准备，缓存过期后同步'});
     }
-    if(plan.digestPrepared||!plan.trimmed&&(chatDigestCacheExpired(session)||opts&&opts.commitPrepared))chatDigestActivate(session,cfg,true);
-    if(manualSend){delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now(),mode:opts&&opts.commitPrepared?'immediate':'send'};}
+    var activated=false;
+    if(plan.digestPrepared||!plan.trimmed&&stageBoundary)activated=chatDigestActivate(session,cfg,true);
+    if(manualSend&&plan.trimmed){delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now(),mode:opts&&opts.commitPrepared?'immediate':'send'};}
     delete session.digestTrimDecision;
     var result=chatCommitAutoTrimPlan(cfg,plan);
+    if(result.trimmed||activated)chatDigestRecordSync(session,cfg,result);
     if(result.trimmed&&requestState){requestState.transportSnapshot={messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),updated:Number(session.transportUpdated)||0};}
     result.sessionId=session.id;
-    if(result.trimmed&&((opts&&opts.commitPrepared)||!manualSend&&(plan.manual||(opts&&opts.idleCheck))))result.gatewaySynced=await chatSyncTrimmedHistoryToGateway(cfg,result);
+    if(result.syncId&&((opts&&opts.commitPrepared)||!manualSend&&plan.manual))result.gatewaySynced=await chatSyncTrimmedHistoryToGateway(cfg,result);
     return result;
   }catch(error){
     chatShowTrimFailure('截断操作失败：'+chatFriendlyError(error));
@@ -7337,11 +7362,11 @@ async function chatManualTrimNow(){return chatRequestManualDigestTrim();}
 // 复用既有的 /ck/clean-history：它本来就是"用面板提供的历史覆盖网关侧 session"的幂等接口，
 // 用同一份历史重复调用不会二次破坏，因此不需要为截断另开一个新接口。
 // 这里不会发起任何 AI 聊天请求，也不会调用上游模型。
-// 只在真的裁掉了内容时才调用；没裁掉就不碰网关，避免白白打断上游缓存前缀。
+// 同步已经提交的截断或总结操作；思维链过期清理由网关就地处理。
 async function chatSyncTrimmedHistoryToGateway(cfg,result){
   cfg=cfg||chatLoadConfig();
-  if(!result||result.trimmed!==true)return false;
-  var session=chatDailyDigestFindSession(result.sessionId)||chatCurrentSession();
+  if(!result||!result.trimmed&&!result.syncId&&!result.thinkingClean)return false;
+  var session=result.sessionId?chatDailyDigestFindSession(result.sessionId):chatCurrentSession();
   var panelKey=cfg.panelKey||'';
   if(!session||!panelKey)return false;
   var targetSessionId=session.id;
@@ -7357,6 +7382,9 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
         session_id:targetSessionId,
         execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps')?(CKBackendRoute.current.execution||'direct_api'):'direct_api',
         trim_sync_only:true,
+        digest_sync_id:result.syncId||'',
+        strip_native_thinking:result.thinkingClean===true,
+        thinking_cleanup_only:result.thinkingClean===true,
         model:cfg.model,
         api_base:cfg.apiBase,
         upstream_key:cfg.upstreamKey,
@@ -7377,12 +7405,17 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var data=await Promise.race([timeout,resp.json()]);
     if(data.ok!==true)throw new Error(data.error||'网关未确认同步');
+    if(result.thinkingClean&&data.synchronized!==true)return false;
+    if(result.syncId){
+      if(data.digest_sync_id!==result.syncId)throw new Error('网关尚未确认本次同步，请刷新后重试');
+      chatDigestConfirmSync(session,cfg,result.syncId);
+    }
     chatDebug('trim_gateway_sync',{ok:true,trigger:String(result.trigger||''),dropped:Number(result.dropped||0)});
     return true;
   }catch(error){
     // 同步失败不回滚本地截断：本地已经是权威历史，下一次发送仍会把完整历史带给网关。
     chatDebug('trim_gateway_sync',{ok:false,error:String((error&&error.message)||error).slice(0,200)});
-    chatShowTrimFailure('本地截断已完成，但同步网关失败。下一次发送会携带本地历史重试同步。'+chatFriendlyError(error),true);
+    if(!result.thinkingClean)chatShowTrimFailure('本机已保存，但网关尚未同步。可重试同步，或在下一次发送时自动同步。'+chatFriendlyError(error),true);
     return false;
   }finally{clearTimeout(timer)}
 }
@@ -7442,6 +7475,49 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
 // 和自动截断刻意分开：截断丢轮次、这个只摘掉历史里的图片和召回块，轮次留着。
 // 默认按缓存过期触发；旧版按轮数配置仍保留兼容，避免升级后改变已有用户的选择。
 var chatAutoCleanBusy=false;
+function chatExpireNativeThinking(session,now){
+  now=Number(now)||Date.now();
+  var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
+  if(rows.some(function(m){return m.inFlight})||session.replyDraft&&['running','finalizing'].includes(session.replyDraft.state))return false;
+  var fallback=rows.reduce(function(n,m){return m.role==='user'||m.role==='assistant'?Math.max(n,Number(m.ts)||0):n},0);
+  var ref=chatCacheActivityReference(session,fallback).timestamp;
+  if(!ref||now-ref<3600000)return false;
+  var changed=false;
+  function clearVisible(m){
+    if(!m||typeof m!=='object')return;
+    if(m.thinking){delete m.thinking;delete m.thinkingDurationMs;changed=true;}
+    ['replyVariants','replyVariantsCarry','messages'].forEach(function(key){if(Array.isArray(m[key]))m[key].forEach(clearVisible)});
+  }
+  rows.forEach(clearVisible);
+  session.transportMessages=(session.transportMessages||[]).map(function(m){
+    if(!Array.isArray(m.content))return m;
+    var kept=m.content.filter(function(b){return !b||!['thinking','redacted_thinking'].includes(b.type)});
+    if(kept.length===m.content.length)return m;
+    changed=true;return Object.assign({},m,{content:kept});
+  }).filter(function(m){return !Array.isArray(m.content)||m.content.length});
+  if(session.replyDraft&&session.replyDraft.assistant_thinking){session.replyDraft.assistant_thinking='';changed=true;}
+  if(!changed)return false;
+  session.messages=rows;session.nativeThinkingCleanedAt=now;session.nativeThinkingSyncPending=now;
+  session.cacheRebuildPending=true;session.updated=now;
+  chatSaveSessions({sessionIds:[session.id]});return true;
+}
+var chatNativeExpirySyncBusy=false;
+async function chatMaybeExpireNativeThinking(){
+  if(!chatSessionsReady||chatTrimTransaction)return;
+  var current=chatCurrentSession(),changed=false;
+  chatSessions.forEach(function(s){if(s===current&&chatSending)return;if(chatExpireNativeThinking(s)&&s===current)changed=true});
+  if(changed)chatRenderMessages({respectUserScroll:true,preservePosition:true});
+  if(!chatSending&&!chatNativeExpirySyncBusy&&current.nativeThinkingSyncPending){
+    var cfg=chatLoadConfig(),pending=current.nativeThinkingSyncPending;
+    if(cfg.panelKey){
+      chatNativeExpirySyncBusy=true;
+      try{if(await chatSyncTrimmedHistoryToGateway(cfg,{sessionId:current.id,thinkingClean:true,trigger:'native_thinking_1h'})&&current.nativeThinkingSyncPending===pending){current.nativeThinkingSyncPending=0;chatSaveSessions({sessionIds:[current.id]});}}
+      finally{chatNativeExpirySyncBusy=false;}
+    }
+  }
+  var node=document.getElementById('chat-native-thinking-clean-state');
+  if(node)node.textContent=current.nativeThinkingCleanedAt?'最近清理：'+chatFullTimeLabel(current.nativeThinkingCleanedAt)+(current.nativeThinkingSyncPending?' · 本机已清理，网关等待同步':''):'规则已开启，缓存满 1h 后自动清理。';
+}
 var chatAutoCleanLastCheckAt=0;
 function chatAutoCleanSessionById(sessionId){
   sessionId=String(sessionId||'');
@@ -7510,7 +7586,7 @@ function chatRenderAutoCleanState(cfg){
   var last=chatAutoCleanLastRound(session);
   if(last>count)last=0;
   if(!clean.enabled){
-    el.textContent='已关闭：只有点 ➕ 里的「清理」才会清。当前 '+count+' 轮。';
+    el.textContent='图片与召回自动清理已关闭。当前 '+count+' 轮。原生思维链仍会在 1h 缓存过期后清理。';
     return;
   }
   if(clean.mode==='cache_5m'||clean.mode==='cache_1h'){
@@ -7722,6 +7798,9 @@ async function chatRecoverInterruptedTurns(opts){
     var matching=interrupted.filter(function(m){return String(m.inFlightTurnId||'')===turnId});
     if(reply&&reply.turn_id&&reply.turn_id!==turnId)reply=null;
     if(reply&&reply.found&&(!turnId||reply.turn_matched===true)){
+      if(turnId)chatDigestConfirmSync(session,cfg,null,turnId);
+      if(reply.usage)chatCaptureCacheLifecycle(reply.usage,session,Number(reply.created_at)*1000||Date.now());
+      session.cacheRebuildPending=false;session.nativeThinkingSyncPending=0;
       if(Array.isArray(reply.transport_messages)){
         session.transportMessages=chatLimitArray(reply.transport_messages,CHAT_MAX_TRANSPORT_MESSAGES);session.transportUpdated=Date.now();
       }
@@ -7733,7 +7812,7 @@ async function chatRecoverInterruptedTurns(opts){
       }
       chatClearInFlightMarks(matching.map(function(m){return chatMessages.indexOf(m)}));
       matching.forEach(function(m){delete m.sendFailed;delete m.failedAt});
-      session.replyDraft=null;chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true});
+      session.replyDraft=null;chatExpireNativeThinking(session);chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true});
       chatSetStatus('已补收完整回复');return {checked:true,recovered:1};
     }
     if(reply&&(reply.assistant_text||reply.assistant_thinking))chatKeepReplyDraft(session,reply);
@@ -8684,6 +8763,7 @@ function chatHandleViewportChange(){
   chatViewportRaf=requestAnimationFrame(function(){
     chatViewportRaf=0;
     chatLayoutCompose();
+    chatSetNewMessageHint(chatNewMessageHintVisible);
     if(chatIsInputActive()){
       chatKeepLatestVisible({soft:true});
       [120,280,520].forEach(function(ms){setTimeout(function(){chatKeepLatestVisible({soft:true})},ms)});
@@ -9224,8 +9304,9 @@ function chatIsMessagesNearBottom(threshold){
   return gap<=((typeof threshold==='number')?threshold:CHAT_BOTTOM_THRESHOLD);
 }
 function chatShouldFollowMessages(){
-  return !chatMessagesFollowPaused&&chatIsMessagesNearBottom(2)&&chatHistoryRange().end===chatMessages.length;
+  return !chatMessagesFollowPaused&&chatIsMessagesAtLatest();
 }
+function chatIsMessagesAtLatest(){return chatIsMessagesNearBottom(4)&&chatHistoryRange().end===chatMessages.length;}
 function chatPauseMessagesFollow(){
   var wasPaused=chatMessagesFollowPaused;
   chatMessagesFollowPaused=true;
@@ -9235,6 +9316,7 @@ function chatPauseMessagesFollow(){
   if(!wasPaused&&box&&box.scrollTo)box.scrollTo({top:box.scrollTop,behavior:'instant'});
 }
 function chatSetNewMessageHint(show){
+  show=!!show&&!chatIsMessagesAtLatest();
   chatNewMessageHintVisible=!!show;
   var tip=document.getElementById('chat-new-message-tip');
   if(!tip)return;
@@ -9246,7 +9328,7 @@ function chatHandleMessagesScroll(){
   var box=chatMessagesBox();
   if(box){
     var previous=box.__ckLastScrollTop;
-    var atBottom=chatIsMessagesNearBottom(2)&&chatHistoryRange().end===chatMessages.length;
+    var atBottom=chatIsMessagesAtLatest();
     if(typeof previous==='number'&&box.scrollTop<previous-1&&!atBottom)chatPauseMessagesFollow();
     if(atBottom&&typeof previous==='number'&&box.scrollTop>previous&&chatHasScrollJumpManualIntent())chatMessagesFollowPaused=false;
     box.__ckLastScrollTop=box.scrollTop;
@@ -9255,7 +9337,7 @@ function chatHandleMessagesScroll(){
     if(box.scrollTop<160)chatHistoryLoad('before');
     else if(box.scrollHeight-box.scrollTop-box.clientHeight<160)chatHistoryLoad('after');
   }
-  if(chatShouldFollowMessages())chatSetNewMessageHint(false);
+  if(chatIsMessagesAtLatest())chatSetNewMessageHint(false);
   if(chatHasScrollJumpManualIntent())chatRevealScrollJumps();else chatUpdateScrollJumpState();
 }
 function chatAttachMessagesScroll(){
@@ -9290,6 +9372,7 @@ function chatAttachMessagesScroll(){
     if(e.pointerType==='mouse'&&e.button===0&&e.clientX>=box.getBoundingClientRect().right-Math.max(12,box.offsetWidth-box.clientWidth)){chatMarkScrollJumpManualIntent();chatPauseMessagesFollow();}
   },{passive:true});
   box.addEventListener('scroll',chatHandleMessagesScroll,{passive:true});
+  box.addEventListener('load',function(){chatSetNewMessageHint(chatNewMessageHintVisible)},true);
 }
 function chatFollowMessagesBottom(shouldStick,instant,showHint){
   if(shouldStick&&!chatMessagesFollowPaused){
@@ -9869,26 +9952,26 @@ function chatUsageCacheCreate1h(usage){
     'cache_creation.ephemeral_1h_input_tokens'
   ]);
 }
-function chatCaptureCacheLifecycle(usage,session){
+function chatCaptureCacheLifecycle(usage,session,at){
   if(!CHAT_HISTORY_TOOLS)return null;
   var lifecycle=CHAT_HISTORY_TOOLS.cacheLifecycle(usage||{});
   session=session||chatCurrentSession();
   if(!session)return lifecycle;
   var changed=false;
-  var now=Date.now();
+  var now=Number(at)||Date.now();
   if(lifecycle.read>0){
-    session.cacheLastReadAt=now;
+    session.cacheLastReadAt=Math.max(Number(session.cacheLastReadAt)||0,now);
     session.cacheLastReadTokens=lifecycle.read;
     changed=true;
   }
-  if(lifecycle.fullCreate){
-    session.cacheFullCreatedAt=now;
+  if(lifecycle.fullCreate&&now>(Number(session.cacheFullCreatedAt)||0)){
+    session.cacheFullCreatedAt=Math.max(Number(session.cacheFullCreatedAt)||0,now);
     session.cacheFullCreateTokens=lifecycle.create;
     session.cacheGeneration=(Number(session.cacheGeneration||0)||0)+1;
     changed=true;
   }
   if(changed){
-    session.updated=now;
+    session.updated=Math.max(Number(session.updated)||0,now);
     chatSaveSessions();
     chatRenderTrimState(chatLoadConfig());
   }
@@ -10133,6 +10216,7 @@ function chatInit(){
     window.visualViewport.addEventListener('scroll',chatHandleViewportChange);
   }
   if(!chatCacheTimer)chatCacheTimer=setInterval(function(){
+    chatMaybeExpireNativeThinking();
     chatMaybeSyncSystemPrompt();
     chatMaybeRollDigestAtDayBoundary();
     chatUpdateCacheExpiryHint(true);
@@ -10142,7 +10226,7 @@ function chatInit(){
     // 按轮自动清理走同一个定时器，也自带 30s 节流和前置判断。
     chatMaybeAutoClean();
   },15000);
-  function checkTrimOnWake(){chatMaybeSyncSystemPrompt();chatMaybeRollDigestAtDayBoundary();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
+  function checkTrimOnWake(){chatMaybeExpireNativeThinking();chatMaybeSyncSystemPrompt();chatMaybeRollDigestAtDayBoundary();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
   document.addEventListener('visibilitychange',function(){if(!document.hidden)checkTrimOnWake()});
   window.addEventListener('pageshow',checkTrimOnWake);
   window.addEventListener('focus',checkTrimOnWake);
@@ -10377,6 +10461,7 @@ async function chatSubmitPendingMessages(options){
   var mainRouteReadyPromise=chatEnsureMainRouteReady();
   await sessionsReadyPromise;
   if(requestState&&requestState.stopped)return;
+  chatExpireNativeThinking(chatCurrentSession());
   if(requestState){
     var requestSession=chatCurrentSession();
     requestState.transportSnapshot={
@@ -10428,6 +10513,8 @@ async function chatSubmitPendingMessages(options){
   if(requestState&&requestState.stopped)return;
   var timeReminderContext=chatTimeReminderContext(chatCurrentSession(),chatMessages,pending);
   var trimResult=await chatApplyAutoTrimForPendingBatch(cfg,pending,requestState);
+  var digestSync=chatDigestPendingSync(chatCurrentSession(),cfg);
+  if(digestSync){digestSync.turnId=requestTurnId;chatSaveSessions();}
   if(requestState&&requestState.stopped)return;
   var windowMessagesForRequest=chatWindowContextMessages();
   var minimalClock=cfg.minimalTimeEnabled===true?new Date(submitTs+8*3600000).toISOString().slice(11,16):'';
@@ -10567,7 +10654,8 @@ async function chatSubmitPendingMessages(options){
       manual_pending:!!currentSession.digestManualTrim,
       cache_age_ms:trimResult.cacheAgeMs||0
     },
-    client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0
+    client_cache_full_created_at:Number(currentSession.cacheFullCreatedAt||0)||0,
+    client_cache_activity_at:chatCacheActivityReference(currentSession,0).timestamp||0
   };
   // Native thinking is a top-level Anthropic option. Keep it out of system/messages
   // so changing depth does not rewrite the reusable prompt-cache prefix.
@@ -10900,6 +10988,8 @@ async function chatSubmitPendingMessages(options){
               chatScheduleSessionSave(cfg.sessionId);
             }
             var completedSession=chatCurrentSession();
+            if(digestSync)chatDigestConfirmSync(completedSession,cfg,digestSync.id,requestTurnId);
+            completedSession.nativeThinkingSyncPending=0;
             if(completedSession.cacheRebuildPending===true){
               completedSession.cacheRebuildPending=false;
               completedSession.updated=Date.now();

@@ -13,7 +13,7 @@ async function ckRunDigestAction(id,action){
 }
 (function(){
   'use strict';
-  var timer=0,seq=0,controller=null,principal=null,state={events:{rows:[],cursor:null,filter:'all',data:null},topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null}};
+  var timer=0,seq=0,controller=null,principal=null,state={events:{rows:[],cursor:null,filter:'all',data:null},topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:'all',data:null}};
   function el(id){return document.getElementById(id)}
   function escape(value){return esc(String(value==null?'—':value))}
   function attr(value){return escAttr(String(value==null?'':value))}
@@ -33,6 +33,7 @@ async function ckRunDigestAction(id,action){
     if(root(section).querySelector('.mm-overview'))return;
     if(section==='events'){root(section).innerHTML='<p class="mm-message" role="status">正在读取事件状态…</p><div class="mm-overview"></div>';return;}
     root(section).innerHTML='<p class="mm-message" role="status">正在读取最新状态…</p><div class="mm-overview"></div><section class="mm-history"><div class="mm-history-heading"><h3>整理记录</h3><span class="mm-history-help">上海时间 · 保留90天</span></div>'+(section==='topics'?'<div class="mm-filters" role="group" aria-label="记录类型">'+[['runs','整理进度'],['changes','更改明细'],['api','API 调用']].map(function(pair){return '<button type="button" data-mm-filter="'+pair[0]+'" aria-pressed="'+(pair[0]===state[section].filter)+'">'+pair[1]+'</button>'}).join('')+'</div>':'')+'<div class="mm-view-intro"></div><div class="mm-records" aria-live="polite"></div><button type="button" class="btn btn-outline btn-sm mm-more" hidden>加载更早记录</button><div class="mm-legacy"></div></section>';
+    if(section==='digest'){var history=root(section).querySelector('.mm-history'),fold=document.createElement('details');fold.className='mm-history-fold';fold.innerHTML='<summary>查看后台整理记录</summary>';history.before(fold);fold.appendChild(history);}
     if(root(section).__mmBound)return;root(section).__mmBound=true;
     root(section).addEventListener('click',function(e){
       var action=e.target.closest('[data-mm-digest-action]');
@@ -43,14 +44,13 @@ async function ckRunDigestAction(id,action){
     });
   }
   function manualCards(sessions){
-    return sessions.filter(function(s){return !!s.manual}).map(function(s){
-      var m=s.manual,ready=m.rounds>0&&m.ready_rounds===m.rounds;
-      var local=typeof chatSessions!=='undefined'&&chatSessions.find(function(x){return String(x.id)===s.session_id});
-      var progress=local&&local.digestManualTrim&&local===chatCurrentSession()?chatDigestPreparationProgress(local,chatLoadConfig()):null;
-      if(progress){m=Object.assign({},m,{rounds:progress.sources,ready_rounds:progress.prepared});ready=progress.ready;}
-      var applied=local&&local.digestManualCompleted&&local.digestManualCompleted.at>=Number(m.id)&&!local.digestManualTrim;
-      return '<section class="mm-current-details" role="status"><div class="mm-summary-line"><h3>手动截断 · '+escape(s.title||s.session_id)+'</h3>'+chip(applied?'已同步':ready?'已就绪 · 可立刻同步':label(s.status),applied?'':ready?'live':'attention')+'</div><div class="mm-stat-grid">'+statistic('本次准备截断',num(progress?progress.rounds:m.rounds)+' 轮','再次准备可纳入新增轮次')+statistic('总结来源已准备',num(m.ready_rounds)+' / '+num(m.rounds)+' 组','已保存 '+num(s.checkpoint_batches)+' 个批次')+'</div><p class="mm-current-note">'+escape(applied?'本次总结与截断已一起应用，可继续准备新增轮次。':ready?'可点立刻同步，不必等1小时；下一条消息重建一次缓存。也可等下一轮发送同步。':'后台准备中，聊天照常，不等待总结。'+(s.last_error?' '+s.last_error:''))+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(s.session_id)+'">继续后台准备截断</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(s.session_id)+'"'+(!ready||applied?' disabled':'')+'>立刻同步'+(!ready?'（尚未就绪）':'')+'</button></div></section>';
-    }).join('');
+    var current=chatCurrentSession(),locals=(typeof chatSessions!=='undefined'?chatSessions:[]).filter(function(s){return s===current||chatDigestHasContent(s)}),cfg=chatLoadConfig();
+    function card(local){
+      var remote=sessions.find(function(s){return s.session_id===String(local.id)}),v=chatDigestSyncView(local,cfg,remote);
+      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div><div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(!v.ready?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
+    }
+    var others=locals.filter(function(s){return s!==current});
+    return (current?card(current):'')+(others.length?'<details class="mm-current-details" data-session="other-results"><summary>其他对话 · '+others.length+' 个</summary>'+others.map(card).join('')+'</details>':'');
   }
   function renderOverview(section,data){
     var box=root(section).querySelector('.mm-overview');
@@ -61,8 +61,9 @@ async function ckRunDigestAction(id,action){
       var stages=state.topics.rows.filter(function(r){return r.kind==='topic_run'}),latestStage=stages.find(function(r){return r.phase!=='finished'&&r.phase!=='failed'});
       box.innerHTML='<div class="mm-summary-line"><h3>主题整理</h3>'+chip(label(status),o.running?'live':status==='retry'?'attention':'')+'<small>观测于 '+escape(clock(data.observed_at))+'</small></div><div class="mm-stat-grid">'+statistic('材料整理',num(checked)+' / '+num(total),'剩余 '+num(progress.remaining)+' 份有效材料')+statistic('主题摘要',num(summary.ready)+' / '+num(summary.total),'共 '+num(data.topic_count)+' 个小主题')+statistic('今日 API 调用',num(todayCalls)+' / '+num(settings.daily_calls),usage.date&&usage.date!==today?'最近记账 '+usage.date+' · '+num(usage.calls)+' 次':today+' · 上海时间')+'</div><div class="mm-progress" role="progressbar" aria-label="材料整理进度" aria-valuemin="0" aria-valuemax="'+total+'" aria-valuenow="'+checked+'"><span style="width:'+pct+'%"></span></div><p class="mm-current-note">'+escape(last.message||'等待新增材料或新的处理意见')+'</p><details class="mm-current-details"><summary>本轮状态与下一步</summary>'+pairs([['当前阶段',o.running&&latestStage?label(latestStage.phase):label(last.stage||last.status)],['最近运行',clock(last.at)],['下一次重试',last.retry_after?clock(last.retry_after):'按后台调度检查'],['API 配置',api.configured?'可调用':'等待配置'],['供应商 / 模型',[api.provider,api.model].filter(Boolean).join(' / ')||'尚未选择'],['待审批',num(o.pending_count)+' 项'],['每批材料',num(settings.batch_size)+' 份'],['你的控制',settings.enabled===false?'自动整理已暂停':'可编辑、暂停、修改预算和撤销自动处理']])+'</details>';
     }else{
-      var sessions=data.sessions||[],schedule=data.schedule||{},running=sessions.filter(function(s){return s.status==='running'}).length,pending=sessions.reduce(function(n,s){return n+(s.pending_groups||0)},0);
-      box.innerHTML='<div class="mm-summary-line"><h3>截断总结</h3>'+chip(running?'正在后台更新':schedule.in_window?'后台自动准备':'等待下一次检查',running?'live':'')+'</div>'+manualCards(sessions)+'<p class="mm-current-note">零点后准备昨天的总结，普通截断随时在后台准备。失败自动重试；自动任务等 1 小时缓存过期后随下一轮发送同步；手动任务准备完成后随下一轮发送同步，无须等缓存过期。</p><div class="mm-stat-grid">'+statistic('准备规则','每天零点起','持续重试，聊天无需等待')+statistic('等待整理',num(pending)+' 轮',sessions.length+' 个本机已同步会话')+statistic('更新中的会话',num(running),'原文与完成批次持续保留')+'</div><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'<span>'+num(s.pending_groups)+' 轮待处理</span></summary>'+pairs([['最近完成',clock(s.completed_at)],['本日尝试',num(s.attempts)],['完成批次',num(s.checkpoint_batches)],['阶段',s.stage||'等待开始'],['下次重试',s.status==='retry'?clock(s.next_retry):'后台自动检查'],['最近问题',s.last_error||'暂无']])+'</details>'}).join('')||'<p class="mw-empty">本机现有窗口暂无截断任务。空白窗口不创建总结任务，已删除窗口不再显示。</p>')+'</div>';
+      var sessions=data.sessions||[];
+      box.innerHTML=manualCards(sessions)+'<details class="mm-current-details mm-digest-background" data-session="background"><summary>后台整理详情</summary><p class="mm-current-note">下面的“材料组”是后台整理单位，不是截断轮数。</p><div class="mm-session-list">'+(sessions.map(function(s){return '<details class="mm-session" data-session="'+attr(s.session_id)+'"><summary><strong>'+escape(s.title||s.session_id)+'</strong>'+chip(label(s.status),s.status==='retry'?'attention':'')+'</summary>'+pairs([['待处理材料',num(s.pending_groups)+' 组'],['已保存批次',num(s.checkpoint_batches)],['最近准备完成',clock(s.completed_at)],['最近问题',s.last_error||'无']])+'</details>'}).join('')||'<p class="mw-empty">暂无后台任务。</p>')+'</div></details>';
+
     }
   }
   function renderEvents(data){

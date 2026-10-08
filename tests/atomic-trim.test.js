@@ -21,7 +21,7 @@ function setup(){
  chatDailyDigestDayKey:t=>new Date(t).toISOString().slice(0,10),chatDailyDigestNormalize:list=>list||[],
  chatDailyDigestEntries:s=>s.dailyDigests||[],chatDailyDigestEndpoint:()=>'/digest',chatLimitArray:list=>list,
  chatSaveSessions:()=>{},chatRenderSessions:()=>{},chatRenderTrimState:()=>{},chatRenderDailyDigest:()=>{},chatResetSessionAnchorFromMessages:()=>{},
- chatDailyDigestSetStatus:()=>{},chatDebug:()=>{},toast:()=>{},chatShowTrimFailure:(...args)=>ctx.alerts.push(args),alerts:[],chatFriendlyError:e=>e.message,chatSyncTrimmedHistoryToGateway:async()=>true,
+ chatDailyDigestSetStatus:()=>{},chatDebug:()=>{},toast:()=>{},chatShowTrimFailure:(...args)=>ctx.alerts.push(args),alerts:[],chatFriendlyError:e=>e.message,chatSyncTrimmedHistoryToGateway:async(c,r)=>{if(r.syncId)ctx.chatDigestConfirmSync(session,c,r.syncId);return true},
  fetch:async(url,opts)=>{requests.push({url,body:JSON.parse(opts.body),signal:opts.signal});return await new Promise(r=>{finish=r})}
  };
  const storage=new Map();ctx.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
@@ -186,7 +186,7 @@ test('manual preparation cancellation prevents later automatic cache-breaking tr
 test('ready manual task can synchronize immediately during a warm cache without a model or confirmation',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
  await x.ctx.chatRequestManualDigestTrim();prepare(x);x.session.cacheLastReadAt=x.ctx.Date.now();
- let synced=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{synced++;return true};x.ctx.ckConfirmDialog=()=>{throw Error('unexpected dialog')};
+ let synced=0;x.ctx.chatSyncTrimmedHistoryToGateway=async(c,r)=>{synced++;x.ctx.chatDigestConfirmSync(x.session,c,r.syncId);return true};x.ctx.ckConfirmDialog=()=>{throw Error('unexpected dialog')};
  assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(synced,1);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);assert.equal(x.requests.length,0);
  assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(synced,1);
 });
@@ -231,5 +231,50 @@ test('trim sync cannot hang forever when fetch ignores abort',async()=>{
  setTimeout:(fn,ms)=>setTimeout(fn,Math.min(ms,10)),fetch:()=>new Promise(()=>{})});
  vm.runInContext(extract('chatSyncTrimmedHistoryToGateway'),x.ctx);
  assert.equal(await x.ctx.chatSyncTrimmedHistoryToGateway(x.cfg,{trimmed:true,sessionId:'s'}),false);
- assert.equal(x.session.messages.length,10);assert.match(x.ctx.alerts[0][0],/本地截断已完成/);
+ assert.equal(x.session.messages.length,10);assert.match(x.ctx.alerts[0][0],/本机已保存，但网关尚未同步/);
+});
+
+test('actual cut count remains unsynchronized until the same operation is acknowledged',async()=>{
+ const x=setup();prepare(x);
+ const result=await x.run();
+ assert.equal(result.dropped,3);
+ assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).rounds,3);
+ assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'同步未完成');
+ const copy=JSON.parse(JSON.stringify(x.session.digestLastSync));x.session.digestLastSync=copy;
+ assert.equal(x.ctx.chatDigestConfirmSync(x.session,x.cfg,'older-operation'),false);
+ copy.turnId='new-turn';
+ assert.equal(x.ctx.chatDigestConfirmSync(x.session,x.cfg,null,'old-turn'),false);
+ assert.equal(x.ctx.chatDigestConfirmSync(x.session,{...x.cfg,panelKey:'other'},copy.id),false);
+ assert.equal(x.ctx.chatDigestConfirmSync(x.session,x.cfg,copy.id,'new-turn'),true);
+ assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'同步完成');
+});
+
+test('background source counts never masquerade as rounds already cut',()=>{
+ const x=setup();x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),requestedAt:x.ctx.Date.now(),dropRounds:3,keep:2,keys:[]};
+ const view=x.ctx.chatDigestSyncView(x.session,x.cfg,{pending_groups:122,manual:{sources:122,ready_sources:122}});
+ assert.equal(view.rounds,0);assert.equal(view.cutNote,'尚未截断');assert.ok(!JSON.stringify(view).includes('122'));
+});
+
+function stageRange(x){
+ x.cfg.dailyDigestDetailDays=1;x.cfg.dailyDigestRollupDays=0;
+ x.session.digestActivePack={scope:x.ctx.chatDigestActiveScope(x.cfg),text:'旧启用总结'};
+ x.session.digestSettingsRequest={at:x.ctx.Date.now(),scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),x:1,y:0};
+ x.session.digestStaged={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),revision:9,
+  base:{entries:[{dayKey:'2026-10-02',text:'新范围摘要',covered:[]}],rollup:null,omitted:[]},result:{day:'2026-10-03'},trims:[]};
+}
+test('new XY activates at expiry even with automatic trimming disabled',async()=>{
+ const x=setup();stageRange(x);x.ctx.chatAutoTrimConfigFrom=()=>({enabled:false,keep:2,roundLimitEnabled:false});
+ x.session.cacheLastReadAt=x.ctx.Date.now();
+ assert.equal((await x.run()).cacheBoundary,false);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'旧启用总结');
+ x.advance(3600000);const result=await x.run();
+ assert.equal(result.trimmed,false);assert.equal(result.dropped,0);assert.equal(x.session.messages.length,10);
+ assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/新范围摘要/);assert.equal(x.session.digestSettingsRequest,undefined);
+ assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'同步未完成');
+});
+test('manual XY sync succeeds with zero cut rounds while unrelated cuts are still preparing',async()=>{
+ const x=setup();stageRange(x);x.session.cacheLastReadAt=x.ctx.Date.now();x.ctx.chatRenderMessages=()=>{};
+ assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);
+ assert.equal(await x.ctx.chatDigestSyncNow(),true);
+ assert.equal(x.session.messages.length,10);assert.equal(x.session.digestLastSync.rounds,0);
+ assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'同步完成');
 });

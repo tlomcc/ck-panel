@@ -124,6 +124,11 @@ function testStageTextIsNotHtml() {
 testMarkupAndStyleExist();
 testStatusLineIsUntouched();
 testStagesAndElapsedSecondsShowUp();
+fakeNow+=16000;
+vm.runInContext('chatStreamProgressRender()',ctx);
+assert.strictEqual(shown(),'等待上游继续 16s','no new text must not pretend to be continuously writing');
+vm.runInContext('chatStreamProgressSet("正在写");chatStreamProgressRender()',ctx);
+assert.strictEqual(shown(),'正在写 28s','a fresh delta resumes the writing status');
 testStopClearsTimerAndHides();
 testStageTextIsNotHtml();
 console.log('stream progress status: OK');

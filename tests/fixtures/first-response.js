@@ -10,7 +10,7 @@
  const execute=new (Object.getPrototypeOf(async function(){}).constructor)('cfg','out','requestState',`
   var assistantText='',nativeThinkingText='',toolEvents=[],firstReplyTs=0,requestTurnId='first-response',latencyTrace={},
       responseUserTs=Date.now(),userMessageIndexes=[0],requestBodyText='{}',recallInfo=null,requestUsage=null,requestCompleted=false,
-      carriedReplyOwners=[],carriedReplyVariants=[],timeReminderContext={round:1};
+      carriedReplyOwners=[],carriedReplyVariants=[],timeReminderContext={round:1},digestSync=null;
   function recordFirstDeltaLatency(){} function markFirstReplyTs(){return firstReplyTs||(firstReplyTs=Date.now())}
   ${tail}
   return requestCompleted;

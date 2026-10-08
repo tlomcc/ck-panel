@@ -8,18 +8,19 @@
  const execute=new AsyncFunction('cfg','out','requestState',`
   var assistantText='',nativeThinkingText='',toolEvents=[],firstReplyTs=0,requestTurnId='recover-turn',latencyTrace={},
       responseUserTs=Date.now(),userMessageIndexes=[0],requestBodyText='{}',recallInfo=null,requestUsage=null,requestCompleted=false,
-      carriedReplyOwners=[],carriedReplyVariants=[],timeReminderContext={round:1};
+      carriedReplyOwners=[],carriedReplyVariants=[],timeReminderContext={round:1},digestSync=null;
   function recordFirstDeltaLatency(){} function markFirstReplyTs(){return firstReplyTs||(firstReplyTs=Date.now())}
   ${tail}
   return requestCompleted;
  `);
  const saved={fetch:window.fetch,load:chatLoadConfig,schedule:chatScheduleRecovery,trim:chatMaybeAutoTrimAtIdleBoundary,clean:chatMaybeAutoClean};
- let posts=0,polls=0,scheduled=0;
+ let posts=0,polls=0,scheduled=0;const recoveredAt=Math.floor(Date.now()/1000)-120;
  const cfg={sessionId:'recovery-session',panelKey:'fixture',gatewayUrl:'https://fixture.invalid',recall:false,splitAssistantReplies:false};
  try{
   chatLoadConfig=()=>cfg;chatScheduleRecovery=()=>{scheduled++};chatMaybeAutoTrimAtIdleBoundary=()=>{};chatMaybeAutoClean=()=>{};
   chatMessages=[{role:'user',text:'测试断线',turnId:'recover-turn',ts:Date.now(),inFlight:true,inFlightAt:Date.now(),inFlightTurnId:'recover-turn'}];
-  chatSessions=[{id:cfg.sessionId,messages:chatMessages,transportMessages:[],updated:Date.now()}];chatActiveSessionId=cfg.sessionId;
+  chatSessions=[{id:cfg.sessionId,messages:chatMessages,transportMessages:[],updated:Date.now(),cacheRebuildPending:true,
+    digestLastSync:{id:'resume-sync',scope:chatDigestActiveScope(cfg),turnId:'recover-turn',at:Date.now()-130000,rounds:5,status:'pending'}}];chatActiveSessionId=cfg.sessionId;
   chatRenderMessages({force:true,removeEphemeral:true});
   window.fetch=async(url,init)=>{
    if(init.method==='POST'){
@@ -31,7 +32,7 @@
    }
    polls++;
    return new Response(JSON.stringify(polls<3?{ok:true,pending:true,found:false,state:'running',turn_id:'recover-turn',assistant_text:'已显示的部分',assistant_thinking:'思考片段'}:
-     {ok:true,pending:false,found:true,state:'complete',turn_id:'recover-turn',turn_matched:true,assistant_text:'已显示的部分，完整结束。',assistant_thinking:'思考片段',usage:{output_tokens:8},transport_messages:[{role:'assistant',content:'完整结束'}]}),{headers:{'Content-Type':'application/json'}});
+     {ok:true,pending:false,found:true,state:'complete',created_at:recoveredAt,turn_id:'recover-turn',turn_matched:true,assistant_text:'已显示的部分，完整结束。',assistant_thinking:'思考片段',usage:{output_tokens:8,cache_read_input_tokens:21000},transport_messages:[{role:'assistant',content:'完整结束'}]}),{headers:{'Content-Type':'application/json'}});
   };
   const request=chatBeginSendingUi();request.pendingMessages=[];chatStreamProgressStart();
   const completed=await execute(cfg,chatAddBubble('assistant','',false),request);
@@ -47,7 +48,10 @@
   assert(chatMessages.find(m=>m.role==='assistant').text==='已显示的部分，完整结束。','final text missing');
   assert(!chatMessages[0].inFlight&&!chatCurrentSession().replyDraft,'completed receipt not cleared');
   assert(chatCurrentSession().transportMessages.length===1,'context missing after resume');
+  assert(chatCurrentSession().cacheRebuildPending===false,'completed recovery would rebuild the cache again');
+  assert(chatCurrentSession().cacheLastReadAt===recoveredAt*1000,'cache renewal must use the receipt timestamp');
+  assert(chatCurrentSession().digestLastSync.status==='synced','same-turn recovery did not confirm synchronization');
   assert(document.getElementById('chat-head-progress').hidden,'writing indicator still running');
-  return {posts,polls,scheduled,partialSaved:true,pendingSurvives:true,completeOnce:true};
+  return {posts,polls,scheduled,partialSaved:true,pendingSurvives:true,completeOnce:true,cacheRenewed:true,syncConfirmed:true};
  }finally{window.fetch=saved.fetch;chatLoadConfig=saved.load;chatScheduleRecovery=saved.schedule;chatMaybeAutoTrimAtIdleBoundary=saved.trim;chatMaybeAutoClean=saved.clean;}
 })()

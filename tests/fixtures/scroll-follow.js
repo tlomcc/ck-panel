@@ -58,5 +58,13 @@
  chatRenderMessages({respectUserScroll:true,newMessage:true});await pause(80);
  check(Math.abs(box.scrollTop-incomingTop)<=2,'rerender recaptured the bottom zone');
  chatJumpToLatest();await pause(80);
- return {wheel:true,touch:true,keyboard:true,scrollbar:true,queuedFrameCancelled:true,pauseSurvivesTimeout:true,manualResume:true,completion:true,incoming:true};
+ chatPauseMessagesFollow();chatSetNewMessageHint(true);
+ check(document.getElementById('chat-new-message-tip').hidden,'paused follow showed a hint at the actual bottom');
+ box.scrollTop=box.scrollHeight-box.clientHeight-1.5;chatSetNewMessageHint(true);
+ check(document.getElementById('chat-new-message-tip').hidden,'fractional bottom geometry showed a hint');
+ chatHistoryView.follow=false;chatHistoryView.end=chatMessages.length-2;chatSetNewMessageHint(true);
+ check(!document.getElementById('chat-new-message-tip').hidden,'a historical page bottom hid the latest hint');
+ chatJumpToLatest();await pause(80);
+ check(document.getElementById('chat-new-message-tip').hidden,'latest jump left a stale hint');
+ return {wheel:true,touch:true,keyboard:true,scrollbar:true,queuedFrameCancelled:true,pauseSurvivesTimeout:true,manualResume:true,completion:true,incoming:true,bottomHint:true};
 })()

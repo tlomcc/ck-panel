@@ -266,15 +266,22 @@ function chatDigestValidateSettings(showError){
 }
 function chatDigestSettingsEdited(){chatDigestSettingsDirty=true;chatDigestValidateSettings(false);}
 function chatSaveDailyDigestSetting(auto){
-  var cfg=chatLoadConfig(),values=auto?null:chatDigestValidateSettings(true);
+  var cfg=chatLoadConfig(),beforeConfig=chatDigestConfigStamp(cfg),values=auto?null:chatDigestValidateSettings(true);
   if(!auto&&!values)return null;
+  // Freeze the currently used prompt before saving a different range, including
+  // an empty pack. Preparing X/Y must never rewrite a warm cache on its own.
+  chatSessions.forEach(function(session){
+    var text=chatDigestFreezePack(cfg,session);
+    if(!session.digestActivePack)session.digestActivePack={scope:chatDigestActiveScope(cfg),config:chatDigestConfigStamp(cfg),text:text,at:Date.now()};
+  });
   if(values){cfg.dailyDigestRetentionDays=values.n;cfg.dailyDigestDetailDays=values.x;cfg.dailyDigestRollupDays=values.y;chatDigestSettingsDirty=false;}
   cfg.dailyDigestEnabled=chatFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
   chatSaveConfigObject(cfg);chatRenderDailyDigest(cfg);chatDailyDigestSetStatus('总结设置已保存','ok');
-  if(!auto)toast('总结设置已保存');
+  if(!auto)toast('已保存 X='+values.x+'、Y='+values.y+'，后台开始准备');
   if(cfg.dailyDigestEnabled!==false){chatDailyDigestSetStatus('已保存：后台准备摘要，完整就绪后在缓存边界或立刻同步时启用。','ok');}
   else chatDailyDigestSetStatus('设置已保存：总结已关闭，不生成也不注入。','ok');
-  chatNightlySettingsPriority(cfg);
+  if(beforeConfig!==chatDigestConfigStamp(cfg))chatNightlySettingsPriority(cfg);
+  else chatScheduleNightlySync(0);
   return cfg;
 }
 function chatDigestParseDays(raw,first,last){

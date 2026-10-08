@@ -121,6 +121,18 @@
 .ck-maintenance .mm-empty-state b{font-size:15px;color:var(--ck-text-soft)}.ck-maintenance .mm-empty-state p{margin:8px 0 0}
 .ck-maintenance .mm-problem{font-size:13px;line-height:1.8;color:var(--ck-amber)}
 .ck-maintenance button:focus-visible,.ck-maintenance summary:focus-visible{outline:2px solid var(--ck-accent);outline-offset:2px}
+.ck-maintenance .mm-digest-result{padding:20px 0;border-bottom:1px solid var(--ck-line)}
+.ck-maintenance .mm-digest-result:first-child{padding-top:0}
+.ck-maintenance .mm-digest-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.ck-maintenance .mm-digest-metrics .mm-stat{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;border-left:0;background:var(--ck-surface-soft);padding:16px;border-radius:12px}
+.ck-maintenance .mm-digest-metrics .mm-stat>small{grid-column:auto}
+.ck-maintenance .mm-digest-metrics b{font-size:26px;line-height:1.4;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ck-maintenance .mm-digest-success{color:var(--ck-accent-strong,#197b71)}
+.ck-maintenance .mm-digest-attention{color:var(--ck-amber,#9a641c)}
+.ck-maintenance .mm-digest-background,.ck-maintenance .mm-history-fold{margin-top:16px}
+.ck-maintenance .mm-history-fold>summary{padding:14px 0;cursor:pointer;color:var(--ck-text-soft);font-size:13px}
+.ck-maintenance .mm-history-fold .mm-history{margin-top:0}
+@media(max-width:420px){.ck-maintenance .mm-digest-metrics b{font-size:18px}.ck-maintenance .mm-digest-metrics .mm-stat{padding:12px 10px}.ck-maintenance .mm-digest-result .chat-actions{gap:8px}}
 @media(max-width:650px){
  .ck-maintenance .mm-history{padding:15px 12px}.ck-maintenance .mm-filters button{padding:8px 3px;font-size:12px;white-space:normal}
  .ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card)>summary{padding:14px 12px;gap:9px}
