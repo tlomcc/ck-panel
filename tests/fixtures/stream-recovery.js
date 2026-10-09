@@ -2,8 +2,8 @@
  const assert=(v,m)=>{if(!v)throw Error(m)};
  const source=window.__streamSource.replace(/\r\n/g,'\n');
  const start=source.indexOf('  var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;');
- const end=source.indexOf('\nfunction switchPanelTab',start);
- const tail=source.slice(start,end).replace(/\}\s*$/,'');
+ const end=source.indexOf('  // CK_STREAM_END:',start);
+ const tail=source.slice(start,end);
  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
  const execute=new AsyncFunction('cfg','out','requestState',`
   var assistantText='',nativeThinkingText='',toolEvents=[],firstReplyTs=0,requestTurnId='recover-turn',latencyTrace={},

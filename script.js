@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v295-clear-sync-cache-expiry';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v296-cache-wake-event-budget';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -3114,6 +3114,7 @@ function chatMaybeSyncPrompt(kind,options){
   return chatStorePrompt(kind,standby,true);
 }
 function chatMaybeSyncSystemPrompt(options){
+  if(chatSessions.some(chatWakeStatusStale))return false;
   var system=chatMaybeSyncPrompt('system',options);
   var thinking=chatMaybeSyncPrompt('thinking',options);
   return system||thinking;
@@ -4339,6 +4340,8 @@ function chatNormalizeSession(s){
     digestSettingsRequest:s.digestSettingsRequest||null,
     nativeThinkingCleanedAt:Number(s.nativeThinkingCleanedAt)||0,
     nativeThinkingSyncPending:Number(s.nativeThinkingSyncPending)||0,
+    wakeEnabled:s.wakeEnabled===true,
+    wakeSyncAt:Number(s.wakeSyncAt)||0,
     digestTrimDecision:s.digestTrimDecision||null,
     digestTransportEpoch:s.digestTransportEpoch||null,
     digestTransportSourceAt:Number(s.digestTransportSourceAt)||0,
@@ -5082,6 +5085,9 @@ function chatStreamProgressRender(){
   else el.setAttribute('hidden','');
 }
 function chatSetStatus(text){
+  if(/正在补收|连接恢复中|回复已生成，正在同步/.test(String(text||''))){
+    if(!chatStreamProgress)chatStreamProgressStart();chatStreamProgressSet('补收中');
+  }else if(!chatSending&&chatStreamProgress&&chatStreamProgress.stage==='补收中')chatStreamProgressStop();
   var el=document.getElementById('chat-status');
   if(!el)return;
   var waiting=/请求网关|正在请求|对方正在输入|等待回复|发送中/.test(String(text||''));
@@ -6579,6 +6585,8 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestSettingsRequest:s.digestSettingsRequest||null,
     nativeThinkingCleanedAt:Number(s.nativeThinkingCleanedAt)||0,
     nativeThinkingSyncPending:Number(s.nativeThinkingSyncPending)||0,
+    wakeEnabled:s.wakeEnabled===true,
+    wakeSyncAt:Number(s.wakeSyncAt)||0,
     digestTrimDecision:s.digestTrimDecision||null,
     digestTransportEpoch:s.digestTransportEpoch||null,
     digestTransportSourceAt:Number(s.digestTransportSourceAt)||0,
@@ -6796,6 +6804,7 @@ async function chatDeleteSession(id,event){
   var title=(s&&s.title)||'这个对话';
   var confirmed=await ckConfirmDialog('删除“'+title+'”后，本机对话及其后台截断任务、总结状态记录将一并移除。',{title:'删除对话',confirmText:'删除',danger:true});
   if(!confirmed)return;
+  if(typeof chatWakeForget==='function'&&!await chatWakeForget(id))return;
   chatDigestForgetSession(id,chatLoadConfig());
   chatDeletedSessionIds[id]=true;
   chatSessions=chatSessions.filter(function(x){return x.id!==id});
@@ -7025,6 +7034,7 @@ function chatBeginSendingUi(){
     btn.classList.add('chat-stop-btn','chat-send-feedback');
     if(typeof requestAnimationFrame==='function')requestAnimationFrame(function(){btn.classList.remove('chat-send-feedback')});
   }
+  chatStreamProgressStart();chatStreamProgressSet('准备中');
   chatSetStatus('正在请求网关...');
   return request;
 }
@@ -7424,6 +7434,7 @@ var chatIdleTrimLastCheckAt=0;
 // 1 小时边界与轮数上限自动截断的"页面在线"路径：到点就地执行本地完整轮次裁剪并同步网关，
 // 全程不发起 AI 聊天请求。页面关闭、休眠或断网时，由发送前既有的边界检查兜底补执行。
 async function chatMaybeAutoTrimAtIdleBoundary(opts){
+  if(chatWakeStatusStale(chatCurrentSession()))return;
   opts=opts||{};
   if(chatIdleTrimBusy||chatSending||chatTrimBusy)return;
   if(!chatSessionsReady)return;
@@ -7475,8 +7486,19 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
 // 和自动截断刻意分开：截断丢轮次、这个只摘掉历史里的图片和召回块，轮次留着。
 // 默认按缓存过期触发；旧版按轮数配置仍保留兼容，避免升级后改变已有用户的选择。
 var chatAutoCleanBusy=false;
+function chatWakeStatusStale(session){
+  if(session&&session.wakeEnabled&&Date.now()-Number(session.wakeSyncAt||0)>15000){
+    if(session===chatCurrentSession()&&typeof chatWakeRefresh==='function')chatWakeRefresh();
+    return true;
+  }
+  return false;
+}
 function chatExpireNativeThinking(session,now){
   now=Number(now)||Date.now();
+  if(session.wakeEnabled&&now-Number(session.wakeSyncAt||0)>15000){
+    if(session===chatCurrentSession()&&typeof chatWakeRefresh==='function')chatWakeRefresh();
+    return false;
+  }
   var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
   if(rows.some(function(m){return m.inFlight})||session.replyDraft&&['running','finalizing'].includes(session.replyDraft.state))return false;
   var fallback=rows.reduce(function(n,m){return m.role==='user'||m.role==='assistant'?Math.max(n,Number(m.ts)||0):n},0);
@@ -7615,6 +7637,7 @@ function chatSaveAutoCleanSetting(auto){
 }
 // 页面在线时的执行路径，挂在既有的 15 秒定时器和"回复落定"那一下上，不新开定时器。
 async function chatMaybeAutoClean(opts){
+  if(chatWakeStatusStale(chatCurrentSession()))return;
   opts=opts||{};
   if(chatAutoCleanBusy||chatSending||chatIdleTrimBusy||chatTrimBusy)return;
   if(currentPanelTab!=='chat')return;
@@ -7738,7 +7761,7 @@ function chatFailedUserMessages(){
 }
 function chatQueueFailedUserMessagesForRetry(){
   var failed=chatFailedUserMessages();
-  failed.forEach(function(m){m.role='pending_user'});
+  failed.forEach(function(m){m.role='pending_user';delete m.turnId;delete m.inFlightTurnId;});
   return failed;
 }
 // ── 断线补收：中途退出 CK 也不能丢回复 ───────────────────────────────────────
@@ -7857,16 +7880,29 @@ function chatClearPendingMessages(){
   chatRenderMessages();
   chatRenderPendingBar();
 }
+async function chatAwaitPreparation(promise,request,label){
+  var timer;
+  if(request&&request===chatActiveRequest)chatStreamProgressSet(label);
+  try{return await Promise.race([promise,new Promise(function(resolve,reject){timer=setTimeout(function(){reject(new Error(label+'超时，请重试'))},30000)})]);}
+  finally{clearTimeout(timer)}
+}
+function chatCanDeleteUnsent(message){
+  return !!(message&&!message.inFlight&&(message.role==='pending_user'||(message.role==='user'&&message.sendFailed===true))&&!(chatActiveRequest&&chatActiveRequest.pendingMessages.indexOf(message)>=0));
+}
 function chatDeletePendingMessage(index){
   var message=chatMessages[index];
-  if(!message||message.role!=='pending_user')return false;
+  if(!chatCanDeleteUnsent(message))return false;
+  var failed=message.sendFailed===true;
   if(chatEditingIndex===index)chatCancelEdit();
   chatMessages.splice(index,1);
   if(chatEditingIndex>index)chatEditingIndex--;
   chatSaveLocalMessages();
   chatRenderMessages({respectUserScroll:true});
   chatRenderPendingBar();
-  toast('已删除暂存消息');
+  if(chatActiveRequest&&chatActiveRequest.userMessageIndexes){
+    var indexes=chatActiveRequest.userMessageIndexes;for(var j=0;j<indexes.length;j++)if(indexes[j]>index)indexes[j]--;
+  }
+  toast(failed?'已删除失败消息':'已删除暂存消息');
   return true;
 }
 function chatPendingGestureReset(){
@@ -7877,11 +7913,11 @@ function chatPendingGestureReset(){
 }
 function chatPendingGestureStart(e){
   if(!e||!e.target||!e.target.closest)return;
-  var row=e.target.closest('.chat-msg-row.pending');
+  var row=e.target.closest('.chat-msg-row.pending,.chat-msg-row.send-failed');
   if(!row)return;
   var index=parseInt(row.getAttribute('data-chat-index'),10);
   var message=chatMessages[index];
-  if(!message||message.role!=='pending_user')return;
+  if(!chatCanDeleteUnsent(message))return;
   var point=e.touches&&e.touches[0]||e;
   chatPendingGestureReset();
   chatPendingGesture.row=row;
@@ -7931,10 +7967,14 @@ function chatPendingGestureEnd(e){
     chatDeletePendingMessage(index);
   }else if(longPressed){
     chatPendingSuppressClickUntil=Date.now()+500;
-  }else if(row&&row.classList.contains('pending')){
+  }else if(row){
     row.style.removeProperty('--pending-swipe-x');
     if(moved)chatPendingSuppressClickUntil=Date.now()+250;
   }
+}
+function chatPendingGestureCancel(){
+  if(chatPendingGesture.row)chatPendingGesture.row.style.removeProperty('--pending-swipe-x');
+  chatPendingGestureReset();
 }
 function chatAttachPendingGestures(){
   var box=chatMessagesBox();
@@ -7944,12 +7984,12 @@ function chatAttachPendingGestures(){
     box.addEventListener('pointerdown',chatPendingGestureStart,{passive:true});
     box.addEventListener('pointermove',chatPendingGestureMove,{passive:false});
     box.addEventListener('pointerup',chatPendingGestureEnd,{passive:true});
-    box.addEventListener('pointercancel',chatPendingGestureEnd,{passive:true});
+    box.addEventListener('pointercancel',chatPendingGestureCancel,{passive:true});
   }else{
     box.addEventListener('touchstart',chatPendingGestureStart,{passive:true});
     box.addEventListener('touchmove',chatPendingGestureMove,{passive:false});
     box.addEventListener('touchend',chatPendingGestureEnd,{passive:true});
-    box.addEventListener('touchcancel',chatPendingGestureEnd,{passive:true});
+    box.addEventListener('touchcancel',chatPendingGestureCancel,{passive:true});
   }
 }
 function chatRefocusChatInput(){
@@ -10226,7 +10266,7 @@ function chatInit(){
     // 按轮自动清理走同一个定时器，也自带 30s 节流和前置判断。
     chatMaybeAutoClean();
   },15000);
-  function checkTrimOnWake(){chatMaybeExpireNativeThinking();chatMaybeSyncSystemPrompt();chatMaybeRollDigestAtDayBoundary();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
+  async function checkTrimOnWake(){if(typeof chatWakeRefresh==='function')await chatWakeRefresh();chatMaybeExpireNativeThinking();chatMaybeSyncSystemPrompt();chatMaybeRollDigestAtDayBoundary();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
   document.addEventListener('visibilitychange',function(){if(!document.hidden)checkTrimOnWake()});
   window.addEventListener('pageshow',checkTrimOnWake);
   window.addEventListener('focus',checkTrimOnWake);
@@ -10270,7 +10310,7 @@ async function chatSendMessage(){
   chatFlushAssistantRevealQueue();
   if(!chatSending&&chatInterruptedInFlightMessages().length){
     await chatRecoverInterruptedTurns({silent:true});
-    if(chatInterruptedInFlightMessages().length){chatSetStatus('正在补收上一轮回复，输入内容已保留');return;}
+    if(chatInterruptedInFlightMessages().length){chatStreamProgressSet('补收中');toast('上一轮正在补收，输入内容已保留',3000);return;}
   }
   if(chatSending){
     if(chatSendButtonCanStop())chatStopMessage();
@@ -10391,6 +10431,7 @@ function chatRetryFailedUser(i){
 async function chatSubmitPendingMessages(options){
   options=options||{};
   var requestState=options.requestState||null;
+  try{
   chatInit();
   chatFlushAssistantRevealQueue();
   if(chatSending&&!options.sendingStarted){
@@ -10399,7 +10440,7 @@ async function chatSubmitPendingMessages(options){
     return;
   }
   if(options.sendingStarted&&!requestState)requestState=chatActiveRequest;
-  if(options.deferForPaint)await chatYieldAfterVisualFeedback();
+  if(options.deferForPaint)await chatAwaitPreparation(chatYieldAfterVisualFeedback(),requestState,'等待界面响应');
   if(requestState&&requestState.stopped)return;
   var input=document.getElementById('chat-input');
   var extraText=options.inputSnapshot?String(options.extraText||'').trim():(input&&input.value||'').trim();
@@ -10459,7 +10500,9 @@ async function chatSubmitPendingMessages(options){
   // 两项互不依赖：首次打开页面时并行准备，避免先等 IndexedDB、再等主链路配置。
   var sessionsReadyPromise=chatEnsureSessionsReady();
   var mainRouteReadyPromise=chatEnsureMainRouteReady();
-  await sessionsReadyPromise;
+  mainRouteReadyPromise.catch(function(){});
+  await chatAwaitPreparation(sessionsReadyPromise,requestState,'读取会话');
+  if(typeof chatWakeRefresh==='function')await chatAwaitPreparation(chatWakeRefresh(),requestState,'更新唤醒状态');
   if(requestState&&requestState.stopped)return;
   chatExpireNativeThinking(chatCurrentSession());
   if(requestState){
@@ -10480,7 +10523,7 @@ async function chatSubmitPendingMessages(options){
   chatFollowMessagesBottom(chatShouldFollowMessages(),true,false);
   if(!out||!out.parentNode)out=chatAddBubble('assistant','',false);
   if(requestState)requestState.out=out;
-  var route=await mainRouteReadyPromise;
+  var route=await chatAwaitPreparation(mainRouteReadyPromise,requestState,'读取供应商');
   if(requestState&&requestState.stopped)return;
   if(!route||!route.ok){
     chatHandleMainRouteNotReady(route);
@@ -10512,7 +10555,7 @@ async function chatSubmitPendingMessages(options){
   if(typeof chatScheduleNightlySync==='function')chatScheduleNightlySync();
   if(requestState&&requestState.stopped)return;
   var timeReminderContext=chatTimeReminderContext(chatCurrentSession(),chatMessages,pending);
-  var trimResult=await chatApplyAutoTrimForPendingBatch(cfg,pending,requestState);
+  var trimResult=await chatAwaitPreparation(chatApplyAutoTrimForPendingBatch(cfg,pending,requestState),requestState,'准备上下文');
   var digestSync=chatDigestPendingSync(chatCurrentSession(),cfg);
   if(digestSync){digestSync.turnId=requestTurnId;chatSaveSessions();}
   if(requestState&&requestState.stopped)return;
@@ -10523,6 +10566,7 @@ async function chatSubmitPendingMessages(options){
     windowMessagesForRequest.forEach(function(m){delete m.minimalTime});
   }
   var userMessageIndexes=[];
+  if(requestState)requestState.userMessageIndexes=userMessageIndexes;
   // 重新生成时带着走的"上一版回复"。先接过来，等新回复落地时挂到新的那一组上，
   // 翻页才有得翻。故意不在这里删：万一这次发送被停止或失败，字段还留在消息上，
   // 用户再点一次重新生成/重试时旧答案不会凭空消失。真正落地后才清。
@@ -10594,6 +10638,7 @@ async function chatSubmitPendingMessages(options){
     session_id:cfg.sessionId,
     // 轮次 id 一起发给网关：断线补收时用它对账，避免把上一轮的旧回复当成这一轮的答案。
     turn_id:requestTurnId,
+    client_sent_at:submitTs,
     execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps')?(CKBackendRoute.current.execution||'direct_api'):'direct_api',
     text:text,
     model:cfg.model,
@@ -11047,7 +11092,7 @@ async function chatSubmitPendingMessages(options){
     finishThinking();
     streamForceText=true;flushStreamRender();
     stopStreamRender();
-    chatStreamProgressStop();
+    chatStreamProgressSet('整理回复');
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
     await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,alreadyShownCount:streamShownCount,renderCompletedTs:streamFinalRenderedAt,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,thinkingDurationMs:thinkingSeen?thinkingTotalMs:undefined,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
@@ -11099,6 +11144,26 @@ async function chatSubmitPendingMessages(options){
       setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
       // 清理排在截断之后：先让截断决定这一轮还剩多少历史，再按最终轮数判断要不要清。
       setTimeout(function(){chatMaybeAutoClean({forceCheck:true})},0);
+    }
+  }
+  // CK_STREAM_END: preparation guard also handles failures before streaming.
+  }catch(error){
+    if(requestState&&chatActiveRequest===requestState&&!requestState.stopped){
+      requestState.stopped=true;
+      if(requestState.controller)requestState.controller.abort();
+      (requestState.pendingMessages||[]).forEach(function(message){
+        if(chatMessages.indexOf(message)<0)return;
+        if(message.inFlight)return;
+        message.role='user';message.sendFailed=true;message.failedAt=Date.now();
+      });
+      chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true});
+      toast(chatFriendlyError(error),5000);
+      if(chatInterruptedInFlightMessages().length)chatScheduleRecovery(0);
+    }
+  }finally{
+    if(requestState&&chatActiveRequest===requestState){
+      if(requestState.out&&requestState.out.parentNode)requestState.out.parentNode.remove();
+      chatReleaseSendingUi(requestState);chatStreamProgressStop();
     }
   }
 }
@@ -11347,7 +11412,7 @@ var API_TABS=[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
   ]},
-  {key:'topics',label:'主题与事件 API',info:'手动找材料、主题自动整理和事件脉络整理共用此模型，复用现有 Fact 和向量。开启自动整理后按预算分批运行，确定的直接归组，有疑点的交给你审批；后续整理会先参考你的处理意见。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'为主题选材和自动整理选择供应商与模型（OpenAI 兼容接口）。主题控制位于“状态 → 主题整理”，事件开关、队列和执行记录位于“状态 → 事件整理”；未配置模型时后台等待，不会重新提取 Fact。'}]},
+  {key:'topics',label:'主题与事件 API',info:'手动找材料、主题自动整理和事件脉络整理共用此模型，复用现有 Fact 和向量。开启自动整理后按预算分批运行，确定的直接归组，有疑点的交给你审批；后续整理会先参考你的处理意见。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'为主题选材和自动整理选择供应商与模型（OpenAI 兼容接口）。主题控制位于“状态 → 主题整理”，事件开关、队列和执行记录位于“状态 → 事件整理”；未配置模型时后台等待，不会重新提取 Fact。'},{key:'topic_materials_fallback',label:'主题选材与事件整理 · 备选',info:'主供应商限流、额度不足或暂时不可用时自动尝试一次。留空则不启用；仍计入整理预算。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'证据审核主模型沿用召回 API；审核主供应商限流或连接失败时使用此备选。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}

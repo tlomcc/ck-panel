@@ -5,8 +5,8 @@
  const until=async check=>{for(let i=0;i<100;i++){if(check())return;await pause(10)}throw Error('Timed out waiting for response receipt')};
  const source=window.__streamSource.replace(/\r\n/g,'\n');
  const start=source.indexOf('  var streamRenderRaf=0,streamRenderDirty=false,streamRenderStopped=false;');
- const end=source.indexOf('\nfunction switchPanelTab',start);
- const tail=source.slice(start,end).replace(/\}\s*$/,'');
+ const end=source.indexOf('  // CK_STREAM_END:',start);
+ const tail=source.slice(start,end);
  const execute=new (Object.getPrototypeOf(async function(){}).constructor)('cfg','out','requestState',`
   var assistantText='',nativeThinkingText='',toolEvents=[],firstReplyTs=0,requestTurnId='first-response',latencyTrace={},
       responseUserTs=Date.now(),userMessageIndexes=[0],requestBodyText='{}',recallInfo=null,requestUsage=null,requestCompleted=false,

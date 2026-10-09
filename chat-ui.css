@@ -184,3 +184,10 @@ body.chat-active .chat-stream-aux .chat-thinking{width:fit-content!important;min
 body.chat-active .chat-thinking-head:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 @keyframes ck-thinking-breathe{0%,100%{opacity:1}50%{opacity:.58}}
 @media(prefers-reduced-motion:reduce){body.chat-active .chat-thinking.is-thinking .chat-thinking-label{animation:none}}
+
+#chat-wake-shortcut[hidden]{display:none!important}
+#chat-wake-shortcut[aria-pressed="true"]{color:var(--accent,#65876d);background:rgba(91,137,103,.12)}
+#chat-wake-status{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+#chat-wake-interval{width:90px;margin-left:12px}
+.chat-msg-row.send-failed.pending-swipe-active{transform:translateX(var(--pending-swipe-x,0px));transition:none}
+.chat-msg-row.send-failed{touch-action:pan-y}

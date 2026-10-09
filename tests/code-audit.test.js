@@ -14,7 +14,7 @@ function extract(name){
   }
   throw Error('Unclosed function '+name);
 }
-function load(context,names){vm.createContext(context);for(const name of names)vm.runInContext(extract(name),context);return context;}
+function load(context,names){context.chatReadStreamChunk=reader=>reader.read();vm.createContext(context);for(const name of names)vm.runInContext(extract(name),context);return context;}
 const noop=()=>{};
 const clone=x=>JSON.parse(JSON.stringify(x));
 
@@ -59,6 +59,7 @@ test('SSE callback exceptions propagate exactly once; text fallback remains supp
 function streamContext(){
   const c=load({TextDecoder,Date,console,latencyTrace:{},requestState:{},assistantText:'',nativeThinkingText:'',toolEvents:[],
     markFirstReplyTs:noop,recordFirstDeltaLatency:noop,chatStreamProgressSet:noop,chatDebug:noop,
+    chatMarkResponseReceived:noop,chatDigestConfirmSync:noop,checkpointReply:noop,digestSync:null,
     chatApplyPollingLiveState:noop,chatStoreSessionRecall:noop,chatPollingLiveState:null,
     chatCurrentSession:()=>({}),chatScheduleSessionSave:noop,timeReminderContext:{round:1},chatSetStatus:noop,cfg:{},responseUserTs:1,requestTurnId:'turn',recallInfo:null,
     CHAT_PLATFORM_EXIT_ERROR:'Function process exited',chatUpsertToolEvent:(old,data)=>old.concat(data),scheduleStreamRender:noop,

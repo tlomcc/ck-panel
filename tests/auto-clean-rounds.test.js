@@ -23,6 +23,7 @@ function extractFunction(name){
 
 function testNormalize(){
   const ctx={console,CHAT_AUTO_CLEAN_DEFAULT_ROUNDS:100,CHAT_AUTO_CLEAN_MIN_ROUNDS:5,CHAT_AUTO_CLEAN_MAX_ROUNDS:5000};
+  ctx.chatWakeStatusStale=()=>false;
   vm.createContext(ctx);
   ['chatPositiveIntOrDefault','chatNormalizeAutoCleanConfig','chatAutoCleanConfigFrom']
     .forEach(name=>vm.runInContext(extractFunction(name),ctx));
@@ -111,7 +112,7 @@ async function testExpiryBehavior(){
     chatPendingMessages:()=>[],chatMessageHasContent:m=>!!m.text,
     chatCacheActivityReference:(s,fallback)=>({timestamp:s.cacheFullCreatedAt||fallback,source:'full_create'}),
     chatCleanHistoryCore:async()=>{cleanCalls++;return {ok:true,sessionId:'s1',images:1,recalls:1}},
-    chatRenderAutoCleanState:()=>{},chatDebug:()=>{},toast:()=>{},chatSaveSessions:()=>{}
+    chatRenderAutoCleanState:()=>{},chatDebug:()=>{},toast:()=>{},chatSaveSessions:()=>{},chatWakeStatusStale:()=>false
   };
   vm.createContext(ctx);
   [

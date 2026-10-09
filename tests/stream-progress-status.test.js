@@ -35,6 +35,7 @@ progressEl.setAttribute = function (k, v) { progressEl.attrs[k] = v; };
 progressEl.removeAttribute = function (k) { delete progressEl.attrs[k]; };
 const timers = { live: 0 };
 const ctx = {
+  chatSending:false,
   console, Number, String, Object, Math,
   Date: { now: () => fakeNow },
   document: {

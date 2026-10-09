@@ -8,6 +8,7 @@ function setup(){
  document:{getElementById:id=>nodes[id]},chatLoadConfig:()=>({...stored}),chatSaveConfigObject:cfg=>{if(!fail)stored={...cfg}},localStorage:{getItem:()=>JSON.stringify(stored)},
  chatPromptDraftDirty:{system:false,thinking:false},chatSetFieldValue:(id,value)=>{nodes[id].value=value},toast:()=>{},ckConfirmDialog:async()=>true,
  chatIsRealMessage:m=>['user','assistant'].includes(m.role),chatCacheActivityReference:s=>({timestamp:Math.max(s.cacheLastReadAt||0,s.cacheFullCreatedAt||0)}),findLibraryProvider:()=>null,providerCacheStrategy:()=>'',chatCacheNoticeStrategy:()=> 'single_5m'};
+ ctx.chatWakeStatusStale=()=>false;
  vm.createContext(ctx);
  ['chatSystemPromptCacheTtl','chatSystemPromptCacheWait','chatPromptFields','chatRenderPromptCounts','chatRenderPromptStandby','chatRenderSystemPromptStandby','chatPromptStandbyEdited','chatSystemPromptStandbyEdited','chatThinkingPromptStandbyEdited','chatStorePrompt','chatSavePromptStandby','chatSyncPromptNow','chatMaybeSyncPrompt','chatMaybeSyncSystemPrompt','chatThinkingPromptValue'].forEach(n=>vm.runInContext(extract(n),ctx));
  vm.runInContext(source.match(/function chatActiveThinkingPrompt[^\n]+/)[0],ctx);
