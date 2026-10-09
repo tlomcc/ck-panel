@@ -102,7 +102,7 @@ function chatDigestSyncView(session,cfg,remote){
       if(ready)view.status=chatDigestReplyActive(session)?'等待当前回复':'正在完成截断';
       view.note+=ready?(chatDigestReplyActive(session)?'总结已就绪，当前回复结束后自动截断。':'总结已就绪，正在完成截断。'):'整理完成后自动截断，期间可继续聊天。';
     }else view.note+=ready?'已准备好，可立刻同步。':'后台继续整理，准备好后可立刻同步。';
-    if(state.status==='retry'||state.local_error){view.status='准备暂未完成';view.tone='attention';view.note+=(state.local_error||state.last_error||'后台会自动重试。');}
+    if(!ready&&(state.status==='retry'||state.local_error)){view.status='准备暂未完成';view.tone='attention';view.note+=(state.local_error||state.last_error||'后台会自动重试。');}
   }else if(!record&&!session.digestManualCompleted){
     if(cfg.dailyDigestEnabled===false){view.status='总结已关闭';view.note='开启总结后会自动准备。';}
     else if(ready){view.status='待同步';view.tone='live';view.note='总结已准备好，尚未截断。等 1h 缓存过期后的下一次发送同步，也可立刻同步。';}

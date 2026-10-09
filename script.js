@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v300-wake-cache-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v301-immediate-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -7218,7 +7218,7 @@ function chatCommitAutoTrimPlan(cfg,plan){
     s.digestWork=null;
     s.digestReadyTrims=(s.digestReadyTrims||[]).filter(function(t){return !(plan.digestPrepared.used||[]).includes(t)});
     s.digestRollup=plan.digestPrepared.rollup;
-    chatDigestResetPack(cfg,s);
+    if(plan.digestPrepared.activePack)s.digestActivePack=plan.digestPrepared.activePack;else chatDigestResetPack(cfg,s);
     s.digestRetryAfter=0;
     chatDailyDigestLastError='';
   }
@@ -7356,7 +7356,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
       chatDigestLog('digest_result',{ok:true,phase:'queued',session_id:session.id,trigger:plan.trigger,schedule:'后台准备，缓存过期后同步'});
     }
     var activated=false;
-    if(plan.digestPrepared||!plan.trimmed&&stageBoundary)activated=chatDigestActivate(session,cfg,true);
+    if(plan.digestPrepared||!plan.trimmed&&stageBoundary)activated=chatDigestActivate(session,cfg,true,plan.digestPrepared&&plan.digestPrepared.activePack);
     if(manualSend&&plan.trimmed){delete session.digestManualTrim;session.digestManualCompleted={rounds:plan.dropped,at:Date.now(),mode:opts&&opts.commitPrepared?'immediate':'send'};}
     delete session.digestTrimDecision;
     var result=chatCommitAutoTrimPlan(cfg,plan);

@@ -230,6 +230,41 @@ test('a restored unfinished reply delays manual commit until its original turn i
  assert.equal(x.session.messages.length,4);
 });
 
+test('a manual cut injects its prepared summary when midnight compaction is unavailable',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);
+ const yesterday=x.ctx.chatDigestShiftDay(x.ctx.chatDailyDigestDayKey(x.ctx.Date.now()),-1);
+ const entries=[{dayKey:yesterday,text:'昨日尚未精简的长总结'.repeat(500),covered:[]}];
+ x.session.digestActivePack={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),text:'前一轮实际发送过的稳定总结',at:x.ctx.Date.now()-1000};
+ x.session.digestStaged={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),base:{entries,rollup:null,omitted:[]},trims:x.session.digestReadyTrims,result:{day:yesterday},revision:2};
+ x.session.digestReadyTrims=[];
+ assert.equal(x.ctx.chatDigestPackReady(x.cfg,x.ctx.chatDigestPreparedSession(x.session,x.cfg)),false);
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);
+ const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);
+ assert.match(pack,/前一轮实际发送过的稳定总结/);
+ assert.match(pack,/她问了前三个问题/,'new summary must be injected in the same transaction as the cut');
+ assert.doesNotMatch(pack,/昨日尚未精简的长总结/);
+ assert.equal(x.session.messages.length,4);assert.equal(x.session.digestStaged,undefined);
+ assert.equal(x.session.digestReadyTrims.length,0);
+});
+
+test('missing both a ready injection and a stable saved pack preserves original history',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);
+ x.session.dailyDigests=[{dayKey:x.ctx.chatDigestShiftDay(x.ctx.chatDailyDigestDayKey(x.ctx.Date.now()),-1),text:'长总结'.repeat(1000),covered:[]}];
+ delete x.session.digestActivePack;
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+ assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
+});
+
+test('an unrelated nightly error does not hide a prepared manual cut waiting for a reply',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);x.ctx.chatSending=true;
+ const view=x.ctx.chatDigestSyncView(x.session,x.cfg,{status:'retry',last_error:'总结供应商返回 HTTP 524'});
+ assert.equal(view.ready,true);assert.equal(view.status,'等待当前回复');
+ assert.doesNotMatch(view.note,/HTTP 524/);
+});
+
 test('preparation status displays actual summary coverage without claiming a completed cut',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true});
  await x.ctx.chatRequestManualDigestTrim();

@@ -4,7 +4,7 @@
  const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,deferQueue=false,queueReady=true;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,deferQueue=false,queueReady=true,nightlyError=false;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
@@ -23,12 +23,12 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;deferQueue=false;queueReady=true;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;deferQueue=false;queueReady=true;nightlyError=false;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
    const groups=body.groups.filter(g=>body.candidate_keys.includes(g.key));
    if(queueReady&&groups.length&&!preparedTrims)preparedTrims=[{keys:groups.map(g=>g.key),text:'已完整整理本次选中的旧对话。',startTs:groups[0].start,endTs:groups.at(-1).end}];
-   return {ok:true,status:queueReady?'succeeded':'queued',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:2,source_stamp:body.base_stamp,config:body.config,base:body.base,
+   return {ok:true,status:nightlyError?'retry':queueReady?'succeeded':'queued',last_error:nightlyError?'总结供应商返回 HTTP 524':'',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:2,source_stamp:body.base_stamp,config:body.config,base:body.base,
      result:queueReady?{day:chatDailyDigestDayKey(Date.now())}:null,
      trims:preparedTrims||[]}};
  }
@@ -104,6 +104,23 @@
    chatRenderNightlyStatus(session);
    check(field('chat-digest-schedule-status').textContent.includes('同步完成'),'final completion status missing');
    check(!field('chat-digest-prepare').textContent.includes('后台准备'),'old action wording remains');
+   await until(()=>!chatDigestMaintenanceBusy,'restored maintenance did not settle');
+
+   setup('midnight');cfg.dailyDigestDetailDays=3;chatSaveConfigObject(cfg);chatWriteForm(cfg);cfg=chatLoadConfig();nightlyError=true;
+   const yesterday=chatDigestShiftDay(chatDailyDigestDayKey(Date.now()),-1);
+   session.dailyDigests=[{dayKey:yesterday,text:'昨日尚未精简的长总结'.repeat(500),covered:[]}];
+   session.digestActivePack={scope:chatDigestActiveScope(cfg),config:chatDigestConfigStamp(cfg),text:'前一轮实际生效的稳定总结',at:Date.now()-1000};
+   field('chat-digest-prepare').click();
+   await until(()=>session.digestLastSync?.status==='synced','midnight summary timeout blocked a prepared manual cut');
+   check(!session.digestStaged&&cleanCalls.length===1,'midnight cut did not consume its staged summary');
+   field('chat-input').value='请沿用截断后的总结';const nextSend=chatSendMessage();
+   await until(()=>posts.length===1&&releaseReply,'next request did not send');
+   const transmitted=JSON.stringify(posts[0]);
+   check(transmitted.includes('已完整整理本次选中的旧对话。'),'the next actual request omitted the new trim summary');
+   check(transmitted.includes('前一轮实际生效的稳定总结'),'the previous stable summary was lost');
+   check(!transmitted.includes('昨日尚未精简的长总结'),'unready long daily source expanded the prompt');
+   releaseReply();await nextSend;
+   results.push({midnightSummaryInjected:true,stableSummaryPreserved:true,unrelatedNightly524DoesNotBlock:true,nextRequestChecked:true});
    return results;
  }finally{
    if(chatNightlyTimer){clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
