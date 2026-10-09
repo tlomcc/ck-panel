@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v297-wake-toggle-states';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v298-wake-recovery';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5085,9 +5085,11 @@ function chatStreamProgressRender(){
   else el.setAttribute('hidden','');
 }
 function chatSetStatus(text){
-  if(/正在补收|连接恢复中|回复已生成，正在同步/.test(String(text||''))){
+  if(/正在补收|连接恢复中|补收连接重试/.test(String(text||''))){
     if(!chatStreamProgress)chatStreamProgressStart();chatStreamProgressSet('补收中');
-  }else if(!chatSending&&chatStreamProgress&&chatStreamProgress.stage==='补收中')chatStreamProgressStop();
+  }else if(/回复已生成，正在同步/.test(String(text||''))){
+    if(!chatStreamProgress)chatStreamProgressStart();chatStreamProgressSet('同步回复');
+  }else if(!chatSending&&chatStreamProgress&&['补收中','同步回复'].includes(chatStreamProgress.stage))chatStreamProgressStop();
   var el=document.getElementById('chat-status');
   if(!el)return;
   var waiting=/请求网关|正在请求|对方正在输入|等待回复|发送中/.test(String(text||''));
@@ -6951,6 +6953,7 @@ function chatQueueSendDuringResponse(){
   var pending=chatPendingMessages().filter(chatMessageHasContent);
   if(!pending.length){toast('没有要发送的内容');return;}
   request.queuedPendingIds=pending.map(chatEnsurePendingMessageId);
+  if(request.checkpointReply)request.checkpointReply();
   toast('已排队，本轮回复接收完成后发送');
 }
 function chatSendQueuedResponse(request){
@@ -7305,6 +7308,10 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   var manualRequest=activationSession.digestManualTrim;
   var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
+  // A slow wake-state read must not delay chat or expire a still-warm prefix.
+  if(!manualSend&&!(opts&&opts.commitPrepared)&&typeof chatWakeStatusStale==='function'&&chatWakeStatusStale(activationSession)){
+    return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
+  }
   var stageBoundary=!!(chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||submittedPending&&submittedPending.length&&chatDigestCacheExpired(activationSession)));
   function summaryOnlyPlan(source){return Object.assign({},source,{boundary:true,cacheBoundary:true,trimmed:false,dropped:0,after:source.before,historyAfter:source.before,localAfter:source.localBefore,transportAfter:source.transportBefore,transportDropped:0,localDropped:0,droppedMessages:[],droppedTransportMessages:[],trigger:'digest_sync',forceCacheRebuild:true});}
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
@@ -7814,6 +7821,7 @@ async function chatRecoverInterruptedTurns(opts){
   if(!interrupted.length){chatRenderReplyDraft();return {checked:false};}
   chatRecoverInFlightBusy=true;
   var cfg=chatLoadConfig(),session=chatCurrentSession(),turnId=String(interrupted[interrupted.length-1].inFlightTurnId||''),reply=null;
+  chatSetStatus('正在补收回复');
   // /ck/chat/last uses turn_id= to recover this exact request, never resend it.
   try{
     try{reply=await chatReadDelivery(cfg,turnId)}catch(e){}
@@ -7835,8 +7843,13 @@ async function chatRecoverInterruptedTurns(opts){
       }
       chatClearInFlightMarks(matching.map(function(m){return chatMessages.indexOf(m)}));
       matching.forEach(function(m){delete m.sendFailed;delete m.failedAt});
+      var queuedIds=session.replyDraft&&session.replyDraft.turn_id===turnId?session.replyDraft.queuedPendingIds:null;
       session.replyDraft=null;chatExpireNativeThinking(session);chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true});
-      chatSetStatus('已补收完整回复');return {checked:true,recovered:1};
+      chatSetStatus('已补收完整回复');
+      if(Array.isArray(queuedIds)&&queuedIds.length)setTimeout(function(){
+        if(session===chatCurrentSession()&&cfg.sessionId===chatActiveSessionId)chatSendQueuedResponse({finished:true,queuedPendingIds:queuedIds});
+      },0);
+      return {checked:true,recovered:1};
     }
     if(reply&&(reply.assistant_text||reply.assistant_thinking))chatKeepReplyDraft(session,reply);
     var age=Date.now()-Number(matching[0]&&(matching[0].inFlightAt||matching[0].ts)||Date.now());
@@ -7852,6 +7865,11 @@ async function chatRecoverInterruptedTurns(opts){
       if(reply&&reply.error&&opts.silent!==true)toast(chatFriendlyError(new Error(reply.error)),5000);
     }
     chatRenderMessages({respectUserScroll:true});
+    return {checked:true,recovered:0};
+  }catch(error){
+    if(session===chatCurrentSession()&&cfg.sessionId===chatActiveSessionId){
+      chatSetStatus('补收连接重试');chatScheduleRecovery(5000);
+    }
     return {checked:true,recovered:0};
   }finally{chatRecoverInFlightBusy=false;}
 }
@@ -9295,18 +9313,18 @@ document.addEventListener('keydown',function(e){
   chatToggleSessions(false,true);
   chatTogglePlus(false);
 });
-window.addEventListener('pagehide',function(){if(chatActiveRequest&&chatActiveRequest.checkpointReply)chatActiveRequest.checkpointReply();chatFlushDeferredSessionSave();chatFlushDebugSave()});
+window.addEventListener('pagehide',function(){if(chatActiveRequest){chatActiveRequest.hiddenAt=Date.now();if(chatActiveRequest.checkpointReply)chatActiveRequest.checkpointReply();}chatFlushDeferredSessionSave();chatFlushDebugSave()});
 document.addEventListener('visibilitychange',function(){
-  if(document.hidden){if(chatActiveRequest&&chatActiveRequest.checkpointReply)chatActiveRequest.checkpointReply();chatFlushDeferredSessionSave();chatFlushDebugSave()}
+  if(document.hidden){if(chatActiveRequest){chatActiveRequest.hiddenAt=Date.now();if(chatActiveRequest.checkpointReply)chatActiveRequest.checkpointReply();}chatFlushDeferredSessionSave();chatFlushDebugSave()}
   if(!document.hidden&&currentPanelTab==='chat'){
     chatUpdateCacheExpiryHint(true);
     // 回到前台就检查有没有"发出去了却没收到回复"的那一轮：
     // 这正是用户中途退出 CK 的那个场景，页面没被杀只是被冻结时也走这条。
-    chatRecoverInterruptedTurns({silent:false});
+    chatResumeAfterVisibility();
   }
 });
 window.addEventListener('pageshow',function(){
-  if(currentPanelTab==='chat')chatRecoverInterruptedTurns({silent:false});
+  if(currentPanelTab==='chat')chatResumeAfterVisibility();
 });
 function chatMessagesBox(){
   return document.getElementById('chat-messages');
@@ -10502,7 +10520,7 @@ async function chatSubmitPendingMessages(options){
   var mainRouteReadyPromise=chatEnsureMainRouteReady();
   mainRouteReadyPromise.catch(function(){});
   await chatAwaitPreparation(sessionsReadyPromise,requestState,'读取会话');
-  if(typeof chatWakeRefresh==='function')await chatAwaitPreparation(chatWakeRefresh(),requestState,'更新唤醒状态');
+  if(typeof chatWakeRefresh==='function')Promise.resolve(chatWakeRefresh()).catch(function(){});
   if(requestState&&requestState.stopped)return;
   chatExpireNativeThinking(chatCurrentSession());
   if(requestState){
@@ -10789,7 +10807,8 @@ async function chatSubmitPendingMessages(options){
   function checkpointReply(force){
     if(!force&&Date.now()-streamDraftAt<1000)return;
     streamDraftAt=Date.now();
-    if(assistantText||nativeThinkingText)chatKeepReplyDraft(chatCurrentSession(),{turn_id:requestTurnId,assistant_text:assistantText,assistant_thinking:nativeThinkingText,tools:toolEvents,usage:requestUsage,state:streamFinalMetadata?'finalizing':'running'});
+    var queuedIds=typeof requestState!=='undefined'&&requestState&&requestState.queuedPendingIds;
+    if(assistantText||nativeThinkingText||queuedIds&&queuedIds.length)chatKeepReplyDraft(chatCurrentSession(),{turn_id:requestTurnId,assistant_text:assistantText,assistant_thinking:nativeThinkingText,tools:toolEvents,usage:requestUsage,state:streamFinalMetadata?'finalizing':'running',queuedPendingIds:queuedIds?queuedIds.slice():undefined});
   }
   if(typeof requestState!=='undefined'&&requestState)requestState.checkpointReply=function(){checkpointReply(true)};
   var streamAux=null,streamFinalMetadata=false,streamFinalRenderedAt=0,streamMetadataReceivedAt=0;
@@ -10899,6 +10918,7 @@ async function chatSubmitPendingMessages(options){
   try{
     var requestSignal=requestState&&requestState.controller?requestState.controller.signal:undefined;
     latencyTrace.panel_request_started_ms=Date.now();
+    if(requestState)requestState.streamStarted=true;
     await chatFetchWithSilentRetry(chatEndpoint(cfg),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -11048,7 +11068,7 @@ async function chatSubmitPendingMessages(options){
       while(reader&&!streamCompleted){
         if(requestState&&requestState.stopped)throw chatCreateAbortError();
         var r;
-        try{r=await chatReadStreamChunk(reader)}
+        try{r=await chatReadStreamChunk(reader,requestSignal)}
         catch(readError){throw chatMarkNetworkFailure(readError)}
         if(r.done)break;
         if(r.value&&r.value.byteLength)chatMarkResponseReceived(requestState);
@@ -11103,10 +11123,10 @@ async function chatSubmitPendingMessages(options){
     requestCompleted=true;
     chatSetStatus('完成');
   }catch(e){
-    if(requestState&&(requestState.stopped||chatRequestWasAborted(e,requestSignal))){
+    if(requestState&&(requestState.stopped||!requestState.recovering&&chatRequestWasAborted(e,requestSignal))){
       requestState.stopped=true;
       chatFinalizeStoppedRequest(requestState);
-    }else if(e&&e.chatNetworkFailure){
+    }else if(requestState&&requestState.recovering||e&&e.chatNetworkFailure){
       checkpointReply(true);
       chatSaveLocalMessages();chatSetStatus('连接恢复中，正在补收回复');
       chatScheduleRecovery(0);
@@ -11135,6 +11155,7 @@ async function chatSubmitPendingMessages(options){
     if(out&&out.parentNode)out.parentNode.remove();
     var releasedSendingUi=chatReleaseSendingUi(requestState);
     chatRenderReplyDraft();
+    if(releasedSendingUi&&!requestCompleted&&chatInterruptedInFlightMessages().length)chatSetStatus('正在补收回复');
     if(requestCompleted){
       if(releasedSendingUi)chatSendQueuedResponse(requestState);
       if(typeof chatScheduleNightlySync==='function')chatScheduleNightlySync();

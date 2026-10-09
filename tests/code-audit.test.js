@@ -57,7 +57,7 @@ test('SSE callback exceptions propagate exactly once; text fallback remains supp
 });
 
 function streamContext(){
-  const c=load({TextDecoder,Date,console,latencyTrace:{},requestState:{},assistantText:'',nativeThinkingText:'',toolEvents:[],
+  const c=load({TextDecoder,Date,console,latencyTrace:{},requestState:{},requestSignal:undefined,assistantText:'',nativeThinkingText:'',toolEvents:[],
     markFirstReplyTs:noop,recordFirstDeltaLatency:noop,chatStreamProgressSet:noop,chatDebug:noop,
     chatMarkResponseReceived:noop,chatDigestConfirmSync:noop,checkpointReply:noop,digestSync:null,
     chatApplyPollingLiveState:noop,chatStoreSessionRecall:noop,chatPollingLiveState:null,

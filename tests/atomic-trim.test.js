@@ -278,3 +278,14 @@ test('manual XY sync succeeds with zero cut rounds while unrelated cuts are stil
  assert.equal(x.session.messages.length,10);assert.equal(x.session.digestLastSync.rounds,0);
  assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'同步完成');
 });
+
+test('stale wake status preserves a ready prefix without making normal sends wait',async()=>{
+ const x=setup();prepare(x);let reads=0;
+ x.session.wakeEnabled=true;x.session.wakeSyncAt=x.ctx.Date.now()-60000;
+ x.ctx.chatWakeRefresh=()=>{reads++;return new Promise(()=>{})};
+ vm.runInContext(extract('chatWakeStatusStale'),x.ctx);
+ const before=JSON.stringify(x.session.messages),result=await x.run();
+ assert.equal(reads,1);assert.equal(result.trimmed,false);assert.equal(result.cacheBoundary,false);assert.equal(result.forceCacheRebuild,false);
+ assert.equal(JSON.stringify(x.session.messages),before);assert.equal(x.requests.length,0);
+ x.session.wakeSyncAt=x.ctx.Date.now();assert.equal((await x.run()).trimmed,true);
+});

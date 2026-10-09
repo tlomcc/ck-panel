@@ -198,6 +198,8 @@ body.chat-active .chat-head-actions #chat-wake-shortcut[aria-pressed="false"],
 body.chat-active .chat-head-actions #chat-wake-shortcut[aria-pressed="false"]:is(:hover,:focus,:active){background:transparent!important;color:#84948b!important;outline:none!important}
 body.chat-active #chat-wake-shortcut[aria-pressed="false"] path{fill:none!important}
 body.chat-active .chat-head-actions #chat-wake-shortcut:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
+body.chat-active .chat-head-actions #chat-wake-shortcut{position:relative!important;overflow:visible!important}
+body.chat-active #chat-wake-countdown{position:absolute;top:calc(100% - 1px);left:50%;transform:translateX(-50%);min-width:34px;white-space:nowrap;font:600 10px/11px "Microsoft YaHei UI",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:0;text-align:center;color:inherit;transition:none!important}
 #chat-wake-status{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 #chat-wake-interval{width:90px;margin-left:12px}
 .chat-msg-row.send-failed.pending-swipe-active{transform:translateX(var(--pending-swipe-x,0px));transition:none}

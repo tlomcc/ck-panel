@@ -1,5 +1,5 @@
 /* Server-owned clocks keep running while the phone sleeps. */
-var chatWakeState={},chatWakeBusy=false,chatWakeWriteBusy=false,chatWakeLastFetch=0,chatWakePending=null;
+var chatWakeState={},chatWakeBusy=false,chatWakeWriteBusy=false,chatWakeLastFetch=0,chatWakePending=null,chatWakePendingScope='',chatWakeRevisions={};
 function chatWakeMode(cfg){
   cfg=cfg||chatLoadConfig();
   var strategy=chatPollingEnabledForConfig(cfg)?chatCacheNoticeStrategy(cfg):providerNormalizeCacheStrategy(cfg.mainRouteCacheStrategy);
@@ -10,11 +10,19 @@ function chatWakeVisibility(show){
   try{localStorage.setItem('ck_wake_shortcut',show?'show':'settings')}catch(e){}
   chatWakeRender();
 }
+function chatWakeCountdown(state,now){
+  var next=Number(state&&state.next_at);
+  if(!state||state.enabled!==true||state.status==='waiting_chat'||state.status==='unsupported'||!Number.isFinite(next)||next<=0)return '--:--';
+  var seconds=Math.max(0,Math.ceil((next*1000-(now===undefined?Date.now():now))/1000));
+  return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+}
 function chatWakeRender(){
   if(typeof chatLoadConfig!=='function')return;
   var cfg=chatLoadConfig(),s=chatWakeState[cfg.sessionId]||{},mode=chatWakeMode(cfg),enabled=s.enabled===true;
   var icon=document.getElementById('chat-wake-shortcut');
   if(icon){icon.hidden=!chatWakeShortcut();icon.setAttribute('aria-pressed',String(enabled));icon.title=enabled?'关闭当前窗口唤醒':'开启当前窗口唤醒';icon.setAttribute('aria-label',icon.title);icon.disabled=chatWakeWriteBusy;}
+  var countdown=document.getElementById('chat-wake-countdown');
+  if(countdown){var time=chatWakeCountdown(s);countdown.textContent=time;countdown.setAttribute('aria-label',time==='--:--'?(enabled?'等待正常聊天开始计时':'唤醒已关闭'):'距下次唤醒 '+time);}
   var visible=document.getElementById('chat-wake-visibility');if(visible)visible.value=chatWakeShortcut()?'show':'settings';
   var toggle=document.getElementById('chat-wake-enabled');if(toggle){toggle.checked=enabled;toggle.disabled=chatWakeWriteBusy||!mode;}
   var input=document.getElementById('chat-wake-interval');
@@ -31,16 +39,19 @@ function chatWakeRender(){
     status.textContent=text;
   }
 }
-async function chatWakeRequest(changes,sessionId){
-  var cfg=chatLoadConfig(),sid=sessionId||cfg.sessionId,controller=new AbortController(),timer=setTimeout(function(){controller.abort()},10000);
+async function chatWakeRequest(changes,sessionId,requestConfig){
+  var cfg=requestConfig||chatLoadConfig(),sid=sessionId||cfg.sessionId,scope=chatEndpoint(cfg)+'|'+cfg.panelKey+'|'+sid;
+  if(changes)chatWakeRevisions[scope]=(chatWakeRevisions[scope]||0)+1;
+  var revision=chatWakeRevisions[scope]||0,controller=new AbortController(),timer;
+  var timeout=new Promise(function(resolve,reject){timer=setTimeout(function(){controller.abort();reject(new Error('唤醒状态连接等待超时'))},10000)});
   try{
     var url=chatEndpoint(cfg).replace(/\/chat$/,'/wake');
     var options={cache:'no-store',signal:controller.signal};
     if(changes){options.method='POST';options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(Object.assign({key:cfg.panelKey,session_id:sid,provider_id:cfg.mainRouteProviderId||''},changes));}
     else url+='?key='+encodeURIComponent(cfg.panelKey)+'&session_id='+encodeURIComponent(sid);
-    var response=await fetch(url,options),data=await response.json();
+    var response=await Promise.race([fetch(url,options),timeout]),data=await Promise.race([response.json(),timeout]);
     if(!response.ok||data.ok===false)throw new Error(data.error||'唤醒状态读取失败');
-    if(chatLoadConfig().panelKey!==cfg.panelKey)return;
+    if(chatLoadConfig().panelKey!==cfg.panelKey||chatEndpoint(chatLoadConfig())!==chatEndpoint(cfg)||(chatWakeRevisions[scope]||0)!==revision)return;
     chatWakeState[sid]=data;
     var session=chatSessions.find(function(x){return x.id===sid});
     if(session){
@@ -56,21 +67,28 @@ async function chatWakeRequest(changes,sessionId){
   }finally{clearTimeout(timer)}
 }
 async function chatWakeRefresh(){
-  if(chatWakePending)return chatWakePending;
-  if(chatWakeWriteBusy||!chatLoadConfig().panelKey)return;
+  var cfg=chatLoadConfig(),sid=cfg.sessionId,scope=chatEndpoint(cfg)+'|'+cfg.panelKey+'|'+sid;
+  if(chatWakePending&&chatWakePendingScope===scope)return chatWakePending;
+  if(chatWakeWriteBusy||!cfg.panelKey)return;
   chatWakeBusy=true;
-  var sid=chatLoadConfig().sessionId;
-  chatWakePending=(async function(){
-    try{return await chatWakeRequest()}
-    catch(error){chatWakeState[sid]=Object.assign({},chatWakeState[sid],{sync_error:'暂时无法确认后台状态'});chatWakeRender();}
-    finally{chatWakeBusy=false;chatWakeLastFetch=Date.now();chatWakePending=null;}
+  var revision=chatWakeRevisions[scope]||0;
+  var pending=(async function(){
+    try{return await chatWakeRequest(null,sid,cfg)}
+    catch(error){
+      var current=chatLoadConfig();
+      if(current.panelKey===cfg.panelKey&&chatEndpoint(current)===chatEndpoint(cfg)&&(chatWakeRevisions[scope]||0)===revision){
+        chatWakeState[sid]=Object.assign({},chatWakeState[sid],{sync_error:'暂时无法确认后台状态'});chatWakeRender();
+      }
+    }
+    finally{if(chatWakePending===pending){chatWakeBusy=false;chatWakeLastFetch=Date.now();chatWakePending=null;chatWakePendingScope='';}}
   })();
-  return chatWakePending;
+  chatWakePending=pending;chatWakePendingScope=scope;return pending;
 }
 async function chatWakeSave(changes){
   if(chatWakeWriteBusy)return;
+  var cfg=chatLoadConfig(),sid=cfg.sessionId;
   chatWakeWriteBusy=true;chatWakeRender();
-  try{if(chatWakePending)await chatWakePending;await chatWakeRequest(changes);toast('唤醒设置已保存');}
+  try{await chatWakeRequest(changes,sid,cfg);toast('唤醒设置已保存');}
   catch(error){toast('唤醒设置未保存，请重试',4000);}
   finally{chatWakeWriteBusy=false;chatWakeRender();}
 }

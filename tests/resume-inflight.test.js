@@ -130,7 +130,7 @@ function testWiring(){
   assert(recover.includes('chatRecoverInFlightBusy'),'要有并发守卫');
 
   assert(source.includes("window.addEventListener('pageshow'"),'回到前台/前进后退都要检查一次');
-  assert(/visibilitychange[\s\S]{0,400}chatRecoverInterruptedTurns/.test(source),
+  assert(/visibilitychange[\s\S]{0,600}chatResumeAfterVisibility/.test(source),
     '从后台切回来要检查一次——这正是用户退出 CK 又回来的那个场景');
   assert(/chatRenderDailyDigest\(cfg\);[\s\S]{0,200}chatRecoverInterruptedTurns/.test(source),
     'IndexedDB 权威全量回填之后也要检查一次（刷新页面那条路）');
