@@ -59,7 +59,7 @@ test('the 12-second recovery deadline covers both stalled fetch and stalled JSON
 test('foreground recovery detaches the old stream and is distinct from user Stop or preparation',()=>{
  const {c}=setup();let aborts=0,polls=0,checkpoints=0;
  c.chatSending=true;c.chatSetStatus=()=>{};c.chatRecoverInterruptedTurns=()=>polls++;
- c.chatActiveRequest={hiddenAt:1,streamStarted:true,controller:{abort(){aborts++}},checkpointReply(){checkpoints++}};
+ c.chatActiveRequest={hiddenAt:1,streamStarted:true,responseReceived:true,controller:{abort(){aborts++}},checkpointReply(){checkpoints++}};
  c.chatResumeAfterVisibility();assert.equal(aborts,1);assert.equal(checkpoints,1);assert.equal(c.chatActiveRequest.recovering,true);assert(!c.chatActiveRequest.stopped);
  c.chatResumeAfterVisibility();assert.equal(aborts,1);
  c.chatActiveRequest={hiddenAt:1,streamStarted:false,controller:{abort(){aborts++}}};c.chatResumeAfterVisibility();assert.equal(aborts,1);
@@ -70,4 +70,19 @@ test('foreground abort releases a read even if the old network stream ignores ca
  const x=setup(),controller=new AbortController();
  const pending=x.c.chatReadStreamChunk({read:()=>new Promise(()=>{})},controller.signal);
  controller.abort();await assert.rejects(pending,{name:'AbortError'});assert.equal(x.timers.size,0);
+});
+
+test('a resumed upload stays connected until its exact turn has a server receipt',async()=>{
+ for(const kind of ['missing','network-error','wrong-turn','pending','complete','finished-during-check']){
+  const {c,cfg}=setup();let aborts=0,reads=0;
+  c.chatSending=true;c.chatLoadConfig=()=>cfg;c.chatSetStatus=()=>{};
+  const request={turnId:'turn1',hiddenAt:1,streamStarted:true,responseReceived:false,controller:{abort(){aborts++}}};c.chatActiveRequest=request;
+  c.chatReadDelivery=async()=>{reads++;
+   if(kind==='network-error')throw Error('offline');
+   if(kind==='finished-during-check')request.finished=true;
+   return {turn_id:kind==='wrong-turn'?'turn2':'turn1',found:kind==='complete'||kind==='finished-during-check',pending:kind==='pending'||kind==='wrong-turn'};
+  };
+  await c.chatResumeAfterVisibility();assert.equal(reads,1);
+  assert.equal(aborts,['pending','complete'].includes(kind)?1:0,kind+' prematurely aborted upload');
+ }
 });

@@ -8,7 +8,7 @@
  chatApplyAutoTrimForPendingBatch=async()=>({trimmed:false});chatMaybeAutoTrimAtIdleBoundary=()=>{};chatMaybeAutoClean=()=>{};chatScheduleNightlySync=()=>{};
  chatScheduleRecovery=delay=>original.schedule(Math.min(Number(delay)||0,10));
  const notices=[];toast=text=>notices.push(String(text));
- const input=document.getElementById('chat-input'),results=[];let cfg,posts,wakes,writes,mode,stream,receiptPolls,finishNormal;
+ const input=document.getElementById('chat-input'),results=[];let cfg,posts,wakes,writes,mode,stream,receiptPolls,finishNormal,finishUpload,receiptMode;
  const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  function setup(enabled,recall){
    chatReleaseSendingUi();chatStreamProgressStop();chatFlushAssistantRevealQueue();
@@ -22,7 +22,7 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[cfg.sessionId]={enabled,mode:'5m',interval:4,next_at:Date.now()/1000+240};
    chatWakePending=null;chatWakePendingScope='';chatWakeWriteBusy=false;chatWakeBusy=false;chatWakeLastFetch=Infinity;
-   posts=[];wakes=[];writes=[];mode='normal';stream=null;receiptPolls=0;finishNormal=null;
+   posts=[];wakes=[];writes=[];mode='normal';stream=null;receiptPolls=0;finishNormal=null;finishUpload=null;receiptMode='complete';
  }
  window.fetch=async(url,options={})=>{
    const target=new URL(url,location.href),body=options.body?JSON.parse(options.body):{};
@@ -32,13 +32,15 @@
    }
    if(target.pathname.endsWith('/chat/last')){
      receiptPolls++;const last=posts.at(-1);
+     if(receiptMode==='error')throw new TypeError('synthetic recovery connection failure');
+     if(receiptMode==='missing')return json({ok:true,found:false,pending:false,turn_id:''});
      return json({ok:true,found:true,pending:false,state:'complete',turn_matched:true,turn_id:last.turn_id,created_at:Date.now()/1000,
        assistant_text:'息屏前的片段，恢复后的完整回复。',usage:{output_tokens:12,cache_read_input_tokens:5000},
        transport_messages:[{role:'user',content:last.text},{role:'assistant',content:'息屏前的片段，恢复后的完整回复。'}]});
    }
    if(target.pathname.endsWith('/chat')){
      posts.push(body);
-     return new Response(new ReadableStream({start(c){
+     const openStream=()=>new Response(new ReadableStream({start(c){
        stream=c;if(mode!=='suspended')options.signal?.addEventListener('abort',()=>{try{c.error(new DOMException('Aborted','AbortError'))}catch(e){}},{once:true});
        const emit=(event,data)=>c.enqueue(new TextEncoder().encode('event: '+event+'\ndata: '+JSON.stringify(data)+'\n\n'));
        emit('memory',{chars:body.recall?120:0,preview:body.recall?'合成召回材料':''});
@@ -48,6 +50,11 @@
        finishNormal=()=>emit('done',{});
        setTimeout(finishNormal,80);
      }}),{headers:{'Content-Type':'text/event-stream'}});
+     if(mode==='uploading')return new Promise((resolve,reject)=>{
+       finishUpload=()=>resolve(openStream());
+       options.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});
+     });
+     return openStream();
    }
    throw Error('Unexpected fixture request '+target.pathname);
  };
@@ -83,6 +90,23 @@
    assert(posts[1].text==='用户已点击发送的下一条'&&input.value==='尚未点击发送的草稿','recovery included an unsubmitted draft');
    assert(!chatPendingMessages().length&&!chatSending,'queued message remained stuck');releaseReads();await pause(10);
    results.push({screenResume:true,originalPosts:1,recoveryGets:receiptPolls,nextMessageSent:true});
+
+   for(const receipt of ['missing','error','complete']){
+     setup(true,true);mode='uploading';receiptMode=receipt;input.value='尚在上传的消息';const running=chatSendMessage();
+     await until(()=>posts.length===1,'upload did not start');const request=chatActiveRequest;request.hiddenAt=Date.now()-1000;
+     assert(!request.responseReceived,'fixture unexpectedly received a first byte');
+     await chatResumeAfterVisibility();
+     if(receipt==='complete'){
+       await running;await until(()=>chatMessages.some(m=>m.role==='assistant'&&m.turnId===request.turnId),'confirmed upload did not recover');
+       assert(request.controller.signal.aborted&&!request.stopped,'confirmed turn did not switch to recovery');
+     }else{
+       assert(!request.controller.signal.aborted&&chatActiveRequest===request,'unconfirmed upload was prematurely aborted');
+       mode='normal';finishUpload();await running;
+       assert(chatMessages.some(m=>m.role==='assistant'&&m.turnId===request.turnId),'original upload was lost');
+     }
+     assert(posts.length===1,'upload recovery duplicated the original POST');releaseReads();await pause(10);
+     results.push({uploadReceipt:receipt,originalPosts:1,unconfirmedUploadPreserved:receipt!=='complete'});
+   }
 
    setup(false,true);const read=chatWakeRefresh();await until(()=>wakes.length===1,'wake read not started');
    await chatWakeSave({enabled:true});assert(writes.length===1,'save waited for slow read');

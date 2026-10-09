@@ -1,9 +1,19 @@
 /* Delivery receipts survive a suspended tab. Polling never starts a model call. */
 var chatRecoveryTimer=0;
-function chatResumeAfterVisibility(){
+async function chatResumeAfterVisibility(){
   var request=chatActiveRequest;
   if(chatSending&&request&&request.hiddenAt&&request.streamStarted&&!request.stopped&&!request.finished){
-    request.hiddenAt=0;request.recovering=true;
+    request.hiddenAt=0;
+    if(!request.responseReceived){
+      // The upload may still be in transit. Detach only once the gateway has
+      // acknowledged this exact turn; otherwise keep the original POST alive.
+      try{
+        var receipt=await chatReadDelivery(chatLoadConfig(),request.turnId);
+        if(!receipt||receipt.turn_id!==request.turnId||!receipt.found&&!receipt.pending)return;
+      }catch(error){return;}
+    }
+    if(request!==chatActiveRequest||!chatSending||request.stopped||request.finished)return;
+    request.recovering=true;
     if(request.checkpointReply)request.checkpointReply();
     chatSetStatus('连接恢复中，正在补收回复');
     // This closes only the browser stream. The gateway keeps the original turn.
