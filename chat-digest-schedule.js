@@ -94,9 +94,15 @@ function chatDigestSyncView(session,cfg,remote){
   var preparing=!!(req&&(!record||Number(req.requestedAt)>record.at)||settings&&(!record||Number(settings.at)>record.at));
   if(preparing&&!view.retry){
     view.rounds=0;view.status=ready?'待同步':'正在准备';view.tone=ready?'live':'';view.cutNote='尚未截断';view.at=0;
-    view.note=settings?'正在按 X='+settings.x+'、Y='+settings.y+' 准备新总结。':'计划截断 '+req.dropRounds+' 轮，原对话仍保留。';
-    view.note+=ready?(settings?'已准备好，等 1h 缓存过期后的下一次发送启用，也可立刻同步。':'已准备好，可立刻同步，或随下一次发送同步。'):'后台继续整理，聊天可照常进行。';
-    if(state.status==='retry'||state.local_error){view.status='准备暂未完成';view.tone='attention';view.note+='后台会自动重试。';}
+    var progress=req&&current&&typeof chatPlanAutoTrimForPendingBatch==='function'?chatDigestPreparationProgress(session,cfg):null;
+    view.note=settings?'正在按 X='+settings.x+'、Y='+settings.y+' 准备新总结。':'计划截断 '+(progress?progress.rounds:req.dropRounds)+' 轮。';
+    if(progress&&progress.sources)view.note+='总结已准备 '+progress.prepared+' / '+progress.sources+' 组。';
+    if(progress&&!progress.valid){view.status='正在更新截断范围';view.note+='原内容有变化，正在复用已有总结并补齐变化部分。';}
+    else if(req&&req.immediate!==false){
+      if(ready)view.status=chatDigestReplyActive(session)?'等待当前回复':'正在完成截断';
+      view.note+=ready?(chatDigestReplyActive(session)?'总结已就绪，当前回复结束后自动截断。':'总结已就绪，正在完成截断。'):'整理完成后自动截断，期间可继续聊天。';
+    }else view.note+=ready?'已准备好，可立刻同步。':'后台继续整理，准备好后可立刻同步。';
+    if(state.status==='retry'||state.local_error){view.status='准备暂未完成';view.tone='attention';view.note+=(state.local_error||state.last_error||'后台会自动重试。');}
   }else if(!record&&!session.digestManualCompleted){
     if(cfg.dailyDigestEnabled===false){view.status='总结已关闭';view.note='开启总结后会自动准备。';}
     else if(ready){view.status='待同步';view.tone='live';view.note='总结已准备好，尚未截断。等 1h 缓存过期后的下一次发送同步，也可立刻同步。';}
@@ -108,15 +114,15 @@ function chatDigestManualStatus(session,cfg){
 }
 function chatRenderNightlyStatus(session){
   session=session||chatCurrentSession();if(!session||session!==chatCurrentSession())return;
-  var cfg=chatLoadConfig(),view=chatDigestSyncView(session,cfg);
+  var cfg=chatLoadConfig(),view=chatDigestSyncView(session,cfg),replyActive=chatDigestReplyActive(session);
   ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var node=document.getElementById(id);if(node)node.hidden=!session.digestManualTrim});
   ['chat-digest-sync-now','chat-trim-sync-now'].forEach(function(id){
     var button=document.getElementById(id);if(!button)return;
-    button.hidden=false;button.disabled=!!(chatSending||chatTrimBusy||chatTrimTransaction||!view.ready);
+    button.hidden=false;button.disabled=!!(replyActive||chatTrimBusy||chatTrimTransaction||!view.ready);
     button.textContent=view.retry?'重试同步':'立刻同步';
-    button.title=chatSending?'当前回复结束后可同步':view.ready?'应用已准备的总结；下一条消息建立新缓存':'总结准备完成后可同步';
+    button.title=replyActive?'当前回复结束后可同步':view.ready?'应用已准备的总结；下一条消息建立新缓存':'总结准备完成后可同步';
   });
-  var prepare=document.getElementById('chat-digest-prepare');if(prepare){prepare.hidden=false;prepare.disabled=!!chatTrimBusy;prepare.textContent=session.digestManualTrim?'更新准备范围':'后台准备截断';}
+  var prepare=document.getElementById('chat-digest-prepare');if(prepare){prepare.hidden=false;prepare.disabled=!!(chatTrimBusy||chatTrimTransaction);prepare.textContent=session.digestManualTrim?'更新截断范围':'立即截断';}
   var text='本次截断 '+view.rounds+' 轮 · '+view.status+'。'+view.note;
   ['chat-digest-schedule-status','chat-trim-next'].forEach(function(id){var node=document.getElementById(id);if(node)node.textContent=text});
 }
@@ -129,6 +135,7 @@ function chatSyncNightlyDigest(cfg,options){
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
   if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
+  chatDigestRefreshManualSources(session,cfg);
   var scope=chatNightlyScope(cfg),configStamp=chatDigestConfigStamp(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
   if(chatNightlySyncs.has(syncKey))return chatNightlySyncs.get(syncKey);
@@ -189,7 +196,7 @@ function chatSyncNightlyDigest(cfg,options){
       chatRenderNightlyStatus(session);
       if(session===chatCurrentSession())chatRenderTrimState(cfg);
       if(session===chatCurrentSession()&&!chatSending){chatRenderDailyDigest(chatLoadConfig());chatRenderNightlyStatus(session);}
-      if(options.notify)toast('已同步后台任务；准备完成后仍会等待缓存边界');
+      if(options.notify)toast(session.digestManualTrim&&session.digestManualTrim.immediate!==false?'已同步截断进度；总结齐全、当前回复结束后自动截断':'已同步后台任务；准备好后可立刻同步');
       return !data.conflict||!!knownAdvance||data.settings_accepted===true;
     }catch(error){
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;

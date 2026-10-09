@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v299-resume-upload-guard';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v300-wake-cache-trim';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6392,13 +6392,13 @@ function chatRenderTrimState(cfg){
   var pendingManual=(chatCurrentSession()||{}).digestManualTrim;
   if(current)current.textContent='当前 '+count+' 个真实轮次'+(trim.roundLimitEnabled?'｜上限 '+trim.roundLimit+' 轮':'');
   if(manual){
-    manual.disabled=chatTrimBusy||count<=0;
+    manual.disabled=!!(chatTrimBusy||chatTrimTransaction||count<=0);
     manual.hidden=false;
-    manual.textContent=pendingManual?'继续后台准备截断':'后台准备截断';
+    manual.textContent=pendingManual?'更新截断范围':'立即截断';
     manual.title=count<=0
       ?'当前没有可处理的对话'
       :(count>trim.keep
-        ?'保留最近 '+trim.keep+' 个完整真实轮次'
+        ?'总结齐全后自动截断，保留最近 '+trim.keep+' 个完整真实轮次'
         :'当前不足 '+trim.keep+' 个真实轮次，不会删除内容');
   }
   chatRenderNightlyStatus(chatCurrentSession());

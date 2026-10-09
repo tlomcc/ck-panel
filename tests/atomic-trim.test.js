@@ -134,7 +134,7 @@ test('a ready batch that extends into retained history is never partially consum
  const x=setup();prepare(x);const all=x.ctx.chatDigestMessageGroups(x.session.messages);x.session.digestReadyTrims[0].keys=all.map(g=>g.key);
  assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.digestReadyTrims.length,1);
 });
-test('manual click starts preparation during chat and commits only with the next send',async()=>{
+test('immediate manual trim waits for the active reply then commits without another send',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatRenderMessages:()=>{},chatRenderNightlyStatus:()=>{},chatRenderTrimState:()=>{}});
  let queued=0;x.ctx.chatSyncNightlyDigest=async()=>{queued++;return true};x.ctx.chatSending=true;
  assert.equal(await x.ctx.chatRequestManualDigestTrim(),true);assert.equal(queued,1);assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
@@ -142,9 +142,9 @@ test('manual click starts preparation during chat and commits only with the next
  await x.ctx.chatRequestManualDigestTrim();assert.equal(queued,1);assert.equal(JSON.stringify(x.session.digestManualTrim),request);
  x.session.cacheLastReadAt=x.ctx.Date.now();
  prepare(x);x.ctx.chatSending=true;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
- x.ctx.chatSending=false;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);assert.equal(x.session.messages.length,10);
- let clean=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{clean++};
- assert.equal((await x.run()).trimmed,true);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);assert.equal(clean,0);
+ let clean=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{clean++;return true};
+ x.ctx.chatSending=false;assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);
+ assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);assert.equal(clean,1);
  x.session.cacheRebuildPending=false;
  const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);assert.equal((await x.run()).trimmed,false);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),pack);
 });
@@ -155,6 +155,89 @@ test('manual preparation preserves new rounds and waits without changing either 
  assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);
  prepare(x);x.session.messages.push({role:'user',text:'新问题',turnId:'new',ts:x.ctx.Date.now()},{role:'assistant',text:'新回复',turnId:'new',ts:x.ctx.Date.now()+1});
  assert.equal((await x.run()).trimmed,true);assert.equal(x.session.messages.length,6);assert.equal(x.session.messages.at(-1).text,'新回复');
+});
+
+test('a manual range prepared during a reply remains usable after transport catches up',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));
+ x.session.messages.push({role:'user',text:'生成中的问题',turnId:'active',ts:x.ctx.Date.now()},
+   {role:'assistant',text:'生成中',turnId:'active',ts:x.ctx.Date.now()+1,inFlight:true});
+ x.ctx.chatSending=true;await x.ctx.chatRequestManualDigestTrim();
+ const req=JSON.parse(JSON.stringify(x.session.digestManualTrim));
+ const groups=x.ctx.chatDigestMessageGroups(x.session.messages).filter(g=>req.keys.includes(g.key));
+ x.session.digestReadyTrims=[{keys:req.keys,text:'覆盖全部已请求资料的总结',startTs:groups[0].start,endTs:groups.at(-1).end}];
+ delete x.session.messages.at(-1).inFlight;x.session.messages.at(-1).text='生成完成';
+ x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));
+ x.ctx.chatSending=false;
+ const plan=x.ctx.chatDigestManualPlan(x.session,x.cfg,x.session.digestManualTrim,[]);
+ assert.equal(plan.manualValid,true);
+ assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);
+ assert.equal(await x.ctx.chatDigestSyncNow(),true);
+ assert.equal(x.session.messages.at(-1).text,'生成完成');
+ assert.ok(history.localTurnGroups(x.session.messages).length>=req.keep);
+ assert.ok(history.transportTurnGroups(x.session.transportMessages).length>=req.keep);
+ assert.equal(x.requests.length,0);
+});
+
+test('changed manual sources are requeued and only fresh complete coverage may commit',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);
+ const oldId=x.session.digestManualTrim.requestedAt,oldKeys=[...x.session.digestManualTrim.keys];
+ x.session.messages[0].text='后来修正的原文';
+ assert.equal(x.ctx.chatDigestRefreshManualSources(x.session,x.cfg),true);
+ assert.ok(x.session.digestManualTrim.requestedAt>oldId);
+ assert.notEqual(x.session.digestManualTrim.keys[0],oldKeys[0]);
+ assert.equal(x.session.digestManualTrim.keys[1],oldKeys[1]);
+ assert.equal(x.ctx.chatDigestRefreshManualSources(x.session,x.cfg),false);
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+ assert.equal(x.session.messages.length,10);
+ prepare(x);assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);
+ assert.equal(x.session.messages.length,4);assert.equal(x.requests.length,0);
+});
+
+test('an older queued result cannot finish a newer manual source revision',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSessionsReady:true,chatRenderMessages:()=>{}});
+ const pending=[];
+ x.ctx.fetch=async(url,opts)=>new Promise(resolve=>pending.push({body:JSON.parse(opts.body),resolve}));
+ const finish=(call,revision)=>call.resolve({ok:true,json:async()=>({ok:true,status:'succeeded',accepted_keys:call.body.groups.map(g=>g.key),
+   snapshot:{revision,source_stamp:call.body.base_stamp,config:call.body.config,base:call.body.base,result:{day:'2026-10-03'},
+     trims:[{keys:call.body.candidate_keys,text:'已完成第'+revision+'版原文总结',startTs:x.session.messages[0].ts,endTs:x.session.messages[5].ts}]}})});
+ await x.ctx.chatRequestManualDigestTrim();assert.equal(pending.length,1);
+ const oldRequest=x.session.digestManualTrim.requestedAt;
+ x.session.messages[0].text='队列请求期间修改的原文';
+ const oldSync=x.ctx.chatSyncNightlyDigest(x.cfg);
+ assert.ok(x.session.digestManualTrim.requestedAt>oldRequest);
+ assert.equal(pending.length,1,'the existing queue request must remain single-flight');
+ finish(pending[0],1);await oldSync;await tick();
+ assert.equal(x.session.messages.length,10,'the stale prepared batch must not delete edited source');
+ assert.ok(x.session.digestManualTrim);
+ const updated=x.ctx.chatMaybeRollDigestAtDayBoundary();assert.equal(pending.length,2);
+ assert.notDeepEqual(pending[1].body.candidate_keys,pending[0].body.candidate_keys);
+ finish(pending[1],2);await updated;
+ assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);
+ assert.ok(x.session.digestPending.some(g=>g.messages.some(m=>m.text==='队列请求期间修改的原文')));
+ assert.match(x.session.digestActivePack.text,/第2版/);
+ assert.doesNotMatch(x.session.digestActivePack.text,/第1版/);
+});
+
+test('a restored unfinished reply delays manual commit until its original turn is recovered',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim();prepare(x);x.session.replyDraft={state:'running',turn_id:'recover-original'};
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+ assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
+ x.session.replyDraft=null;
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);
+ assert.equal(x.session.messages.length,4);
+});
+
+test('preparation status displays actual summary coverage without claiming a completed cut',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true});
+ await x.ctx.chatRequestManualDigestTrim();
+ const group=x.ctx.chatDigestMessageGroups(x.session.messages)[0];
+ x.session.digestReadyTrims=[{keys:[group.key],text:'第一轮总结',startTs:group.start,endTs:group.end}];
+ const view=x.ctx.chatDigestSyncView(x.session,x.cfg);
+ assert.equal(view.rounds,0);assert.match(view.note,/已准备 1 \/ 3 组/);
+ assert.match(view.note,/自动截断/);
 });
 
 test('ready manual cut still commits when an earlier send left a pending cache rebuild',async()=>{
@@ -190,12 +273,12 @@ test('ready manual task can synchronize immediately during a warm cache without 
  assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(synced,1);assert.equal(x.session.messages.length,4);assert.equal(x.session.digestManualTrim,undefined);assert.equal(x.requests.length,0);
  assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(synced,1);
 });
-test('ready preparation remains reusable and can extend to newly added rounds',async()=>{
+test('preparation-only requests remain reusable and can extend to newly added rounds',async()=>{
  const x=setup();let queued=0;Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>{queued++},chatRenderMessages:()=>{}});
- await x.ctx.chatRequestManualDigestTrim();prepare(x);const first=x.session.digestManualTrim;
- await x.ctx.chatRequestManualDigestTrim();assert.equal(queued,1);assert.equal(x.session.digestManualTrim,first);
+ await x.ctx.chatRequestManualDigestTrim({immediate:false});prepare(x);const first=x.session.digestManualTrim;
+ await x.ctx.chatRequestManualDigestTrim({immediate:false});assert.equal(queued,1);assert.equal(x.session.digestManualTrim,first);
  x.session.messages.push({role:'user',text:'新增',turnId:'new',ts:x.ctx.Date.now()},{role:'assistant',text:'新答',turnId:'new',ts:x.ctx.Date.now()+1});
- await x.ctx.chatRequestManualDigestTrim();assert.equal(queued,2);assert.equal(x.session.digestManualTrim.dropRounds,4);assert.ok(x.session.digestManualTrim.requestedAt>first.requestedAt);
+ await x.ctx.chatRequestManualDigestTrim({immediate:false});assert.equal(queued,2);assert.equal(x.session.digestManualTrim.dropRounds,4);assert.ok(x.session.digestManualTrim.requestedAt>first.requestedAt);
  assert.equal(x.session.digestReadyTrims.length,1);assert.equal(x.session.messages.length,12);assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),false);
  const g=x.ctx.chatDigestMessageGroups(x.session.messages.slice(6,8))[0];x.session.digestReadyTrims.push({keys:[g.key],text:'补充总结',startTs:g.start,endTs:g.end});
  assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(x.session.messages.length,4);
