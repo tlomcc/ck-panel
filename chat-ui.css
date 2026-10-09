@@ -186,7 +186,18 @@ body.chat-active .chat-thinking-head:focus-visible{outline:2px solid currentColo
 @media(prefers-reduced-motion:reduce){body.chat-active .chat-thinking.is-thinking .chat-thinking-label{animation:none}}
 
 #chat-wake-shortcut[hidden]{display:none!important}
-#chat-wake-shortcut[aria-pressed="true"]{color:var(--accent,#65876d);background:rgba(91,137,103,.12)}
+/* Match Fact B: only the saved on/off value controls the icon's appearance. */
+body.chat-active .chat-head-actions #chat-wake-shortcut{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;opacity:1!important;box-shadow:none!important;filter:none!important;transform:none!important;transition:none!important;-webkit-tap-highlight-color:transparent}
+body.chat-active .chat-head-actions #chat-wake-shortcut[hidden]{display:none!important}
+body.chat-active .chat-head-actions #chat-wake-shortcut svg{stroke-width:1.6!important;transform:none!important;transition:none!important}
+body.chat-active .chat-head-actions #chat-wake-shortcut[aria-pressed="true"]{background:#e3efe9!important;color:var(--ck-ui-jade)!important}
+body.chat-active #chat-wake-shortcut[aria-pressed="true"] path{fill:#c3ded1!important}
+body.dark.chat-active .chat-head-actions #chat-wake-shortcut[aria-pressed="true"]{background:#304a3f!important;color:#a2ceba!important}
+body.dark.chat-active #chat-wake-shortcut[aria-pressed="true"] path{fill:#426453!important}
+body.chat-active .chat-head-actions #chat-wake-shortcut[aria-pressed="false"],
+body.chat-active .chat-head-actions #chat-wake-shortcut[aria-pressed="false"]:is(:hover,:focus,:active){background:transparent!important;color:#84948b!important;outline:none!important}
+body.chat-active #chat-wake-shortcut[aria-pressed="false"] path{fill:none!important}
+body.chat-active .chat-head-actions #chat-wake-shortcut:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
 #chat-wake-status{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 #chat-wake-interval{width:90px;margin-left:12px}
 .chat-msg-row.send-failed.pending-swipe-active{transform:translateX(var(--pending-swipe-x,0px));transition:none}
