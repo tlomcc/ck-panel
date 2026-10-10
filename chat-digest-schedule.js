@@ -71,6 +71,25 @@ function chatNightlyConfig(cfg){return Object.assign(chatDigestOptions(cfg),{ena
 function chatNightlyBaseStamp(cfg,session){return chatDigestStamp([chatNightlyBase(session),chatNightlyConfig(cfg)]);}
 function chatNightlyScope(cfg){return chatDigestStamp([cfg.gatewayUrl,cfg.panelKey]);}
 function chatNightlyEndpoint(cfg){return chatDailyDigestEndpoint(cfg).replace(/\/prepare$/,'/queue')+'?policy=cache-safe-v2&key='+encodeURIComponent(cfg.panelKey||'');}
+function chatDigestAutoPolicy(cfg,session,rows,afterReply){
+  var trim=chatWindowTrimConfigFromSession(session)||chatAutoTrimConfigFrom(Object.assign({},cfg,{windowTrimOverride:false}));
+  var local=CKChatHistory.localTurnGroups(rows).filter(function(g){return g.userMessages>0}).length;
+  var total=CKChatHistory.transportTurnGroups(session.transportMessages||[]).length||local;
+  var last=rows.reduce(function(n,m){return Math.max(n,Number(m.ts)||0)},0),ref=chatCacheActivityReference(session,last);
+  var count=total+(afterReply?1:0);
+  return {enabled:!!(trim.enabled||trim.roundLimitEnabled&&count>=trim.roundLimit),keep:trim.keep,minimum:trim.minimum,total:count,ttl_seconds:chatDigestCacheTtl(cfg)/1000,cache_at:ref.timestamp/1000,observed_at:Date.now()/1000};
+}
+function chatDigestQueueForReply(cfg,session){
+  if(cfg.dailyDigestEnabled===false||session.digestManualTrim)return null;
+  var rows=(session===chatCurrentSession()?chatMessages:session.messages||[]).filter(function(m){return !m.inFlight&&m.role!=='pending_user'});
+  var auto=chatDigestAutoPolicy(cfg,session,rows,true),keep=Math.max(0,auto.keep-1);
+  var local=CKChatHistory.trimLocalTurns(rows,keep),transport=CKChatHistory.trimTransportTurns(session.transportMessages||[],keep);
+  var selected=chatDigestMessageGroups(local.droppedMessages);
+  var candidates=(chatDigestTransportSources(session,rows,selected,transport.dropped)||selected).map(function(g){return Object.assign({},g,{candidate:true})});
+  var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));candidates.forEach(function(g){groups.set(g.key,g)});
+  var remote=chatDigestStage(session,cfg)||session.digestRemote||{};
+  return {session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:chatNightlyBaseStamp(cfg,session),base:chatNightlyBase(session),config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:candidates.map(function(g){return g.key}),auto:auto};
+}
 function chatDigestSyncView(session,cfg,remote){
   var scope=chatDigestActiveScope(cfg),record=session.digestLastSync,req=session.digestManualTrim,settings=session.digestSettingsRequest;
   if(record&&record.scope!==scope)record=null;
@@ -142,7 +161,8 @@ function chatSyncNightlyDigest(cfg,options){
   var staged=chatDigestStage(session,cfg);
   var remote=staged|| (session.digestRemote&&session.digestRemote.scope===scope?session.digestRemote:{});
   var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
-  var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim]);
+  var auto=chatDigestAutoPolicy(cfg,session,rows,false);
+  var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim,auto.enabled,auto.keep,auto.minimum,auto.total,auto.cache_at,auto.ttl_seconds]);
   var previous=chatNightlySynced[syncKey]||{},now=Date.now(),unchanged=previous.signature===signature;
   if(!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(session.digestManualTrim||session.digestSettingsRequest?2000:60000)))return Promise.resolve(true);
   var body=null;
@@ -150,6 +170,7 @@ function chatSyncNightlyDigest(cfg,options){
     var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
     chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
     body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
+    body.auto=auto;
   }
   var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},12000);
   var task=(async function(){
@@ -192,6 +213,7 @@ function chatSyncNightlyDigest(cfg,options){
       if(body&&body.settings_override&&matchingConfig&&JSON.stringify(chatNightlyConfig(chatLoadConfig()))===JSON.stringify(body.config))delete session.digestSettingsPending;
       session.digestSchedule={scope:scope,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
       chatSaveSessions({sessionIds:[session.id]});
+      if(session===chatCurrentSession()&&!chatSending&&data.auto&&data.auto.due)setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
       if(session.digestManualTrim||session.digestSettingsRequest)chatScheduleNightlySync(2000);
       chatRenderNightlyStatus(session);
       if(session===chatCurrentSession())chatRenderTrimState(cfg);

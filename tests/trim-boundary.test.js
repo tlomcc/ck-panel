@@ -121,12 +121,13 @@ function planContext(cacheStrategy,session,messages,trimConfig){
     chatMessages:messages,
     chatEditingIndex:-1,
     CHAT_AUTO_TRIM_IDLE_MS:60*60*1000,
+    chatDigestCacheTtl:cfg=>['native_5m','single_5m','assistant_latest','native_tiered'].includes(cfg.cacheStrategy)?300000:cfg.cacheStrategy==='prefix_24h'?86400000:3600000,
     CHAT_HISTORY_TOOLS:historyTools,
     chatPendingMessages:()=>[],
     chatCurrentSession:()=>session,
     chatLoadConfig:()=>({cacheStrategy}),
     chatAutoTrimConfigFrom:()=>Object.assign({
-      enabled:true,keep:2,roundLimitEnabled:false,roundLimit:1000
+      enabled:true,keep:2,minimum:1,roundLimitEnabled:false,roundLimit:1000
     },trimConfig||{}),
     chatAutoTrimRoundCount:list=>(list||[]).filter(m=>m&&m.role==='user').length,
     chatTransportRoundCount:list=>(list||[]).filter(m=>m&&m.role==='user').length,
@@ -151,18 +152,22 @@ function staleRounds(count,ts){
 
 function testIdleBoundaryAppliesToEveryCacheStrategy(){
   const strategies=['single_5m','assistant_latest','native_stable','native_tiered','prefix_24h'];
-  const stale=Date.now()-2*60*60*1000;
   strategies.forEach(strategy=>{
+    const ttl=strategy==='prefix_24h'?86400000:strategy==='native_stable'?3600000:300000;
+    const stale=Date.now()-ttl-1000;
     const messages=staleRounds(5,stale);
     const session={transportMessages:[],cacheLastReadAt:stale};
     const context=planContext(strategy,session,messages);
     // idleCheck=true：页面在线定时器路径，没有待发送消息也要能到点截断
     const plan=context.chatPlanAutoTrimForPendingBatch({cacheStrategy:strategy},[],{trigger:'idle_1h',idleCheck:true});
-    assert.strictEqual(plan.boundary,true,strategy+' 必须触发 1h 边界');
+    assert.strictEqual(plan.boundary,true,strategy+' 必须按实际 TTL 触发边界');
     assert.strictEqual(plan.cacheAgeBoundary,true,strategy+' 的 cacheAgeBoundary 必须为真');
     assert.strictEqual(plan.trimmed,true,strategy+' 超过保留轮数时必须裁剪');
     assert.strictEqual(plan.historyAfter,2,strategy+' 必须保留设定的轮数');
     assert.strictEqual(plan.dropped,3,strategy+' 必须裁掉多余的完整轮次');
+    const fresh=Date.now()-ttl+3000;
+    const waiting=planContext(strategy,{transportMessages:[],cacheLastReadAt:fresh},staleRounds(5,fresh));
+    assert.strictEqual(waiting.chatPlanAutoTrimForPendingBatch({cacheStrategy:strategy},[],{idleCheck:true}).trimmed,false,strategy+' 缓存有效时不截断');
   });
 }
 
@@ -227,7 +232,7 @@ function testRoundLimitAndOneHourBoundaryTrimOnce(){
 
 function testRoundLimitDisabledKeepsOneHourBehavior(){
   const stale=Date.now()-2*60*60*1000;
-  const config={enabled:true,keep:2,roundLimitEnabled:false,roundLimit:200};
+  const config={enabled:true,keep:2,minimum:1,roundLimitEnabled:false,roundLimit:200};
   const plan=planContext('native_stable',{transportMessages:[],cacheLastReadAt:stale},staleRounds(5,stale),config)
     .chatPlanAutoTrimForPendingBatch({cacheStrategy:'native_stable'},[],{trigger:'idle_1h',idleCheck:true});
   assert.strictEqual(plan.roundLimitBoundary,false,'关闭轮数上限后不能产生轮数边界');

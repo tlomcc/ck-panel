@@ -25,10 +25,12 @@ function chatWakeRender(){
   if(countdown){var time=chatWakeCountdown(s);countdown.textContent=time;countdown.setAttribute('aria-label',time==='--:--'?(enabled?'等待正常聊天开始计时':'唤醒已关闭'):'距下次唤醒 '+time);}
   var visible=document.getElementById('chat-wake-visibility');if(visible)visible.value=chatWakeShortcut()?'show':'settings';
   var toggle=document.getElementById('chat-wake-enabled');if(toggle){toggle.checked=enabled;toggle.disabled=chatWakeWriteBusy||!mode;}
-  var input=document.getElementById('chat-wake-interval');
-  if(input){input.max=mode==='1h'?59:4;input.disabled=chatWakeWriteBusy||!mode;if(document.activeElement!==input)input.value=s.interval|| (mode==='1h'?50:4);}
+  var seconds=Number(s.interval_seconds)||Number(s.interval)*60||(mode==='1h'?3000:240);
+  ['minutes','seconds'].forEach(function(part){var input=document.getElementById('chat-wake-'+part);if(!input)return;
+    input.max=part==='minutes'?(mode==='1h'?59:4):59;input.disabled=chatWakeWriteBusy||!mode;
+    if(document.activeElement!==input)input.value=String(part==='minutes'?Math.floor(seconds/60):seconds%60).padStart(2,'0');});
   var label=document.getElementById('chat-wake-mode');
-  if(label)label.textContent=mode?(mode==='1h'?'1h · 1–59 分钟':'5min · 1–4 分钟'):'当前供应商策略不使用 5min / 1h 唤醒';
+  if(label)label.textContent=mode?(mode==='1h'?'1h · 最长 59分50秒':'5min · 最长 04分50秒')+'，保留 10 秒缓冲。':'当前供应商策略不使用 5min / 1h 唤醒';
   var status=document.getElementById('chat-wake-status');
   if(status){
     var remaining=Math.max(0,Math.ceil((Number(s.next_at||0)*1000-Date.now())/1000));
@@ -97,9 +99,9 @@ function chatWakeToggle(){
   return chatWakeSave({enabled:!s.enabled});
 }
 function chatWakeSaveInterval(value){
-  var n=Number(value),max=chatWakeMode()==='1h'?59:4;
-  if(!Number.isInteger(n)||n<1||n>max){toast('唤醒间隔必须为 1–'+max+' 的整数分钟');chatWakeRender();return;}
-  return chatWakeSave({interval:n});
+  var minutes=Number(document.getElementById('chat-wake-minutes').value),seconds=Number(document.getElementById('chat-wake-seconds').value),total=minutes*60+seconds,max=chatWakeMode()==='1h'?3590:290;
+  if(!Number.isInteger(minutes)||!Number.isInteger(seconds)||minutes<0||seconds<0||seconds>59||total<1||total>max){toast('唤醒间隔必须大于 0 秒，最长 '+(max===3590?'59分50秒':'04分50秒'));return;}
+  return chatWakeSave({interval_seconds:total});
 }
 async function chatWakeForget(id){
   try{await chatWakeRequest({enabled:false,forget:true},id);return true;}

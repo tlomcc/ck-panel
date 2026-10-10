@@ -4,8 +4,9 @@ function chatDigestCacheExpired(session,now){
   var rows=session===chatCurrentSession()?chatMessages:session.messages||[],last=0;
   rows.forEach(function(m){if(m.role==='user'||m.role==='assistant')last=Math.max(last,Number(m.ts)||0)});
   var ref=typeof chatCacheActivityReference==='function'?chatCacheActivityReference(session,last):{timestamp:Math.max(session.cacheFullCreatedAt||0,session.cacheLastReadAt||0,last)};
-  return !ref.timestamp||(Number(now)||Date.now())-ref.timestamp>=3600000;
+  return !ref.timestamp||(Number(now)||Date.now())-ref.timestamp>=chatDigestCacheTtl(chatLoadConfig());
 }
+function chatDigestCacheTtl(cfg){cfg=cfg||{};var strategy=typeof chatEffectiveCacheStrategy==='function'?chatEffectiveCacheStrategy(cfg):cfg.mainRouteCacheStrategy||cfg.cacheStrategy||'';return ['native_5m','single_5m','assistant_latest','native_tiered'].includes(strategy)?300000:strategy==='prefix_24h'?86400000:3600000;}
 function chatDigestStage(session,cfg){
   var stage=session.digestStaged;
   return stage&&stage.scope===chatDigestActiveScope(cfg)&&stage.config===chatDigestConfigStamp(cfg)&&!session.digestManualPending?stage:null;
@@ -179,6 +180,7 @@ function chatDigestAutoPreparedPlan(session,cfg,plan,pending){
   var virtual=chatDigestPreparedSession(session,cfg);
   var prepared=chatDigestPreparedTrim(virtual,cfg,plan);
   if(prepared)return Object.assign({},plan,{digestPrepared:prepared});
+  if(!plan.manual)return null; // An automatic cut keeps exactly the configured recent rounds.
   var groups=chatDigestPlanSources(session,plan),covered=new Set();
   chatDailyDigestNormalize(virtual.dailyDigests).forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
   chatDigestOmittedCoverage(virtual.digestOmittedCovered).forEach(function(r){covered.add(r.key)});

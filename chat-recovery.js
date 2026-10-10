@@ -1,5 +1,11 @@
 /* Delivery receipts survive a suspended tab. Polling never starts a model call. */
-var chatRecoveryTimer=0;
+var chatRecoveryTimer=0,chatRecoveryReceiptTimer=0,chatRecoveryProgress={};
+function chatRetryLiveReceipt(request){
+  clearTimeout(chatRecoveryReceiptTimer);
+  chatRecoveryReceiptTimer=setTimeout(function(){
+    if(request===chatActiveRequest&&chatSending&&!request.stopped&&!request.finished){request.hiddenAt=Date.now();chatResumeAfterVisibility();}
+  },2500);
+}
 async function chatResumeAfterVisibility(){
   var request=chatActiveRequest;
   if(chatSending&&request&&request.hiddenAt&&request.streamStarted&&!request.stopped&&!request.finished){
@@ -9,8 +15,8 @@ async function chatResumeAfterVisibility(){
       // acknowledged this exact turn; otherwise keep the original POST alive.
       try{
         var receipt=await chatReadDelivery(chatLoadConfig(),request.turnId);
-        if(!receipt||receipt.turn_id!==request.turnId||!receipt.found&&!receipt.pending)return;
-      }catch(error){return;}
+        if(!receipt||receipt.turn_id!==request.turnId||!receipt.found&&!receipt.pending){chatSetStatus('正在确认发送回执，连接恢复后自动补收');chatRetryLiveReceipt(request);return;}
+      }catch(error){chatSetStatus('发送回执暂未连通，2秒后重试');chatRetryLiveReceipt(request);return;}
     }
     if(request!==chatActiveRequest||!chatSending||request.stopped||request.finished)return;
     request.recovering=true;
@@ -58,23 +64,35 @@ async function chatRecoveryTransportHint(cfg){
   var hash=await window.crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
   return {session:session,count:rows.length,canonical:canonical,hash:Array.from(new Uint8Array(hash)).map(function(b){return b.toString(16).padStart(2,'0')}).join('')};
 }
-async function chatReadDelivery(cfg,turnId){
+async function chatReadDelivery(cfg,turnId,full){
   var controller=new AbortController(),timer;
   var timeout=new Promise(function(resolve,reject){timer=setTimeout(function(){controller.abort();reject(new Error('补收连接等待超时'))},12000)});
   try{
     var url=chatEndpoint(cfg).replace(/\/chat$/,'/chat/last')+'?key='+encodeURIComponent(cfg.panelKey)
       +'&session_id='+encodeURIComponent(cfg.sessionId)+'&turn_id='+encodeURIComponent(turnId);
-    var hint=await Promise.race([chatRecoveryTransportHint(cfg),timeout]);
+    var hint=full?null:await Promise.race([chatRecoveryTransportHint(cfg),timeout]);
     if(hint)url+='&known_transport_count='+hint.count+'&known_transport_sha256='+hint.hash;
     var response=await Promise.race([fetch(url,{cache:'no-store',signal:controller.signal}),timeout]);
     if(!response.ok)throw new Error('补收连接暂不可用');
     var data=await Promise.race([response.json(),timeout]),delta=data.transport_delta;
     if(delta){
-      if(!hint||delta.base_count!==hint.count||delta.base_sha256!==hint.hash||!Array.isArray(delta.messages)||chatRecoveryCanonical(hint.session.transportMessages)!==hint.canonical)throw new Error('上下文已变化，重新读取补收回复');
+      if(!hint||delta.base_count!==hint.count||delta.base_sha256!==hint.hash||!Array.isArray(delta.messages)||chatRecoveryCanonical(hint.session.transportMessages)!==hint.canonical){
+        if(full)throw new Error('完整补收结果格式无效');
+        clearTimeout(timer);return await chatReadDelivery(cfg,turnId,true);
+      }
       data.transport_messages=hint.session.transportMessages.concat(delta.messages);delete data.transport_delta;
     }
     return data;
   }finally{clearTimeout(timer)}
+}
+function chatRecoveryStatus(reply,turnId,networkError){
+  var key=chatActiveSessionId+':'+turnId,state=chatRecoveryProgress[key]||{started:Date.now(),attempts:0};state.attempts++;
+  chatRecoveryProgress[key]=state;
+  var seconds=Math.max(0,Math.floor((Date.now()-state.started)/1000));
+  if(networkError)return '补收连接未连通 · 已重试 '+state.attempts+' 次 · 已等待 '+seconds+'秒，将自动续收';
+  if(reply&&reply.state==='finalizing')return '回复已生成，后台正在保存 · 已等待 '+seconds+'秒';
+  if(reply&&reply.pending){var chars=Array.from(reply.assistant_text||'').length,thinking=Array.from(reply.assistant_thinking||'').length;return '后台仍在生成 · 已收到正文 '+chars+' 字'+(thinking?' / 思考 '+thinking+' 字':'');}
+  return '正在确认这一轮回执 · 已检查 '+state.attempts+' 次';
 }
 async function chatReadStreamChunk(reader,signal){
   var timer,onAbort;

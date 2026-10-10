@@ -11,6 +11,7 @@ function setup(){
     Date:class extends Date{static now(){return now}},document:{hidden:false,getElementById:()=>null},
     setTimeout:(callback,delay)=>{timers.set(++sequence,{callback,delay});return sequence},clearTimeout:id=>timers.delete(id),
     localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+    chatWindowTrimConfigFromSession:()=>null,chatAutoTrimConfigFrom:()=>({enabled:true,keep:40,minimum:30}),chatCacheActivityReference:(s,last)=>({timestamp:Math.max(s.cacheFullCreatedAt||0,s.cacheLastReadAt||0,last||0)}),
     chatSessions:[session],chatMessages:session.messages,chatCurrentSession:()=>session,chatLoadConfig:()=>cfg,
     chatSaveSessions:()=>{},chatRenderTrimState:()=>{},chatSplitThinkingText:text=>({text}),chatDebug:()=>{},toast:()=>{},
     fetch:async(url,init={})=>{const body=init.body?JSON.parse(init.body):null;calls.push({url,body,init});return response(body)}

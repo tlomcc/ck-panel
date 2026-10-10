@@ -14,7 +14,7 @@ function setup(){
  chatSplitThinkingText:text=>({text}),document:{getElementById:()=>null},
  chatMessages:messages,chatEditingIndex:-1,chatSessions:[session],chatTrimTransaction:null,chatDailyDigestChain:Promise.resolve(),
  chatSending:false,chatTrimBusy:false,chatCurrentSession:()=>session,chatDailyDigestFindSession:id=>ctx.chatSessions.find(s=>s.id===id),chatLoadConfig:()=>cfg,
- chatAutoTrimConfigFrom:cfg=>cfg&&cfg.windowTrimOverride?cfg.windowTrimConfig:({enabled:true,keep:2,roundLimitEnabled:false,roundLimit:10}),
+ chatWindowTrimConfigFromSession:()=>null,chatAutoTrimConfigFrom:cfg=>cfg&&cfg.windowTrimOverride?cfg.windowTrimConfig:({enabled:true,keep:2,minimum:1,roundLimitEnabled:false,roundLimit:10}),
  chatPendingMessages:()=>ctx.chatMessages.filter(m=>m.role==='pending_user'),chatIsRealMessage:m=>m.role==='user'||m.role==='assistant',
  chatCacheActivityReference:()=>({timestamp:session.cacheLastReadAt,source:'cache_read'}),chatHasCacheNoticeAfter:()=>false,
  chatDailyDigestRequestMessages:list=>list.map(m=>({...m})),chatDailyDigestFirstDay:()=> '2000-01-01',
@@ -47,16 +47,16 @@ test('unprepared summaries never remove context or wait for a model',async()=>{
  const x=setup();x.ctx.fetch=()=>new Promise(()=>{});const result=await x.run();
  assert.equal(result.trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.dailyDigests.length,0);assert.equal(x.requests.length,0);
 });
-test('idle expiry only prepares and leaves the active conversation untouched',async()=>{
+test('idle expiry applies a complete prepared cut without another send',async()=>{
  const x=setup();prepare(x);const result=await x.run(null,{idleCheck:true});
- assert.equal(result.trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.requests.length,0);
+ assert.equal(result.trimmed,true);assert.equal(x.session.messages.length,4);assert.equal(x.requests.length,0);
 });
 test('storage failure keeps all original messages',async()=>{
  const x=setup();prepare(x);x.ctx.localStorage.setItem=()=>{throw Error('quota')};assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);
 });
 test('cache reads renew the full hour and defer both summary and round-limit trimming',async()=>{
  const x=setup();prepare(x);x.session.cacheLastReadAt+=7199000;
- x.ctx.chatAutoTrimConfigFrom=()=>({enabled:true,keep:2,roundLimitEnabled:true,roundLimit:3});
+ x.ctx.chatAutoTrimConfigFrom=()=>({enabled:true,keep:2,minimum:1,roundLimitEnabled:true,roundLimit:3});
  assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);
  x.advance(3600000);assert.equal((await x.run()).trimmed,true);
 });
@@ -73,14 +73,14 @@ test('old source is accounted on the commit date without editing yesterday',asyn
  const today=x.session.dailyDigests.find(e=>e.dayKey==='2026-10-04');assert.match(today.text,/原对话 2026-10-03/);
  assert.equal(x.ctx.chatDailyDigestNormalize(x.session.dailyDigests).length,2);
 });
-test('automatic expiry commits the prepared prefix even when new rounds grew beyond it',async()=>{
+test('automatic expiry waits for complete coverage when new rounds grew beyond the prepared range',async()=>{
  const x=setup();prepare(x);
  x.session.messages.push({role:'user',text:'新问题',turnId:'new',ts:x.ctx.Date.now()-1000},{role:'assistant',text:'新回复',turnId:'new',ts:x.ctx.Date.now()-900});
  x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));
  const pending={role:'pending_user',text:'本次消息',ts:x.ctx.Date.now()};x.session.messages.push(pending);
  const result=await x.ctx.chatApplyAutoTrimForPendingBatch(x.cfg,[pending],{});
- assert.equal(result.trimmed,true);assert.equal(result.dropped,3);assert.equal(result.after,3);
- assert.equal(x.session.transportMessages.length,6);assert.ok(x.session.messages.includes(pending));assert.equal(x.requests.length,0);
+ assert.equal(result.trimmed,false);assert.equal(x.session.messages.length,13);
+ assert.equal(x.session.transportMessages.length,12);assert.ok(x.session.messages.includes(pending));assert.equal(x.requests.length,0);
  x.session.cacheRebuildPending=false;x.session.cacheLastReadAt=x.ctx.Date.now();
  const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);assert.equal((await x.run()).trimmed,false);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),pack);
 });
@@ -103,7 +103,7 @@ test('legacy extra transport history is summarized in background and joins a rea
  const x=setup();prepare(x);
  const old=[{role:'user',content:'旧问A'},{role:'assistant',content:'旧答A'},{role:'user',content:'旧问B'},{role:'assistant',content:'旧答B'}];
  x.session.transportMessages=old.concat(x.session.messages.map(m=>({role:m.role,content:m.text+(m.role==='user'?'\n<ck_gateway_context>召回内容</ck_gateway_context>':'')})));
- x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),keys:x.session.digestReadyTrims[0].keys,dropRounds:5,keep:2,requestedAt:x.ctx.Date.now()};
+ x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),keys:x.session.digestReadyTrims[0].keys,dropRounds:5,keep:2,minimum:1,requestedAt:x.ctx.Date.now()};
  const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);
  assert.equal((await x.run()).trimmed,false);assert.equal(x.session.messages.length,10);assert.equal(x.session.transportMessages.length,14);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);
  const groups=x.ctx.chatDigestCandidateGroups(x.session,x.cfg,x.session.messages),extra=groups.filter(g=>g.key.startsWith('tr:'));
@@ -368,7 +368,7 @@ test('actual cut count remains unsynchronized until the same operation is acknow
 });
 
 test('background source counts never masquerade as rounds already cut',()=>{
- const x=setup();x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),requestedAt:x.ctx.Date.now(),dropRounds:3,keep:2,keys:[]};
+ const x=setup();x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),requestedAt:x.ctx.Date.now(),dropRounds:3,keep:2,minimum:1,keys:[]};
  const view=x.ctx.chatDigestSyncView(x.session,x.cfg,{pending_groups:122,manual:{sources:122,ready_sources:122}});
  assert.equal(view.rounds,0);assert.equal(view.cutNote,'尚未截断');assert.ok(!JSON.stringify(view).includes('122'));
 });
@@ -381,7 +381,7 @@ function stageRange(x){
   base:{entries:[{dayKey:'2026-10-02',text:'新范围摘要',covered:[]}],rollup:null,omitted:[]},result:{day:'2026-10-03'},trims:[]};
 }
 test('new XY activates at expiry even with automatic trimming disabled',async()=>{
- const x=setup();stageRange(x);x.ctx.chatAutoTrimConfigFrom=()=>({enabled:false,keep:2,roundLimitEnabled:false});
+ const x=setup();stageRange(x);x.ctx.chatAutoTrimConfigFrom=()=>({enabled:false,keep:2,minimum:1,roundLimitEnabled:false});
  x.session.cacheLastReadAt=x.ctx.Date.now();
  assert.equal((await x.run()).cacheBoundary,false);assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'旧启用总结');
  x.advance(3600000);const result=await x.run();

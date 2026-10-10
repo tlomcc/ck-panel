@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v301-immediate-trim';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v302-background-records';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1967,6 +1967,7 @@ function chatNormalizeAutoTrimConfig(raw){
     enabled:raw.enabled!==false,
     prefixSilent:raw.prefixSilent===true||raw.prefix_silent===true,
     keep:keep,
+    minimum:chatPositiveIntOrDefault(raw.minimum,30),
     roundLimitEnabled:raw.roundLimitEnabled===true||raw.round_limit_enabled===true,
     roundLimit:Math.max(keep+1,roundLimit)
   };
@@ -1980,6 +1981,7 @@ function chatAutoTrimConfigFrom(cfg){
     enabled:cfg.autoTrimEnabled,
     prefixSilent:cfg.autoTrimPrefixSilent===true,
     keep:cfg.autoTrimKeepRounds,
+    minimum:cfg.autoTrimMinimumRounds,
     roundLimitEnabled:cfg.autoTrimRoundLimitEnabled===true,
     roundLimit:cfg.autoTrimRoundLimit
   });
@@ -2519,6 +2521,7 @@ function chatDefaultConfig(){
     splitAssistantReplies:true,
     autoTrimEnabled:true,
     autoTrimKeepRounds:CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
+    autoTrimMinimumRounds:30,
     autoTrimPrefixSilent:false,
     autoTrimRoundLimitEnabled:false,
     autoTrimRoundLimit:CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT,
@@ -3514,6 +3517,7 @@ function chatLoadConfig(){
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
+  cfg.autoTrimMinimumRounds=trim.minimum;
   cfg.autoTrimPrefixSilent=trim.prefixSilent;
   cfg.autoTrimRoundLimitEnabled=trim.roundLimitEnabled;
   cfg.autoTrimRoundLimit=trim.roundLimit;
@@ -3582,6 +3586,7 @@ function chatSaveConfigObject(cfg){
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
+  cfg.autoTrimMinimumRounds=trim.minimum;
   cfg.autoTrimPrefixSilent=trim.prefixSilent;
   cfg.autoTrimRoundLimitEnabled=trim.roundLimitEnabled;
   cfg.autoTrimRoundLimit=trim.roundLimit;
@@ -4499,6 +4504,7 @@ function chatReadForm(){
     enabled:saved.autoTrimEnabled!==false,
     prefixSilent:saved.autoTrimPrefixSilent===true,
     keep:saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
+    minimum:saved.autoTrimMinimumRounds,
     roundLimitEnabled:saved.autoTrimRoundLimitEnabled===true,
     roundLimit:saved.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT
   });
@@ -4512,6 +4518,7 @@ function chatReadForm(){
     enabled:chatFieldChecked('chat-auto-trim-enabled',saved.autoTrimEnabled!==false),
     prefixSilent:chatFieldChecked('chat-auto-trim-prefix-silent',saved.autoTrimPrefixSilent===true),
     keep:chatFieldValue('chat-auto-trim-keep',saved.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS),
+    minimum:chatFieldValue('chat-auto-trim-minimum',saved.autoTrimMinimumRounds||30),
     roundLimitEnabled:chatFieldChecked('chat-auto-trim-round-limit-enabled',saved.autoTrimRoundLimitEnabled===true),
     roundLimit:chatFieldValue('chat-auto-trim-round-limit',saved.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT)
   });
@@ -4576,6 +4583,7 @@ function chatReadForm(){
     splitAssistantReplies:saved.splitAssistantReplies!==false,
     autoTrimEnabled:trimCfg.enabled,
     autoTrimKeepRounds:trimCfg.keep,
+    autoTrimMinimumRounds:trimCfg.minimum,
     autoTrimPrefixSilent:trimCfg.prefixSilent,
     autoTrimRoundLimitEnabled:trimCfg.roundLimitEnabled,
     autoTrimRoundLimit:trimCfg.roundLimit,
@@ -4587,6 +4595,7 @@ function chatReadForm(){
       enabled:chatFieldChecked('chat-window-trim-enabled',currentTrim.enabled),
       prefixSilent:chatFieldChecked('chat-window-trim-prefix-silent',currentTrim.prefixSilent),
       keep:chatFieldValue('chat-window-trim-keep',currentTrim.keep),
+      minimum:chatFieldValue('chat-window-trim-minimum',currentTrim.minimum),
       roundLimitEnabled:chatFieldChecked('chat-window-trim-round-limit-enabled',currentTrim.roundLimitEnabled),
       roundLimit:chatFieldValue('chat-window-trim-round-limit',currentTrim.roundLimit)
     }),
@@ -4660,6 +4669,7 @@ function chatWriteForm(cfg){
     enabled:cfg.autoTrimEnabled!==false,
     prefixSilent:cfg.autoTrimPrefixSilent===true,
     keep:cfg.autoTrimKeepRounds||CHAT_AUTO_TRIM_DEFAULT_KEEP_ROUNDS,
+    minimum:cfg.autoTrimMinimumRounds,
     roundLimitEnabled:cfg.autoTrimRoundLimitEnabled===true,
     roundLimit:cfg.autoTrimRoundLimit||CHAT_AUTO_TRIM_DEFAULT_ROUND_LIMIT
   });
@@ -4667,12 +4677,14 @@ function chatWriteForm(cfg){
   chatSetFieldChecked('chat-auto-trim-enabled',defaultTrim.enabled);
   chatSetFieldChecked('chat-auto-trim-prefix-silent',defaultTrim.prefixSilent);
   chatSetFieldValue('chat-auto-trim-keep',defaultTrim.keep);
+  chatSetFieldValue('chat-auto-trim-minimum',defaultTrim.minimum);
   chatSetFieldChecked('chat-auto-trim-round-limit-enabled',defaultTrim.roundLimitEnabled);
   chatSetFieldValue('chat-auto-trim-round-limit',defaultTrim.roundLimit);
   chatSetFieldChecked('chat-window-trim-override',cfg.windowTrimOverride===true);
   chatSetFieldChecked('chat-window-trim-enabled',trimCfg.enabled);
   chatSetFieldChecked('chat-window-trim-prefix-silent',trimCfg.prefixSilent);
   chatSetFieldValue('chat-window-trim-keep',trimCfg.keep);
+  chatSetFieldValue('chat-window-trim-minimum',trimCfg.minimum);
   chatSetFieldChecked('chat-window-trim-round-limit-enabled',trimCfg.roundLimitEnabled);
   chatSetFieldValue('chat-window-trim-round-limit',trimCfg.roundLimit);
   chatRenderWindowTrimControls(cfg);
@@ -7124,16 +7136,17 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   // 也要允许到点截断，否则 1h 自动截断只能等下一次发送才生效。
   var cacheAgeBoundary=!!(
     trim.enabled&&(selected.size>0||opts.idleCheck===true)&&
-    cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS
+    cacheReferenceTs&&cacheAgeMs>=chatDigestCacheTtl(cfg)
   );
   // A round limit prepares the cut early; automatic activation still waits for
   // a full hour since the latest successful cache read/create.
   var roundLimitBoundary=!!(
-    trim.roundLimitEnabled&&cacheReferenceTs&&cacheAgeMs>=CHAT_AUTO_TRIM_IDLE_MS&&(selected.size>0||opts.idleCheck===true)&&
+    trim.roundLimitEnabled&&cacheReferenceTs&&cacheAgeMs>=chatDigestCacheTtl(cfg)&&(selected.size>0||opts.idleCheck===true)&&
     historyRounds>=trim.roundLimit
   );
   var retryBlocked=!manual&&Number(session&&session.trimRetryAfter||0)>Date.now();
-  var boundary=!retryBlocked&&(manual||pendingBoundary||roundLimitBoundary||cacheAgeBoundary);
+  var thresholdMet=Math.max(0,historyRounds-trim.keep)>=trim.minimum;
+  var boundary=!retryBlocked&&(manual||thresholdMet&&(pendingBoundary||roundLimitBoundary||cacheAgeBoundary));
   var trigger=manual
     ?String(opts.trigger||'manual')
     :(pendingBoundary?'pending_rebuild':(roundLimitBoundary?'round_limit':'cache_1h'));
@@ -7312,7 +7325,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   if(!manualSend&&!(opts&&opts.commitPrepared)&&typeof chatWakeStatusStale==='function'&&chatWakeStatusStale(activationSession)){
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
   }
-  var stageBoundary=!!(chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||submittedPending&&submittedPending.length&&chatDigestCacheExpired(activationSession)));
+  var stageBoundary=!!(chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||((submittedPending&&submittedPending.length)||(opts&&opts.idleCheck))&&chatDigestCacheExpired(activationSession)));
   function summaryOnlyPlan(source){return Object.assign({},source,{boundary:true,cacheBoundary:true,trimmed:false,dropped:0,after:source.before,historyAfter:source.before,localAfter:source.localBefore,transportAfter:source.transportBefore,transportDropped:0,localDropped:0,droppedMessages:[],droppedTransportMessages:[],trigger:'digest_sync',forceCacheRebuild:true});}
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
     if(stageBoundary&&chatDigestSettingsReady(activationSession,cfg)){plan=summaryOnlyPlan(plan);manualSend=false;}
@@ -7322,7 +7335,6 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});
     }
   }
-  if(opts&&opts.idleCheck){chatScheduleNightlySync();return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,forceCacheRebuild:false});}
   if(!plan.boundary&&stageBoundary)plan=summaryOnlyPlan(plan);
   if(!plan.boundary||(requestState&&requestState.stopped)){
     chatRenderTrimState(cfg);
@@ -7363,7 +7375,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
     if(result.trimmed||activated)chatDigestRecordSync(session,cfg,result);
     if(result.trimmed&&requestState){requestState.transportSnapshot={messages:chatLimitArray(session.transportMessages||[],CHAT_MAX_TRANSPORT_MESSAGES),updated:Number(session.transportUpdated)||0};}
     result.sessionId=session.id;
-    if(result.syncId&&((opts&&opts.commitPrepared)||!manualSend&&plan.manual))result.gatewaySynced=await chatSyncTrimmedHistoryToGateway(cfg,result);
+    if(result.syncId&&((opts&&(opts.commitPrepared||opts.idleCheck))||!manualSend&&plan.manual))result.gatewaySynced=await chatSyncTrimmedHistoryToGateway(cfg,result);
     return result;
   }catch(error){
     chatShowTrimFailure('截断操作失败：'+chatFriendlyError(error));
@@ -7460,7 +7472,7 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
   var reference=chatCacheActivityReference(session,chatLastMessageTs());
   var count=chatCurrentConversationRoundCount();
   if(count<=0)return;
-  var cacheAgeDue=!!(trim.enabled&&reference.timestamp&&now-reference.timestamp>=CHAT_AUTO_TRIM_IDLE_MS);
+  var cacheAgeDue=!!(trim.enabled&&reference.timestamp&&now-reference.timestamp>=chatDigestCacheTtl(cfg));
   var roundLimitDue=!!(trim.roundLimitEnabled&&count>=trim.roundLimit);
   if(!cacheAgeDue&&!roundLimitDue)return;
   chatIdleTrimBusy=true;
@@ -7824,7 +7836,8 @@ async function chatRecoverInterruptedTurns(opts){
   chatSetStatus('正在补收回复');
   // /ck/chat/last uses turn_id= to recover this exact request, never resend it.
   try{
-    try{reply=await chatReadDelivery(cfg,turnId)}catch(e){}
+    var networkError=false;
+    try{reply=await chatReadDelivery(cfg,turnId)}catch(e){networkError=true;}
     if(session!==chatCurrentSession()||cfg.sessionId!==chatActiveSessionId)return {checked:false};
     var matching=interrupted.filter(function(m){return String(m.inFlightTurnId||'')===turnId});
     if(reply&&reply.turn_id&&reply.turn_id!==turnId)reply=null;
@@ -7855,8 +7868,8 @@ async function chatRecoverInterruptedTurns(opts){
     var age=Date.now()-Number(matching[0]&&(matching[0].inFlightAt||matching[0].ts)||Date.now());
     var terminal=reply&&['error','interrupted'].includes(reply.state);
     // Missing once can mean the upload or model is still running. Keep the marker.
-    if(!terminal&&(reply&&reply.pending||age<900000)){
-      chatSetStatus(reply&&reply.state==='finalizing'?'回复已生成，正在同步':'连接恢复中，正在补收回复');
+    if(!terminal&&(networkError||reply&&reply.pending||age<900000)){
+      chatSetStatus(chatRecoveryStatus(reply,turnId,networkError));
       chatScheduleRecovery(reply?2500:5000);
     }else{
       chatMarkInterruptedAsFailed(matching);
@@ -9117,6 +9130,8 @@ function ckAttachChatSheetDismiss(){
   },true);
 }
 function chatSwitchSideTab(tab,silent){
+  var settingsPage=({gateway:'connection',cleanup:'cleanup',billing:'billing',history:'history',time:'time',tools:'tools',session:'tools'})[tab];
+  if(settingsPage&&typeof ckSettingsSelect==='function'){ckSettingsSelect(settingsPage);tab='display';}
   tab=chatSettingDestination(tab);
   tab=document.getElementById('chat-side-'+tab)?tab:'model';
   var nav=document.getElementById('chat-settings-nav');
@@ -10759,6 +10774,7 @@ async function chatSubmitPendingMessages(options){
   // 什么都省不了。现在的规则就一条：没有隐藏 transport 可用，就把页面上看到的
   // 这份可见历史整份发过去——发出去的永远等于屏幕上显示的。
   if(!transportForRequest.length)body.window_messages=windowMessagesForRequest;
+  if(typeof chatDigestQueueForReply==='function')body.digest_queue=chatDigestQueueForReply(cfg,currentSession);
   body=chatLockGatewayBody(body);
   var requestBodyText=JSON.stringify(body);
   var assistantText='',nativeThinkingText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
@@ -11203,6 +11219,7 @@ function switchPanelTab(tab,opts) {
   if(subTabs)subTabs.style.display=(tab==='apiconfig')?'grid':'none';
   var panel=document.getElementById('tab-'+tab);
   if(panel)panel.classList.add('active');
+  if(tab==='records'&&typeof ckRecordsRefresh==='function')ckRecordsRefresh();
   if(tab==='apiconfig'){
     renderApiConfig();
     if(currentApiTab==='polling')apiPollingStartStatusRealtime();
@@ -11433,7 +11450,8 @@ var API_TABS=[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
   ]},
-  {key:'topics',label:'主题与事件 API',info:'手动找材料、主题自动整理和事件脉络整理共用此模型，复用现有 Fact 和向量。开启自动整理后按预算分批运行，确定的直接归组，有疑点的交给你审批；后续整理会先参考你的处理意见。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'为主题选材和自动整理选择供应商与模型（OpenAI 兼容接口）。主题控制位于“状态 → 主题整理”，事件开关、队列和执行记录位于“状态 → 事件整理”；未配置模型时后台等待，不会重新提取 Fact。'},{key:'topic_materials_fallback',label:'主题选材与事件整理 · 备选',info:'主供应商限流、额度不足或暂时不可用时自动尝试一次。留空则不启用；仍计入整理预算。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'证据审核主模型沿用召回 API；审核主供应商限流或连接失败时使用此备选。'}]},
+  {key:'topics',label:'主题与事件 API',info:'主题选材、事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'主题选材与事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
+  {key:'records',label:'每日记录 API',info:'每天从前一天聊天更新待办与基本信息；整理后由检查模型核验，两框各不超过5000字。',groups:[{key:'daily_records',label:'每日记录 · 整理',info:'只提取明确、重要、持续的事实和待办，更新过时内容、移除已完成事项。'},{key:'daily_records_audit',label:'每日记录 · 检查',info:'独立检查事实依据、重要性、精炼程度、最新状态与字数；不合格退回重新提炼。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}

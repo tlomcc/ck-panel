@@ -44,7 +44,7 @@ test('a changing prefix or invalid delta is retried, never silently spliced into
    if(variant==='count')delta.base_count=1;if(variant==='hash')delta.base_sha256='f'.repeat(64);if(variant==='messages')delta.messages=null;
    return {ok:true,json:async()=>({transport_delta:delta})};
   };
-  await assert.rejects(c.chatReadDelivery(cfg,'t'),/上下文已变化/);
+  await assert.rejects(c.chatReadDelivery(cfg,'t'),/完整补收结果格式无效/);
  }
 });
 test('the 12-second recovery deadline covers both stalled fetch and stalled JSON',async()=>{
@@ -55,6 +55,25 @@ test('the 12-second recovery deadline covers both stalled fetch and stalled JSON
   for(let i=0;i<50&&!called;i++)await flush();assert(called);x.expire();
   await assert.rejects(pending,/补收连接等待超时/);assert.equal(x.timers.size,0);
  }
+});
+
+test('invalid delta falls back to one complete history read successfully',async()=>{
+ const {c,cfg}=setup();let reads=0;
+ const rows=[{role:'assistant',content:'补收成功'}];
+ c.fetch=async url=>{reads++;if(reads===1)return {ok:true,json:async()=>({transport_delta:{base_count:99,base_sha256:'bad',messages:[]}})};
+  assert(!url.includes('known_transport'));return {ok:true,json:async()=>({found:true,turn_id:'t',transport_messages:rows})};
+ };
+ assert.deepEqual((await c.chatReadDelivery(cfg,'t')).transport_messages,rows);assert.equal(reads,2);
+});
+
+test('first receipt failure keeps upload alive and a later receipt starts recovery',async()=>{
+ const {c,cfg,timers}=setup();let reads=0,aborts=0;
+ c.chatSending=true;c.chatLoadConfig=()=>cfg;c.chatSetStatus=()=>{};c.chatRecoverInterruptedTurns=()=>{};
+ const request={turnId:'t',hiddenAt:1,streamStarted:true,responseReceived:false,controller:{abort(){aborts++}}};c.chatActiveRequest=request;
+ c.chatReadDelivery=async()=>{if(++reads===1)throw Error('network');return {turn_id:'t',pending:true}};
+ await c.chatResumeAfterVisibility();assert.equal(aborts,0);
+ const next=[...timers.values()].find(t=>t.ms===2500);assert(next,'receipt must retry');
+ await next.fn();await flush();assert.equal(reads,2);assert.equal(aborts,1);assert(request.recovering);
 });
 test('foreground recovery detaches the old stream and is distinct from user Stop or preparation',()=>{
  const {c}=setup();let aborts=0,polls=0,checkpoints=0;
