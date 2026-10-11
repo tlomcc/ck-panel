@@ -72,9 +72,7 @@
  click('#mw-save');await wait(()=>$('mw-status').textContent.includes('你的修改已生效'));
  check(failedBody===JSON.stringify(calls.filter(c=>c.body&&c.path==='/ck/memory-topics').at(-1).body),'Retry changed receipt');
  check(document.querySelector('.mw-reader-summary').textContent.includes('回程'),'Manual summary not shown');
- $('mw-enabled').click();await wait(()=>!store.topics.find(t=>t.id==='seed_topic').recall_enabled&&!$('mw-enabled').disabled);
- check($('mw-draft-status').textContent==='已保存','Switch did not give saved feedback');
- $('mw-enabled').click();await wait(()=>store.topics.find(t=>t.id==='seed_topic').recall_enabled&&!$('mw-enabled').disabled);
+ check(!$('mw-enabled')&&store.topics.find(t=>t.id==='seed_topic').recall_enabled,'All event contents must stay recallable');
  input('mw-title','本机新草稿');conflict=true;click('#mw-save');await wait(()=>$('mw-status').textContent.includes('先复制草稿'));
  check($('mw-save').disabled&&$('mw-title').value==='本机新草稿','Conflict overwrote draft or allowed stale retry');
  click('[data-mw="reload"]');await wait(()=>ckDialogState.resolve);ckDialogSubmit();await wait(()=>$('mw-status').textContent.includes('目录已同步'));conflict=false;

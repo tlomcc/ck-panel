@@ -28,7 +28,7 @@
       '<div class="mw-memory-tabs" role="tablist" aria-label="记忆视图"><button id="mw-groups-tab" type="button" role="tab" aria-selected="true" aria-controls="mw-groups-panel" data-mw="memory-groups">大主题</button><button id="mw-events-tab" type="button" role="tab" aria-selected="false" aria-controls="mw-events" tabindex="-1" data-mw="memory-events">事件</button></div><section id="mw-groups-panel" class="mw-subpage" role="tabpanel" aria-labelledby="mw-groups-tab">'+
       '<div class="mw-library-toolbar"><label class="mw-directory-search"><span class="sr-only">搜索主题目录</span><input id="mw-directory-query" type="search" placeholder="搜索大主题、小主题或摘要" autocomplete="off"></label>'+button('new','新建小主题')+button('monitor','整理状态')+'<details class="mw-menu"><summary aria-label="更多目录操作">···</summary><div>'+button('reload','刷新目录')+button('topic-api','主题 API')+'</div></details></div>'+
       '<p id="mw-status" class="mw-library-status" role="status">正在读取主题目录…</p><nav id="mw-breadcrumb" class="mw-breadcrumb" aria-label="主题路径"></nav><div id="mw-directory-heading"></div><div id="mw-topics-list" class="mw-directory-grid"></div><div id="mw-topic-editor"></div>'+
-      '<details class="mw-library-help"><summary>主题、摘要与召回如何使用</summary><p>大主题收纳小主题，主题负责归类和浏览，事件记录事情的起因、变化和结果，Fact 保留原始证据。主题摘要用于目录介绍，C 召回以事件为准。你可以直接改名、修改摘要与说明、移动归属、移出材料、关闭召回或暂停整理。自动处理记录可在状态页查看和撤销。编辑目录不会删除原始 Fact。</p></details></section><section id="mw-events" class="mw-reader mw-subpage" role="tabpanel" aria-labelledby="mw-events-tab" hidden></section>';
+      '<details class="mw-library-help"><summary>主题、摘要与召回如何使用</summary><p>大主题收纳小主题，主题负责归类和浏览，事件记录事情的起因、变化和结果，Fact 保留原始证据。主题摘要用于目录介绍，C 召回以事件为准。你可以直接改名、修改摘要与说明、移动归属、移出材料或暂停整理。现有和新增的事件内容全部允许召回。自动处理记录可在状态页查看和撤销。编辑目录不会删除原始 Fact。</p></details></section><section id="mw-events" class="mw-reader mw-subpage" role="tabpanel" aria-labelledby="mw-events-tab" hidden></section>';
     page.addEventListener('click',onTopicAction);
     el('tab-topics').querySelector('.mw-memory-tabs').addEventListener('keydown',function(e){
       if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
@@ -48,7 +48,6 @@
     });
     page.addEventListener('change',function(e){
       if(e.target.id==='mw-material-order'){state.materialOrder=e.target.value;renderMaterials();return}
-      if(e.target.id==='mw-enabled'&&state.draft){var dirty=state.dirty;state.draft.recall_enabled=e.target.checked;markDirty();if(!dirty)save('save');}
     });
     if(window.memoryReviewMount)review=window.memoryReviewMount({
       canWrite:function(){return state.loaded&&!state.busy&&!state.dirty},revision:function(){return state.revision},
@@ -83,7 +82,7 @@
     }else{
       var list=(groups.get(state.group)||[]).filter(match),group=state.groups.find(function(g){return g.title===state.group})||{};
       el('mw-directory-heading').innerHTML='<div class="mw-directory-heading"><h3 tabindex="-1">'+esc(state.group||'待归类')+'</h3><span>'+list.length+' 个小主题</span></div>'+(group.summary?'<p class="mw-directory-intro">'+esc(group.summary)+'</p>':'');
-      shelf.innerHTML=list.map(function(t){return '<button class="mw-directory-card mw-leaf-card" type="button" data-mw="select" data-id="'+escAttr(t.id)+'"><span class="mw-directory-title">'+esc(t.title)+'</span><span class="mw-directory-excerpt">'+esc(t.summary||t.note||'进入后查看明细')+'</span><span class="mw-directory-meta">'+t.materials.length+' 条明细 <i>·</i> '+(t.recall_enabled===false?'召回已关闭':'允许召回')+(t.changed_count?' · 有更新':'')+'</span>'+arrow+'</button>'}).join('')||'<p class="mw-empty">'+(query?'这个目录下没有匹配的小主题。':'此目录还没有小主题。')+'</p>';
+      shelf.innerHTML=list.map(function(t){return '<button class="mw-directory-card mw-leaf-card" type="button" data-mw="select" data-id="'+escAttr(t.id)+'"><span class="mw-directory-title">'+esc(t.title)+'</span><span class="mw-directory-excerpt">'+esc(t.summary||t.note||'进入后查看明细')+'</span><span class="mw-directory-meta">'+t.materials.length+' 条明细 <i>·</i> '+'全部允许召回'+(t.changed_count?' · 有更新':'')+'</span>'+arrow+'</button>'}).join('')||'<p class="mw-empty">'+(query?'这个目录下没有匹配的小主题。':'此目录还没有小主题。')+'</p>';
     }
   }
   function materialMarkup(m){
@@ -106,7 +105,7 @@
     var root=el('mw-topic-editor');if(!root)return;var d=state.draft;
     root.hidden=state.view!=='detail'||!d;if(root.hidden){root.innerHTML='';return}
     var fresh=!state.topics.some(function(t){return t.id===d.id});
-    root.innerHTML='<section class="mw-reader"><header class="mw-reader-head"><div><span class="mw-directory-kicker">小主题</span><h3 tabindex="-1">'+esc(d.title||'新建小主题')+'</h3></div><label class="mw-recall-switch"><input id="mw-enabled" type="checkbox" role="switch" '+(d.recall_enabled!==false?'checked':'')+'><span class="mw-switch-track" aria-hidden="true"></span><span>允许召回</span></label></header>'+
+    root.innerHTML='<section class="mw-reader"><header class="mw-reader-head"><div><span class="mw-directory-kicker">小主题</span><h3 tabindex="-1">'+esc(d.title||'新建小主题')+'</h3></div><span class="mw-note">全部允许召回</span></header>'+
       '<p class="mw-reader-summary">'+esc(d.summary||'摘要待更新。可以先阅读明细，或在下方编辑摘要。')+'</p><div class="mw-save-line"><span id="mw-draft-status" role="status">已保存</span>'+button('save','保存改动','id="mw-save"')+'</div>'+
       '<details class="mw-edit-panel"'+(fresh||state.dirty?' open':'')+'><summary>编辑名称、摘要与归属</summary><fieldset id="mw-editor-fields"><div class="mw-form-pair"><label>小主题名称<input id="mw-title" maxlength="80" value="'+escAttr(d.title)+'" placeholder="给这段经历起个名字"></label><label>所属大主题<input id="mw-group" maxlength="80" list="mw-group-options" value="'+escAttr(d.group_title||'')+'" placeholder="选择已有目录，或输入新名称"></label></div><datalist id="mw-group-options">'+Array.from(new Set(state.topics.map(function(t){return t.group_title}).filter(Boolean))).map(function(n){return '<option value="'+escAttr(n)+'"></option>'}).join('')+'</datalist><label>小主题摘要<textarea id="mw-summary" maxlength="360" rows="4" placeholder="简明写出事情的脉络">'+esc(d.summary||'')+'</textarea></label><label>补充说明<textarea id="mw-note" maxlength="2000" rows="3">'+esc(d.note||'')+'</textarea></label><label>别名<input id="mw-aliases" value="'+escAttr((d.aliases||[]).join('，'))+'" maxlength="970" placeholder="用逗号分隔"></label></fieldset><p class="mw-note">你的编辑直接生效。摘要随后仅在材料或目录内容发生变化时重新整理；后台处理可到状态页暂停。</p><div class="mw-toolbar">'+button('copy','复制主题内容')+button('delete','删除此主题','id="mw-delete"')+'</div></details></section>'+
       '<section class="mw-material-section"><div class="mw-directory-heading"><h3 id="mw-material-count"></h3><label class="mw-order-label"><span class="sr-only">明细时间排序</span><select id="mw-material-order"><option value="recent"'+(state.materialOrder!=='oldest'?' selected':'')+'>最近在前</option><option value="oldest"'+(state.materialOrder==='oldest'?' selected':'')+'>从早到晚</option></select></label></div><label class="mw-material-filter"><span class="sr-only">搜索此主题的明细</span><input id="mw-material-query" type="search" value="'+escAttr(state.materialQuery||'')+'" placeholder="在这个小主题中搜索"></label><div id="mw-materials" class="mw-timeline"></div><div class="mw-more-row">'+button('material-more','继续显示','id="mw-material-more" hidden')+'<span id="mw-material-page"></span></div></section>';
@@ -138,7 +137,7 @@
     if(state.busy||!state.draft||state.conflict)return;
     if(action==='delete'&&!(await ckConfirmDialog('仅删除这个主题目录，原始 Fact 会保留。',{title:'删除主题',confirmText:'删除主题',danger:true})))return;
     var d=state.draft,key=state.key;
-    var body={action:action,id:d.id,expected_revision:state.revision,title:d.title,group_title:d.group_title||'',note:d.note||'',aliases:d.aliases||[],recall_enabled:d.recall_enabled!==false,material_stamps:Object.fromEntries(d.materials.filter(function(m){return m.stamp}).map(function(m){return [m.fact_id,m.stamp]})),fact_ids:d.materials.map(function(m){return m.fact_id})};
+    var body={action:action,id:d.id,expected_revision:state.revision,title:d.title,group_title:d.group_title||'',note:d.note||'',aliases:d.aliases||[],recall_enabled:true,material_stamps:Object.fromEntries(d.materials.filter(function(m){return m.stamp}).map(function(m){return [m.fact_id,m.stamp]})),fact_ids:d.materials.map(function(m){return m.fact_id})};
     if(d.summary_edited)body.summary_text=d.summary||'';
     var signature=JSON.stringify(body);if(!state.request||state.request.signature!==signature)state.request={signature:signature,body:Object.assign({request_id:uid()},body)};
     state.busy=true;syncButtons();message('mw-status','正在保存…');
