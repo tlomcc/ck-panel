@@ -91,7 +91,7 @@ test('n excludes today; x and y select adjacent natural-day windows with exact h
   assert.deepEqual(plain(x.ctx.chatDailyDigestEntries(x.session).map(r=>r.dayKey)),['2026-09-27','2026-09-28','2026-09-29','2026-09-30']);
   const source=x.ctx.chatDigestRollupSource(x.cfg,x.session);
   x.session.digestRollup={start:source.range.start,end:source.range.end,text:'两天大总结',source:source.stamp};
-  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'【2026-09-27-2026-09-28】\n两天大总结\n\n【2026-09-29】\n日期29\n\n【2026-09-30】\n日期30');
+  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'【2026-09-27-2026-09-28】\n两天大总结\n\n【2026-09-29】\n日期29\n\n日期30');
   x.cfg.dailyDigestRetentionDays=5;x.cfg.dailyDigestDetailDays=2;x.cfg.dailyDigestRollupDays=1;
   assert.equal(x.ctx.chatDigestRollupSource(x.cfg,x.session).range.start,'2026-09-27');
   x.cfg.dailyDigestEnabled=false;assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'');
@@ -109,8 +109,8 @@ test('x/y zero, gaps, year boundaries and long retained records are not silently
   const x=setup();assert.equal(x.ctx.chatDigestShiftDay('2028-03-01',-1),'2028-02-29');assert.equal(x.ctx.chatDigestShiftDay('2026-01-01',-1),'2025-12-31');
   x.cfg.dailyDigestRetentionDays=100;x.cfg.dailyDigestDetailDays=100;x.cfg.dailyDigestRollupDays=0;
   x.session.dailyDigests=Array.from({length:101},(_,i)=>x.entry(x.ctx.chatDigestShiftDay('2026-09-30',-i),'正文'.repeat(600)));
-  const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);assert.equal((pack.match(/^【/gm)||[]).length,101);assert.ok(pack.length>100000);
-  x.cfg.dailyDigestDetailDays=0;assert.equal((x.ctx.chatDailyDigestPack(x.cfg,x.session).match(/^【/gm)||[]).length,1);
+  const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);assert.equal((pack.match(/^【/gm)||[]).length,100);assert.equal((pack.match(/正文/g)||[]).length,101*600);assert.ok(pack.length>100000);
+  x.cfg.dailyDigestDetailDays=0;assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'正文'.repeat(600));
   x.cfg.dailyDigestRetentionDays=3;x.cfg.dailyDigestDetailDays=1;x.cfg.dailyDigestRollupDays=2;x.session.dailyDigests=[x.entry('2026-09-26','太旧'),x.entry('2026-09-28','有记录')];
   assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'【2026-09-27-2026-09-28】\n有记录');
 });

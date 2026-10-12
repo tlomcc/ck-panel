@@ -192,7 +192,7 @@ function chatDailyDigestBuildPack(cfg,session){
   var range=chatDigestRange(cfg),parts=[],rollup=chatDigestRollupText(cfg,session);
   if(rollup)parts.push(rollup);
   chatDailyDigestEntries(session,range.today,cfg).forEach(function(row){
-    if(row.dayKey===range.today)parts.push(chatDailyDigestBlockText(row));
+    if(row.dayKey===range.today)parts.push(row.text);
     else if(range.x&&row.dayKey>=range.detailStart&&row.dayKey<range.today)parts.push(chatDailyDigestBlockText(Object.assign({},row,{text:chatDigestTierText(row,'detail')})));
   });
   return parts.join('\n\n');

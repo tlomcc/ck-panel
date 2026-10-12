@@ -77,7 +77,9 @@ test('old source is accounted on the commit date without editing yesterday',asyn
  const x=setup();prepare(x);x.advance(86400000);
  x.session.dailyDigests=[{dayKey:'2026-10-03',text:'昨日定稿',startTs:x.session.messages[0].ts,endTs:x.session.messages[0].ts,covered:[]}];
  assert.equal((await x.run()).trimmed,true);assert.equal(x.session.dailyDigests.find(e=>e.dayKey==='2026-10-03').text,'昨日定稿');
- const today=x.session.dailyDigests.find(e=>e.dayKey==='2026-10-04');assert.match(today.text,/原对话 2026-10-03/);
+ const today=x.session.dailyDigests.find(e=>e.dayKey==='2026-10-04');assert.match(today.text,/【2026-10-03 /);
+ assert.doesNotMatch(today.text,/原对话|归档|2026-10-04/);
+ assert.doesNotMatch(x.session.digestActivePack.text,/2026-10-04/,'injection must not add the commit date as an event date');
  assert.equal(x.ctx.chatDailyDigestNormalize(x.session.dailyDigests).length,2);
 });
 test('automatic expiry waits for complete coverage when new rounds grew beyond the prepared range',async()=>{
@@ -121,7 +123,8 @@ test('legacy extra transport history is summarized in background and joins a rea
  assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);
  const epoch=x.session.digestTransportEpoch;const result=await x.run();assert.equal(result.trimmed,true);assert.equal(result.dropped,5);
  assert.equal(x.session.messages.length,4);assert.equal(x.session.transportMessages.length,4);assert.notEqual(x.session.digestTransportEpoch,epoch);
- assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/额外旧发送历史总结/);assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/原始时间未保存/);
+ assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/额外旧发送历史总结/);assert.doesNotMatch(x.ctx.chatDailyDigestPack(x.cfg,x.session),/原始时间未保存|归档|原对话/);
+ assert.ok(extra.every(g=>g.messages.every(m=>m.ts===0)),'unknown transport dates must remain unknown');
  assert.equal(x.session.digestPending.length,5);assert.equal(x.requests.length,0);
 });
 test('different transport answers cannot borrow coverage from local answers',async()=>{

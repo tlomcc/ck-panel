@@ -54,7 +54,7 @@ function chatDigestTransportSources(session,rows,localSelected,drop){
     else{
       if(!source.length)source=[{role:'user',text:'[此轮仅含非文字内容]'}];
       var key='tr:'+chatDigestStamp([session.digestTransportEpoch,i,source]);
-      group={key:key,day:chatDailyDigestDayKey(stamp),start:stamp,end:stamp,messages:source.map(function(m){return Object.assign({},m,{ts:stamp,turnId:key})})};
+      group={key:key,day:chatDailyDigestDayKey(stamp),start:stamp,end:stamp,messages:source.map(function(m){return Object.assign({},m,{ts:0,turnId:key})})};
     }
     merged.set(group.key,group);
   });
@@ -153,8 +153,8 @@ function chatDigestPreparedTrim(session,cfg,plan){
   if(!entry){entry={id:'dg-'+today,dayKey:today,kind:'daily',text:'',covered:[],rounds:0,startTs:0,endTs:0};entries.push(entry)}
   used.forEach(function(t){
     if(t.keys.every(function(k){return entry.covered.includes(k)}))return;
-    var source=t.keys.some(function(k){return k.indexOf('tr:')===0})?'【历史发送记录（原始时间未保存）；归档 '+today+'】':'【原对话 '+chatDailyDigestRangeLabel(t)+'；归档 '+today+'】';
-    var addition=source+'\n'+t.text;additions.push(addition);
+    var source=t.keys.some(function(k){return k.indexOf('tr:')===0})?'':'【'+chatDailyDigestRangeLabel(t)+'】\n';
+    var addition=source+t.text;additions.push(addition);
     entry.text+=(entry.text?'\n\n':'')+addition;
     entry.startTs=entry.startTs?Math.min(entry.startTs,t.startTs):t.startTs;entry.endTs=Math.max(entry.endTs,t.endTs);
     entry.covered=Array.from(new Set(entry.covered.concat(t.keys)));entry.rounds+=t.keys.length;entry.detail=null;entry.brief=null;
@@ -168,7 +168,7 @@ function chatDigestPreparedTrim(session,cfg,plan){
     // Never remove source history if neither injection can be constructed.
     var frozen=session.digestActivePack;
     if(!frozen||!frozen.text||frozen.scope!==chatDigestActiveScope(cfg)||frozen.config!==chatDigestConfigStamp(cfg))return null;
-    text=frozen.text+(additions.length?'\n\n【'+today+'】\n'+additions.join('\n\n'):'');
+    text=frozen.text+(additions.length?'\n\n'+additions.join('\n\n'):'');
   }
   return {entries:entries,rollup:session.digestRollup,used:used,
     activePack:{scope:chatDigestActiveScope(cfg),config:chatDigestConfigStamp(cfg),text:text,at:Date.now()}};
