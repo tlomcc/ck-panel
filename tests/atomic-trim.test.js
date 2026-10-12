@@ -29,6 +29,7 @@ function setup(){
  vm.runInContext(fs.readFileSync(require.resolve('../chat-digest.js'),'utf8'),ctx);
  vm.runInContext(fs.readFileSync(require.resolve('../chat-digest-activation.js'),'utf8'),ctx);
  vm.runInContext(fs.readFileSync(require.resolve('../chat-digest-schedule.js'),'utf8'),ctx);ctx.chatScheduleNightlySync=()=>{};
+ ctx.chatRefreshPreparedDigest=async()=>false;
  ctx.chatRenderDailyDigest=()=>{};ctx.chatDailyDigestSetStatus=()=>{};ctx.chatDailyDigestEndpoint=()=>'/digest';
  ['chatAutoTrimRoundCount','chatTimeReminderContext','chatPlanAutoTrimForPendingBatch','chatCommitAutoTrimPlan','chatApplyAutoTrimForPendingBatch'].forEach(n=>vm.runInContext(extract(n),ctx));
  return {ctx,cfg,session,requests,advance:ms=>{now+=ms},reply:data=>finish({ok:true,json:async()=>data}),run:(state=null,opts={})=>{const pending={role:'pending_user',text:'下一条'};return ctx.chatApplyAutoTrimForPendingBatch(cfg,[pending],state,opts)}};
@@ -38,6 +39,12 @@ function prepare(x){
  const groups=x.ctx.chatDigestMessageGroups(x.session.messages.slice(0,6));
  x.session.digestReadyTrims=[{keys:groups.map(g=>g.key),text:'她问了前三个问题，我逐一回应。',startTs:groups[0].start,endTs:groups.at(-1).end}];
 }
+
+test('expired send refreshes prepared summaries before deciding to preserve or trim',async()=>{
+ const x=setup();let reads=0;
+ x.ctx.chatRefreshPreparedDigest=async()=>{reads++;prepare(x)};
+ const result=await x.run();assert.equal(reads,1);assert.equal(result.trimmed,true);assert.equal(x.session.messages.length,4);
+});
 test('ready summaries and matching full turns commit atomically at an expired cache',async()=>{
  const x=setup();prepare(x);const first=await x.run();assert.equal(first.trimmed,true);assert.equal(x.session.messages.length,4);
  assert.equal(x.session.dailyDigests.length,1);assert.match(x.session.digestActivePack.text,/前三个问题/);assert.equal(x.requests.length,0);

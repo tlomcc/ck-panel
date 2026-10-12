@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v303-record-context';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v305-reply-sync';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5097,6 +5097,7 @@ function chatStreamProgressRender(){
   else el.setAttribute('hidden','');
 }
 function chatSetStatus(text){
+  if(typeof chatUpdateWaitActions==='function')chatUpdateWaitActions(text);
   if(/正在补收|连接恢复中|补收连接重试/.test(String(text||''))){
     if(!chatStreamProgress)chatStreamProgressStart();chatStreamProgressSet('补收中');
   }else if(/回复已生成，正在同步/.test(String(text||''))){
@@ -7317,12 +7318,17 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   // Both the idle timer and a new send share this barrier.
   while(chatTrimTransaction)await chatTrimTransaction;
   var activationSession=chatCurrentSession();
+  var wakeStateStale=!(opts&&opts.commitPrepared)&&typeof chatWakeStatusStale==='function'&&chatWakeStatusStale(activationSession);
+  if(!(opts&&opts.commitPrepared)&&!activationSession.digestManualTrim&&chatDigestCacheExpired(activationSession)&&!wakeStateStale&&typeof chatRefreshPreparedDigest==='function'){
+    await chatRefreshPreparedDigest(cfg,activationSession);
+    if(activationSession!==chatCurrentSession()||requestState&&requestState.stopped)return {trimmed:false,boundary:false,dropped:0};
+  }
   chatDigestFreezePack(cfg,activationSession);
   var manualRequest=activationSession.digestManualTrim;
   var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
   // A slow wake-state read must not delay chat or expire a still-warm prefix.
-  if(!manualSend&&!(opts&&opts.commitPrepared)&&typeof chatWakeStatusStale==='function'&&chatWakeStatusStale(activationSession)){
+  if(!manualSend&&wakeStateStale){
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
   }
   var stageBoundary=!!(chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||((submittedPending&&submittedPending.length)||(opts&&opts.idleCheck))&&chatDigestCacheExpired(activationSession)));
@@ -7467,7 +7473,7 @@ async function chatMaybeAutoTrimAtIdleBoundary(opts){
   var session=chatCurrentSession();
   if(!session)return;
   // 已经标记待重建，说明上一次边界处理过了，交给下一次真实发送即可。
-  if(session.cacheRebuildPending===true||Number(session.trimRetryAfter||0)>now)return;
+  if(Number(session.trimRetryAfter||0)>now)return;
   if(chatPendingMessages().length)return;
   var reference=chatCacheActivityReference(session,chatLastMessageTs());
   var count=chatCurrentConversationRoundCount();
@@ -7840,6 +7846,7 @@ async function chatRecoverInterruptedTurns(opts){
     try{reply=await chatReadDelivery(cfg,turnId)}catch(e){networkError=true;}
     if(session!==chatCurrentSession()||cfg.sessionId!==chatActiveSessionId)return {checked:false};
     var matching=interrupted.filter(function(m){return String(m.inFlightTurnId||'')===turnId});
+    if(!matching.length||!matching.some(function(m){return m.inFlight&&String(m.inFlightTurnId||'')===turnId}))return {checked:false};
     if(reply&&reply.turn_id&&reply.turn_id!==turnId)reply=null;
     if(reply&&reply.found&&(!turnId||reply.turn_matched===true)){
       if(turnId)chatDigestConfirmSync(session,cfg,null,turnId);
@@ -10299,7 +10306,7 @@ function chatInit(){
     // 按轮自动清理走同一个定时器，也自带 30s 节流和前置判断。
     chatMaybeAutoClean();
   },15000);
-  async function checkTrimOnWake(){if(typeof chatWakeRefresh==='function')await chatWakeRefresh();chatMaybeExpireNativeThinking();chatMaybeSyncSystemPrompt();chatMaybeRollDigestAtDayBoundary();chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})}
+  async function checkTrimOnWake(){if(typeof chatWakeRefresh==='function')await chatWakeRefresh();chatMaybeExpireNativeThinking();chatMaybeSyncSystemPrompt();await chatRefreshPreparedDigest(chatLoadConfig(),chatCurrentSession());await chatMaybeAutoTrimAtIdleBoundary({forceCheck:true});chatMaybeRollDigestAtDayBoundary()}
   document.addEventListener('visibilitychange',function(){if(!document.hidden)checkTrimOnWake()});
   window.addEventListener('pageshow',checkTrimOnWake);
   window.addEventListener('focus',checkTrimOnWake);
@@ -10968,8 +10975,10 @@ async function chatSubmitPendingMessages(options){
       var beforeContentRaw='';
       var streamError=null;
       var streamCompleted=false;
+      var stopReplyWatch=typeof chatStartReplyWatch==='function'?chatStartReplyWatch(requestState,cfg):function(){};
       function handleStreamEvent(ev,data){
         if(streamError||(requestState&&requestState.stopped))return;
+        if(typeof chatNoteReplyProgress==='function')chatNoteReplyProgress(requestState,ev,data);
         if(ev==='reconnect')throw chatMarkNetworkFailure(new Error('正在补收已有请求'));
         if(ev==='error'){
           var streamErrorText=data&&typeof data==='object'
@@ -11116,6 +11125,7 @@ async function chatSubmitPendingMessages(options){
       chatScheduleSessionSave(cfg.sessionId);
       latencyTrace.panel_stream_done_ms=Date.now();
       }finally{
+        stopReplyWatch();
         if(reader){
           // done is the protocol boundary; some proxies leave HTTP open.
           // Cancellation itself must not become another completion wait.

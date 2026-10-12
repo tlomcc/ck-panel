@@ -115,7 +115,10 @@
    check(!session.digestStaged&&cleanCalls.length===1,'midnight cut did not consume its staged summary');
    field('chat-input').value='请沿用截断后的总结';const nextSend=chatSendMessage();
    await until(()=>posts.length===1&&releaseReply,'next request did not send');
-   const transmitted=JSON.stringify(posts[0]);
+   // The durable digest outbox contains source material for the background
+   // worker. Only the remaining chat fields contribute to the model prompt.
+   const {digest_queue:queuedSources,...chatRequest}=posts[0];
+   const transmitted=JSON.stringify(chatRequest);
    check(transmitted.includes('已完整整理本次选中的旧对话。'),'the next actual request omitted the new trim summary');
    check(transmitted.includes('前一轮实际生效的稳定总结'),'the previous stable summary was lost');
    check(!transmitted.includes('昨日尚未精简的长总结'),'unready long daily source expanded the prompt');

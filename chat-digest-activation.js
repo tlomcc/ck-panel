@@ -37,12 +37,19 @@ function chatDigestTransportRows(messages){
 // transport turn. Every unmatched transport turn needs its own proven coverage.
 function chatDigestTransportSources(session,rows,localSelected,drop){
   var transport=session.transportMessages||[],turns=CKChatHistory.transportTurnGroups(transport),local=chatDigestMessageGroups(rows);
-  if(!drop||turns.length===local.length)return null;
+  if(!drop||!turns.length)return null;
   if(!session.digestTransportEpoch){session.digestTransportEpoch=String(Date.now())+'-'+Math.random().toString(36).slice(2,9);session.digestTransportSourceAt=Date.now();}
   var stamp=Number(session.digestTransportSourceAt)||Date.now(),offset=turns.length-local.length,merged=new Map();
   function signature(messages){return JSON.stringify(messages.map(function(m){return {role:m.role,text:m.text}}))}
+  var localByText=new Map(),transportCounts=new Map();
+  local.forEach(function(g){var key=signature(g.messages);localByText.set(key,localByText.has(key)?null:g)});
+  var sources=turns.map(function(turn){return chatDigestTransportRows(transport.slice(turn.startIndex,turn.endIndex))});
+  sources.forEach(function(source){var key=signature(source);transportCounts.set(key,(transportCounts.get(key)||0)+1)});
   turns.slice(0,drop).forEach(function(turn,i){
-    var source=chatDigestTransportRows(transport.slice(turn.startIndex,turn.endIndex)),match=local[i-offset],group;
+    var source=sources[i],keyText=signature(source),match=transportCounts.get(keyText)===1?localByText.get(keyText):null,group;
+    // Unique exact turns survive extra failed/pending rows at either end.
+    // Ambiguous repeated turns retain the old positional safety check.
+    if(!match)match=local[i-offset];
     if(match&&signature(source)===signature(match.messages))group=match;
     else{
       if(!source.length)source=[{role:'user',text:'[此轮仅含非文字内容]'}];

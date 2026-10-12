@@ -27,6 +27,30 @@ function result(x,body,revision=2){
     base:{entries:[{dayKey:'2026-10-03',startTs:x.session.messages[0].ts,endTs:x.session.messages[1].ts,text:'我记下了她的安排。',covered:body.groups.map(g=>g.key)}],rollup:null,omitted:[]},result:{day:'2026-10-04'}}};
 }
 
+test('wake GET bypasses throttle and stages the finished result without acknowledging unsent edits',async()=>{
+  const x=setup();await x.sync();const original=x.calls[0].body;
+  x.session.title='本机尚未上传的标题';
+  x.ctx.fetch=async(url,init)=>{
+    assert.equal(init.method,undefined);assert.equal(init.body,undefined);
+    return {ok:true,json:async()=>({ok:true,sessions:[result(x,original)]})};
+  };
+  assert.equal(await x.ctx.chatRefreshPreparedDigest(x.cfg,x.session),true);
+  assert(x.session.digestStaged);assert.equal(x.session.dailyDigests.length,0);
+  let posted=false;x.ctx.fetch=async(url,init)=>{posted=init.method==='POST';return x.response(JSON.parse(init.body))};
+  await x.sync();assert(posted,'read-only refresh falsely acknowledged a local change');
+});
+
+test('an extra failed local turn does not rename already summarized transport turns',()=>{
+  const x=setup(),old=x.ctx.chatDigestMessageGroups(x.session.messages)[0];
+  x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));
+  x.session.messages.push({role:'user',text:'尚未完成的另一轮',ts:Date.now(),turnId:'failed',sendFailed:true});
+  const groups=x.ctx.chatDigestTransportSources(x.session,x.session.messages,[old],1);
+  assert.equal(groups.length,1);assert.equal(groups[0].key,old.key);
+  x.session.transportMessages[1].content='不同内容';
+  const changed=x.ctx.chatDigestTransportSources(x.session,x.session.messages,[old],1);
+  assert.equal(changed.length,2,'changed transport content must still require separate proven coverage');
+});
+
 test('expanding x waits for compact summaries instead of freezing a 24k source fallback',()=>{
   const x=setup();x.cfg.dailyDigestDetailDays=3;x.cfg.dailyDigestRollupDays=0;
   const raw='详细底稿'.repeat(6000);

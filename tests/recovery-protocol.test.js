@@ -4,6 +4,23 @@ const source=fs.readFileSync(require.resolve('../chat-recovery.js'),'utf8');
 const flush=()=>new Promise(r=>setImmediate(r));
 const plain=x=>JSON.parse(JSON.stringify(x));
 const base=[{role:'user',content:'中文\nemoji🙂'},{role:'assistant',content:[{type:'thinking',thinking:'已存在的思考',signature:'signed-prefix+/=='},{type:'tool_use',id:'tool1',name:'search',input:{query:'合成查询',limit:2}}]}];
+test('heartbeat-only streams check their exact receipt, while ongoing thinking stays attached',async()=>{
+ for(const mode of ['heartbeat','thinking','unknown','completed','superseded']){
+  const {c,cfg,timers}=setup();let now=1000,aborts=0,reads=0;
+  c.Date=class extends Date{static now(){return now}};
+  c.chatSending=true;c.chatActiveSessionId='a';c.chatSetStatus=()=>{};
+  const request={turnId:'t',controller:{abort(){aborts++}}};c.chatActiveRequest=request;
+  c.chatReadDelivery=async()=>{reads++;if(mode==='superseded')c.chatActiveRequest={};return {turn_id:mode==='unknown'?'other':'t',pending:mode!=='completed',found:mode==='completed'}};
+  const stop=c.chatStartReplyWatch(request,cfg);
+  now+=mode==='completed'?5000:45000;
+  if(mode==='thinking')c.chatNoteReplyProgress(request,'thinking',{text:'持续思考'});
+  if(mode==='completed'){request.replyCompleteAt=1000;}
+  await request.checkReceipt(false);
+  assert.equal(reads,mode==='thinking'?0:1);
+  assert.equal(aborts,['heartbeat','completed'].includes(mode)?1:0);
+  stop();assert.equal(timers.size,0);assert.equal(request.checkReceipt,undefined);
+ }
+});
 function setup(){
  const timers=new Map();let seq=0;
  const session={id:'a',transportMessages:plain(base)},cfg={sessionId:'a',panelKey:'fixture'};

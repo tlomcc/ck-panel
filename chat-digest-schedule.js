@@ -154,7 +154,7 @@ function chatSyncNightlyDigest(cfg,options){
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
   if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
-  chatDigestRefreshManualSources(session,cfg);
+  if(!options.readOnly)chatDigestRefreshManualSources(session,cfg);
   var scope=chatNightlyScope(cfg),configStamp=chatDigestConfigStamp(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
   if(chatNightlySyncs.has(syncKey))return chatNightlySyncs.get(syncKey);
@@ -164,15 +164,15 @@ function chatSyncNightlyDigest(cfg,options){
   var auto=chatDigestAutoPolicy(cfg,session,rows,false);
   var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim,auto.enabled,auto.keep,auto.minimum,auto.total,auto.cache_at,auto.ttl_seconds]);
   var previous=chatNightlySynced[syncKey]||{},now=Date.now(),unchanged=previous.signature===signature;
-  if(!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(session.digestManualTrim||session.digestSettingsRequest?2000:60000)))return Promise.resolve(true);
+  if(!options.force&&!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(session.digestManualTrim||session.digestSettingsRequest?2000:60000)))return Promise.resolve(true);
   var body=null;
-  if(!unchanged){
+  if(!unchanged&&!options.readOnly){
     var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
     chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
     body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
     body.auto=auto;
   }
-  var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},12000);
+  var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},options.readOnly?2500:12000);
   var task=(async function(){
     try{
       var response=await fetch(chatNightlyEndpoint(cfg)+(body?'':'&session_id='+encodeURIComponent(session.id)),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal}:{cache:'no-store',signal:controller.signal});
@@ -183,7 +183,7 @@ function chatSyncNightlyDigest(cfg,options){
       if(chatDigestConfigStamp(chatLoadConfig())!==configStamp){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(0);return false;
       }
-      chatNightlySynced[syncKey]={signature:signature,at:Date.now()};
+      if(!options.readOnly)chatNightlySynced[syncKey]={signature:signature,at:Date.now()};
       chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
       var accepted=new Set(data.accepted_keys||[]),pending=chatNightlyPending(session).filter(function(g){return !accepted.has(g.key)});
       try{if(pending.length)localStorage.setItem(chatNightlyOutboxKey(session),JSON.stringify(pending));else localStorage.removeItem(chatNightlyOutboxKey(session))}catch(e){}
@@ -222,7 +222,7 @@ function chatSyncNightlyDigest(cfg,options){
       return !data.conflict||!!knownAdvance||data.settings_accepted===true;
     }catch(error){
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;
-      chatNightlySynced[syncKey]={retryAt:Date.now()+30000};
+      if(!options.readOnly)chatNightlySynced[syncKey]={retryAt:Date.now()+30000};
       chatNightlyStatus[session.id]={scope:scope,local_error:'同步暂未完成，原文已保留，稍后重试'};
       chatRenderNightlyStatus(session);
       chatScheduleNightlySync(30000);
@@ -231,6 +231,12 @@ function chatSyncNightlyDigest(cfg,options){
     }finally{clearTimeout(timer);chatNightlySyncs.delete(syncKey);}
   })();
   chatNightlySyncs.set(syncKey,task);return task;
+}
+async function chatRefreshPreparedDigest(cfg,session){
+  if(!session||cfg.dailyDigestEnabled===false)return false;
+  var timer;
+  try{return await Promise.race([chatSyncNightlyDigest(cfg,{session:session,readOnly:true,force:true}),new Promise(function(resolve){timer=setTimeout(function(){resolve(false)},2500)})]);}
+  finally{clearTimeout(timer)}
 }
 function chatNightlyManualPriority(session){
   delete session.digestPreparingBase;
