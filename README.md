@@ -29,4 +29,9 @@ The send-button hot path is intentionally small. It changes the button state and
 
 ## Gateway location
 
-Use the navigation menu or model settings → 连接网关 to choose Alibaba or VPS. Existing installations keep Alibaba until explicitly switched. The built-in VPS endpoint is https://tlomcc.cc.cd:18443/gateway with /mcp for memory tools; the current network requires Clash/proxy access. A switch verifies HTTPS, authentication, provider configuration and MCP tools, saves the current sessions, then reloads under the same panel origin. Chat storage, prompts, API configuration and canonical transport history remain shared. This VPS route uses the existing Python gateway; Claude Code is not part of this route.
+Use the navigation menu or model settings → 连接网关 to choose Alibaba or VPS. Existing installations keep Alibaba until explicitly switched. The built-in VPS endpoint is https://tlomcc.cc.cd:18443/gateway with /mcp for memory tools and is reached over direct HTTPS. When the VPS route is active, the panel preconnects to the selected origin before a request. A switch verifies HTTPS, authentication, provider configuration and MCP tools, saves the current sessions, then reloads under the same panel origin. Chat storage, prompts, API configuration and canonical transport history remain shared. This VPS route uses the existing Python gateway; Claude Code is not part of this route.
+
+
+### 国内 API VPS（2026-10-13）
+
+连接网关可选择国内 VPS（API）、美国 VPS（订阅）或自定义地址。国内默认入口为 https://123.57.175.84:18443/gateway，记忆接口为同源 /mcp，默认执行路径 Claude Code · API。使用原有面板 Key。旧美国 API 的预设地址在页面载入时转到国内，独立订阅与自定义地址保留；历史、本地提示词和配置不清空。国内使用受信任的 IP 地址证书，由服务器 Certbot 定时续期。

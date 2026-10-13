@@ -1,7 +1,13 @@
 (function(root){
   'use strict';
   var key='ckBackendRouteV1';
-  var defaults={mode:'vps',gateway:'https://tlomcc.cc.cd:18443/gateway',mcp:'https://tlomcc.cc.cd:18443/mcp',execution:'direct_api',subscriptionModel:'sonnet'};
+  var servers={cn:'https://123.57.175.84:18443',us:'https://tlomcc.cc.cd:18443'};
+  var defaults={mode:'vps',gateway:servers.cn+'/gateway',mcp:servers.cn+'/mcp',execution:'claude_code_api',subscriptionModel:'sonnet',server:'cn'};
+  function serverOf(route){
+    if(route&&route.gateway===servers.cn+'/gateway'&&route.mcp===servers.cn+'/mcp')return 'cn';
+    if(route&&((route.gateway===servers.us+'/gateway'&&route.mcp===servers.us+'/mcp')||(route.gateway==='https://tlomcc.us.ci:18443/gateway'&&route.mcp==='https://tlomcc.us.ci:18443/mcp')))return 'us';
+    return 'custom';
+  }
   function normalize(value){
     var url=new URL(String(value||'').trim());
     if(url.username||url.password||url.search||url.hash)throw new Error('地址不能包含密钥、账号、查询参数或片段。');
@@ -15,14 +21,54 @@
     if(['direct_api','claude_code_api','claude_code_subscription'].indexOf(execution)<0)throw new Error('未知聊天执行路径');
     var model=String(saved.subscriptionModel||'sonnet').trim();
     if(!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('请填写官方 Claude 模型名或 sonnet、opus、haiku');
-    return {mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:execution,subscriptionModel:model};
+    var route={mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:execution,subscriptionModel:model};
+    var server=serverOf(route);
+    if(server==='us'&&!saved.server&&execution!=='claude_code_subscription'){
+      route.gateway=defaults.gateway;route.mcp=defaults.mcp;server='cn';
+    }
+    if(server==='cn'&&execution==='claude_code_subscription')throw new Error('国内 VPS 只提供 API 路线；订阅请选择美国 VPS。');
+    if(server!=='custom')route.server=server;
+    return route;
   }
   var current=Object.assign({},defaults),saved;
   try{saved=JSON.parse(root.localStorage.getItem(key)||'null');current=parse(saved)}catch(e){}
   if(!saved&&root.location&&root.location.hostname==='127.0.0.1'&&root.location.port==='19080'){
     current={mode:'vps',gateway:root.location.origin+'/gateway',mcp:root.location.origin+'/mcp'};
   }
-  function storageValue(route){return JSON.stringify({mode:route.mode,gateway:route.gateway,mcp:route.mcp,execution:route.execution||'direct_api',subscriptionModel:route.subscriptionModel||'sonnet'})}
+  function storageValue(route){var value={mode:route.mode,gateway:route.gateway,mcp:route.mcp,execution:route.execution||'direct_api',subscriptionModel:route.subscriptionModel||'sonnet'};if(serverOf(route)!=='custom')value.server=serverOf(route);return JSON.stringify(value)}
+  var routeHintSignature='';
+  function routeHintOrigins(route){
+    if(!route||route.mode!=='vps')return [];
+    var seen={},origins=[];
+    [route.gateway,route.mcp].forEach(function(value){
+      try{
+        var url=new URL(String(value||'')),origin=url.origin;
+        if(!origin||origin==='null'||seen[origin])return;
+        seen[origin]=true;origins.push({origin:origin,host:url.hostname});
+      }catch(e){}
+    });
+    return origins;
+  }
+  function refreshRouteHints(route,force){
+    if(typeof document!=='object'||!document.head||typeof document.createElement!=='function'||typeof document.querySelectorAll!=='function')return;
+    var origins=routeHintOrigins(route),signature=origins.map(function(item){return item.origin}).join('|');
+    if(!force&&signature===routeHintSignature)return;
+    var old=document.querySelectorAll('link[data-ck-route-hint]');
+    for(var i=old.length-1;i>=0;i--){
+      if(old[i]&&typeof old[i].remove==='function')old[i].remove();
+      else if(old[i]&&old[i].parentNode)old[i].parentNode.removeChild(old[i]);
+    }
+    origins.forEach(function(item){
+      var dns=document.createElement('link');
+      dns.rel='dns-prefetch';dns.href='//'+item.host;dns.setAttribute('data-ck-route-hint','dns');
+      document.head.appendChild(dns);
+      var preconnect=document.createElement('link');
+      preconnect.rel='preconnect';preconnect.href=item.origin;preconnect.crossOrigin='anonymous';
+      preconnect.setAttribute('crossorigin','anonymous');preconnect.setAttribute('data-ck-route-hint','preconnect');
+      document.head.appendChild(preconnect);
+    });
+    routeHintSignature=signature;
+  }
   async function probe(route,authKey,fetcher){
     var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},20000);
     try{
@@ -56,7 +102,7 @@
   }
   function isSubscription(){return current.mode==='vps'&&current.execution==='claude_code_subscription'}
   function subscriptionRoute(){return {ok:true,source:'claude_subscription',provider:null,providerName:'Claude 订阅',providerHost:'api.anthropic.com',apiBase:'',upstreamKey:'',apiType:'claude',model:current.subscriptionModel||'sonnet',reason:''}}
-  root.CKBackendRoute={isSubscription:isSubscription,subscriptionRoute:subscriptionRoute,subscriptionStatus:subscriptionStatus,key:key,current:current,defaults:defaults,normalize:normalize,parse:parse,probe:probe,storageValue:storageValue};
+  root.CKBackendRoute={servers:servers,serverOf:serverOf,isSubscription:isSubscription,subscriptionRoute:subscriptionRoute,subscriptionStatus:subscriptionStatus,key:key,current:current,defaults:defaults,normalize:normalize,parse:parse,probe:probe,storageValue:storageValue,refreshRouteHints:refreshRouteHints};
   if(typeof module==='object'&&module.exports)module.exports=root.CKBackendRoute;
 })(typeof window==='object'?window:globalThis);
 
@@ -64,6 +110,7 @@ function ckOpenBackendRoute(){
   var active=CKBackendRoute.current;
   document.getElementById('ck-backend-mode').value=active.mode;
   document.getElementById('ck-execution-mode').value=active.execution||'direct_api';
+  document.getElementById('ck-vps-server').value=CKBackendRoute.serverOf(active);
   document.getElementById('ck-subscription-model').value=active.subscriptionModel||'sonnet';
   var previous;
   try{previous=JSON.parse(localStorage.getItem(CKBackendRoute.key)||'null')}catch(e){}
@@ -88,12 +135,28 @@ function ckBackendFieldsChanged(){
   var sub=document.getElementById('ck-execution-mode').value==='claude_code_subscription';
   document.getElementById('ck-subscription-fields').hidden=!sub;
   document.getElementById('ck-execution-hint').textContent=sub?'使用独立的官方订阅登录；CK 继续管理提示词、记忆、历史与工具。辅助总结和向量等仍使用各自 API。订阅不可用时不会自动切回 API。':'使用面板中的供应商 API 配置。Claude Code · API 使用官方客户端，由 CK 管理提示词、工具和聊天历史。';
+  var server=document.getElementById('ck-vps-server');
+  var option=document.querySelector('#ck-execution-mode option[value="claude_code_subscription"]');
+  if(option)option.disabled=!!server&&server.value==='cn';
+}
+function ckBackendServerChanged(){
+  var server=document.getElementById('ck-vps-server').value,origin=CKBackendRoute.servers[server];
+  if(origin){
+    document.getElementById('ck-vps-gateway').value=origin+'/gateway';
+    document.getElementById('ck-vps-mcp').value=origin+'/mcp';
+    document.getElementById('ck-execution-mode').value=server==='cn'?'claude_code_api':'claude_code_subscription';
+  }
+  ckBackendFieldsChanged();
 }
 function ckRenderBackendRoute(){
-  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=CKBackendRoute.current.mode==='vps'?(CKBackendRoute.current.execution==='claude_code_subscription'?'VPS · Claude Code（订阅）':CKBackendRoute.current.execution==='claude_code_api'?'VPS · Claude Code（API）':'VPS · 直接 API'):'VPS · 直接 API'});
+  var place=CKBackendRoute.serverOf(CKBackendRoute.current)==='cn'?'国内 VPS':CKBackendRoute.serverOf(CKBackendRoute.current)==='us'?'美国 VPS':'VPS';
+  document.querySelectorAll('[data-ck-backend-label]').forEach(function(el){el.textContent=place+' · '+(CKBackendRoute.current.execution==='claude_code_subscription'?'Claude Code（订阅）':CKBackendRoute.current.execution==='claude_code_api'?'Claude Code（API）':'直接 API')});
 }
 if(typeof document==='object'){
+  if(window.CKBackendRoute&&typeof window.CKBackendRoute.refreshRouteHints==='function')window.CKBackendRoute.refreshRouteHints(window.CKBackendRoute.current);
   document.addEventListener('DOMContentLoaded',ckRenderBackendRoute);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&window.CKBackendRoute)window.CKBackendRoute.refreshRouteHints(window.CKBackendRoute.current,true)});
+  if(window.addEventListener)window.addEventListener('pageshow',function(){if(window.CKBackendRoute)window.CKBackendRoute.refreshRouteHints(window.CKBackendRoute.current,true)});
   var ckBackendDraftTimer=setInterval(function(){
     if(!window.chatSessionsReady)return;
     clearInterval(ckBackendDraftTimer);
@@ -112,7 +175,7 @@ async function ckSaveBackendRoute(){
   window.ckBackendSwitchBusy=true;button.disabled=true;
   try{
     oldValue=localStorage.getItem(CKBackendRoute.key);
-    var route=CKBackendRoute.parse({mode:document.getElementById('ck-backend-mode').value,gateway:document.getElementById('ck-vps-gateway').value,mcp:document.getElementById('ck-vps-mcp').value,execution:document.getElementById('ck-execution-mode').value,subscriptionModel:(document.getElementById('ck-subscription-model')||{}).value||'sonnet'});
+    var route=CKBackendRoute.parse({mode:document.getElementById('ck-backend-mode').value,gateway:document.getElementById('ck-vps-gateway').value,mcp:document.getElementById('ck-vps-mcp').value,execution:document.getElementById('ck-execution-mode').value,subscriptionModel:(document.getElementById('ck-subscription-model')||{}).value||'sonnet',server:(document.getElementById('ck-vps-server')||{}).value||'custom'});
     var auth=typeof storedPanelKey==='function'?storedPanelKey():'';
     if(!auth&&route.mode==='vps')throw new Error('请先在当前面板登录，验证现有配置后再切换 VPS。');
     message.textContent='正在检查网关、配置和记忆接口…';
@@ -131,6 +194,7 @@ async function ckSaveBackendRoute(){
     localStorage.setItem(CKBackendRoute.key,value);
     committed=true;
     if(localStorage.getItem(CKBackendRoute.key)!==value)throw new Error('连接选择未能保存，已保留当前连接。');
+    CKBackendRoute.refreshRouteHints(route,true);
     message.textContent='验证通过，正在使用所选网关重新加载…';
     window.location.reload();
   }catch(e){
