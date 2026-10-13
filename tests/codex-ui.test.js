@@ -55,8 +55,9 @@ const server = http.createServer((req, res) => {
       assert(await page.locator('dialog.cx-picker').evaluate(e=>e.matches(':modal')));
       await page.locator('dialog.cx-picker').getByRole('button',{name:'测试接口 · model-a',exact:true}).click();
       await page.locator('#cx-tab-api').click();
+      await page.locator('.cx-profile-summary').click();
       await page.locator('.cx-profile-grid .ck-select-button').click();
-      await page.locator('dialog.cx-picker').getByRole('button',{name:'中',exact:true}).click();
+      await page.locator('dialog.cx-picker').getByRole('button',{name:'medium',exact:true}).click();
       await page.waitForFunction(()=>document.querySelector('[name=effort]').value==='medium');
       await page.getByRole('button',{name:'选择模型',exact:true}).click();
       await page.locator('dialog.cx-picker[open]').waitFor();
@@ -68,11 +69,13 @@ const server = http.createServer((req, res) => {
       await page.locator('dialog[open]').waitFor({state:'detached'});
       assert(await page.locator('.cx-overlay').isVisible());
       modelsFail=true;
-      await page.getByRole('button',{name:'读取模型列表',exact:true}).click();
+      await page.getByRole('button',{name:'刷新模型',exact:true}).click();
       await page.locator('dialog.cx-picker[open]').waitFor();
       assert((await page.locator('dialog.cx-picker').innerText()).includes('HTTP 401'));
       await page.locator('dialog.cx-picker').getByRole('button',{name:'取消',exact:true}).click();
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      assert.equal(await page.evaluate(()=>localStorage.getItem('ck_codex_access')),null);
+      assert.equal(await page.evaluate(()=>CKCodexStorage.load()),'test');
       console.log('Codex UI '+width+': text, folding, questions, selectors, model search, Escape PASS');
       await context.close();
     }

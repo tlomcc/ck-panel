@@ -24,7 +24,10 @@ function chatStopWaiting(){
 function chatNoteReplyProgress(request,event,data){
   if(!request)return;
   if(event==='reply_complete')request.replyCompleteAt=Date.now();
-  if(event==='delta'&&String(typeof data==='string'?data:data&&data.text||'')||event==='thinking'&&String(typeof data==='string'?data:data&&data.text||data&&data.thinking||'')||event==='tool')request.modelProgressAt=Date.now();
+  var text=String(typeof data==='string'?data:data&&data.text||data&&data.thinking||'');
+  if(event==='delta'&&text){request.receivedTextChars=(request.receivedTextChars||0)+text.length;request.modelProgressAt=Date.now();}
+  if(event==='thinking'&&text){request.receivedThinkingChars=(request.receivedThinkingChars||0)+text.length;request.modelProgressAt=Date.now();}
+  if(event==='tool')request.modelProgressAt=Date.now();
 }
 function chatStartReplyWatch(request,cfg){
   if(!request)return function(){};
@@ -32,23 +35,26 @@ function chatStartReplyWatch(request,cfg){
   function active(){return !closed&&request===chatActiveRequest&&chatSending&&!request.stopped&&!request.finished&&cfg.sessionId===chatActiveSessionId}
   async function check(force){
     if(!active()||checking)return;
-    var last=request.replyCompleteAt||request.modelProgressAt,delay=request.replyCompleteAt?5000:45000;
+    var last=request.replyCompleteAt||request.modelProgressAt,delay=request.replyCompleteAt?2500:8000;
     if(!force&&Date.now()-last<delay)return;
     checking=true;
-    chatSetStatus(request.replyCompleteAt?'正在补收已完成的回复':'长时间没有新内容，正在检查回复');
+    if(force||request.replyCompleteAt)chatSetStatus(request.replyCompleteAt?'正在补收已完成的回复':'正在检查回复');
     try{
       var receipt=await chatReadDelivery(cfg,request.turnId);
       if(!active()||(!force&&(request.replyCompleteAt||request.modelProgressAt)!==last))return;
       // Never abandon an unacknowledged POST or start a second model call.
-      if(receipt&&receipt.turn_id===request.turnId&&(receipt.found||receipt.pending||['error','interrupted'].includes(receipt.state))){
+      var ahead=receipt&&(String(receipt.assistant_text||'').length>(request.receivedTextChars||0)||String(receipt.assistant_thinking||'').length>(request.receivedThinkingChars||0));
+      var finished=receipt&&(receipt.found||['complete','error','interrupted'].includes(receipt.state));
+      if(receipt&&receipt.turn_id===request.turnId&&(finished||receipt.pending&&(ahead||force))){
+        chatSetStatus('连接恢复中，正在补收回复');
         request.recovering=true;if(request.checkpointReply)request.checkpointReply();request.controller.abort();
       }
     }catch(error){if(active())chatSetStatus('补收连接暂未连通，会继续检查；可停止等待');}
     finally{checking=false}
   }
   request.checkReceipt=check;
-  function tick(){if(!active())return;check(false);timer=setTimeout(tick,5000)}
-  timer=setTimeout(tick,5000);
+  function tick(){if(!active())return;check(false);timer=setTimeout(tick,2500)}
+  timer=setTimeout(tick,2500);
   return function(){closed=true;clearTimeout(timer);delete request.checkReceipt};
 }
 function chatRetryLiveReceipt(request){

@@ -19,9 +19,11 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlsplit, parse_qs
 from urllib.request import Request, urlopen
+from key_store import KeyStore
 from any_retry import AnyRetry, CONTINUE_TASK, is_any, retryable
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
+EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
 WORKSPACE = Path(os.environ.get('CK_CODEX_WORKSPACE', '/home/ckcodex/workspace'))
 CLI = os.environ.get('CK_CODEX_BIN', '/usr/local/bin/codex')
@@ -239,7 +241,12 @@ class Manager:
         self.engines = {}
         self.any_retries = {}  # In memory: only a manual submit can arm a run.
         self.config_path = root / 'config.json'
-        self.config = json.loads(self.config_path.read_text('utf-8'))
+        self.key_store = KeyStore(root)
+        self.config = self.key_store.load(self.config_path, write_json)
+        previous = self.config_path.with_name('config.previous.json')
+        if previous.exists():
+            self.key_store.load(previous, write_json)
+        self.model_cache = {}
         self.quit = threading.Event()
         if start_worker:
             threading.Thread(target=self.pump, daemon=True).start()
@@ -278,7 +285,8 @@ class Manager:
         return {'profiles': profiles, 'default_profile': self.config.get('default_profile'),
                 'version': VERSION, 'cli_version': self.config.get('cli_version'),
                 'workspace': str(WORKSPACE), 'servers': self.config.get('servers', []),
-                'backup': self.config.get('backup', {}), 'max_running': None, 'parallel_windows': True}
+                'backup': self.config.get('backup', {}), 'max_running': None, 'parallel_windows': True,
+                'key_storage': 'encrypted', 'efforts': list(EFFORTS)}
 
     def save_config(self, body):
         with self.lock:
@@ -298,29 +306,55 @@ class Manager:
                     raise Problem('API 地址需要使用 HTTPS，且不能包含密码或查询参数')
                 model = str(raw.get('model', '')).strip()
                 effort = raw.get('effort', 'high')
-                if not model or len(model) > 160 or effort not in ('minimal','low','medium','high','xhigh'):
+                if not model or len(model) > 160 or effort not in EFFORTS:
                     raise Problem('请填写有效模型和推理强度')
                 key = str(raw.get('api_key', '')).strip() or old.get(pid, {}).get('api_key', '')
-                if '\n' in key or len(key) > 8192:
+                if any(ord(c) < 32 or ord(c) == 127 for c in key) or len(key) > 8192:
                     raise Problem('API 密钥格式无效')
-                out.append({'id': pid, 'name': str(raw.get('name') or 'API')[:80], 'base_url': base,
-                            'model': model, 'effort': effort, 'api_key': key})
+                candidate = {'id': pid, 'name': str(raw.get('name') or 'API')[:80], 'base_url': base,
+                             'model': model, 'effort': effort, 'api_key': key}
+                changed = any(old.get(pid, {}).get(k) != v for k, v in candidate.items())
+                candidate['revision'] = uuid.uuid4().hex if changed else old.get(pid, {}).get('revision')
+                out.append(candidate)
             for window in self.store.list():
                 if window['profile'] not in ids:
                     raise Problem('仍有窗口使用待删除的 API，请先切换或删除这些窗口', 409)
             default = body.get('default_profile') or out[0]['id']
             if default not in ids:
                 raise Problem('默认 API 不存在')
-            # One small local rollback unit for API configuration edits.
-            shutil.copy2(self.config_path, self.config_path.with_name('config.previous.json'))
             updated = dict(self.config, profiles=out, default_profile=default)
-            write_json(self.config_path, updated)
+            write_json(self.config_path, self.key_store.encode(updated))
             self.config = updated
             for wid, engine in list(self.engines.items()):
-                if self.store.one(wid)['status'] not in ACTIVE:
+                if self.store.one(wid)['status'] not in ACTIVE and engine.profile_fingerprint != json.dumps(self.profile(self.store.one(wid)['profile']), sort_keys=True):
                     engine.close()
                     self.engines.pop(wid, None)
             return self.public_config()
+
+    def save_profile(self, body, delete=False):
+        with self.lock:
+            raw = body.get('profile', {})
+            pid = str(raw.get('id', ''))
+            old = next((p for p in self.config['profiles'] if p['id'] == pid), None)
+            if old and body.get('expected_revision') != old.get('revision'):
+                raise Problem('此供应商已在另一页面修改，请刷新后核对再保存。', 409)
+            profiles = [dict(p) for p in self.config['profiles']]
+            default = self.config.get('default_profile')
+            if delete:
+                if not old:
+                    raise Problem('供应商已不存在，请刷新。', 404)
+                profiles = [p for p in profiles if p['id'] != pid]
+                if default == pid:
+                    default = profiles[0]['id'] if profiles else None
+            else:
+                saved = dict(raw, revision=uuid.uuid4().hex)
+                if old:
+                    profiles = [saved if p['id'] == pid else p for p in profiles]
+                else:
+                    profiles.append(saved)
+                if body.get('make_default') or not default:
+                    default = pid
+            return self.save_config({'profiles': profiles, 'default_profile': default})
 
     def engine(self, wid, fresh_config=False):
         if fresh_config and wid in self.engines:
@@ -648,19 +682,64 @@ class Manager:
                 raise Problem('未知操作', 404)
             return self.store.one(wid)
 
-    def models(self, pid):
-        profile = self.profile(pid)
-        if not profile.get('api_key'):
-            raise Problem('请先保存 API 密钥')
-        req = Request(profile['base_url']+'/models', headers={'Authorization':'Bearer '+profile['api_key'], 'Accept':'application/json'})
+    def models(self, pid, draft=None):
+        draft = draft or {}
         try:
-            with urlopen(req, timeout=25) as response:
+            profile = self.profile(pid)
+        except Problem:
+            profile = {'id': pid, 'model': '', 'api_key': '', 'base_url': ''}
+        base = str(draft.get('base_url') or profile['base_url']).strip().rstrip('/')
+        url = urlsplit(base)
+        if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise Problem('请填写有效的 HTTPS API 地址')
+        key = str(draft.get('api_key') or '').strip()
+        if base != profile['base_url'] and not key:
+            raise Problem('地址已改变，请填写对应供应商的密钥后再读取模型。')
+        key = key or profile.get('api_key', '')
+        if not key or any(ord(c) < 32 or ord(c) == 127 for c in key) or len(key) > 8192:
+            raise Problem('请填写有效的 API 密钥')
+        cache_key = hashlib.sha256((base + '\0' + key).encode()).hexdigest()
+        cached = self.model_cache.get(cache_key)
+        if cached and time.monotonic() < cached[0] and (not draft.get('refresh') or cached[1].get('warning')):
+            result = dict(cached[1], cached=True)
+            if result.get('source') == 'configured':
+                model = str(draft.get('model') or profile.get('model') or '').strip()
+                result['models'] = [model] if model else []
+            return result
+        req = Request(base+'/models', headers={'Authorization':'Bearer '+key, 'Accept':'application/json', 'User-Agent':'CK-Codex/'+VERSION})
+        warning, status, kind = '', None, ''
+        try:
+            with urlopen(req, timeout=20) as response:
                 value = json.loads(response.read(2_000_000))
+            rows = value.get('data', [])
+            if not isinstance(rows, list):
+                raise ValueError('invalid model list')
+            names = sorted({str(x['id']) for x in rows if isinstance(x, dict) and x.get('id')})
+            if not names:
+                raise ValueError('empty model list')
+            result = {'models': names, 'source': 'upstream'}
         except HTTPError as exc:
-            raise Problem('模型列表请求失败，HTTP '+str(exc.code)+'；可直接填写供应商支持的模型名。', 502)
+            status = exc.code
+            try:
+                value = json.loads(exc.read(16000))
+                error = value.get('error', {})
+                kind = str(value.get('type') or (error.get('type') or error.get('code') if isinstance(error, dict) else ''))
+            except Exception:
+                kind = ''
+            if kind == 'unauthorized_client_error':
+                warning = '供应商拒绝当前客户端（HTTP 401，unauthorized_client_error）。请联系供应商确认客户端授权；这不是 Codex 任务中心登录失效。'
+            elif status in (401, 403):
+                warning = '供应商模型接口拒绝授权（HTTP '+str(status)+'）。请核对该供应商的密钥、访问权限和 API 地址。'
+            else:
+                warning = '供应商模型列表暂不可用（HTTP '+str(status)+'）。'
         except Exception:
-            raise Problem('暂时无法获取模型列表；可直接填写供应商支持的模型名。', 502)
-        return {'models': sorted({str(x['id']) for x in value.get('data',[]) if isinstance(x,dict) and x.get('id')})}
+            warning = '供应商未返回有效的模型列表，或连接超时。'
+        if warning:
+            model = str(draft.get('model') or profile.get('model') or '').strip()
+            result = {'models': [model] if model else [], 'source': 'configured', 'upstream_status': status,
+                      'warning': warning+' 仍可手动填写模型；当前仅显示已配置名称，不代表接口验证成功。'}
+        self.model_cache[cache_key] = (time.monotonic() + (30 if warning else 300), result)
+        return result
 
     def shutdown(self):
         self.quit.set()
@@ -733,8 +812,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise Problem('请求格式无效')
             if path.path=='/config':
                 result = self.manager.save_config(body) if self.command=='POST' else self.manager.public_config()
+            elif path.path in ('/profiles/save', '/profiles/delete') and self.command=='POST':
+                result = self.manager.save_profile(body, delete=path.path.endswith('/delete'))
             elif path.path=='/models' and self.command=='POST':
-                result = self.manager.models(body.get('profile'))
+                result = self.manager.models(body.get('profile'), body)
             elif path.path=='/threads':
                 result = self.manager.create(body) if self.command=='POST' else {'windows':self.manager.store.list()}
             elif len(parts)>=2 and parts[0]=='threads':

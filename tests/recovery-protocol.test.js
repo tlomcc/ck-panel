@@ -5,14 +5,14 @@ const flush=()=>new Promise(r=>setImmediate(r));
 const plain=x=>JSON.parse(JSON.stringify(x));
 const base=[{role:'user',content:'中文\nemoji🙂'},{role:'assistant',content:[{type:'thinking',thinking:'已存在的思考',signature:'signed-prefix+/=='},{type:'tool_use',id:'tool1',name:'search',input:{query:'合成查询',limit:2}}]}];
 test('heartbeat-only streams check their exact receipt, while ongoing thinking stays attached',async()=>{
- for(const mode of ['heartbeat','thinking','unknown','completed','superseded']){
+ for(const mode of ['heartbeat','thinking','unknown','completed','superseded','upstream-wait']){
   const {c,cfg,timers}=setup();let now=1000,aborts=0,reads=0;
   c.Date=class extends Date{static now(){return now}};
   c.chatSending=true;c.chatActiveSessionId='a';c.chatSetStatus=()=>{};
   const request={turnId:'t',controller:{abort(){aborts++}}};c.chatActiveRequest=request;
-  c.chatReadDelivery=async()=>{reads++;if(mode==='superseded')c.chatActiveRequest={};return {turn_id:mode==='unknown'?'other':'t',pending:mode!=='completed',found:mode==='completed'}};
+  c.chatReadDelivery=async()=>{reads++;if(mode==='superseded')c.chatActiveRequest={};return {turn_id:mode==='unknown'?'other':'t',pending:mode!=='completed',found:mode==='completed',assistant_text:mode==='heartbeat'?'已生成却未送达的内容':''}};
   const stop=c.chatStartReplyWatch(request,cfg);
-  now+=mode==='completed'?5000:45000;
+  now+=mode==='completed'?2500:8000;
   if(mode==='thinking')c.chatNoteReplyProgress(request,'thinking',{text:'持续思考'});
   if(mode==='completed'){request.replyCompleteAt=1000;}
   await request.checkReceipt(false);
