@@ -19,8 +19,9 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlsplit, parse_qs
 from urllib.request import Request, urlopen
+from any_retry import AnyRetry, CONTINUE_TASK, is_any, retryable
 
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
 WORKSPACE = Path(os.environ.get('CK_CODEX_WORKSPACE', '/home/ckcodex/workspace'))
 CLI = os.environ.get('CK_CODEX_BIN', '/usr/local/bin/codex')
@@ -63,8 +64,8 @@ class Store:
           request_id TEXT PRIMARY KEY, window_id TEXT REFERENCES windows(id) ON DELETE CASCADE,
           text TEXT, status TEXT, created REAL, turn_id TEXT DEFAULT '');
         ''')
-        self.db.execute("UPDATE tasks SET status='interrupted' WHERE status IN ('starting','running','waiting')")
-        self.db.execute("UPDATE windows SET status='interrupted', error='服务重启，上一任务已中断；请检查结果后继续。' WHERE status IN ('starting','running','waiting')")
+        self.db.execute("UPDATE tasks SET status='interrupted' WHERE status IN ('queued','starting','running','waiting')")
+        self.db.execute("UPDATE windows SET status='interrupted', error='服务重启，上一任务已中断；请检查结果后继续。' WHERE status IN ('queued','starting','running','waiting')")
         self.db.commit()
 
     def one(self, wid):
@@ -136,8 +137,10 @@ class Engine:
             '[model_providers.ck_tasks]', 'name = "CK Codex independent API"',
             'base_url = ' + json.dumps(profile['base_url']),
             'env_key = "CK_CODEX_API_KEY"', 'wire_api = "responses"',
-            'requires_openai_auth = false', 'request_max_retries = 2',
-            'stream_max_retries = 2', 'stream_idle_timeout_ms = 180000',
+            'requires_openai_auth = false',
+            'request_max_retries = ' + ('0' if is_any(profile) else '2'),
+            'stream_max_retries = ' + ('0' if is_any(profile) else '2'),
+            'stream_idle_timeout_ms = 180000',
             '[projects.' + json.dumps(str(WORKSPACE)) + ']', 'trust_level = "trusted"', ''
         ])
         (home / 'config.toml').write_text(config, 'utf-8')
@@ -234,6 +237,7 @@ class Manager:
         self.root, self.engine_factory = root, engine_factory
         self.lock = threading.RLock()
         self.engines = {}
+        self.any_retries = {}  # In memory: only a manual submit can arm a run.
         self.config_path = root / 'config.json'
         self.config = json.loads(self.config_path.read_text('utf-8'))
         self.quit = threading.Event()
@@ -392,11 +396,14 @@ class Manager:
             self.store.db.commit()
             self.store.item(wid, 'user:'+key, 'userMessage', self.redact(text))
             self.store.update(wid, status='queued', error='')
+            if is_any(self.profile(window['profile'])):
+                self.any_retries[wid] = AnyRetry(key)
             return {'accepted': True, 'request_id': key, 'window': self.store.one(wid)}
 
     def finish(self, wid, status, error=''):
         with self.store.lock:
-            self.store.db.execute("UPDATE tasks SET status=? WHERE window_id=? AND status IN ('starting','running','waiting')", (status, wid))
+            self.any_retries.pop(wid, None)
+            self.store.db.execute("UPDATE tasks SET status=? WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (status, wid))
             self.store.db.commit()
             self.store.update(wid, status=status, error=self.redact(error), turn_id='')
 
@@ -407,7 +414,27 @@ class Manager:
             pass
 
     def log_problem(self, wid, text):
+        with self.store.lock:
+            if wid in self.any_retries and retryable(text):
+                return  # The single counter owns transient ANY diagnostics.
         self.store.item(wid, 'diagnostic', 'warning', self.redact(text))
+
+    def schedule_any_retry(self, wid, turn):
+        with self.store.lock:
+            run = self.any_retries.get(wid)
+            if not run or turn.get('status') != 'failed' or not retryable(turn.get('error') or {}):
+                return False
+            if run.pending:
+                return True  # Duplicate completion cannot reset the delay.
+            task = self.store.db.execute('SELECT status FROM tasks WHERE request_id=?', (run.request_id,)).fetchone()
+            if not task or task['status'] not in ('starting', 'running', 'waiting'):
+                return False
+            run.schedule()
+            self.store.db.execute("UPDATE tasks SET status='queued',turn_id='' WHERE request_id=?", (run.request_id,))
+            self.store.db.commit()
+            self.store.update(wid, status='queued', turn_id='', error='')
+            self.store.item(wid, 'any-retry:'+run.request_id, 'warning', run.text)
+            return True
 
     def pump(self):
         while not self.quit.wait(.35):
@@ -416,10 +443,18 @@ class Manager:
                     # Each window owns an engine and an active turn. Other windows,
                     # including those awaiting user input, must not block this one.
                     with self.store.lock:
-                        task = self.store.db.execute("SELECT * FROM tasks WHERE status='queued' ORDER BY created LIMIT 1").fetchone()
+                        queued = self.store.db.execute("SELECT * FROM tasks WHERE status='queued' ORDER BY created").fetchall()
+                        task = next((t for t in queued if t['window_id'] not in self.any_retries
+                                     or self.any_retries[t['window_id']].ready()), None)
                         if not task:
                             continue
                         task = dict(task)
+                        run = self.any_retries.get(task['window_id'])
+                        if run:
+                            run.starting()
+                            if run.count:
+                                task['text'] = CONTINUE_TASK
+                                self.store.item(task['window_id'], 'any-retry:'+run.request_id, 'warning', run.text)
                         self.store.db.execute("UPDATE tasks SET status='starting' WHERE request_id=?", (task['request_id'],))
                         self.store.db.commit()
                     wid = task['window_id']
@@ -455,8 +490,16 @@ class Manager:
             self.store.update(wid, status='running', turn_id=p['turn']['id'])
         elif method == 'turn/completed':
             turn = p['turn']
-            self.finish(wid, {'completed':'completed','interrupted':'interrupted','failed':'failed'}.get(turn['status'], 'failed'),
-                        str((turn.get('error') or {}).get('message', '')))
+            with self.store.lock:
+                if turn.get('id') == getattr(engine, 'last_completed_turn_id', None):
+                    return
+                window = self.store.one(wid)
+                if window['turn_id'] and window['turn_id'] != turn.get('id'):
+                    return  # Ignore an old turn after the next attempt has started.
+                engine.last_completed_turn_id = turn.get('id')
+                if not self.schedule_any_retry(wid, turn):
+                    self.finish(wid, {'completed':'completed','interrupted':'interrupted','failed':'failed'}.get(turn['status'], 'failed'),
+                                str((turn.get('error') or {}).get('message', '')))
             for rid in list(engine.requests):
                 self.store.item(wid, 'request:'+rid, 'resolved', '该请求已结束')
             engine.requests.clear()
@@ -504,7 +547,11 @@ class Manager:
         with self.lock:
             window = self.store.one(wid)
             if action in ('stop','close','delete'):
+                with self.store.lock:
+                    self.any_retries.pop(wid, None)
                 engine = self.engines.get(wid)
+                if engine:
+                    engine.stopping = True
                 if engine and window.get('turn_id'):
                     try:
                         engine.rpc('turn/interrupt', {'threadId':window['thread_id'], 'turnId':window['turn_id']}, timeout=8)
