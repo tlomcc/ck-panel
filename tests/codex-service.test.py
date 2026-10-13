@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import threading
+import time
 import unittest
 import uuid
 
@@ -96,5 +98,26 @@ class Lifecycle(unittest.TestCase):
         second=service.Store(self.root)
         try:self.assertEqual(second.one(w['id'])['status'],'interrupted');self.assertEqual(second.db.execute('SELECT status FROM tasks').fetchone()[0],'interrupted')
         finally:second.db.close()
+    def test_parallel_windows_waiting_and_stop_are_isolated(self):
+        windows=[self.create('parallel-create-'+str(i)) for i in range(3)]
+        for i,w in enumerate(windows):
+            self.m.submit(w['id'],{'text':'task','request_id':'parallel-submit-'+str(i)})
+        pump=threading.Thread(target=self.m.pump);pump.start()
+        try:
+            deadline=time.monotonic()+4
+            while self.m.store.one(windows[0]['id'])['status']!='running' and time.monotonic()<deadline:time.sleep(.02)
+            self.m.store.update(windows[0]['id'],status='waiting')
+            while any(self.m.store.one(w['id'])['status']!='running' for w in windows[1:]) and time.monotonic()<deadline:time.sleep(.02)
+            self.assertEqual([self.m.store.one(w['id'])['status'] for w in windows],['waiting','running','running'])
+            self.m.action(windows[1]['id'],'stop',{})
+            self.assertEqual(self.m.store.one(windows[2]['id'])['status'],'running')
+            for w in windows:
+                if w['id'] in self.m.engines:self.assertEqual(sum(call[0]=='turn/start' for call in self.m.engines[w['id']].calls),1)
+        finally:self.m.quit.set();pump.join(2)
+    def test_text_is_complete_across_large_stream_and_reconnect(self):
+        w=self.create();wid=w['id'];text='完整文字进展。'*50000
+        self.m.store.item(wid,'long','agentMessage',text[:200000])
+        self.m.store.item(wid,'long','agentMessage',text[200000:],append=True)
+        self.assertEqual(self.m.store.snapshot(wid)['items'][0]['text'],text)
 
 if __name__=='__main__':unittest.main()

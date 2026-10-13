@@ -4,7 +4,9 @@ CK 侧栏的「Codex 任务」与「Codex API 配置」连接独立的 VPS 服�
 未登录聊天网关时，也可从登录页的「Codex 任务中心」或 `#codex-tasks` / `#codex-api` 链接进入。窗口确认框独立，聊天网关原有鉴权保持有效。
 后端使用官方 Codex app-server 的 stdio 协议，监听回环 19007，由 HTTPS `/codex/*` 转发；没有网关代码依赖。
 
-每个窗口使用独立 CODEX_HOME 和真实 thread ID。新建、关闭后恢复、永久删除都操作对应 Codex 会话；删除也清除该窗口的本地历史。关闭网页不终止任务。任务串行执行，同一执行中窗口可追加指令，支持停止及回答 Codex 的问题。
+每个窗口使用独立 CODEX_HOME 和真实 thread ID。新建、关闭后恢复、永久删除都操作对应 Codex 会话；删除也清除该窗口的本地历史。关闭网页不终止任务。不同窗口并行执行，每个窗口最多一个任务；等待回复不会阻塞其他窗口。同一执行中窗口可追加指令，支持停止及回答 Codex 的问题。
+
+文字进展和回复完整保存，命令、文件差异与工具信息默认完全折叠，问题醒目显示。任务接口、推理强度和模型通过独立顶层弹窗选择，支持模型搜索及手动输入。
 
 文字进展、命令输出、文件差异、计划、最终回复和错误保存到 SQLite，通过带游标的读取补收。客户端提交使用稳定请求编号，断线重试不重复排队。服务重启将执行中的任务标为中断，不自动重新执行可能已产生副作用的命令。只展示模型提供的简短思考摘要，不保存或展示原始推理事件。
 
@@ -14,5 +16,5 @@ API 配置与访问密钥独立存放于 `/var/lib/ck-codex/config.json`（0600�
 
 部署运行环境：Python 3.10+、Linux、Codex CLI 0.162.1。`CK_CODEX_STATE`、`CK_CODEX_WORKSPACE`、`CK_CODEX_BIN`、`CK_CODEX_PORT` 可设置独立测试环境。服务不安装到 Python 网关目录，避免依赖及状态混用。
 
-验证：`python -B tests/codex-service.test.py`；`node --check codex-tasks.js`。
+验证：`python -B tests/codex-service.test.py`；`node --check codex-tasks.js`；安装 Playwright Chromium 后执行 `node tests/codex-ui.test.js`。
 另外执行真实 CLI 创建/恢复/删除、API 只读任务，以及 320/390/1360 像素浅/深色浏览器验收。

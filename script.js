@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v310-codex-independent-entry';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v311-codex-parallel-clean-feed';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -121,6 +121,7 @@ function ckConfirmDialog(message,opts){opts=Object.assign({message:message},opts
 function ckPromptDialog(title,value,opts){opts=Object.assign({mode:'prompt',title:title,value:value},opts||{});return ckOpenDialog(opts)}
 function ckChooseDialog(title,choices,opts){opts=Object.assign({mode:'choose',title:title,choices:choices||[]},opts||{});return ckOpenDialog(opts)}
 document.addEventListener('keydown',function(e){
+  if(e.target&&e.target.closest&&e.target.closest('.cx-overlay'))return;
   var modal=document.getElementById('ckActionModal');
   if(!modal||!modal.classList.contains('show'))return;
   if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();ckDialogCancel();return}

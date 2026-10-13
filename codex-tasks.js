@@ -14,6 +14,25 @@
   function message(text, bad) { $('message').textContent=text||''; $('message').classList.toggle('cx-error',!!bad); }
   function stamp(ts) { return new Date(ts*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
   function draftKey(id) { return 'ck_codex_draft_'+id; }
+  function chooseDialog(title, choices, opts){
+    return new Promise(function(resolve){
+      var dlg=node('dialog','cx-dialog cx-picker'),heading=node('h3','',title),list=node('div','cx-picker-list'),answer=null;
+      heading.id='cx-picker-title';dlg.setAttribute('aria-labelledby',heading.id);dlg.append(heading);
+      if(opts&&opts.searchable){
+        var search=node('input');search.type='search';search.placeholder='搜索模型或选项';search.setAttribute('aria-label','搜索选项');dlg.append(search);
+        search.oninput=function(){var q=search.value.trim().toLowerCase();Array.from(list.children).forEach(function(b){b.hidden=!b.textContent.toLowerCase().includes(q);});};
+      }
+      choices.forEach(function(c){
+        var b=button(c.label,function(){answer=c.value;dlg.close();},'cx-picker-option');b.disabled=!!c.disabled;b.classList.toggle('active',!!c.active);
+        if(c.hint)b.append(node('small','',c.hint));list.append(b);
+      });
+      if(!choices.length)list.append(node('p','cx-muted','没有可选择的模型，可以直接填写模型名称。'));
+      dlg.append(list,button('取消',function(){dlg.close();}));root.append(dlg);
+      dlg.addEventListener('close',function(){dlg.remove();resolve(answer);},{once:true});
+      dlg.showModal();var first=list.querySelector('button.active:not(:disabled)')||list.querySelector('button:not(:disabled)');if(first)first.focus();
+    });
+  }
+  window.ckCodexChooseDialog=chooseDialog;
   function taskDialog(title,text,value){
     return new Promise(function(resolve){
       var dlg=node('dialog','cx-dialog'),form=node('form'),heading=node('h3','',title),p=node('p','',text),actions=node('div','cx-dialog-actions');
@@ -50,7 +69,7 @@
       '<div id="cx-tasks" class="cx-workspace" hidden><aside class="cx-sidebar"><div class="cx-sidebar-head"><h3>任务窗口</h3><button type="button" id="cx-new" class="btn btn-blue btn-sm">＋ 新窗口</button></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></aside>'+
       '<main class="cx-main"><div id="cx-window-toolbar" class="cx-window-toolbar"><div><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div><div class="cx-window-actions"><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button></div></div>'+
       '<div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立的 Codex 会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div>'+
-      '<div id="cx-pending" class="cx-pending"></div><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="3" placeholder="描述要完成的任务，例如：检查两台服务器的服务状态，并告诉我需要处理的项目。"></textarea><div class="cx-compose-bar"><label>接口<select id="cx-profile"></select></label><span id="cx-usage"></span><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div><small id="cx-compose-hint">关闭页面不影响执行。任务按顺序运行，减少同时修改文件的冲突。</small></form></main></div>'+
+      '<div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="3" placeholder="描述要完成的任务，例如：检查两台服务器的服务状态，并告诉我需要处理的项目。"></textarea><div class="cx-compose-bar"><label>接口<select id="cx-profile"></select></label><span id="cx-usage"></span><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
       '<section id="cx-api" class="cx-api" hidden><div class="cx-section-heading"><div><h3>Codex API 配置</h3><p>接口与密钥保存在美国 VPS。修改后用于下一次任务。</p></div><button id="cx-add-profile" type="button" class="btn btn-outline btn-sm">添加接口</button></div><form id="cx-api-form"><div id="cx-profiles"></div><div class="cx-api-save"><button id="cx-save-api" class="btn btn-blue" type="submit">保存 Codex API</button><span id="cx-api-state" role="status"></span></div></form></section>'+
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
       '</section>';
@@ -126,21 +145,21 @@
     var usage={};try{usage=JSON.parse(w&&w.usage||'{}');}catch(_){}
     var total=usage.total||{};$('usage').textContent=total.totalTokens?Number(total.totalTokens).toLocaleString()+' tokens':'';
     if(w&&w.error)message(w.error,true);
-    $('compose-hint').textContent=w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已排队；前一个任务结束后自动执行。':w&&w.status==='running'?'正在服务器执行。可以补充指令；关闭此页面后任务继续。':'任务按顺序运行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
+    $('compose-hint').textContent=w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已提交，正在启动。':w&&w.status==='running'?'正在服务器执行。可以补充指令；关闭此页面后任务继续。':'不同窗口可同时执行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
   }
   function copy(text){navigator.clipboard.writeText(text).then(function(){message('已复制');}).catch(function(){message('复制失败，请选中文字手动复制',true);});}
   function card(item){
     var titles={userMessage:'你的任务',agentMessage:item.data.phase==='final_answer'?'完成回复':'Codex',reasoning:'思考摘要',commandExecution:'执行命令',fileChange:'修改文件',diff:'本轮改动',plan:'执行计划',warning:'运行提示',resolved:'已处理',contextCompaction:'已整理上下文'};
     var el=node('article','cx-item cx-item-'+item.kind);el.dataset.itemId=item.id;
-    var head=node('header','cx-item-head');head.append(node('strong','',titles[item.kind]||'工具执行'),node('time','',stamp(item.created)));
-    if(item.text)head.append(button('复制',function(){copy(item.text);},'cx-copy'));
-    el.append(head);
-    if(['commandExecution','fileChange','diff','reasoning'].includes(item.kind)||!titles[item.kind]){
+    if(!['userMessage','agentMessage','plan','reasoning','warning','contextCompaction'].includes(item.kind)){
       var details=node('details','cx-detail'), summary=node('summary');
-      summary.textContent=item.data.command|| (item.kind==='fileChange'?(item.data.changes||[]).map(function(c){return c.path;}).join('、'):titles[item.kind]||item.kind);
-      if(item.data.status)summary.append(node('span','cx-badge',item.data.status));
-      details.append(summary,node('pre','',item.text||'正在执行…'));el.append(details);
-    }else el.append(node('div','cx-text',item.text|| (item.kind==='contextCompaction'?'Codex 已压缩当前上下文，继续任务。':'正在处理…')));
+      summary.textContent=titles[item.kind]||'执行命令';
+      details.append(summary,node('pre','',[item.data.command,item.text].filter(Boolean).join('\n\n')||'正在执行…'));el.append(details);
+    }else{
+      var head=node('header','cx-item-head');head.append(node('strong','',titles[item.kind]),node('time','',stamp(item.created)));
+      if(item.text)head.append(button('复制',function(){copy(item.text);},'cx-copy'));
+      el.append(head,node('div','cx-text',item.text|| (item.kind==='contextCompaction'?'Codex 已压缩当前上下文，继续任务。':'正在处理…')));
+    }
     return el;
   }
   function renderFeed(changed, reset){
@@ -162,7 +181,7 @@
     var signature=JSON.stringify(live.map(function(i){return [i.id,i.seq];}));if(pending.dataset.signature===signature)return;
     pending.dataset.signature=signature;pending.replaceChildren();
     live.forEach(function(item){
-      var event=item.data, box=node('form','cx-question');box.append(node('h4','','Codex 需要你的回复'));
+      var event=item.data, box=node('form','cx-question');box.setAttribute('role','alert');box.append(node('h4','','需要你回复 · Codex 正在等待'));
       if(event.method==='item/tool/requestUserInput'){
         (event.params.questions||[]).forEach(function(q){
           var label=node('label','',q.question), input=node('textarea');input.name=q.id;input.rows=2;input.required=true;label.append(input);box.append(label);
@@ -234,12 +253,23 @@
     var row=node('fieldset','cx-profile-card');row.dataset.id=p.id;
     var title=node('legend','',p.name||'新接口');row.append(title);
     var grid=node('div','cx-profile-grid');
-    [['名称','text',p.name,'name'],['API 地址（含 /v1）','url',p.base_url,'base_url'],['模型','text',p.model,'model'],['API 密钥','password','','api_key']].forEach(function(f){var el=field.apply(null,f);var input=el.querySelector('input');if(f[3]!=='api_key')input.required=true;else input.placeholder=p.has_key?'已保存；留空保留原密钥':'填写模型 API 密钥';if(f[3]==='model'){var datalist=node('datalist');datalist.id='cx-models-'+p.id;input.setAttribute('list',datalist.id);el.append(datalist);}grid.append(el);});
+    [['名称','text',p.name,'name'],['API 地址（含 /v1）','url',p.base_url,'base_url'],['模型','text',p.model,'model'],['API 密钥','password','','api_key']].forEach(function(f){var el=field.apply(null,f);var input=el.querySelector('input');if(f[3]!=='api_key')input.required=true;else input.placeholder=p.has_key?'已保存；留空保留原密钥':'填写模型 API 密钥';if(f[3]==='model'){input.autocapitalize='off';input.spellcheck=false;el.append(button('选择模型',function(){pickModel();}));}grid.append(el);});
     var effort=field('推理强度','select','','effort');[['minimal','最少'],['low','低'],['medium','中'],['high','高'],['xhigh','最高']].forEach(function(pair){var opt=node('option','',pair[1]);opt.value=pair[0];effort.querySelector('select').append(opt);});effort.querySelector('select').value=p.effort||'high';grid.append(effort);row.append(grid);
     var footer=node('div','cx-profile-footer'),def=node('label','cx-check'),radio=node('input');radio.type='radio';radio.name='default_profile';radio.value=p.id;radio.checked=p.id===config.default_profile;def.append(radio,document.createTextNode('新窗口默认使用'));footer.append(def);
-    footer.append(button('读取模型列表',async function(){
-      try{if(formDirty)throw Error('请先保存配置，再读取模型列表');message('正在读取模型列表…');var result=await request('/models',{profile:p.id}), list=document.getElementById('cx-models-'+p.id);list.replaceChildren();result.models.forEach(function(m){var opt=node('option');opt.value=m;list.append(opt);});message('已读取 '+result.models.length+' 个模型，点击模型输入框选择。');}catch(e){message(e.message,true);}
-    }));
+    var modelCache=null;
+    async function pickModel(reload){
+      try{
+        if(!modelCache||reload){
+          var base=row.querySelector('[name=base_url]').value.trim().replace(/\/+$/,'');
+          if(!config.profiles.some(function(saved){return saved.id===p.id;})||base!==p.base_url||row.querySelector('[name=api_key]').value.trim())throw Error('请先保存接口地址和密钥，再读取模型列表');
+          message('正在读取模型列表…');var result=await request('/models',{profile:p.id});modelCache=result.models;
+        }
+        var input=row.querySelector('[name=model]'),names=Array.from(new Set([input.value].concat(modelCache).filter(Boolean)));
+        var chosen=await chooseDialog('选择模型',names.map(function(m){return {value:m,label:m,active:m===input.value};}),{searchable:true});
+        if(chosen!==null){input.value=chosen;input.dispatchEvent(new Event('input',{bubbles:true}));message('已选择模型，请保存配置');}
+      }catch(e){message(e.message+'；也可以直接填写模型名称。',true);}
+    }
+    footer.append(button('读取模型列表',function(){pickModel(true);}));
     footer.append(button('移除此接口',function(){if(windows.some(function(w){return w.profile===p.id;})){message('仍有窗口使用此接口，请先为窗口切换接口。',true);return;}row.remove();formDirty=true;$('api-state').textContent='有未保存的修改';}));
     row.append(footer);$('profiles').append(row);
   }

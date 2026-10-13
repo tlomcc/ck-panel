@@ -20,7 +20,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit, parse_qs
 from urllib.request import Request, urlopen
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
 WORKSPACE = Path(os.environ.get('CK_CODEX_WORKSPACE', '/home/ckcodex/workspace'))
 CLI = os.environ.get('CK_CODEX_BIN', '/usr/local/bin/codex')
@@ -92,7 +92,7 @@ class Store:
             if append and old:
                 text = old['text'] + text
             limit = 65536 if kind in ('commandExecution', 'tool') else 262144
-            if len(text) > limit:
+            if kind not in ('userMessage', 'agentMessage', 'plan', 'reasoning', 'warning') and len(text) > limit:
                 text = '[较早输出已省略；完整执行记录在该 Codex 窗口目录]\n' + text[-limit:]
             self.db.execute('UPDATE windows SET seq=seq+1, updated=? WHERE id=?', (time.time(), wid))
             seq = self.db.execute('SELECT seq FROM windows WHERE id=?', (wid,)).fetchone()[0]
@@ -274,7 +274,7 @@ class Manager:
         return {'profiles': profiles, 'default_profile': self.config.get('default_profile'),
                 'version': VERSION, 'cli_version': self.config.get('cli_version'),
                 'workspace': str(WORKSPACE), 'servers': self.config.get('servers', []),
-                'backup': self.config.get('backup', {}), 'max_running': 1}
+                'backup': self.config.get('backup', {}), 'max_running': None, 'parallel_windows': True}
 
     def save_config(self, body):
         with self.lock:
@@ -413,8 +413,8 @@ class Manager:
         while not self.quit.wait(.35):
             try:
                 with self.lock:
-                    if any(w['status'] in ('starting','running','waiting') for w in self.store.list()):
-                        continue
+                    # Each window owns an engine and an active turn. Other windows,
+                    # including those awaiting user input, must not block this one.
                     with self.store.lock:
                         task = self.store.db.execute("SELECT * FROM tasks WHERE status='queued' ORDER BY created LIMIT 1").fetchone()
                         if not task:

@@ -46,7 +46,8 @@
     }).filter(function(choice){return !choice.hidden});
     button.setAttribute('aria-expanded','true');
     try{
-      var selected=await ckChooseDialog(label(select),choices,{searchable:choices.length>8});
+      var picker=select.closest('.cx-overlay')&&window.ckCodexChooseDialog?window.ckCodexChooseDialog:ckChooseDialog;
+      var selected=await picker(label(select),choices,{searchable:choices.length>8});
       if(selected===null||!select.isConnected||select.matches(':disabled'))return;
       var option=options[Number(selected)];
       if(!option||option.disabled||option.hidden||option.parentElement.disabled||!select.contains(option))return;
