@@ -34,6 +34,12 @@ async function chatApplyWindowCleanup(session,cfg,snapshot){
     var sourceRows=source?(source===chatCurrentSession()?chatMessages:source.messages||[]):[];
     var original=JSON.stringify([rows,sourceRows]);
     if(rows.some(function(m){return m.inFlight||m.role==='pending_user'})||sourceRows.some(function(m){return m.inFlight||m.role==='pending_user'}))return true;
+    var restore=action.restore_prefix,plain=rows.filter(function(m){return ['user','assistant'].includes(m.role)});
+    if(restore&&plain.length===restore.existing_count&&plain[0]&&plain[0].role===restore.before.role&&chatWindowCleanupText(plain[0].text)===chatWindowCleanupText(restore.before.text)){
+      var prefix=restore.messages.map(function(m,i){return {role:m.role,text:m.text,ts:Number(plain[0].ts)-restore.messages.length+i}});
+      if(!await chatWindowCleanupCovered(prefix,action.target_hashes,action.cutoff))return true;
+      rows=prefix.concat(rows);
+    }
     var historical=rows.filter(function(m){return ['user','assistant'].includes(m.role)&&Number(m.ts||0)<=action.cutoff;});
     var kept=historical.slice(-action.keep),removed=historical.slice(0,-action.keep);
     if(!await chatWindowCleanupCovered(removed,action.target_hashes,action.cutoff)||
