@@ -34,7 +34,7 @@ async function chatApplyWindowCleanup(session,cfg,snapshot){
     var sourceRows=source?(source===chatCurrentSession()?chatMessages:source.messages||[]):[];
     var original=JSON.stringify([rows,sourceRows]);
     if(rows.some(function(m){return m.inFlight||m.role==='pending_user'})||sourceRows.some(function(m){return m.inFlight||m.role==='pending_user'}))return true;
-    var historical=rows.filter(function(m){return Number(m.ts||0)<=action.cutoff;});
+    var historical=rows.filter(function(m){return ['user','assistant'].includes(m.role)&&Number(m.ts||0)<=action.cutoff;});
     var kept=historical.slice(-action.keep),removed=historical.slice(0,-action.keep);
     if(!await chatWindowCleanupCovered(removed,action.target_hashes,action.cutoff)||
        !await chatWindowCleanupCovered(sourceRows,action.source_hashes,action.cutoff)){

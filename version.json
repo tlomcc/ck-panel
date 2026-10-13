@@ -1,5 +1,5 @@
 {
-  "version": "chat-v313-window-summary-merge",
+  "version": "chat-v314-window-summary-merge",
   "notes": [
     "支持经人工核对的窗口摘要合并与指定消息保留。",
     "先核对原文并保存合并摘要，再移除来源窗口；中断后可继续同步。"
