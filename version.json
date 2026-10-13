@@ -1,5 +1,5 @@
 {
-  "version": "chat-v311-codex-parallel-clean-feed",
+  "version": "chat-v312-codex-parallel-clean-feed",
   "notes": [
     "Codex 不同任务窗口支持同时执行，等待回复的窗口不会阻塞其他窗口。",
     "文字进展和回复完整保留；命令、文件修改与工具输出默认折叠，只显示文字标题。",

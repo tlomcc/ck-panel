@@ -18,6 +18,7 @@
     return new Promise(function(resolve){
       var dlg=node('dialog','cx-dialog cx-picker'),heading=node('h3','',title),list=node('div','cx-picker-list'),answer=null;
       heading.id='cx-picker-title';dlg.setAttribute('aria-labelledby',heading.id);dlg.append(heading);
+      if(opts&&opts.message)dlg.append(node('p','',opts.message));
       if(opts&&opts.searchable){
         var search=node('input');search.type='search';search.placeholder='搜索模型或选项';search.setAttribute('aria-label','搜索选项');dlg.append(search);
         search.oninput=function(){var q=search.value.trim().toLowerCase();Array.from(list.children).forEach(function(b){b.hidden=!b.textContent.toLowerCase().includes(q);});};
@@ -259,13 +260,17 @@
     var modelCache=null;
     async function pickModel(reload){
       try{
+        var notice='';
         if(!modelCache||reload){
+          try{
           var base=row.querySelector('[name=base_url]').value.trim().replace(/\/+$/,'');
           if(!config.profiles.some(function(saved){return saved.id===p.id;})||base!==p.base_url||row.querySelector('[name=api_key]').value.trim())throw Error('请先保存接口地址和密钥，再读取模型列表');
           message('正在读取模型列表…');var result=await request('/models',{profile:p.id});modelCache=result.models;
+          }catch(error){notice=error.message+' 当前仅显示已知模型，也可取消后在模型框手动填写。';}
         }
-        var input=row.querySelector('[name=model]'),names=Array.from(new Set([input.value].concat(modelCache).filter(Boolean)));
-        var chosen=await chooseDialog('选择模型',names.map(function(m){return {value:m,label:m,active:m===input.value};}),{searchable:true});
+        var input=row.querySelector('[name=model]'),names=Array.from(new Set([input.value].concat(modelCache||[]).filter(Boolean)));
+        message(notice||'模型列表已就绪',!!notice);
+        var chosen=await chooseDialog('选择模型',names.map(function(m){return {value:m,label:m,active:m===input.value};}),{searchable:true,message:notice});
         if(chosen!==null){input.value=chosen;input.dispatchEvent(new Event('input',{bubbles:true}));message('已选择模型，请保存配置');}
       }catch(e){message(e.message+'；也可以直接填写模型名称。',true);}
     }
