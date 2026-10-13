@@ -1,0 +1,27 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),{webcrypto}=require('node:crypto');
+async function setup(){
+ const target={id:'target',messages:Array.from({length:100},(_,i)=>({role:i%2?'assistant':'user',text:'内容'+i,ts:i+1})),transportMessages:[{role:'user',content:'old'}]},source={id:'source',messages:[{role:'user',text:'临时窗口',ts:50}]},other={id:'other',messages:[{role:'user',text:'无关窗口',ts:2}]};
+ const cfg={panelKey:'fixture',sessionId:'source'},saved=[],deleted=[],storage=new Map();
+ const c={crypto:webcrypto,TextEncoder,Uint8Array,Set,Date,JSON,Promise,chatSessions:[target,source,other],chatMessages:source.messages,chatActiveSessionId:'source',chatSending:false,chatTrimBusy:false,chatTrimTransaction:null,chatSessionsReady:true,chatIndexedDbFailed:false,chatDeletedSessionIds:{},chatNightlySynced:{},
+ chatCurrentSession:()=>c.chatSessions.find(s=>s.id===c.chatActiveSessionId),chatDailyDigestFindSession:id=>c.chatSessions.find(s=>s.id===id),chatNightlyScope:()=> 'scope',chatDailyDigestNormalize:x=>x,chatNormalizeDigestRollup:x=>x,chatDigestOmittedCoverage:x=>x,
+ chatDigestRecordSync:(s,cfg,r)=>{s.digestLastSync={id:'sync',status:'pending'};r.syncId='sync'},chatSaveSessions:()=>{saved.push(JSON.parse(JSON.stringify(c.chatSessions)));c.chatSaveSessionsToIndexedDb.pending=Promise.resolve()},chatSaveSessionsToIndexedDb:{pending:Promise.resolve()},chatNightlyOutboxKey:s=>s.id,
+ chatWakeForget:async()=>true,chatDigestForgetSession:id=>deleted.push(id),chatSaveConfigObject:()=>{},chatDigestResetPack:()=>{},chatSyncTrimmedHistoryToGateway:async()=>true,chatRenderSessions:()=>{},chatRenderMessages:()=>{},chatRenderDailyDigest:()=>{},chatSetStatus:()=>{},chatScheduleNightlySync:()=>{},localStorage:{removeItem:k=>storage.delete(k)}};
+ vm.createContext(c);vm.runInContext(fs.readFileSync(require.resolve('../chat-window-cleanup.js'),'utf8'),c);
+ const hash=rows=>Promise.all(rows.map(m=>c.chatWindowCleanupHash(m.role,m.text)));
+ const snapshot={revision:5,base:{entries:[{dayKey:'2026-10-13',text:'两窗口完整摘要'}],omitted:[],rollup:null},result:{day:'2026-10-13',window_cleanup:{id:'repair-1',target:'target',source:'source',keep:40,cutoff:100,target_hashes:await hash(target.messages),source_hashes:await hash(source.messages)}}};
+ return {c,cfg,target,source,other,saved,deleted,snapshot,run:()=>c.chatApplyWindowCleanup(target,cfg,snapshot)};
+}
+test('durably saves summary and exact last 40 before removing source; unrelated window unchanged',async()=>{
+ const x=await setup(),last=JSON.stringify(x.target.messages.slice(-40)),other=JSON.stringify(x.other);
+ await x.run();assert.equal(JSON.stringify(x.target.messages),last);assert.equal(JSON.stringify(x.other),other);assert.deepEqual(x.deleted,['source']);assert.equal(x.c.chatActiveSessionId,'target');
+ assert.ok(x.saved[0].find(s=>s.id==='target').dailyDigests.length);assert.ok(x.saved[0].find(s=>s.id==='source'));assert.equal(x.target.digestManualCompleted.cleanupState,'done');
+ x.target.messages.push({role:'user',text:'新消息',ts:200});await x.run();assert.equal(x.target.messages.length,41);assert.deepEqual(x.deleted,['source']);
+});
+test('unreviewed source message prevents all deletion',async()=>{const x=await setup();x.source.messages.push({role:'user',text:'未同步原文',ts:70});await x.run();assert.equal(x.target.messages.length,100);assert.equal(x.deleted.length,0)});
+test('unreviewed old target text prevents truncation',async()=>{const x=await setup();x.target.messages[0].text='编辑后的正文';await x.run();assert.equal(x.target.messages.length,100)});
+test('messages after reviewed cutoff survive even if total exceeds 40',async()=>{const x=await setup();x.target.messages.push({role:'user',text:'审阅后新增',ts:101});await x.run();assert.equal(x.target.messages.length,41);assert.equal(x.target.messages.at(-1).text,'审阅后新增')});
+test('storage failure restores target and never deletes source',async()=>{const x=await setup();x.c.chatIndexedDbFailed=true;await assert.rejects(x.run());assert.equal(x.target.messages.length,100);assert.equal(x.deleted.length,0);assert.equal(x.c.chatTrimBusy,false)});
+test('failed gateway ACK can resume from durable pending receipt without server snapshot',async()=>{const x=await setup();x.c.chatSyncTrimmedHistoryToGateway=async()=>false;await assert.rejects(x.run());assert.equal(x.target.digestManualCompleted.cleanupState,'pending');x.c.chatSyncTrimmedHistoryToGateway=async()=>true;await x.c.chatApplyWindowCleanup(x.target,x.cfg,null);assert.equal(x.target.digestManualCompleted.cleanupState,'done');assert.equal(x.target.messages.length,40)});
+test('active reply is never cut',async()=>{const x=await setup();x.c.chatSending=true;await x.run();assert.equal(x.target.messages.length,100);assert.equal(x.deleted.length,0)});
+test('source cleanup failure leaves recoverable receipt and source',async()=>{const x=await setup();x.c.chatWakeForget=async()=>false;await assert.rejects(x.run());assert.ok(x.c.chatSessions.includes(x.source));x.c.chatWakeForget=async()=>true;await x.c.chatApplyWindowCleanup(x.target,x.cfg,null);assert.equal(x.deleted.length,1)});

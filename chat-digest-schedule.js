@@ -152,6 +152,7 @@ function chatScheduleNightlySync(delay){
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
+  if(session.digestManualCompleted&&session.digestManualCompleted.cleanupState==='pending'&&typeof chatApplyWindowCleanup==='function')return chatApplyWindowCleanup(session,cfg,null).catch(function(){chatScheduleNightlySync(3000);return false});
   if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
   if(!options.readOnly)chatDigestRefreshManualSources(session,cfg);
@@ -183,6 +184,7 @@ function chatSyncNightlyDigest(cfg,options){
       if(chatDigestConfigStamp(chatLoadConfig())!==configStamp){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(0);return false;
       }
+      if(typeof chatApplyWindowCleanup==='function'&&await chatApplyWindowCleanup(session,cfg,data.snapshot))return true;
       if(!options.readOnly)chatNightlySynced[syncKey]={signature:signature,at:Date.now()};
       chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
       var accepted=new Set(data.accepted_keys||[]),pending=chatNightlyPending(session).filter(function(g){return !accepted.has(g.key)});
