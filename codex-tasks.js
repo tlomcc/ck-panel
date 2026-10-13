@@ -14,6 +14,18 @@
   function message(text, bad) { $('message').textContent=text||''; $('message').classList.toggle('cx-error',!!bad); }
   function stamp(ts) { return new Date(ts*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
   function draftKey(id) { return 'ck_codex_draft_'+id; }
+  function taskDialog(title,text,value){
+    return new Promise(function(resolve){
+      var dlg=node('dialog','cx-dialog'),form=node('form'),heading=node('h3','',title),p=node('p','',text),actions=node('div','cx-dialog-actions');
+      heading.id='cx-dialog-title';dlg.setAttribute('aria-labelledby',heading.id);form.append(heading,p);
+      var input;if(value!==undefined){input=node('input');input.value=value;input.required=true;input.maxLength=100;input.setAttribute('aria-label',title);form.append(input);}
+      var cancel=button('取消',function(){dlg.close();}),confirm=node('button','btn btn-blue btn-sm',input?'保存':'删除窗口');confirm.type='submit';
+      actions.append(cancel,confirm);form.append(actions);dlg.append(form);root.append(dlg);
+      form.onsubmit=function(e){e.preventDefault();if(input&&!input.value.trim())return;dlg.returnValue='confirmed';dlg.close();};
+      dlg.addEventListener('close',function(){var answer=dlg.returnValue==='confirmed'?(input?input.value.trim():true):null;dlg.remove();resolve(answer);},{once:true});
+      dlg.showModal();if(input){input.focus();input.select();}else cancel.focus();
+    });
+  }
   async function request(path, body) {
     var controller=new AbortController(), timeout=setTimeout(function(){controller.abort();},55000);
     try {
@@ -68,7 +80,9 @@
     $('api-form').oninput=function(){formDirty=true;$('api-state').textContent='有未保存的修改';};
     $('api-form').onsubmit=saveApi;
     root.addEventListener('keydown',function(e){
-      if(e.key==='Escape'&&!document.querySelector('#ckActionModal.show')){e.preventDefault();close();}
+      e.stopPropagation(); // CK gateway authentication remains pending behind this independent view.
+      if(root.querySelector('dialog[open]'))return;
+      if(e.key==='Escape'){e.preventDefault();close();}
       if(e.key==='Tab'){
         var nodes=Array.from(root.querySelectorAll('button,input,select,textarea,a,summary')).filter(function(n){return !n.disabled&&n.getClientRects().length;});
         if(!nodes.length)return;var first=nodes[0],last=nodes[nodes.length-1];
@@ -195,10 +209,10 @@
     try{var w=await request('/threads',{request_id:key,title:'新任务',profile:config.default_profile});sessionStorage.removeItem('ck_codex_create');windows.unshift(w);await select(w.id);message('新窗口已创建');}
     catch(e){message(e.message,true);}finally{busy=false;$('new').disabled=false;renderToolbar();}
   }
-  async function renameWindow(){var w=current();if(!w)return;var title=await ckPromptDialog('窗口名称',w.title,{required:true});if(title)act('rename',{title:title});}
+  async function renameWindow(){var w=current();if(!w)return;var title=await taskDialog('窗口名称','为这个任务取一个便于查找的名称。',w.title);if(title)act('rename',{title:title});}
   async function deleteWindow(){
     var w=current();if(!w)return;
-    if(await ckConfirmDialog('删除「'+w.title+'」？正在执行的任务会停止，CK 记录与 VPS 上对应的 Codex 会话会一起删除。已修改的项目文件保留。',{title:'删除 Codex 窗口',confirmText:'删除窗口'}))act('delete');
+    if(await taskDialog('删除 Codex 窗口','删除「'+w.title+'」？正在执行的任务会停止，CK 记录与 VPS 上对应的 Codex 会话会一起删除。已修改的项目文件保留。'))act('delete');
   }
   async function act(name,body){
     if(!selected||busy)return;busy=true;renderToolbar();var id=selected;
@@ -247,4 +261,7 @@
   window.ckOpenCodex=function(name){make();previousFocus=document.activeElement;root.hidden=false;document.body.classList.add('cx-open');selected=selected||localStorage.getItem('ck_codex_selected')||'';showTab(name||'tasks');$('exit').focus();refresh(true);};
   document.addEventListener('visibilitychange',function(){if(document.hidden)clearTimeout(timer);else if(opened())refresh(false);});
   window.addEventListener('online',function(){if(opened())refresh(false);});
+  function openLinkedTab(){if(location.hash==='#codex-tasks'||location.hash==='#codex-api')window.ckOpenCodex(location.hash==='#codex-api'?'api':'tasks');}
+  window.addEventListener('hashchange',openLinkedTab);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',openLinkedTab,{once:true});else openLinkedTab();
 })();

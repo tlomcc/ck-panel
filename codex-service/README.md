@@ -1,6 +1,7 @@
 # Codex 任务中心
 
 CK 侧栏的「Codex 任务」与「Codex API 配置」连接独立的 VPS 服务。
+未登录聊天网关时，也可从登录页的「Codex 任务中心」或 `#codex-tasks` / `#codex-api` 链接进入。窗口确认框独立，聊天网关原有鉴权保持有效。
 后端使用官方 Codex app-server 的 stdio 协议，监听回环 19007，由 HTTPS `/codex/*` 转发；没有网关代码依赖。
 
 每个窗口使用独立 CODEX_HOME 和真实 thread ID。新建、关闭后恢复、永久删除都操作对应 Codex 会话；删除也清除该窗口的本地历史。关闭网页不终止任务。任务串行执行，同一执行中窗口可追加指令，支持停止及回答 Codex 的问题。
