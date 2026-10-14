@@ -43,9 +43,9 @@ const server=http.createServer((req,res)=>{
     const sync=async()=>{await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.waitForTimeout(130);};
     const menu=async()=>{if(width<=640&&!await page.locator('#cx-window-sidebar').isVisible())await page.locator('#cx-window-toggle').click();};
     const refresh=async()=>{await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelector('#cx-refresh').textContent!=='刷新中…');};
-    await page.goto('http://127.0.0.1:'+server.address().port+'/');await notice('done').waitFor();
-    assert(!await page.locator('#cx-root').isVisible());assert.equal(await notice('run').getAttribute('data-tone'),'ok');assert.equal(await notice('bad').getAttribute('data-tone'),'error');assert.equal(await notice('closed').count(),0);
-    const outside=await page.locator('#cx-task-notices').boundingBox();assert(outside.x<16&&outside.y<110);
+    await page.goto('http://127.0.0.1:'+server.address().port+'/');await page.waitForTimeout(250);assert(!await page.locator('#cx-task-notices').isVisible());await page.evaluate(()=>ckOpenCodex('api'));await notice('done').waitFor();
+    assert(await page.locator('#cx-root').isVisible());assert.equal(await notice('run').getAttribute('data-tone'),'ok');assert.equal(await notice('bad').getAttribute('data-tone'),'error');assert.equal(await notice('closed').count(),0);
+    const strips=await page.locator('#cx-task-notices').boundingBox();assert(strips.x<16&&strips.y<125);assert(Math.abs(strips.width-width/3)<2);const box=await notice('done').boundingBox();assert(box.height<=25&&box.width<=width/3);const runBox=await notice('run').boundingBox();assert.equal(runBox.x,box.x);assert(runBox.y+runBox.height<=box.y);
     assert((await notice('done').innerText()).includes('未查看'));
     // Clicking cannot dismiss a completed result before the detail request succeeds.
     failDetail='done';await notice('done').click();await page.getByText('记录读取失败',{exact:true}).waitFor();assert(await notice('done').isVisible());
@@ -61,10 +61,10 @@ const server=http.createServer((req,res)=>{
     await menu();await page.locator('#cx-tab-api').click();bump('run',{status:'completed'});await refresh();
     assert((await notice('run').innerText()).includes('未查看'));await page.waitForTimeout(500);assert(await notice('run').isVisible());
     await notice('run').click();await notice('run').waitFor({state:'detached'});
-    await page.locator('#cx-exit').click();await page.reload();await notice('bad').waitFor();assert.equal(await notice('done').count(),0);assert.equal(await notice('run').count(),0);
+    await page.locator('#cx-exit').click();assert(!await page.locator('#cx-task-notices').isVisible());assert.equal(await page.locator('.cx-question-outside').count(),0);await page.reload();await page.waitForTimeout(200);assert(!await page.locator('#cx-task-notices').isVisible());await page.evaluate(()=>ckOpenCodex('api'));await notice('bad').waitFor();assert.equal(await notice('done').count(),0);assert.equal(await notice('run').count(),0);
     // Another completion in the same window must notify again, even if the running transition was missed.
     bump('done',{status:'completed'});bump('run',{status:'completed'});await sync();await notice('done').waitFor();await notice('run').waitFor();
-    await notice('done').click();await notice('done').waitFor({state:'detached'});assert(await notice('run').isVisible(),'opening from CK must not mark the previously selected window seen');
+    await notice('done').click();await notice('done').waitFor({state:'detached'});assert(await notice('run').isVisible(),'switching from settings must not mark another window seen');
     // An older detail response cannot acknowledge a newer completion seen by the list poll.
     holdId='run';held=false;await notice('run').click();while(!held)await page.waitForTimeout(20);
     bump('run',{status:'completed'});await sync();holdId='';release();await page.waitForTimeout(150);assert(await notice('run').isVisible());

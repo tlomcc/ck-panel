@@ -103,12 +103,10 @@
   }
   function renderTaskNotices(){
     var rail=$('task-notices');if(!rail)return;
-    var inside=opened(),parent=inside?root.querySelector('.cx-shell'):document.body;
-    if(rail.parentNode!==parent){if(inside)$('body').before(rail);else parent.append(rail);}
-    rail.classList.toggle('cx-notices-outside',!inside);
-    $('notice-tools').hidden=!inside||!config;
+    var inside=opened();
+    $('notice-tools').hidden=!inside||!config;$('tab-tasks').hidden=tab==='tasks';
     var active=windows.filter(function(w){return !archivedWindow(w);}).sort(function(a,b){return (a.created||0)-(b.created||0)||a.id.localeCompare(b.id);});
-    rail.hidden=!access||(!active.length&&(!inside||!config));
+    rail.hidden=!inside||!access||!active.length;
     var list=$('notice-list'),signature=JSON.stringify([inside,tab,selected,active.map(function(w){return [w.id,w.title,windowState(w),w.error,w.scheduled_count,completionSeen(w)];})]);
     if(list.dataset.signature===signature)return;
     list.dataset.signature=signature;
@@ -214,8 +212,9 @@
       '</div></section>';
     document.body.append(root);
     var rail=node('section','cx-task-notices');rail.id='cx-task-notices';rail.setAttribute('aria-label','Codex 任务窗口');
-    rail.innerHTML='<div id="cx-notice-tools" class="cx-notice-tools"><button id="cx-tab-tasks" type="button" class="btn btn-sm btn-outline">任务窗口</button><button id="cx-new" type="button" class="btn btn-sm btn-outline">＋ 新窗口</button></div><div id="cx-notice-list" class="cx-notice-list"></div>';
+    rail.innerHTML='<div id="cx-notice-tools" class="cx-notice-tools"><button id="cx-tab-tasks" type="button" class="btn btn-sm btn-outline">任务</button><button id="cx-new" type="button" class="btn btn-sm btn-outline" aria-label="新窗口" title="新窗口">＋</button></div><div id="cx-notice-list" class="cx-notice-list"></div>';
     $('body').before(rail);
+    root.querySelector('.cx-head').insertBefore($('notice-tools'),$('page-heading'));
     $('exit').onclick=close;
     ['tasks','api','info'].forEach(function(name){$('tab-'+name).onclick=function(){showTab(name);closeSidebar();};});
     $('refresh').onclick=async function(){var b=$('refresh');feedback(b,'刷新中…','busy');var ok=await refresh(true);feedback(b,ok===undefined?'刷新':ok?'已刷新':'刷新失败',ok===false?'error':'ok');};
@@ -245,7 +244,6 @@
     var notice=button('',jumpToWaiting,'cx-question-notice');notice.id='cx-question-notice';notice.hidden=true;$('message').after(notice);
     var jump=node('div','cx-question-nav');jump.id='cx-question-nav';jump.hidden=true;
     jump.append(node('span'),button('上一处',function(){jumpQuestion(-1);}),button('回到提问',function(){jumpQuestion(0);}),button('下一处',function(){jumpQuestion(1);}));$('feed').before(jump);
-    var outside=button('',jumpToWaiting,'cx-question-outside');outside.id='cx-question-outside';outside.hidden=true;document.body.append(outside);
     root.addEventListener('pointerdown',function(e){if(!e.target.closest('dialog'))dismiss(e.target);});
     root.addEventListener('click',function(e){if(e.target.closest('.cx-window-actions button'))root.querySelector('.cx-window-menu').open=false;});
     root.addEventListener('keydown',function(e){
@@ -368,7 +366,7 @@
   function renderQuestionNotice(){
     renderTaskNotices();
     var waiting=windows.filter(function(w){return w.status==='waiting';}),count=waiting.length;
-    ['question-notice','question-outside'].forEach(function(id){var b=$(id);b.hidden=!count||(id==='question-outside'&&opened());b.textContent='Codex · '+count+' 个窗口待回复 · 回到提问';});
+    var b=$('question-notice');b.hidden=!count;b.textContent='Codex · '+count+' 个窗口待回复 · 回到提问';
   }
   async function jumpToWaiting(){
     var w=windows.find(function(w){return w.id===selected&&w.status==='waiting';})||windows.find(function(w){return w.status==='waiting';});if(!w)return;
