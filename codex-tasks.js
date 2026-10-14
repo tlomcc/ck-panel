@@ -37,16 +37,48 @@
     localStorage.removeItem('ck_codex_pending_'+id);sessionStorage.removeItem('ck_codex_pending_'+id);
   }
   function scheduleStamp(ts){return new Date(ts*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}
+  async function cancelSchedule(s){
+    if(!selected||busy)return;
+    var id=selected;busy=true;renderToolbar();
+    try{
+      try{await request('/threads/'+id+'/cancel-schedule',{request_id:s.request_id});}
+      catch(e){
+        // A lost response can still mean the server cancelled it. Only restore after confirmation.
+        if(e.status)throw e;
+        var snapshot=await request('/threads/'+id);
+        if(!(snapshot.schedules||[]).some(function(row){return row.request_id===s.request_id&&row.state==='cancelled';}))throw e;
+      }
+      cancelRefresh();
+      var active=selected===id&&draftOwner===id;
+      var draft=active?$('input').value:localStorage.getItem(draftKey(id))||'';
+      var restored=draft&&draft.trim()!==s.text?draft+'\n\n'+s.text:draft||s.text;
+      // Do not reuse a cancelled schedule's id when its original submit response was lost.
+      [localStorage,sessionStorage].forEach(function(storage){
+        var key='ck_codex_pending_'+id,pending;try{pending=JSON.parse(storage.getItem(key)||'null');}catch(_){}
+        if(pending&&pending.request_id===s.request_id)storage.removeItem(key);
+      });
+      if(active){
+        $('input').value=restored;
+        saveDraft();resizeInput();
+        schedules=schedules.filter(function(row){return row.request_id!==s.request_id;});renderSchedules();
+        if(opened()&&tab==='tasks')$('input').focus();
+      }else localStorage.setItem(draftKey(id),restored);
+      var cached=windowCache.get(id);if(cached)cached.schedules=cached.schedules.filter(function(row){return row.request_id!==s.request_id;});
+      message(draft?'定时任务已取消，内容已追加到原窗口草稿':'定时任务已取消，内容已放回输入框');
+      refreshStatus(true);await refresh(false);
+    }catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
+  }
   function renderSchedules(){
-    var list=$('schedules');list.replaceChildren();list.hidden=!schedules.length;
-    if(!schedules.length)return;
+    var visible=schedules.filter(function(s){return s.state!=='cancelled';});
+    var list=$('schedules');list.replaceChildren();list.hidden=!visible.length;
+    if(!visible.length)return;
     list.append(node('h4','','定时任务 · 北京时间'));
-    schedules.forEach(function(s){
+    visible.forEach(function(s){
       var row=node('details','cx-scheduled'),summary=node('summary'),pending=s.state==='scheduled';
-      var status=pending?(s.scheduled_for<=Date.now()/1000?'到点，等待窗口空闲':'待执行'):s.state==='cancelled'?'已取消':labels[s.state]||s.state;
+      var status=pending?(s.scheduled_for<=Date.now()/1000?'到点，等待窗口空闲':'待执行'):labels[s.state]||s.state;
       summary.append(node('span','',scheduleStamp(s.scheduled_for)),node('strong','',status));row.append(summary,node('p','cx-text',s.text));
       var provider=config.profiles.find(function(p){return p.id===s.profile;});if(provider)row.append(node('small','cx-muted','供应商：'+provider.name+' · 执行时使用该供应商的最新配置'));
-      if(pending)row.append(button('取消定时任务',function(){act('cancel-schedule',{request_id:s.request_id});}));
+      if(pending)row.append(button('取消定时任务',function(){cancelSchedule(s);}));
       list.append(row);
     });
   }
