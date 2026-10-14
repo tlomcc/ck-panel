@@ -1,5 +1,5 @@
 {
-  "version": "chat-v320-codex-workspace-sync",
+  "version": "chat-v321-codex-workspace-sync",
   "notes": [
     "Codex 使用独立侧栏，任务窗口、API 配置和工作资料分开。",
     "参考普通聊天排版，扩大消息区；供应商和任务按钮保持稳定，不挤压换行。",
