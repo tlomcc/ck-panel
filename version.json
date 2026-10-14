@@ -1,9 +1,7 @@
 {
-  "version": "chat-v316-codex-servers-latency",
+  "version": "chat-v317-region-chat-policy",
   "notes": [
-    "服务器状态新增国内、美国两个独立标签。",
-    "Codex 聊天区扩大；供应商折叠、独立保存，密钥免密码加密。",
-    "推理档位使用官方名称，模型列表明确提示上游授权问题。",
-    "回复连接卡住时更早核对回执，保留完整回复和原任务。"
+    "美国 VPS 聊天只使用 Claude 订阅。",
+    "国内 VPS 聊天只使用 API 中转站；旧美国 API 选择自动迁至国内。"
   ]
 }

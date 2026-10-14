@@ -4,8 +4,11 @@
   var servers={cn:'https://123.57.175.84:18443',us:'https://tlomcc.cc.cd:18443'};
   var defaults={mode:'vps',gateway:servers.cn+'/gateway',mcp:servers.cn+'/mcp',execution:'claude_code_api',subscriptionModel:'sonnet',server:'cn'};
   function serverOf(route){
-    if(route&&route.gateway===servers.cn+'/gateway'&&route.mcp===servers.cn+'/mcp')return 'cn';
-    if(route&&((route.gateway===servers.us+'/gateway'&&route.mcp===servers.us+'/mcp')||(route.gateway==='https://tlomcc.us.ci:18443/gateway'&&route.mcp==='https://tlomcc.us.ci:18443/mcp')))return 'us';
+    try{
+      var origin=new URL(route.gateway).origin;
+      if(origin===servers.cn)return 'cn';
+      if([servers.us,'https://tlomcc.us.ci:18443','https://192.220.15.95:18443'].indexOf(origin)>=0)return 'us';
+    }catch(e){}
     return 'custom';
   }
   function normalize(value){
@@ -15,7 +18,7 @@
     if(url.protocol!=='https:'&&!(local&&url.protocol==='http:'))throw new Error('公网地址请使用 HTTPS；HTTP 仅允许本机隧道。');
     return url.href.replace(/\/+$/,'');
   }
-  function parse(saved){
+  function parse(saved,migrate){
     if(!saved||saved.mode!=='vps')return Object.assign({},defaults);
     var execution=saved.execution||'direct_api';
     if(['direct_api','claude_code_api','claude_code_subscription'].indexOf(execution)<0)throw new Error('未知聊天执行路径');
@@ -23,15 +26,16 @@
     if(!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('请填写官方 Claude 模型名或 sonnet、opus、haiku');
     var route={mode:'vps',gateway:normalize(saved.gateway),mcp:normalize(saved.mcp),execution:execution,subscriptionModel:model};
     var server=serverOf(route);
-    if(server==='us'&&!saved.server&&execution!=='claude_code_subscription'){
+    if(server==='us'&&execution!=='claude_code_subscription'&&migrate===true){
       route.gateway=defaults.gateway;route.mcp=defaults.mcp;server='cn';
     }
+    if(server==='us'&&execution!=='claude_code_subscription')throw new Error('美国 VPS 只提供订阅聊天；API 中转站请选择国内 VPS。');
     if(server==='cn'&&execution==='claude_code_subscription')throw new Error('国内 VPS 只提供 API 路线；订阅请选择美国 VPS。');
     if(server!=='custom')route.server=server;
     return route;
   }
   var current=Object.assign({},defaults),saved;
-  try{saved=JSON.parse(root.localStorage.getItem(key)||'null');current=parse(saved)}catch(e){}
+  try{saved=JSON.parse(root.localStorage.getItem(key)||'null');current=parse(saved,true)}catch(e){}
   if(!saved&&root.location&&root.location.hostname==='127.0.0.1'&&root.location.port==='19080'){
     current={mode:'vps',gateway:root.location.origin+'/gateway',mcp:root.location.origin+'/mcp'};
   }
@@ -76,6 +80,7 @@
       if(!health.ok)throw new Error('网关健康检查失败：HTTP '+health.status);
       var status=await health.json();
       if(status.status!=='ok')throw new Error('这个地址没有返回 CK 网关状态。');
+      if(Array.isArray(status.chat_backends)&&status.chat_backends.indexOf(route.execution)<0)throw new Error('目标服务器不支持所选聊天路线；美国只用订阅，国内只用 API 中转站。');
       if(status.migration_read_only===true)throw new Error('VPS 仍是只读预览，暂不能作为正式连接。');
       if(route.execution==='claude_code_api'&&(status.claude_code_api!==true||status.claude_code_native!==true))throw new Error('目标 VPS 的 Claude Code 原生服务尚未就绪。');
       if(route.execution==='claude_code_subscription'){
@@ -132,12 +137,18 @@ function ckCloseBackendRoute(){
 }
 function ckBackendFieldsChanged(){
   document.getElementById('ck-vps-fields').hidden=document.getElementById('ck-backend-mode').value!=='vps';
-  var sub=document.getElementById('ck-execution-mode').value==='claude_code_subscription';
-  document.getElementById('ck-subscription-fields').hidden=!sub;
-  document.getElementById('ck-execution-hint').textContent=sub?'使用独立的官方订阅登录；CK 继续管理提示词、记忆、历史与工具。辅助总结和向量等仍使用各自 API。订阅不可用时不会自动切回 API。':'使用面板中的供应商 API 配置。Claude Code · API 使用官方客户端，由 CK 管理提示词、工具和聊天历史。';
   var server=document.getElementById('ck-vps-server');
-  var option=document.querySelector('#ck-execution-mode option[value="claude_code_subscription"]');
-  if(option)option.disabled=!!server&&server.value==='cn';
+  var region=CKBackendRoute.serverOf({gateway:document.getElementById('ck-vps-gateway').value});
+  if(region==='custom'&&server)region=server.value;
+  var select=document.getElementById('ck-execution-mode');
+  Array.from(select.options).forEach(function(option){
+    option.disabled=region==='us'?option.value!=='claude_code_subscription':region==='cn'?option.value==='claude_code_subscription':false;
+  });
+  if(region==='us')select.value='claude_code_subscription';
+  else if(region==='cn'&&select.value==='claude_code_subscription')select.value='claude_code_api';
+  var sub=select.value==='claude_code_subscription';
+  document.getElementById('ck-subscription-fields').hidden=!sub;
+  document.getElementById('ck-execution-hint').textContent=sub?'美国 VPS 只使用官方订阅登录；CK 管理提示词、记忆、历史与工具。订阅不可用时不会自动切回 API。辅助总结和向量仍使用各自 API。':'国内 VPS 只使用 API 中转站；直接 API 与 Claude Code · API 均使用面板中的供应商配置。';
 }
 function ckBackendServerChanged(){
   var server=document.getElementById('ck-vps-server').value,origin=CKBackendRoute.servers[server];

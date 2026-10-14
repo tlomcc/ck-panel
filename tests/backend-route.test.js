@@ -3,7 +3,7 @@ const source=fs.readFileSync(path.join(__dirname,'../backend-route.js'),'utf8');
 function fixture(saved){
  const storage=new Map(saved?[['ckBackendRouteV1',JSON.stringify(saved)]]:[]),els={};
  for(const id of ['ck-backend-status','ck-backend-save','ck-backend-mode','ck-execution-mode','ck-vps-gateway','ck-vps-mcp','chat-input'])els[id]={value:'',textContent:''};
- els['ck-backend-mode'].value='vps';els['ck-vps-gateway'].value='https://tlomcc.cc.cd:18443/gateway';els['ck-vps-mcp'].value='https://tlomcc.cc.cd:18443/mcp';
+ els['ck-backend-mode'].value='vps';els['ck-vps-gateway'].value='https://123.57.175.84:18443/gateway';els['ck-vps-mcp'].value='https://123.57.175.84:18443/mcp';els['ck-execution-mode'].value='direct_api';
  const ctx={URL,AbortController,setTimeout,clearTimeout,setInterval:()=>0,clearInterval,document:{addEventListener(){},getElementById:id=>els[id]},localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},sessionStorage:{setItem(){}},location:{hostname:'test',reload(){ctx.reloaded=true}},storedPanelKey:()=> 'test-key',panelAppStarted:true,chatSessionsReady:true,chatSaveConfig(){},chatSaveLocalMessages(){},async chatSaveSessionsToIndexedDb(){ctx.saved=true}};
  ctx.window=ctx;vm.createContext(ctx);vm.runInContext(source,ctx);
  ctx.fetch=async url=>({ok:true,json:async()=>url.endsWith('/health')?{status:'ok',migration_read_only:false}:url.endsWith('/config')?{config_status:{ok:true},providers:{test:{}}}:{result:{tools:[{name:'test'}]}}});
@@ -54,7 +54,7 @@ test('Claude Code selection requires live capability and persists only the expli
 
 test('subscription requires login, persists independent model and never falls back to API',async()=>{
  const {ctx,els,storage}=fixture();els['ck-execution-mode'].value='claude_code_subscription';
- els['ck-subscription-model']={value:'opus'};
+ els['ck-subscription-model']={value:'opus'};els['ck-vps-gateway'].value='https://tlomcc.cc.cd:18443/gateway';els['ck-vps-mcp'].value='https://tlomcc.cc.cd:18443/mcp';
  const original=ctx.fetch;let ready=false;
  ctx.fetch=async url=>url.endsWith('/ck/subscription/status')?{ok:true,json:async()=>({ready,message:'订阅未登录'})}:original(url);
  await ctx.ckSaveBackendRoute();assert.equal(ctx.reloaded,undefined);assert.equal(storage.has('ckBackendRouteV1'),false);
@@ -85,11 +85,42 @@ test('VPS route publishes scoped DNS and preconnect hints and refreshes them on 
  assert.equal(links.length,0);
 });
 
-test('existing American API routes migrate; subscriptions and explicit American choices stay',()=>{
+test('all saved American API routes migrate to China; explicit invalid switches are rejected',()=>{
  const old={mode:'vps',gateway:'https://tlomcc.cc.cd:18443/gateway',mcp:'https://tlomcc.cc.cd:18443/mcp',execution:'claude_code_api'};
  const moved=fixture(old);assert.equal(moved.ctx.CKBackendRoute.current.gateway,'https://123.57.175.84:18443/gateway');assert.equal(moved.ctx.CKBackendRoute.current.execution,'claude_code_api');
  assert.equal(moved.storage.get('ckBackendRouteV1'),JSON.stringify(old),'startup keeps stored original route recoverable');
  assert.equal(fixture({...old,execution:'claude_code_subscription'}).ctx.CKBackendRoute.current.gateway,old.gateway);
- assert.equal(fixture({...old,server:'us'}).ctx.CKBackendRoute.current.gateway,old.gateway);
+ assert.equal(fixture({...old,server:'us'}).ctx.CKBackendRoute.current.server,'cn');
+ assert.throws(()=>moved.ctx.CKBackendRoute.parse({...old,server:'us'}),/美国/);
  assert.throws(()=>moved.ctx.CKBackendRoute.parse({...old,gateway:'https://123.57.175.84:18443/gateway',mcp:'https://123.57.175.84:18443/mcp',execution:'claude_code_subscription'}),/国内/);
+});
+
+
+test('US aliases and custom memory addresses cannot enable American API chat',()=>{
+ const api=fixture().ctx.CKBackendRoute;
+ for(const host of ['tlomcc.cc.cd','tlomcc.us.ci','192.220.15.95']){
+  const saved={mode:'vps',server:'custom',gateway:'https://'+host+':18443/gateway',mcp:'https://custom.test/mcp',execution:'direct_api'};
+  assert.throws(()=>api.parse(saved),/美国/);
+  const loaded=fixture(saved).ctx.CKBackendRoute.current;
+  assert.equal(loaded.server,'cn');assert.equal(loaded.execution,'direct_api');
+ }
+});
+
+test('custom gateway capability rejects unsupported execution before config calls',async()=>{
+ const api=fixture().ctx.CKBackendRoute;let calls=0;
+ await assert.rejects(api.probe({gateway:'https://custom.test/gateway',execution:'direct_api'},'test',async()=>{
+  calls++;return {ok:true,json:async()=>({status:'ok',chat_backends:['claude_code_subscription']})};
+ }),/服务器不支持/);
+ assert.equal(calls,1);
+});
+
+test('server form permits subscription only in US and API only in China',()=>{
+ const {ctx,els}=fixture();
+ els['ck-vps-fields']={};els['ck-subscription-fields']={};els['ck-execution-hint']={};els['ck-vps-server']={value:'us'};
+ const select=els['ck-execution-mode'];select.options=['direct_api','claude_code_api','claude_code_subscription'].map(value=>({value}));
+ ctx.ckBackendServerChanged();assert.equal(select.value,'claude_code_subscription');
+ assert.equal(select.options.filter(o=>!o.disabled).map(o=>o.value).join(','),'claude_code_subscription');
+ els['ck-vps-server'].value='cn';ctx.ckBackendServerChanged();
+ assert.equal(select.value,'claude_code_api');assert.equal(select.options.filter(o=>!o.disabled).length,2);
+ assert.equal(els['ck-subscription-fields'].hidden,true);
 });
