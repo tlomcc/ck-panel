@@ -204,14 +204,14 @@ class AnyNoRetryLifecycle(Lifecycle):
         self.complete(wid,engine)
         time.sleep(.8)
         self.assertEqual(self.m.store.one(wid)['status'],'failed')
-        self.assertNotIn(wid,self.m.ag_retries)
+        self.assertNotIn(wid,self.m.automatic_retries)
         self.assertEqual(sum(m=='turn/start' for m,_ in engine.calls),1)
-        self.assertFalse(any(i['id'].startswith(('any-retry:','ag-retry:'))
+        self.assertFalse(any(i['id'].startswith(('any-retry:','ag-retry:','auto-retry:'))
                              for i in self.m.store.snapshot(wid)['items']))
         self.m.submit(wid,{'text':'user manually continues','request_id':'manual-again-001'})
         self.wait_for(lambda:self.m.store.one(wid)['status']=='running')
         self.assertEqual(sum(m=='turn/start' for m,_ in engine.calls),2)
-        self.assertNotIn(wid,self.m.ag_retries)
+        self.assertNotIn(wid,self.m.automatic_retries)
 
     def test_native_any_retries_remain_zero_other_providers_unchanged(self):
         for profile,expected in [(self.profile,0),(dict(self.profile,id='other'),2)]:

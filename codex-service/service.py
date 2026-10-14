@@ -22,9 +22,10 @@ from urllib.parse import urlsplit, parse_qs
 from urllib.request import Request, urlopen
 from key_store import KeyStore
 from ag_retry import AgRetry, CONTINUE_TASK, is_ag
+from any_retry import AnyRetry, is_any
 
-VERSION = '1.4.3'
-# ANY must keep native request/stream retries disabled after removing its loop.
+VERSION = '1.4.4'
+# ANY native request/stream retries stay disabled; the switch owns continuation.
 ANY_PROFILE_ID = '75c76315-eb66-4fa0-ab6d-f0d2b9ef344e'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
@@ -258,7 +259,7 @@ class Manager:
         self.root, self.engine_factory = root, engine_factory
         self.lock = threading.RLock()
         self.engines = {}
-        self.ag_retries = {}  # Armed only for a new submission or due schedule.
+        self.automatic_retries = {}  # In-memory runs; never replayed after restart.
         self.config_path = root / 'config.json'
         self.key_store = KeyStore(root)
         self.config = self.key_store.load(self.config_path, write_json)
@@ -305,7 +306,33 @@ class Manager:
                 'version': VERSION, 'cli_version': self.config.get('cli_version'),
                 'workspace': str(WORKSPACE), 'servers': self.config.get('servers', []),
                 'backup': self.config.get('backup', {}), 'max_running': None, 'parallel_windows': True,
-                'key_storage': 'encrypted', 'efforts': list(EFFORTS), 'scheduling': True}
+                'key_storage': 'encrypted', 'efforts': list(EFFORTS), 'scheduling': True, 'any_retry_switch': True,
+                'any_retry_profile': ANY_PROFILE_ID, 'any_auto_retry': self.config.get('any_auto_retry') is True}
+
+    def set_any_retry(self, body):
+        enabled = body.get('enabled')
+        if type(enabled) is not bool:
+            raise Problem('自动重试开关必须为开启或关闭')
+        with self.lock, self.store.lock:
+            updated = dict(self.config, any_auto_retry=enabled)
+            write_json(self.config_path, self.key_store.encode(updated))
+            self.config = updated
+            if not enabled:
+                for wid, run in list(self.automatic_retries.items()):
+                    if isinstance(run, AnyRetry):
+                        self.automatic_retries.pop(wid, None)
+                        if run.pending:
+                            self.finish(wid, 'interrupted', 'any 自动重试已关闭，待重试已取消。')
+            else:
+                # Arm unfinished ANY tasks, but never replay a failed/completed task.
+                for task in self.store.db.execute("""SELECT t.request_id,t.window_id,
+                        COALESCE(s.profile,w.profile) AS profile FROM tasks t
+                        JOIN windows w ON w.id=t.window_id
+                        LEFT JOIN schedules s ON s.request_id=t.request_id
+                        WHERE t.status IN ('queued','starting','running','waiting')""").fetchall():
+                    if task['profile'] == ANY_PROFILE_ID:
+                        self.automatic_retries.setdefault(task['window_id'], AnyRetry(task['request_id']))
+            return self.public_config()
 
     def save_config(self, body):
         with self.lock:
@@ -462,8 +489,10 @@ class Manager:
             self.store.db.commit()
             self.store.item(wid, 'user:'+key, 'userMessage', self.redact(text))
             self.store.update(wid, status='queued', error='')
-            if is_ag(self.profile(window['profile'])):
-                self.ag_retries[wid] = AgRetry(key)
+            if is_any(self.profile(window['profile'])) and self.config.get('any_auto_retry') is True:
+                self.automatic_retries[wid] = AnyRetry(key)
+            elif is_ag(self.profile(window['profile'])):
+                self.automatic_retries[wid] = AgRetry(key)
             return {'accepted': True, 'request_id': key, 'window': self.store.one(wid)}
 
     def schedule(self, wid, body):
@@ -510,14 +539,16 @@ class Manager:
                     self.store.db.execute("UPDATE schedules SET status='dispatched' WHERE request_id=?", (key,))
                     self.store.db.execute("UPDATE windows SET status='queued',error='',seq=seq+1,updated=? WHERE id=?", (time.time(),wid))
                 self.store.item(wid,'user:'+key,'userMessage',self.redact(row['text']), {'scheduled_for':row['scheduled_for']})
-                if is_ag(self.profile(row['profile'])):
-                    self.ag_retries[wid] = AgRetry(key)
+                if is_any(self.profile(row['profile'])) and self.config.get('any_auto_retry') is True:
+                    self.automatic_retries[wid] = AnyRetry(key)
+                elif is_ag(self.profile(row['profile'])):
+                    self.automatic_retries[wid] = AgRetry(key)
 
     def finish(self, wid, status, error=''):
         with self.store.lock:
             if error and self.store.one(wid)['error'] != self.redact(error):
                 self.store.item(wid, 'error:'+uuid.uuid4().hex, 'error', self.redact(error))
-            self.ag_retries.pop(wid, None)
+            self.automatic_retries.pop(wid, None)
             self.store.db.execute("UPDATE tasks SET status=? WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (status, wid))
             self.store.db.commit()
             self.store.update(wid, status=status, error=self.redact(error), turn_id='')
@@ -530,13 +561,13 @@ class Manager:
 
     def log_problem(self, wid, text):
         with self.store.lock:
-            if wid in self.ag_retries and self.ag_retries[wid].accepts(text):
+            if wid in self.automatic_retries and self.automatic_retries[wid].accepts(text):
                 return  # One counter owns diagnostics for this automatic run.
         self.store.item(wid, 'diagnostic:'+uuid.uuid4().hex, 'warning', self.redact(text))
 
     def schedule_retry(self, wid, turn):
         with self.store.lock:
-            run = self.ag_retries.get(wid)
+            run = self.automatic_retries.get(wid)
             if not run or turn.get('status') != 'failed' or not run.accepts(turn.get('error') or {}):
                 return False
             if run.pending:
@@ -548,8 +579,8 @@ class Manager:
             self.store.db.execute("UPDATE tasks SET status='queued',turn_id='' WHERE request_id=?", (run.request_id,))
             self.store.db.commit()
             self.store.update(wid, status='queued', turn_id='',
-                              error='AG 限流，等待自动继续')
-            self.store.item(wid, 'ag-retry:'+run.request_id, 'warning', run.text)
+                              error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 过载，等待自动重试')
+            self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', run.text)
             return True
 
     def pump(self):
@@ -561,17 +592,17 @@ class Manager:
                     # including those awaiting user input, must not block this one.
                     with self.store.lock:
                         queued = self.store.db.execute("SELECT * FROM tasks WHERE status='queued' ORDER BY created").fetchall()
-                        task = next((t for t in queued if t['window_id'] not in self.ag_retries
-                                     or self.ag_retries[t['window_id']].ready()), None)
+                        task = next((t for t in queued if t['window_id'] not in self.automatic_retries
+                                     or self.automatic_retries[t['window_id']].ready()), None)
                         if not task:
                             continue
                         task = dict(task)
-                        run = self.ag_retries.get(task['window_id'])
+                        run = self.automatic_retries.get(task['window_id'])
                         if run:
                             run.starting()
                             if run.count:
                                 task['text'] = CONTINUE_TASK
-                                self.store.item(task['window_id'], 'ag-retry:'+run.request_id, 'warning', run.text)
+                                self.store.item(task['window_id'], 'auto-retry:'+run.request_id, 'warning', run.text)
                         self.store.db.execute("UPDATE tasks SET status='starting' WHERE request_id=?", (task['request_id'],))
                         self.store.db.commit()
                     wid = task['window_id']
@@ -607,7 +638,7 @@ class Manager:
         method, p = event.get('method', ''), self.clean(event.get('params', {}))
         wid = engine.wid
         if method == 'turn/started':
-            run = self.ag_retries.get(wid)
+            run = self.automatic_retries.get(wid)
             self.store.update(wid, status='running', turn_id=p['turn']['id'],
                               **({} if run and run.count else {'error':''}))
         elif method == 'turn/completed':
@@ -666,10 +697,10 @@ class Manager:
             error = p.get('error') or {}
             text = self.redact(str((error.get('message') if isinstance(error, dict) else error) or p.get('message') or 'Codex 运行出错'))
             with self.store.lock:
-                run = self.ag_retries.get(wid)
+                run = self.automatic_retries.get(wid)
                 if run and run.accepts(p):
-                    self.store.update(wid, error='AG 限流，等待自动继续')
-                    self.store.item(wid, 'ag-retry:'+run.request_id, 'warning', text,
+                    self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 过载，等待自动重试')
+                    self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', text,
                                     {'willRetry':bool(p.get('willRetry'))})
                 else:
                     self.store.update(wid, error=text)
@@ -689,7 +720,7 @@ class Manager:
             window = self.store.one(wid)
             if action in ('stop','close','delete'):
                 with self.store.lock:
-                    self.ag_retries.pop(wid, None)
+                    self.automatic_retries.pop(wid, None)
                 engine = self.engines.get(wid)
                 if engine:
                     engine.stopping = True
@@ -932,6 +963,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise Problem('请求格式无效')
             if path.path=='/config':
                 result = self.manager.save_config(body) if self.command=='POST' else self.manager.public_config()
+            elif path.path == '/profiles/any-retry' and self.command == 'POST':
+                result = self.manager.set_any_retry(body)
             elif path.path in ('/profiles/save', '/profiles/delete') and self.command=='POST':
                 result = self.manager.save_profile(body, delete=path.path.endswith('/delete'))
             elif path.path=='/models' and self.command=='POST':

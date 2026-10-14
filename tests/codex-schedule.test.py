@@ -91,10 +91,10 @@ class Scheduling(unittest.TestCase):
     def test_selected_provider_is_retained_and_any_never_arms_retry(self):
         self.m.config['profiles'].append(dict(self.profile,id=fixtures.ANY_PROFILE_ID,name='any',model='any-model'))
         wid=self.create()['id']; self.m.action(wid,'profile',{'profile':fixtures.ANY_PROFILE_ID}); self.schedule(wid)
-        self.assertNotIn(wid,self.m.ag_retries)
+        self.assertNotIn(wid,self.m.automatic_retries)
         self.m.action(wid,'profile',{'profile':'p'})
         with self.assertRaises(service.Problem):self.m.save_config({'profiles':[self.profile]})
-        self.due(); self.m.dispatch_due(); self.assertNotIn(wid,self.m.ag_retries)
+        self.due(); self.m.dispatch_due(); self.assertNotIn(wid,self.m.automatic_retries)
         worker=threading.Thread(target=self.m.pump); worker.start()
         try:
             deadline=time.monotonic()+3

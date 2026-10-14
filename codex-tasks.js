@@ -525,6 +525,21 @@
       }catch(error){state.textContent=error.message;state.classList.add('cx-error');}
       finally{saving=false;controls.forEach(function(n){n.disabled=false;});}
     };
+    if(p.id===(config.any_retry_profile||'75c76315-eb66-4fa0-ab6d-f0d2b9ef344e')){
+      var retryBox=node('div','cx-any-retry'),retryState=node('p','cx-muted');retryState.setAttribute('role','status');
+      var retryButton=button('',async function(){
+        retryButton.disabled=true;retryState.textContent='正在保存…';
+        try{
+          config=await request('/profiles/any-retry',{enabled:config.any_auto_retry!==true});
+          syncRetry();retryState.textContent=config.any_auto_retry?'已开启；仅对未完成任务生效，不会重跑历史失败。':'已关闭；待重试已取消，正在执行的请求完成后不再重试。';
+        }catch(error){retryState.textContent=error.message;}
+        finally{retryButton.disabled=!config.any_retry_switch;}
+      });
+      retryButton.classList.add('cx-any-retry-toggle');retryButton.setAttribute('role','switch');
+      function syncRetry(){var enabled=config.any_auto_retry===true;retryButton.textContent='自动重试：'+(enabled?'开启':'关闭');retryButton.setAttribute('aria-checked',String(enabled));retryButton.disabled=!config.any_retry_switch;}
+      syncRetry();retryState.textContent=config.any_retry_switch?'适用于所有 any 窗口，默认关闭。开启后，过载失败随机等 1～10 秒继续；关闭立即取消待重试。':'后端更新中，开关暂不可用，请稍后刷新。';
+      retryBox.append(retryButton,retryState);row.insertBefore(retryBox,form);
+    }
     row.syncDefault=function(){if(row.dataset.dirty!=='true')check.checked=p.id===config.default_profile;header();};
     $('profiles').append(row);return row;
   }
