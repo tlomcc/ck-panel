@@ -24,7 +24,7 @@ from key_store import KeyStore
 from any_retry import AnyRetry, CONTINUE_TASK, is_any
 from ag_retry import AgRetry, is_ag
 
-VERSION = '1.4.1'
+VERSION = '1.4.2'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
 WORKSPACE = Path(os.environ.get('CK_CODEX_WORKSPACE', '/home/ckcodex/workspace'))
@@ -518,6 +518,8 @@ class Manager:
 
     def finish(self, wid, status, error=''):
         with self.store.lock:
+            if error and self.store.one(wid)['error'] != self.redact(error):
+                self.store.item(wid, 'error:'+uuid.uuid4().hex, 'error', self.redact(error))
             self.any_retries.pop(wid, None)
             self.store.db.execute("UPDATE tasks SET status=? WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (status, wid))
             self.store.db.commit()
@@ -533,7 +535,7 @@ class Manager:
         with self.store.lock:
             if wid in self.any_retries and self.any_retries[wid].accepts(text):
                 return  # One counter owns diagnostics for this automatic run.
-        self.store.item(wid, 'diagnostic', 'warning', self.redact(text))
+        self.store.item(wid, 'diagnostic:'+uuid.uuid4().hex, 'warning', self.redact(text))
 
     def schedule_retry(self, wid, turn):
         with self.store.lock:
@@ -591,7 +593,8 @@ class Manager:
                             self.store.db.execute("UPDATE tasks SET turn_id=?,status=CASE WHEN status='starting' THEN 'running' ELSE status END WHERE request_id=?", (turn_id, task['request_id']))
                             self.store.db.commit()
                         if self.store.one(wid)['status'] == 'starting':
-                            self.store.update(wid, status='running', turn_id=turn_id, error='')
+                            self.store.update(wid, status='running', turn_id=turn_id,
+                                              **({} if run and run.count else {'error':''}))
                     except Exception as exc:
                         # An ambiguous timeout must not start a second task while the old engine runs.
                         engine = self.engines.pop(wid, None)
@@ -607,7 +610,9 @@ class Manager:
         method, p = event.get('method', ''), self.clean(event.get('params', {}))
         wid = engine.wid
         if method == 'turn/started':
-            self.store.update(wid, status='running', turn_id=p['turn']['id'], error='')
+            run = self.any_retries.get(wid)
+            self.store.update(wid, status='running', turn_id=p['turn']['id'],
+                              **({} if run and run.count else {'error':''}))
         elif method == 'turn/completed':
             turn = p['turn']
             with self.store.lock:
@@ -633,6 +638,8 @@ class Manager:
                 item = {'type': kind, 'id': item['id'], 'status': 'completed' if method.endswith('completed') else 'running'}
             elif kind in ('agentMessage','plan'):
                 text = item.get('text', '')
+                if kind == 'agentMessage' and text and self.store.one(wid)['error']:
+                    self.store.update(wid, error='')
             elif kind == 'commandExecution':
                 text = item.get('aggregatedOutput') or ''
             elif kind == 'fileChange':
@@ -665,9 +672,11 @@ class Manager:
                 run = self.any_retries.get(wid)
                 if run and run.accepts(p):
                     self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else '上游过载，等待自动重试')
+                    self.store.item(wid, 'any-retry:'+run.request_id, 'warning', text,
+                                    {'willRetry':bool(p.get('willRetry'))})
                 else:
                     self.store.update(wid, error=text)
-                    self.store.item(wid, 'error:'+str(p.get('turnId') or 'current'), 'error', text,
+                    self.store.item(wid, 'error:'+uuid.uuid4().hex, 'error', text,
                                     {'willRetry':bool(p.get('willRetry'))})
         elif method in ('warning','configWarning'):
             self.log_problem(wid, p.get('message') or p.get('summary') or str(p.get('error', p)))

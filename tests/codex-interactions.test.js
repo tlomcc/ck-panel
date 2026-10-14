@@ -35,6 +35,15 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   delay=160;await page.locator('#cx-refresh').click();assert.equal(await page.locator('#cx-refresh').textContent(),'刷新中…');assert(await page.locator('#cx-refresh').isDisabled());await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');delay=0;
   fail=true;await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='刷新失败');fail=false;
   windows[0].error='provider failed';await refresh();assert.equal(await page.locator('.cx-task-status').textContent(),'运行出错');assert.equal(await page.locator('.cx-task-status').getAttribute('data-status'),'error');assert(await page.locator('#cx-stop').isVisible());
+  base.push({id:'err1',kind:'error',text:'rate limit exceeded',created:20,data:{}});await refresh();
+  assert((await page.locator('.cx-item-error').innerText()).includes('rate limit exceeded'));
+  assert(!(await page.locator('#cx-message').innerText()).includes('provider failed'));
+  assert.equal(await page.locator('#cx-other-errors').isVisible(),false);
+  windows[1].error='另一窗口限流';windows[1].status='running';await refresh();
+  assert((await page.locator('#cx-other-errors').innerText()).includes('任务2：另一窗口限流'));
+  windows[1].error='';await refresh();assert.equal(await page.locator('#cx-other-errors').isVisible(),false);
+  base.push({id:'recovered',kind:'agentMessage',text:'已经恢复，继续处理。',created:21,data:{}});windows[0].error='';await refresh();
+  assert(await page.locator('#cx-feed').evaluate(e=>{var all=[...e.children];return all.indexOf(e.querySelector('[data-item-id=err1]'))<all.indexOf(e.querySelector('[data-item-id=recovered]'));}));
   windows[0].status='failed';await refresh();assert.equal(await page.locator('.cx-task-status').textContent(),'执行失败');
   windows[0].status='completed';windows[0].error='';await refresh();
   await page.locator('.cx-compose-bar .ck-select-button').click();await page.locator('dialog[open]').waitFor();await page.getByRole('button',{name:'复制选项：供应商B · model-b',exact:true}).click();await page.waitForFunction(()=>window.copied.includes('供应商B · model-b'));assert.equal(await page.locator('#cx-profile').inputValue(),'p');assert(await page.locator('dialog[open]').isVisible());await page.mouse.click(3,3);await page.locator('dialog').waitFor({state:'detached'});

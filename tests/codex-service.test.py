@@ -63,6 +63,12 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(self.m.store.one(wid)['error'],'')
         self.m.event(engine,{'method':'error','params':{'message':'another failure'}})
         self.assertEqual(self.m.store.one(wid)['error'],'another failure')
+        rows=self.m.store.snapshot(wid)['items']
+        self.assertEqual([r['kind'] for r in rows],['error','agentMessage','error'])
+        self.m.event(engine,{'method':'item/completed','params':{'item':{'id':'recovered2','type':'agentMessage','text':'recovered without delta'}}})
+        self.assertEqual(self.m.store.one(wid)['error'],'')
+        self.m.log_problem(wid,'first warning');self.m.log_problem(wid,'second warning')
+        self.assertEqual([r['text'] for r in self.m.store.snapshot(wid)['items'] if r['kind']=='warning'],['first warning','second warning'])
         self.m.event(engine,{'method':'turn/completed','params':{'turn':{'id':'active-turn','status':'failed','error':{'message':'failed finally'}}}})
         self.assertEqual(self.m.store.one(wid)['status'],'failed')
     def test_resolved_questions_keep_options_after_reload_and_other_questions_still_wait(self):
@@ -202,6 +208,8 @@ class AnyRetryLifecycle(Lifecycle):
             self.assertGreater(run.due,time.monotonic())
             run.due=0
             self.wait_for(lambda:run.count==count and self.m.store.one(wid)['status']=='running')
+            self.assertTrue(self.m.store.one(wid)['error'], 'starting a retry is not recovery')
+            self.m.event(engine,{'method':'item/agentMessage/delta','params':{'itemId':'recovered-'+str(count),'delta':'Recovered'}})
             self.assertEqual(self.m.store.one(wid)['error'],'')
             self.m.log_problem(wid,'high demand')
         self.complete(wid,engine,'completed','')

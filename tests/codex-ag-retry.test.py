@@ -31,6 +31,8 @@ class AG(unittest.TestCase):
             self.complete(wid,engine,message='429 rate limit reached')
             run=self.m.any_retries[wid];self.assertIsInstance(run,AgRetry);self.assertEqual(run.delay,[10,20,40,60][count-1]);run.due=0
             self.wait_for(lambda:run.count==count and self.m.store.one(wid)['status']=='running')
+            self.assertTrue(self.m.store.one(wid)['error'], 'starting a retry is not recovery')
+            self.m.event(engine,{'method':'item/agentMessage/delta','params':{'itemId':'recovered-'+str(count),'delta':'Recovered'}})
             self.assertEqual(self.m.store.one(wid)['error'],'')
         starts=[p for method,p in engine.calls if method=='turn/start']
         self.assertEqual(len(starts),5);self.assertEqual(len({p['threadId'] for p in starts}),1)
