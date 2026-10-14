@@ -2,7 +2,7 @@ var ckRecordsData=null,ckRecordsBusy=false,ckRecordsPrincipal='',ckRecordsTimer=
 function ckRecordsScope(cfg){return chatEndpoint(cfg)+'|'+cfg.panelKey}
 function ckRecordsTime(n){return n?new Date(n*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚无'}
 function ckRecordsFailure(f){
-  var stages={reading:'读取聊天来源',summarizing:'整理模型生成',validating:'程序校验',checking:'独立模型检查',batch_saved:'保存批次'},checks={grounded:'事实依据',important:'重要性',concise:'精炼程度',current:'最新状态',limits:'字数限制'};
+  var stages={reading:'读取聊天来源',summarizing:'整理模型生成',validating:'程序校验',checking:'独立模型检查',batch_saved:'保存批次',unknown:'旧版未保存'},checks={grounded:'事实依据',important:'重要性',concise:'精炼程度',current:'最新状态',limits:'字数限制'};
   var lines=['失败时间：'+ckRecordsTime(f.at),'失败阶段：'+(stages[f.stage]||f.stage||'旧版未保存')+(f.day?' · 处理 '+f.day:'')+(f.batch?' · 第 '+f.batch+' / '+f.batches+' 批':''),
     '原因：'+(f.message||'未保存具体原因')+(f.error_code?'（'+f.error_code+'）':'')];
   if(f.provider||f.model)lines.push('本次模型：'+[f.provider,f.model].filter(Boolean).join(' / '));
@@ -17,6 +17,8 @@ function ckRecordsRender(){
   ['todos','profile'].forEach(function(kind){var box=document.getElementById('ck-records-'+kind),count=document.getElementById('ck-records-'+kind+'-count');if(box)box.value=data[kind]||'';if(count)count.textContent=Array.from(data[kind]||'').length+' / 5000 字'});
   var message=(names[data.status]||'正在读取记录')+(data.last_day?' · 已完成至 '+data.last_day:'')+(data.batch&&['summarizing','validating','checking','batch_saved','retry','needs_attention'].includes(data.status)?' · 第 '+data.batch+' / '+data.batches+' 批':'');
   var lines=[message,'最近检查成功：'+ckRecordsTime(data.last_checked_at),'最近内容更新：'+ckRecordsTime(data.last_updated_at)];
+  var latest=(data.history||[])[0];
+  if(latest&&latest.method==='manual')lines.push('最近人工核对：'+(latest.start_day?latest.start_day+' 至 ':'')+latest.day+(latest.partial?'（当天资料截至 '+ckRecordsTime(latest.source_cutoff)+'）':''));
   if(data.last_attempt_at)lines.push('最近尝试：'+ckRecordsTime(data.last_attempt_at));
   if(data.last_error)lines.push(data.last_failure?ckRecordsFailure(data.last_failure):'最近问题：'+data.last_error);
   if(data.legacy_failure)lines.push('旧版本未保存具体失败阶段、时间和审核意见；更新后的新失败会显示详情。');

@@ -45,6 +45,7 @@ const server=http.createServer((req,res)=>{if(req.url==='/blank'){res.setHeader(
   await monitor.locator('summary').click();await page.evaluate(()=>{ckRecordsConnectionError='状态连接暂未完成';ckRecordsRender()});assert.equal(await monitor.locator('details').getAttribute('open'),'');assert((await monitor.innerText()).includes('audit_rejected'));assert((await monitor.innerText()).includes('状态连接暂未完成'));
   await page.screenshot({path:out+'/record-status-'+width+'.png'});
   await page.evaluate(()=>{ckRecordsData={status:'needs_attention',last_error:'总结生成或结果校验失败',legacy_failure:true};ckRecordsRender()});assert((await monitor.innerText()).includes('旧版本未保存具体失败阶段'));
+  await page.evaluate(()=>{ckRecordsData={status:'updated',last_day:'2026-10-13',history:[{method:'manual',start_day:'2026-10-12',day:'2026-10-14',partial:true,source_cutoff:1791950000}]};ckRecordsRender()});assert((await monitor.innerText()).includes('最近人工核对：2026-10-12 至 2026-10-14'));assert((await monitor.innerText()).includes('当天资料截至'));
   assert.deepEqual(errors,[]);console.log(width+': footer, header, navigation, last-window deletion, reload, failure details, history, escaping PASS');await context.close();
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1});
