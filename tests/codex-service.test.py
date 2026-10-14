@@ -42,6 +42,43 @@ class Lifecycle(unittest.TestCase):
         a=self.create();b=self.create();c=self.create('create-request-2')
         self.assertEqual(a['id'],b['id']);self.assertNotEqual(a['thread_id'],c['thread_id'])
         self.assertEqual(len(self.m.engines),2)
+    def test_numbered_titles_are_atomic_and_replayed_creation_keeps_its_title(self):
+        a=self.m.create({'request_id':'numbered-one','auto_title':True,'title':'任务99'})
+        b=self.m.create({'request_id':'numbered-two'})
+        again=self.m.create({'request_id':'numbered-one','auto_title':True})
+        self.assertEqual([a['title'],b['title'],again['title']],['任务1','任务2','任务1'])
+        self.m.action(a['id'],'rename',{'title':'部署面板'})
+        c=self.m.create({'request_id':'numbered-three','auto_title':True})
+        self.assertEqual(c['title'],'任务3')
+    def test_error_display_does_not_allow_a_second_active_turn_and_clears_on_recovery(self):
+        w=self.create();wid=w['id'];engine=self.m.engines[wid]
+        self.m.store.update(wid,status='running',turn_id='active-turn')
+        self.m.event(engine,{'method':'error','params':{'turnId':'active-turn','error':{'message':'provider private-secret-test failed'},'willRetry':True}})
+        actual=self.m.store.one(wid)
+        self.assertEqual(actual['status'],'running');self.assertNotIn('private-secret-test',actual['error'])
+        self.assertIn('failed',actual['error'])
+        with self.assertRaises(service.Problem):self.m.submit(wid,{'request_id':'error-submit','text':'second task'})
+        self.assertEqual(self.m.store.snapshot(wid)['items'][0]['kind'],'error')
+        self.m.event(engine,{'method':'item/agentMessage/delta','params':{'itemId':'response','delta':'recovered'}})
+        self.assertEqual(self.m.store.one(wid)['error'],'')
+        self.m.event(engine,{'method':'error','params':{'message':'another failure'}})
+        self.assertEqual(self.m.store.one(wid)['error'],'another failure')
+        self.m.event(engine,{'method':'turn/completed','params':{'turn':{'id':'active-turn','status':'failed','error':{'message':'failed finally'}}}})
+        self.assertEqual(self.m.store.one(wid)['status'],'failed')
+    def test_resolved_questions_keep_options_after_reload_and_other_questions_still_wait(self):
+        w=self.create();wid=w['id'];engine=self.m.engines[wid]
+        question={'method':'item/tool/requestUserInput','params':{'questions':[{'id':'scope','question':'执行范围','options':[{'label':'仅本次','description':'只处理当前任务'}]}]}}
+        for rid in ('1','2'):
+            engine.requests[rid]=dict(question,id=rid)
+            self.m.store.item(wid,'request:'+rid,'request','',engine.requests[rid])
+        self.m.store.update(wid,status='waiting')
+        self.m.action(wid,'answer',{'request_id':'1','answers':{'scope':'仅本次'}})
+        self.assertEqual(self.m.store.one(wid)['status'],'waiting')
+        record=self.m.store.snapshot(wid)['items'][0]
+        self.assertEqual(record['kind'],'resolved');self.assertEqual(record['data']['params'],question['params'])
+        self.m.event(engine,{'method':'serverRequest/resolved','params':{'requestId':'2'}})
+        self.assertEqual(self.m.store.one(wid)['status'],'running')
+        self.assertTrue(all(item['data']['method']==question['method'] for item in self.m.store.snapshot(wid)['items']))
     def test_submission_retry_never_duplicates_task(self):
         w=self.create();body={'text':'do work','request_id':'submit-request-1'}
         self.m.submit(w['id'],body);self.m.submit(w['id'],body)

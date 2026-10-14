@@ -24,7 +24,7 @@ from key_store import KeyStore
 from any_retry import AnyRetry, CONTINUE_TASK, is_any
 from ag_retry import AgRetry, is_ag
 
-VERSION = '1.4.0'
+VERSION = '1.4.1'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
 WORKSPACE = Path(os.environ.get('CK_CODEX_WORKSPACE', '/home/ckcodex/workspace'))
@@ -107,7 +107,9 @@ class Store:
         with self.lock:
             if not self.db.execute('SELECT 1 FROM windows WHERE id=?', (wid,)).fetchone():
                 return
-            old = self.db.execute('SELECT text,created FROM items WHERE window_id=? AND id=?', (wid, iid)).fetchone()
+            old = self.db.execute('SELECT text,created,data FROM items WHERE window_id=? AND id=?', (wid, iid)).fetchone()
+            if kind == 'resolved' and old:
+                data = dict(json.loads(old['data']), **(data or {}))
             if append and old:
                 text = old['text'] + text
             limit = 65536 if kind in ('commandExecution', 'tool') else 262144
@@ -413,8 +415,13 @@ class Manager:
             cwd = str(WORKSPACE)
             now = time.time()
             with self.store.lock:
+                title = str(body.get('title') or '').strip()
+                if body.get('auto_title') or not title:
+                    numbers = [int(m.group(1)) for w in self.store.list()
+                               if (m := re.fullmatch(r'任务\s*(\d+)', w['title'] or ''))]
+                    title = '任务' + str(max(numbers, default=0) + 1)
                 self.store.db.execute('INSERT INTO windows(id,create_key,title,profile,cwd,status,created,updated) VALUES(?,?,?,?,?,?,?,?)',
-                                      (wid, request_id, str(body.get('title') or '新任务')[:100], profile['id'], cwd, 'opening', now, now))
+                                      (wid, request_id, title[:100], profile['id'], cwd, 'opening', now, now))
                 self.store.db.commit()
             try:
                 engine = self.engine(wid)
@@ -541,7 +548,7 @@ class Manager:
             run.schedule(turn.get('error'))
             self.store.db.execute("UPDATE tasks SET status='queued',turn_id='' WHERE request_id=?", (run.request_id,))
             self.store.db.commit()
-            self.store.update(wid, status='queued', turn_id='', error='')
+            self.store.update(wid, status='queued', turn_id='', error='上游过载，等待自动重试')
             self.store.item(wid, 'any-retry:'+run.request_id, 'warning', run.text)
             return True
 
@@ -599,7 +606,7 @@ class Manager:
         method, p = event.get('method', ''), self.clean(event.get('params', {}))
         wid = engine.wid
         if method == 'turn/started':
-            self.store.update(wid, status='running', turn_id=p['turn']['id'])
+            self.store.update(wid, status='running', turn_id=p['turn']['id'], error='')
         elif method == 'turn/completed':
             turn = p['turn']
             with self.store.lock:
@@ -635,6 +642,8 @@ class Manager:
                 item = {'id':item['id'], 'type':kind, 'status':item.get('status'), 'command':item.get('command','')}
             self.store.item(wid, item['id'], kind, text, item)
         elif method in ('item/agentMessage/delta','item/plan/delta','item/commandExecution/outputDelta','item/reasoning/summaryTextDelta'):
+            if method == 'item/agentMessage/delta' and p.get('delta') and self.store.one(wid)['error']:
+                self.store.update(wid, error='')
             kind = {'item/agentMessage/delta':'agentMessage','item/plan/delta':'plan',
                     'item/commandExecution/outputDelta':'commandExecution','item/reasoning/summaryTextDelta':'reasoning'}[method]
             iid = p['itemId']
@@ -648,12 +657,24 @@ class Manager:
             self.store.item(wid, 'diff:'+p.get('turnId',''), 'diff', p.get('diff',''))
         elif method == 'thread/tokenUsage/updated':
             self.store.update(wid, usage=json.dumps(p.get('tokenUsage', {})))
-        elif method in ('warning','error','configWarning'):
+        elif method == 'error':
+            error = p.get('error') or {}
+            text = self.redact(str((error.get('message') if isinstance(error, dict) else error) or p.get('message') or 'Codex 运行出错'))
+            with self.store.lock:
+                if wid in self.any_retries and retryable(p):
+                    self.store.update(wid, error='上游过载，等待自动重试')
+                else:
+                    self.store.update(wid, error=text)
+                    self.store.item(wid, 'error:'+str(p.get('turnId') or 'current'), 'error', text,
+                                    {'willRetry':bool(p.get('willRetry'))})
+        elif method in ('warning','configWarning'):
             self.log_problem(wid, p.get('message') or p.get('summary') or str(p.get('error', p)))
         elif method == 'serverRequest/resolved':
             rid = str(p.get('requestId'))
             engine.requests.pop(rid, None)
             self.store.item(wid, 'request:'+rid, 'resolved', '已处理')
+            if not engine.requests and self.store.one(wid)['status'] == 'waiting':
+                self.store.update(wid, status='running')
 
     def action(self, wid, action, body):
         with self.lock:
@@ -768,7 +789,7 @@ class Manager:
                 engine.send({'id':event['id'], 'result':result})
                 engine.requests.pop(rid, None)
                 self.store.item(wid,'request:'+rid,'resolved','已回复')
-                self.store.update(wid,status='running')
+                self.store.update(wid,status='waiting' if engine.requests else 'running')
             else:
                 raise Problem('未知操作', 404)
             return self.store.one(wid)

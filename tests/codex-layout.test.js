@@ -28,14 +28,14 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/tasks-'+width+'.png'});
   await page.locator('#cx-tab-api').click();assert.equal(await page.locator('.cx-profile-card[open]').count(),0);
   const p=page.locator('.cx-profile-card[data-id=p]'),q=page.locator('.cx-profile-card[data-id=q]');
-  await p.locator('summary').click();await q.locator('summary').click();
+  await q.locator('summary').click();
   await q.locator('[name=name]').fill('尚未保存的另一个供应商');await q.locator('[name=base_url]').fill('');
-  await p.locator('[name=name]').fill('AgentRouter · 独立保存');
+  await p.locator('summary').click();await p.locator('[name=name]').fill('AgentRouter · 独立保存');
   await p.getByRole('button',{name:'保存供应商',exact:true}).click();await p.getByText('已保存 · 下次任务生效',{exact:true}).waitFor();
   assert.equal(posted.length,1);assert.equal(posted[0].profile.id,'p');assert.equal(config.profiles[1].name,'4router');assert.equal(await q.locator('[name=name]').inputValue(),'尚未保存的另一个供应商');assert.equal(await q.locator('[name=base_url]').inputValue(),'');
   await p.locator('.ck-select-button').click();for(const effort of ['high','xhigh','max','ultra'])assert(await page.locator('dialog').getByRole('button',{name:effort,exact:true}).isVisible());await page.locator('dialog').getByRole('button',{name:'max',exact:true}).click();
   await p.getByRole('button',{name:'刷新模型',exact:true}).click();await page.locator('dialog[open]').waitFor();assert((await page.locator('dialog').innerText()).includes('unauthorized_client_error'));await page.keyboard.press('Escape');assert(await page.locator('#cx-api').isVisible());
-  await q.locator('summary').click();await page.locator('#cx-api').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/api-'+width+'.png'});
+  await page.locator('#cx-api').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/api-'+width+'.png'});
   await page.evaluate(()=>document.body.classList.add('dark'));assert(await p.isVisible());await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/api-dark-'+width+'.png'});
   await page.locator('#cx-exit').click();
   await page.evaluate(()=>{window.storedPanelKey=()=> 'fixture-panel-key';document.getElementById('ckActionModal').classList.remove('show');document.getElementById('loading-wrap').style.setProperty('display','none','important');});
