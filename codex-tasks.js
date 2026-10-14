@@ -13,7 +13,7 @@
   function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'cx-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2); }
   function current() { return windows.find(function(w){return w.id===selected;}); }
   function opened() { return root && !root.hidden; }
-  function message(text, bad) { $('message').textContent=text||''; $('message').classList.toggle('cx-error',!!bad); }
+  function message(text, bad) { $('message').textContent=text||''; $('message').classList.toggle('cx-error',!!bad);delete $('message').dataset.windowError; }
   function stamp(ts) { return new Date(ts*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
   function draftKey(id) { return 'ck_codex_draft_'+id; }
   function saveDraft(){
@@ -64,9 +64,10 @@
   }
   function feedback(b,text,state){
     if(!b)return;
-    clearTimeout(b.feedbackTimer);if(!b.dataset.label)b.dataset.label=b.textContent;
+    var saved=b.feedbackState||(b.feedbackState={button:b,label:b.textContent});b=saved.button;
+    clearTimeout(saved.timer);if(!b.dataset.label)b.dataset.label=saved.label;
     b.textContent=text;b.dataset.feedback=state;b.setAttribute('aria-busy',String(state==='busy'));b.disabled=state==='busy';
-    if(state!=='busy')b.feedbackTimer=setTimeout(function(){b.textContent=b.dataset.label;delete b.dataset.feedback;b.removeAttribute('aria-busy');},2200);
+    if(state!=='busy')saved.timer=setTimeout(function(){var live=saved.button;live.textContent=saved.label;delete live.dataset.feedback;live.removeAttribute('aria-busy');},2200);
   }
   function copyButton(text,label){var b=button('复制',function(){copy(text,b);},'cx-copy');if(label)b.setAttribute('aria-label',label);return b;}
   function chooseDialog(title, choices, opts){
@@ -214,7 +215,7 @@
     var profile=config.profiles.find(function(p){return p.id===chosen;});$('effort').textContent=profile?profile.effort:'';
     var usage={};try{usage=JSON.parse(w&&w.usage||'{}');}catch(_){}
     var total=usage.total||{};$('usage').textContent=total.totalTokens?Number(total.totalTokens).toLocaleString()+' tokens':'';
-    if(w&&w.error)message(w.error,true);
+    if(w&&w.error){message(w.error,true);$('message').dataset.windowError=w.id;}else if($('message').dataset.windowError)message('');
     $('compose-hint').textContent=timed?'按北京时间执行，退出页面仍有效；窗口忙碌时等待空闲。':w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已提交，正在启动。':w&&w.status==='running'?'正在服务器执行。可以补充指令，或选择时间安排下一任务。':'不选时间即刻执行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
   }
   async function copy(text,b){
@@ -274,8 +275,14 @@
       var previous=items.get(item.id);if(item.kind==='resolved'&&!item.data.method&&previous&&previous.data.method)item=Object.assign({},item,{data:previous.data});
       items.set(item.id,item);
       if(item.kind==='resolved'&&!item.data.method)return;
-      var old=Array.from(feed.children).find(function(n){return n.dataset.itemId===item.id;}), el=card(item);
-      if(old){var openedDetail=old.querySelector('details[open]');if(openedDetail&&el.querySelector('details'))el.querySelector('details').open=true;old.replaceWith(el);}else feed.append(el);
+      var old=Array.from(feed.children).find(function(n){return n.dataset.itemId===item.id;});
+      if(old&&previous&&previous.kind===item.kind&&previous.text===item.text&&JSON.stringify(previous.data)===JSON.stringify(item.data))return;
+      var el=card(item);
+      if(old){
+        var openedDetail=old.querySelector('details[open]');if(openedDetail&&el.querySelector('details'))el.querySelector('details').open=true;
+        var copies=el.querySelectorAll('.cx-copy');old.querySelectorAll('.cx-copy').forEach(function(b,i){if(b.dataset.feedback&&copies[i]){var next=copies[i];next.feedbackState=b.feedbackState;b.feedbackState.button=next;next.textContent=b.textContent;next.dataset.feedback=b.dataset.feedback;next.disabled=b.disabled;next.setAttribute('aria-busy',b.getAttribute('aria-busy'));}});
+        old.replaceWith(el);
+      }else feed.append(el);
     });
     if(!feed.childElementCount){var empty=node('div','cx-empty');empty.append(node('span','','>_'),node('h3','','窗口已准备好'),node('p','','输入任务后，Codex 会在美国 VPS 上开始执行。'));feed.append(empty);}
     if(changed.length&&feed.querySelector('.cx-empty')&&feed.childElementCount>1)feed.querySelector('.cx-empty').remove();
