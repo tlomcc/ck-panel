@@ -8,8 +8,8 @@ from ag_retry import AgRetry,AG_PROFILE_ID,is_ag
 
 class AG(unittest.TestCase):
     create=f.Lifecycle.create
-    wait_for=f.AnyRetryLifecycle.wait_for
-    complete=f.AnyRetryLifecycle.complete
+    wait_for=f.AnyNoRetryLifecycle.wait_for
+    complete=f.AnyNoRetryLifecycle.complete
     def setUp(self):
         f.Lifecycle.setUp(self)
         self.profile.update(id=AG_PROFILE_ID,name='ag',base_url='https://agentrouter.org/v1')
@@ -29,7 +29,7 @@ class AG(unittest.TestCase):
             self.m.event(engine,{'method':'error','params':{'error':{'message':'429 rate limit reached'}}})
             self.assertEqual(self.m.store.one(wid)['error'],'AG 限流，等待自动继续')
             self.complete(wid,engine,message='429 rate limit reached')
-            run=self.m.any_retries[wid];self.assertIsInstance(run,AgRetry);self.assertEqual(run.delay,[10,20,40,60][count-1]);run.due=0
+            run=self.m.ag_retries[wid];self.assertIsInstance(run,AgRetry);self.assertEqual(run.delay,[10,20,40,60][count-1]);run.due=0
             self.wait_for(lambda:run.count==count and self.m.store.one(wid)['status']=='running')
             self.assertTrue(self.m.store.one(wid)['error'], 'starting a retry is not recovery')
             self.m.event(engine,{'method':'item/agentMessage/delta','params':{'itemId':'recovered-'+str(count),'delta':'Recovered'}})
@@ -37,13 +37,13 @@ class AG(unittest.TestCase):
         starts=[p for method,p in engine.calls if method=='turn/start']
         self.assertEqual(len(starts),5);self.assertEqual(len({p['threadId'] for p in starts}),1)
         self.assertEqual(starts[-1]['input'][0]['text'],f.service.CONTINUE_TASK)
-        self.complete(wid,engine,'completed','');self.assertNotIn(wid,self.m.any_retries)
+        self.complete(wid,engine,'completed','');self.assertNotIn(wid,self.m.ag_retries)
         warnings=[i for i in self.m.store.snapshot(wid)['items'] if i['kind']=='warning'];self.assertEqual(len(warnings),1)
         self.assertIn('4 次',warnings[0]['text'])
     def test_stop_cancels_wait_and_reopen_does_not_rearm(self):
         wid,engine=self.start();self.complete(wid,engine,message='rate_limit_exceeded')
         self.m.action(wid,'close',{});self.m.action(wid,'reopen',{})
-        self.assertNotIn(wid,self.m.any_retries);time.sleep(.4)
+        self.assertNotIn(wid,self.m.ag_retries);time.sleep(.4)
         self.assertEqual(len([1 for method,_ in engine.calls if method=='turn/start']),1)
     def test_only_rate_limit_is_retryable(self):
         run=AgRetry('fixture')
@@ -59,6 +59,6 @@ class AG(unittest.TestCase):
             run.schedule({'retryAfterMs':90000});self.assertEqual(run.due,190)
     def test_non_rate_limit_failure_finishes_without_continuation(self):
         wid,engine=self.start();self.complete(wid,engine,message='401 unauthorized client')
-        self.assertEqual(self.m.store.one(wid)['status'],'failed');self.assertNotIn(wid,self.m.any_retries)
+        self.assertEqual(self.m.store.one(wid)['status'],'failed');self.assertNotIn(wid,self.m.ag_retries)
 
 if __name__=='__main__':unittest.main()

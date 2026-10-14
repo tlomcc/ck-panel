@@ -3,7 +3,10 @@ import json
 import re
 import time
 from urllib.parse import urlsplit
-from any_retry import AnyRetry, retryable
+CONTINUE_TASK = ('继续完成用户在本窗口提交的尚未完成任务，包括已追加的要求。'
+                 '上次请求因供应商暂时不可用而结束。先核对已有进展，'
+                 '保留已成功的操作和结果，不重复执行已完成的工作；完成任务后结束。')
+
 
 AG_PROFILE_ID = 'computer-api'
 
@@ -13,11 +16,30 @@ def is_ag(profile):
             and urlsplit(profile.get('base_url', '')).hostname == 'agentrouter.org')
 
 
-class AgRetry(AnyRetry):
+class AgRetry:
+    def __init__(self, request_id):
+        self.request_id = request_id
+        self.count = 0
+        self.due = 0
+        self.pending = False
+
+    def ready(self):
+        return not self.pending or time.monotonic() >= self.due
+
+    def starting(self):
+        if self.pending:
+            self.count += 1
+            self.pending = False
+
     def accepts(self, error):
         text = (error if isinstance(error, str) else json.dumps(error, ensure_ascii=False)).lower()
         normalized = re.sub(r'rate[ _-]?limit', 'rate limit', text).replace('限流', 'rate limit')
-        return retryable(normalized) and bool(
+        if any(word in normalized for word in (
+                'unauthorized', 'invalid api key', 'insufficient_quota',
+                'insufficient balance', 'billing', 'model_refusal',
+                'context_length_exceeded', 'permission denied')):
+            return False
+        return bool(
             re.search(r'\brate[ _-]?limit|\b429\b|too many requests|请求过多|限流', text))
 
     def schedule(self, error=None):

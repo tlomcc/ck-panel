@@ -10,10 +10,10 @@ import sys
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]/'codex-service'))
-from any_retry import ANY_PROFILE_ID
 
 spec=importlib.util.spec_from_file_location('codex_service',Path(__file__).parents[1]/'codex-service/service.py')
 service=importlib.util.module_from_spec(spec);spec.loader.exec_module(service)
+ANY_PROFILE_ID = service.ANY_PROFILE_ID
 
 class FakeEngine:
     def __init__(self,manager,wid,profile):
@@ -168,7 +168,7 @@ class Lifecycle(unittest.TestCase):
         self.m.store.item(wid,'long','agentMessage',text[200000:],append=True)
         self.assertEqual(self.m.store.snapshot(wid)['items'][0]['text'],text)
 
-class AnyRetryLifecycle(Lifecycle):
+class AnyNoRetryLifecycle(Lifecycle):
     def setUp(self):
         super().setUp()
         self.profile.update(id=ANY_PROFILE_ID, name='any')
@@ -197,86 +197,30 @@ class AnyRetryLifecycle(Lifecycle):
         self.m.event(engine,{'method':'turn/completed','params':{'turn':turn}})
         return turn
 
-    def test_unbounded_retries_one_counter_then_success_no_restart(self):
+    def test_overload_failure_never_submits_automatic_continuation(self):
         wid,engine=self.start_task()
-        for count in range(1,13):
-            self.m.event(engine,{'method':'error','params':{'error':{'message':'high demand'}}})
-            self.assertIn('等待自动重试',self.m.store.one(wid)['error'])
-            self.complete(wid,engine)
-            run=self.m.any_retries[wid]
-            self.assertTrue(run.pending)
-            self.assertGreater(run.due,time.monotonic())
-            run.due=0
-            self.wait_for(lambda:run.count==count and self.m.store.one(wid)['status']=='running')
-            self.assertTrue(self.m.store.one(wid)['error'], 'starting a retry is not recovery')
-            self.m.event(engine,{'method':'item/agentMessage/delta','params':{'itemId':'recovered-'+str(count),'delta':'Recovered'}})
-            self.assertEqual(self.m.store.one(wid)['error'],'')
-            self.m.log_problem(wid,'high demand')
-        self.complete(wid,engine,'completed','')
-        self.assertNotIn(wid,self.m.any_retries)
-        snapshot=self.m.store.snapshot(wid)
-        self.assertEqual([i['text'] for i in snapshot['items'] if i['kind']=='warning'],['已重试 12 次'])
-        self.assertEqual(self.m.store.db.execute('SELECT count(*) FROM tasks').fetchone()[0],1)
-        starts=[p for method,p in engine.calls if method=='turn/start']
-        self.assertEqual(len(starts),13)
-        self.assertEqual(starts[0]['input'][0]['text'],'original user task')
-        self.assertEqual(starts[-1]['input'][0]['text'],service.CONTINUE_TASK)
-        self.assertEqual(len({p['threadId'] for p in starts}),1)
-        time.sleep(.4)
-        self.assertEqual(len([1 for method,_ in engine.calls if method=='turn/start']),13)
-        self.assertEqual(self.m.store.one(wid)['status'],'completed')
-
-    def test_stop_during_delay_cancels_and_reopen_does_not_rearm(self):
-        wid,engine=self.start_task();turn=self.complete(wid,engine)
-        self.m.action(wid,'close',{})
-        self.m.event(engine,{'method':'turn/completed','params':{'turn':turn}})
-        self.assertNotIn(wid,self.m.any_retries)
-        self.m.action(wid,'reopen',{})
-        time.sleep(.4)
-        self.assertEqual(self.m.store.one(wid)['status'],'idle')
-        self.assertEqual(self.m.store.db.execute('SELECT status FROM tasks').fetchone()[0],'interrupted')
-        self.assertEqual(len([1 for method,_ in engine.calls if method=='turn/start']),1)
-
-    def test_retry_wait_does_not_block_another_provider(self):
-        wid,engine=self.start_task();self.complete(wid,engine)
-        self.m.any_retries[wid].due=time.monotonic()+10
-        other=dict(self.profile,id='not-any',name='any')
-        self.m.config['profiles'].append(other)
-        w=self.m.create({'request_id':'other-create-001','profile':'not-any'})
-        self.m.submit(w['id'],{'text':'other task','request_id':'other-submit-001'})
-        self.wait_for(lambda:self.m.store.one(w['id'])['status']=='running')
-        self.complete(w['id'],self.m.engines[w['id']])
-        self.assertEqual(self.m.store.one(w['id'])['status'],'failed')
-        self.assertNotIn(w['id'],self.m.any_retries)
-        self.assertEqual(self.m.store.one(wid)['status'],'queued')
-
-    def test_permanent_error_stops(self):
-        wid,engine=self.start_task();self.complete(wid,engine,message='401 Unauthorized invalid API key')
+        self.m.event(engine,{'method':'error','params':{'error':{'message':'high demand'}}})
+        self.assertNotIn('等待自动',self.m.store.one(wid)['error'])
+        self.complete(wid,engine)
+        time.sleep(.8)
         self.assertEqual(self.m.store.one(wid)['status'],'failed')
-        self.assertNotIn(wid,self.m.any_retries)
+        self.assertNotIn(wid,self.m.ag_retries)
+        self.assertEqual(sum(m=='turn/start' for m,_ in engine.calls),1)
+        self.assertFalse(any(i['id'].startswith(('any-retry:','ag-retry:'))
+                             for i in self.m.store.snapshot(wid)['items']))
+        self.m.submit(wid,{'text':'user manually continues','request_id':'manual-again-001'})
+        self.wait_for(lambda:self.m.store.one(wid)['status']=='running')
+        self.assertEqual(sum(m=='turn/start' for m,_ in engine.calls),2)
+        self.assertNotIn(wid,self.m.ag_retries)
 
-    def test_restart_during_delay_never_replays_task(self):
-        wid,engine=self.start_task();self.complete(wid,engine)
-        second=service.Store(self.root)
-        try:
-            self.assertEqual(second.one(wid)['status'],'interrupted')
-            self.assertEqual(second.db.execute('SELECT status FROM tasks').fetchone()[0],'interrupted')
-        finally:second.db.close()
-
-    def test_duplicate_completion_does_not_reset_wait(self):
-        wid,engine=self.start_task();turn=self.complete(wid,engine)
-        due=self.m.any_retries[wid].due
-        self.m.event(engine,{'method':'turn/completed','params':{'turn':turn}})
-        self.assertEqual(self.m.any_retries[wid].due,due)
-
-    def test_delay_is_random_integer_one_to_ten(self):
-        import any_retry
-        with patch.object(any_retry.random,'SystemRandom') as rng, patch.object(any_retry.time,'monotonic',return_value=100):
-            rng.return_value.randint.side_effect=[1,10,4]
-            run=service.AnyRetry('task')
-            due=[]
-            for _ in range(3):run.schedule();due.append(run.due)
-            self.assertEqual(due,[101,110,104])
-            self.assertEqual(rng.return_value.randint.call_args.args,(1,10))
+    def test_native_any_retries_remain_zero_other_providers_unchanged(self):
+        for profile,expected in [(self.profile,0),(dict(self.profile,id='other'),2)]:
+            wid=uuid.uuid4().hex
+            with patch.object(service.subprocess,'Popen'), patch.object(service.threading.Thread,'start'), \
+                 patch.object(service.Engine,'rpc'), patch.object(service.Engine,'send'):
+                service.Engine(self.m,wid,profile)
+            config=(self.m.window_home(wid)/'config.toml').read_text()
+            self.assertIn(f'request_max_retries = {expected}',config)
+            self.assertIn(f'stream_max_retries = {expected}',config)
 
 if __name__=='__main__':unittest.main()

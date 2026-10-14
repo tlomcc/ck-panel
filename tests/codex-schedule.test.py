@@ -88,13 +88,13 @@ class Scheduling(unittest.TestCase):
                 self.m.schedule(wid,{'request_id':'invalid-schedule','text':'work','scheduled_for':due})
         self.assertEqual(self.m.store.schedules(wid),[])
 
-    def test_selected_provider_is_retained_and_any_only_arms_at_dispatch(self):
+    def test_selected_provider_is_retained_and_any_never_arms_retry(self):
         self.m.config['profiles'].append(dict(self.profile,id=fixtures.ANY_PROFILE_ID,name='any',model='any-model'))
         wid=self.create()['id']; self.m.action(wid,'profile',{'profile':fixtures.ANY_PROFILE_ID}); self.schedule(wid)
-        self.assertNotIn(wid,self.m.any_retries)
+        self.assertNotIn(wid,self.m.ag_retries)
         self.m.action(wid,'profile',{'profile':'p'})
         with self.assertRaises(service.Problem):self.m.save_config({'profiles':[self.profile]})
-        self.due(); self.m.dispatch_due(); self.assertIn(wid,self.m.any_retries)
+        self.due(); self.m.dispatch_due(); self.assertNotIn(wid,self.m.ag_retries)
         worker=threading.Thread(target=self.m.pump); worker.start()
         try:
             deadline=time.monotonic()+3
@@ -102,6 +102,13 @@ class Scheduling(unittest.TestCase):
             starts=[p for method,p in self.m.engines[wid].calls if method=='turn/start']
             self.assertEqual(len(starts),1); self.assertEqual(starts[0]['model'],'any-model')
             self.assertEqual(self.m.store.one(wid)['profile'],'p')
+            engine=self.m.engines[wid]
+            self.m.event(engine,{'method':'turn/completed','params':{'turn':{
+                'id':self.m.store.one(wid)['turn_id'],'status':'failed',
+                'error':{'message':'503 high demand'}}}})
+            time.sleep(.5)
+            self.assertEqual(self.m.store.one(wid)['status'],'failed')
+            self.assertEqual(sum(m=='turn/start' for m,_ in engine.calls),1)
         finally:self.m.quit.set(); worker.join(3)
 
     def test_simultaneous_dispatch_claims_once(self):
