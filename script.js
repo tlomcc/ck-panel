@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v325-records-status-sidebar';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v326-delete-window-digest';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6814,13 +6814,42 @@ async function chatDeleteSession(id,event){
     event.preventDefault();
     event.stopPropagation();
   }
-  if(chatSending)return;
+  if(chatSending||chatDeleteDigestBusy)return;
   chatFlushAssistantRevealQueue();
   var s=chatSessions.find(function(x){return x.id===id});
+  if(!s)return;
+  if(!chatSessionsReady){toast('正在加载完整聊天记录，请稍后再删除');return;}
   var title=(s&&s.title)||'这个对话';
-  var confirmed=await ckConfirmDialog('删除“'+title+'”后，本机对话及其后台截断任务、总结状态记录将一并移除。',{title:'删除对话',confirmText:'删除',danger:true});
-  if(!confirmed)return;
+  chatDeleteDigestBusy=true;
+  var handoff=null;
+  try{
+  if(String(s.title||'').trim()==='小克'){
+    if(!await ckConfirmDialog('删除“'+title+'”后，本机对话及其后台截断任务、总结状态记录将一并移除。',{title:'删除对话',confirmText:'删除',danger:true}))return;
+  }else{
+    var choice=await ckChooseDialog('删除「'+title+'」',[
+      {value:'summarize',label:'确定 · 总结后删除',hint:'使用总结截断模型，保存成功后删除。'},
+      {value:'delete',label:'不总结，直接删除',hint:'删除本机对话及其后台截断任务、总结状态记录。',danger:true}
+    ],{message:'是否将这个窗口尚未总结的聊天汇入「小克」的当日总结？',cancelText:'取消'});
+    if(choice!=='summarize'&&choice!=='delete')return;
+    if(choice==='summarize'){
+      handoff=await chatDeleteDigestHandoff(s);
+      chatSetStatus('总结已保存，正在同步「小克」…');
+      var handoffCfg=chatLoadConfig();
+      if((handoff.groups||handoff.target.digestManualPending)&&(!await chatSyncNightlyDigest(handoffCfg,{session:handoff.target,force:true})||handoff.target.digestManualPending===chatNightlyScope(handoffCfg)||handoff.target.digestRemoteConflict)){
+        throw Error('总结已保存在「小克」，后台同步尚未确认；原窗口已保留，再次操作不会重复汇入。');
+      }
+    }
+  }
+  if(chatSending||chatTrimBusy||chatTrimTransaction||chatActiveDigestJob){toast('正在处理聊天或总结，原窗口已保留');return;}
+  if(handoff&&(handoff.scope!==chatNightlyScope(chatLoadConfig())||handoff.sourceStamp!==chatDeleteDigestSourceStamp(s))){
+    toast('汇入后聊天或网关有变化，原窗口已保留；可重新操作补齐新内容',6000);return;
+  }
+  var deleteSourceStamp=chatDeleteDigestSourceStamp(s);
+  var deleteScope=chatNightlyScope(chatLoadConfig());
   if(typeof chatWakeForget==='function'&&!await chatWakeForget(id))return;
+  if(chatSending||chatTrimBusy||chatTrimTransaction||deleteScope!==chatNightlyScope(chatLoadConfig())||chatDailyDigestFindSession(id)!==s||deleteSourceStamp!==chatDeleteDigestSourceStamp(s)){
+    toast('删除前聊天内容有变化，原窗口已保留',5000);return;
+  }
   chatDigestForgetSession(id,chatLoadConfig());
   chatDeletedSessionIds[id]=true;
   chatSessions=chatSessions.filter(function(x){return x.id!==id});
@@ -6830,7 +6859,7 @@ async function chatDeleteSession(id,event){
     chatActiveSessionId=newId;
   }else if(chatActiveSessionId===id){
     chatSessions.sort(function(a,b){return (b.updated||0)-(a.updated||0)});
-    chatActiveSessionId=chatSessions[0].id;
+    chatActiveSessionId=handoff?handoff.target.id:chatSessions[0].id;
   }
   var cfg=chatLoadConfig();
   cfg.sessionId=chatActiveSessionId;
@@ -6846,7 +6875,11 @@ async function chatDeleteSession(id,event){
   chatRenderMessages();
   chatRenderDailyDigest(cfg);
   chatUpdateRuntime(cfg);
-  chatSetStatus('对话已删除');
+  var message=handoff?(handoff.groups?'已汇入「小克」的当日总结，原窗口已删除':'没有尚未总结的内容，原窗口已删除'):'对话已删除';
+  chatSetStatus(message);toast(message);
+  }catch(error){
+    var failure=chatDigestSafeError(error,chatLoadConfig());chatSetStatus(failure);toast(failure,6000);
+  }finally{chatDeleteDigestBusy=false;}
 }
 function chatSelectSession(id){
   if(chatSending)return;
