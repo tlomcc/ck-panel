@@ -84,14 +84,51 @@
   }
   function status(w){return w.status==='failed'?'failed':w.error?'error':w.status;}
   function statusLabel(w){return status(w)==='error'?(w.status==='interrupted'?'执行中断':w.status==='queued'?'出错待重试':'运行出错'):(labels[w.status]||w.status);}
-  function renderOtherErrors(){
-    var box=$('other-errors');if(!box)return;
-    var errors=windows.filter(function(w){return w.id!==selected&&w.error&&!['completed','closed','idle'].includes(w.status);});
-    var signature=JSON.stringify(errors.map(function(w){return [w.id,w.title,w.error];}));
-    box.hidden=!config||!errors.length;
-    if(box.dataset.signature===signature)return;
-    box.dataset.signature=signature;box.replaceChildren();
-    errors.forEach(function(w){box.append(button(w.title+'：'+w.error,function(){showTab('tasks');select(w.id);},'cx-other-error'));});
+  function seenKey(id){return 'ck_codex_seen_'+encodeURIComponent(endpoint)+'_'+id;}
+  function completionVersion(w){return String(w.seq||w.updated||0);}
+  function completionSeen(w){try{return localStorage.getItem(seenKey(w.id))===completionVersion(w);}catch(_){return false;}}
+  function archivedWindow(w){return w.status==='closed'||(w.status==='completed'&&!w.error&&!w.scheduled_count&&completionSeen(w));}
+  function markCompletionSeen(snapshot){
+    var w=current();
+    // A list poll, cached feed, failed read, or background settings page is not a view.
+    if(!opened()||document.hidden||tab!=='tasks'||!w||w.id!==snapshot.id||w.status!=='completed'||w.error||snapshot.status!=='completed'||completionVersion(w)!==completionVersion(snapshot))return;
+    try{localStorage.setItem(seenKey(w.id),completionVersion(snapshot));}catch(_){}
+  }
+  async function openTaskNotice(id){
+    if(!opened()){
+      // Choose before opening: never acknowledge the previously selected window incidentally.
+      restoreWindow(id);localStorage.setItem('ck_codex_selected',id);
+      await window.ckOpenCodex('tasks');
+    }else await select(id);
+  }
+  function renderTaskNotices(){
+    var rail=$('task-notices');if(!rail)return;
+    var inside=opened(),parent=inside?root.querySelector('.cx-shell'):document.body;
+    if(rail.parentNode!==parent){if(inside)$('body').before(rail);else parent.append(rail);}
+    rail.classList.toggle('cx-notices-outside',!inside);
+    $('notice-tools').hidden=!inside||!config;
+    var active=windows.filter(function(w){return !archivedWindow(w);}).sort(function(a,b){return (a.created||0)-(b.created||0)||a.id.localeCompare(b.id);});
+    rail.hidden=!access||(!active.length&&(!inside||!config));
+    var list=$('notice-list'),signature=JSON.stringify([inside,tab,selected,active.map(function(w){return [w.id,w.title,windowState(w),w.error,w.scheduled_count,completionSeen(w)];})]);
+    if(list.dataset.signature===signature)return;
+    list.dataset.signature=signature;
+    var prior=new Map(Array.from(list.children).map(function(b){return [b.dataset.windowId,b];}));
+    active.forEach(function(w,index){
+      var b=prior.get(w.id);prior.delete(w.id);
+      if(!b){b=button('',function(){openTaskNotice(w.id);},'cx-task-notice');b.dataset.windowId=w.id;b.append(node('strong'),node('span'));}
+      var stale=windowState(w)==='状态待同步',bad=stale||['failed','error'].includes(status(w));
+      var label=stale?'连接异常 · 待同步':w.status==='completed'&&!completionSeen(w)?'已完成 · 未查看':statusLabel(w);
+      if(w.scheduled_count)label+=' · '+w.scheduled_count+' 个定时任务';
+      b.dataset.status=stale?'unknown':status(w);b.dataset.tone=bad?'error':'ok';
+      b.classList.toggle('active',inside&&tab==='tasks'&&w.id===selected);
+      b.querySelector('strong').textContent=w.title;b.querySelector('span').textContent=label;
+      b.title=w.title+' · '+label+(w.error?'：'+w.error:'');b.setAttribute('aria-label',b.title+'，点击查看');
+      if(list.children[index]!==b)list.insertBefore(b,list.children[index]||null);
+    });
+    prior.forEach(function(b){
+      if(inside&&document.activeElement===b){$('window-title').tabIndex=-1;$('window-title').focus({preventScroll:true});}
+      b.remove();
+    });
   }
   function sidebarClose(){closeSidebar();}
   function dismiss(target){
@@ -166,8 +203,8 @@
     root=node('div','cx-overlay');root.id='cx-root';root.hidden=true;
     root.innerHTML='<section class="cx-shell" role="dialog" aria-modal="true" aria-labelledby="cx-title">'+
       '<header class="cx-head"><button type="button" id="cx-window-toggle" class="btn btn-outline btn-sm cx-window-toggle" aria-expanded="false" aria-controls="cx-window-sidebar">菜单</button><div id="cx-page-heading" class="cx-brand"><h2 id="cx-title">Codex</h2></div><div id="cx-window-toolbar" class="cx-window-toolbar"><div class="cx-window-heading"><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div><details class="cx-window-menu"><summary aria-label="窗口操作">···</summary><div class="cx-window-actions"><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button></div></details></div><span id="cx-connection" class="cx-badge">尚未连接</span><button id="cx-refresh" type="button" class="cx-refresh" aria-label="刷新当前页面" title="刷新">刷新</button><button id="cx-exit" type="button" class="btn btn-outline btn-sm">返回 CK</button></header>'+
-      '<p id="cx-message" class="cx-message" role="status" aria-live="polite"></p><div id="cx-other-errors" class="cx-other-errors" role="status" aria-live="polite" aria-label="其他窗口当前异常" hidden></div><div id="cx-body" class="cx-body"><button id="cx-sidebar-backdrop" class="cx-sidebar-backdrop" type="button" aria-label="收起 Codex 菜单" tabindex="-1"></button>'+
-      '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation cx-navigation-top" aria-label="任务导航"><button id="cx-tab-tasks" type="button">任务窗口</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>我的窗口</h3><button type="button" id="cx-new" class="btn btn-blue btn-sm">＋ 新窗口</button></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div><nav class="cx-navigation cx-navigation-bottom" aria-label="Codex 设置"><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav></aside>'+
+      '<p id="cx-message" class="cx-message" role="status" aria-live="polite"></p><div id="cx-body" class="cx-body"><button id="cx-sidebar-backdrop" class="cx-sidebar-backdrop" type="button" aria-label="收起 Codex 菜单" tabindex="-1"></button>'+
+      '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation cx-navigation-top" aria-label="Codex 设置"><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>已查看 / 已关闭</h3></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div></aside>'+
       '<form id="cx-login" class="cx-login" hidden><h3>连接你的 Codex</h3><p>使用「VPS 管理 → Codex 任务中心 → 查看访问密钥」里的专用密钥。只需在这台设备填写一次。</p><label>服务地址<input id="cx-endpoint" type="url" required autocomplete="off"></label><label>Codex 访问密钥<input id="cx-access" type="password" required autocomplete="off"></label><button class="btn btn-blue" type="submit">连接</button><small>这是任务中心的访问密钥。模型 API 密钥在连接后单独配置。</small></form>'+
       '<div id="cx-tasks" class="cx-workspace" hidden><main class="cx-main">'+
       '<div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立的 Codex 会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div>'+
@@ -176,6 +213,9 @@
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
       '</div></section>';
     document.body.append(root);
+    var rail=node('section','cx-task-notices');rail.id='cx-task-notices';rail.setAttribute('aria-label','Codex 任务窗口');
+    rail.innerHTML='<div id="cx-notice-tools" class="cx-notice-tools"><button id="cx-tab-tasks" type="button" class="btn btn-sm btn-outline">任务窗口</button><button id="cx-new" type="button" class="btn btn-sm btn-outline">＋ 新窗口</button></div><div id="cx-notice-list" class="cx-notice-list"></div>';
+    $('body').before(rail);
     $('exit').onclick=close;
     ['tasks','api','info'].forEach(function(name){$('tab-'+name).onclick=function(){showTab(name);closeSidebar();};});
     $('refresh').onclick=async function(){var b=$('refresh');feedback(b,'刷新中…','busy');var ok=await refresh(true);feedback(b,ok===undefined?'刷新':ok?'已刷新':'刷新失败',ok===false?'error':'ok');};
@@ -237,7 +277,7 @@
     $('title').textContent={tasks:'Codex 任务',api:'Codex API 配置',info:'Codex 工作资料'}[name];
     $('page-heading').hidden=!!config&&name==='tasks';$('window-toolbar').hidden=!config||name!=='tasks';$('task-list').hidden=!config;
     ['tasks','api','info'].forEach(function(n){$(n).hidden=!config||n!==name;$('tab-'+n).classList.toggle('active',n===name);$('tab-'+n).setAttribute('aria-current',n===name?'page':'false');});
-    $('login').hidden=!!config;
+    $('login').hidden=!!config;renderTaskNotices();
     if(!config){$('endpoint').value=endpoint;return;}
     if(name==='api'&&!formDirty)renderApi();
     if(name==='info')renderInfo();
@@ -247,15 +287,16 @@
     return statusLabel(w);
   }
   function renderWindows(){
+    renderTaskNotices();
     var query=$('search').value.trim().toLowerCase(),list=$('windows');
-    var signature=JSON.stringify([query,selected,windows.map(function(w){return [w.id,w.title,windowState(w),w.status,stamp(w.updated),w.scheduled_count];})]);
+    var signature=JSON.stringify([query,selected,windows.map(function(w){return [w.id,w.title,windowState(w),w.status,stamp(w.updated),w.scheduled_count,archivedWindow(w)];})]);
     if(signature===windowListSignature)return;windowListSignature=signature;list.replaceChildren();
-    windows.filter(function(w){return !query||w.title.toLowerCase().includes(query);}).forEach(function(w){
+    windows.filter(function(w){return archivedWindow(w)&&(!query||w.title.toLowerCase().includes(query));}).forEach(function(w){
       var b=node('button','cx-window'+(w.id===selected?' active':''));b.type='button';b.dataset.status=windowState(w)==='状态待同步'?'unknown':status(w);b.title='上次服务器状态：'+(labels[w.status]||w.status);
       b.append(node('strong','',w.title),node('span','',windowState(w)+(w.scheduled_count?' · '+w.scheduled_count+' 个定时任务':'')),node('small','',stamp(w.updated)));
       b.onclick=function(){select(w.id);};list.append(b);
     });
-    if(!list.childElementCount)list.append(node('p','cx-muted',windows.length?'没有匹配的窗口':'还没有窗口，点击「新窗口」。'));
+    if(!list.childElementCount)list.append(node('p','cx-muted',query?'没有匹配的窗口':'已查看的完成窗口会收在这里。'));
   }
   function renderToolbar(){
     if(!config)return;
@@ -280,7 +321,7 @@
     var profile=config.profiles.find(function(p){return p.id===chosen;});$('effort').textContent=profile?profile.effort:'';
     var usage={};try{usage=JSON.parse(w&&w.usage||'{}');}catch(_){}
     var total=usage.total||{};$('usage').textContent=total.totalTokens?Number(total.totalTokens).toLocaleString()+' tokens':'';
-    renderOtherErrors();
+    renderTaskNotices();
     $('compose-hint').textContent=timed?'按北京时间执行，退出页面仍有效；窗口忙碌时等待空闲。':w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已提交，正在启动。':w&&w.status==='running'?'正在服务器执行。可以补充指令，或选择时间安排下一任务。':'不选时间即刻执行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
   }
   async function copy(text,b){
@@ -325,13 +366,13 @@
     $('question-nav').querySelector('span').textContent='提问 '+(questionIndex+1)+' / '+questions.length;
   }
   function renderQuestionNotice(){
+    renderTaskNotices();
     var waiting=windows.filter(function(w){return w.status==='waiting';}),count=waiting.length;
     ['question-notice','question-outside'].forEach(function(id){var b=$(id);b.hidden=!count||(id==='question-outside'&&opened());b.textContent='Codex · '+count+' 个窗口待回复 · 回到提问';});
   }
   async function jumpToWaiting(){
     var w=windows.find(function(w){return w.id===selected&&w.status==='waiting';})||windows.find(function(w){return w.status==='waiting';});if(!w)return;
-    if(!opened())await window.ckOpenCodex('tasks');else showTab('tasks');
-    if(selected!==w.id)await select(w.id);else await refresh(false);
+    await openTaskNotice(w.id);
     jumpQuestion(0);var q=questionItems().find(function(i){return i.kind==='request';});if(q)focusQuestion(q.id);
   }
   function renderFeed(changed, reset){
@@ -410,7 +451,7 @@
       try{
         var response=await request('/threads',null,controller.signal);if(statusController!==controller||controller.signal.aborted)return;
         var hadCurrent=!!current(),prior=selected,now=Date.now(),old=new Map(windows.map(function(w){return [w.id,w];}));
-        windows=response.windows.map(function(w){confirmedAt.set(w.id,now);return newerWindow(old.get(w.id),w);});renderQuestionNotice();renderOtherErrors();
+        windows=response.windows.map(function(w){confirmedAt.set(w.id,now);return newerWindow(old.get(w.id),w);});renderQuestionNotice();renderTaskNotices();
         if(!opened())return;
         windowCache.forEach(function(_,wid){if(!windows.some(function(w){return w.id===wid;})){windowCache.delete(wid);confirmedAt.delete(wid);}});
         if(selected&&!current()){removeDraft(selected);windowCache.delete(selected);restoreWindow('');}
@@ -437,6 +478,7 @@
     async function readWindow(wid){
       var snapshot=await request('/threads/'+wid+'?after='+cursor,null,controller.signal);if(!valid()||wid!==selected)return;
       var reset=cursor===0;cursor=snapshot.cursor;confirmedAt.set(wid,Date.now());windows=windows.map(function(w){return w.id===wid?newerWindow(w,snapshot.window):w;});renderFeed(snapshot.items,reset);
+      markCompletionSeen(snapshot.window);
       var next=snapshot.schedules||[];if(JSON.stringify(schedules)!==JSON.stringify(next)){schedules=next;renderSchedules();}renderToolbar();renderWindows();renderQuestionNotice();
       $('connection').textContent='已连接';$('connection').dataset.state='ok';
       if($('message').dataset.source==='sync')message('');
@@ -475,7 +517,7 @@
   }
   async function act(name,body){
     if(!selected||busy)return;busy=true;renderToolbar();var id=selected;
-    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){cancelStatus();cancelRefresh();windows=windows.filter(function(w){return w.id!==id;});removeDraft(id);windowCache.delete(id);confirmedAt.delete(id);localStorage.removeItem('ck_codex_selected');if(selected===id)restoreWindow('');renderWindows();renderToolbar();}message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');cancelRefresh();await refreshStatus(true);await refresh(false);}
+    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){cancelStatus();cancelRefresh();windows=windows.filter(function(w){return w.id!==id;});localStorage.removeItem(seenKey(id));removeDraft(id);windowCache.delete(id);confirmedAt.delete(id);localStorage.removeItem('ck_codex_selected');if(selected===id)restoreWindow('');renderWindows();renderToolbar();}message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');cancelRefresh();await refreshStatus(true);await refresh(false);}
     catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
   }
   async function send(){
@@ -590,6 +632,7 @@
   }
   window.ckOpenCodex=async function(name){make();if(!opened()){previousFocus=document.activeElement;pageScroll=window.scrollY;}root.hidden=false;document.body.classList.add('cx-open');document.documentElement.classList.add('cx-open');layoutViewport();selected=selected||localStorage.getItem('ck_codex_selected')||'';if(draftOwner!==selected)restoreDraft(selected);showTab(name||'tasks');renderQuestionNotice();$('exit').focus({preventScroll:true});await loadAccess();if(opened())await refresh(true);};
   document.addEventListener('visibilitychange',function(){if(document.hidden){if(root)saveDraft();cancelRefresh();cancelStatus();}else if(root&&access){refreshStatus(true);if(opened()){queueViewport();refresh(false);}}});
+  window.addEventListener('storage',function(e){if(root&&e.key&&e.key.startsWith('ck_codex_seen_'))renderWindows();});
   window.addEventListener('pagehide',function(){if(root)saveDraft();});
   window.addEventListener('resize',queueViewport);
   if(window.visualViewport){window.visualViewport.addEventListener('resize',queueViewport);window.visualViewport.addEventListener('scroll',queueViewport);}

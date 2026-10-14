@@ -28,7 +28,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   let page=await context.newPage();let errors=[];const observe=p=>p.on('pageerror',e=>errors.push(e.message));observe(page);
   const url='http://127.0.0.1:'+server.address().port+'/#codex-tasks';
   const ready=async()=>{await page.waitForFunction(()=>document.getElementById('cx-window-title')?.textContent==='窗口一');};
-  const choose=async title=>{if(width<640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-windows button').filter({hasText:title}).click();await page.waitForFunction(t=>document.getElementById('cx-window-title').textContent===t,title);};
+  const choose=async title=>{const live=page.locator('#cx-notice-list button').filter({hasText:title});if(await live.count())await live.click();else{if(width<640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-windows button').filter({hasText:title}).click();}await page.waitForFunction(t=>document.getElementById('cx-window-title').textContent===t,title);};
   const setTime=async value=>{if(!await page.locator('#cx-schedule-time').isVisible())await page.locator('#cx-schedule-summary').click();await page.locator('#cx-schedule-time').fill(value);await page.locator('#cx-schedule-summary').click();};
   await page.goto(url);await ready();assert.equal(await page.locator('#cx-input').inputValue(),'刷新前未发送的草稿');
   await page.locator('#cx-input').fill('窗口一草稿\n保留换行与空格  ');await setTime('2090-06-15T13:45');
