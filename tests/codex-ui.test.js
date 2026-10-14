@@ -10,7 +10,7 @@ const server = http.createServer((req, res) => {
 });
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
-  const browser = await chromium.launch({args:['--no-sandbox']});
+  const browser = await chromium.launch({args:['--no-sandbox','--disable-dev-shm-usage']});
   try {
     for (const width of [390, 1280]) {
       const context = await browser.newContext({viewport:{width,height:900}, serviceWorkers:'block'});
@@ -54,7 +54,7 @@ const server = http.createServer((req, res) => {
       await page.locator('dialog.cx-picker[open]').waitFor();
       assert(await page.locator('dialog.cx-picker').evaluate(e=>e.matches(':modal')));
       await page.locator('dialog.cx-picker').getByRole('button',{name:'测试接口 · model-a',exact:true}).click();
-      await page.locator('#cx-tab-api').click();
+      if(width<=640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-tab-api').click();
       await page.locator('.cx-profile-summary').click();
       await page.locator('.cx-profile-grid .ck-select-button').click();
       await page.locator('dialog.cx-picker').getByRole('button',{name:'medium',exact:true}).click();

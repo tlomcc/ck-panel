@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),http=require('http'),assert=require(
 const root=path.resolve(__dirname,'..');
 const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://local').pathname.slice(1)||'index.html',file=path.resolve(root,name);if(!file.startsWith(root+'/')||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);return res.end();}res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.json')?'application/json':'text/html');res.end(fs.readFileSync(file));});
 (async()=>{
- await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({args:['--no-sandbox']});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({args:['--no-sandbox','--disable-dev-shm-usage']});
  try{for(const width of [390,1440]){
   const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'});
   await context.addInitScript(()=>{localStorage.setItem('ck_codex_access','fixture-access');localStorage.setItem('ck_codex_endpoint','https://codex.test/codex');});
@@ -25,8 +25,8 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   const feed=await page.locator('#cx-feed').boundingBox();assert(feed.height>480,`feed height ${feed.height}`);
   assert.equal(await page.locator('details.cx-detail[open]').count(),0);
   if(width<640){assert.equal(await page.locator('#cx-window-sidebar').isVisible(),false);await page.locator('#cx-window-toggle').click();assert(await page.locator('#cx-window-sidebar').isVisible());await page.getByRole('button',{name:'另一个正在执行的任务',exact:false}).click();assert.equal(await page.locator('#cx-window-sidebar').isVisible(),false);}
-  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/tasks-'+width+'.png'});
-  await page.locator('#cx-tab-api').click();assert.equal(await page.locator('.cx-profile-card[open]').count(),0);
+  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-workspace-check/legacy/tasks-'+width+'.png'});
+  if(width<=640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-tab-api').click();assert.equal(await page.locator('.cx-profile-card[open]').count(),0);
   const p=page.locator('.cx-profile-card[data-id=p]'),q=page.locator('.cx-profile-card[data-id=q]');
   await q.locator('summary').click();
   await q.locator('[name=name]').fill('尚未保存的另一个供应商');await q.locator('[name=base_url]').fill('');
@@ -35,8 +35,8 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert.equal(posted.length,1);assert.equal(posted[0].profile.id,'p');assert.equal(config.profiles[1].name,'4router');assert.equal(await q.locator('[name=name]').inputValue(),'尚未保存的另一个供应商');assert.equal(await q.locator('[name=base_url]').inputValue(),'');
   await p.locator('.ck-select-button').click();for(const effort of ['high','xhigh','max','ultra'])assert(await page.locator('dialog').getByRole('button',{name:effort,exact:true}).isVisible());await page.locator('dialog').getByRole('button',{name:'max',exact:true}).click();
   await p.getByRole('button',{name:'刷新模型',exact:true}).click();await page.locator('dialog[open]').waitFor();assert((await page.locator('dialog').innerText()).includes('unauthorized_client_error'));await page.keyboard.press('Escape');assert(await page.locator('#cx-api').isVisible());
-  await page.locator('#cx-api').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/api-'+width+'.png'});
-  await page.evaluate(()=>document.body.classList.add('dark'));assert(await p.isVisible());await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/api-dark-'+width+'.png'});
+  await page.locator('#cx-api').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'/home/ckcodex/workspace/work/codex-workspace-check/legacy/api-'+width+'.png'});
+  await page.evaluate(()=>document.body.classList.add('dark'));assert(await p.isVisible());await page.screenshot({path:'/home/ckcodex/workspace/work/codex-workspace-check/legacy/api-dark-'+width+'.png'});
   await page.locator('#cx-exit').click();
   await page.evaluate(()=>{window.storedPanelKey=()=> 'fixture-panel-key';document.getElementById('ckActionModal').classList.remove('show');document.getElementById('loading-wrap').style.setProperty('display','none','important');});
   let statusCalls=[];
@@ -45,7 +45,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.evaluate(()=>ckOpenServerStatus());await page.locator('#ck-server-tab-us').click();await page.getByText('22%',{exact:true}).waitFor();await page.waitForTimeout(250);assert((await page.locator('#ck-server-name').innerText()).includes('美国'));assert(await page.getByText('Codex 任务 · 正常',{exact:true}).isVisible());assert.equal(await page.locator('#ck-server-tab-us').getAttribute('aria-selected'),'true');
   await page.locator('#ck-server-tab-cn').click();await page.getByText('11%',{exact:true}).waitFor();assert((await page.locator('#ck-server-name').innerText()).includes('国内'));assert((await page.locator('#ck-server-body').innerText()).includes('1.0 GB / 2.0 GB'));
   assert.equal(await page.evaluate(()=>CKBackendRoute.current.server),'cn');
-  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-layout-20261014/servers-'+width+'.png'});
+  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-workspace-check/legacy/servers-'+width+'.png'});
   await page.locator('#ck-server-close').click();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);
   console.log(width+': layout, mobile drawer, encrypted storage, independent save, drafts, efforts, upstream error, two-server race PASS');await context.close();
  }}finally{await browser.close();server.close();}
