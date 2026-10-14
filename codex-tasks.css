@@ -76,7 +76,23 @@ body.dark .cx-overlay,html.dark .cx-overlay{--cx-question:#bd9aed;--cx-question-
 
 .cx-window[data-status=running] span,.cx-task-status[data-status=running]{color:var(--ck-accent-strong);font-weight:700}.cx-window[data-status=waiting] span,.cx-task-status[data-status=waiting]{color:var(--cx-question);font-weight:700}.cx-window[data-status=failed] span,.cx-window[data-status=error] span,.cx-task-status[data-status=failed],.cx-task-status[data-status=error]{color:var(--ck-danger);font-weight:700}.cx-task-status[data-status=unknown],.cx-window[data-status=unknown] span{color:var(--ck-muted);font-weight:400}
 
-.cx-other-errors{display:flex;flex-wrap:wrap;gap:6px;max-height:90px;overflow:auto;flex-shrink:0;margin-bottom:8px}.cx-shell .cx-other-error{text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:12px;color:var(--ck-danger);border:1px solid currentColor;background:var(--ck-surface);padding:7px 10px;border-radius:8px}
+/* Live windows stay within reach; reviewed results remain in the menu. */
+.cx-task-notices{display:flex;align-items:flex-start;gap:8px;flex-shrink:0;padding:8px 12px;border-bottom:1px solid var(--ck-line);background:var(--ck-bg);min-width:0}
+.cx-task-notices[hidden],.cx-task-notices [hidden]{display:none!important}
+.cx-notice-tools{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.cx-shell .cx-notice-tools .btn{font-size:11px;line-height:1.4;padding:4px 8px;min-height:26px}
+.cx-notice-tools #cx-tab-tasks{border-color:transparent;background:transparent;color:var(--ck-muted)}
+.cx-notice-list{display:flex;flex-wrap:wrap;gap:6px;min-width:0;max-height:min(138px,20dvh);overflow:auto;overscroll-behavior:contain;padding:2px;flex:1}
+.cx-task-notices .cx-task-notice{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:116px;max-width:220px;min-height:48px;margin:0;padding:7px 11px;border:1px solid var(--ck-accent);border-left:4px solid var(--ck-accent);border-radius:8px;background:var(--ck-accent-wash);color:var(--ck-accent-strong);font:12px/1.4 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;text-align:left;cursor:pointer;box-shadow:var(--ck-shadow-xs);white-space:normal}
+.cx-task-notice strong{display:block;width:100%;font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-task-notice span{font-size:10px;overflow-wrap:anywhere}
+.cx-task-notices .cx-task-notice[data-tone=error]{background:#fff1f1;border-color:#bd5656;color:#983d3d}
+body.dark .cx-task-notices .cx-task-notice[data-tone=error],html.dark .cx-task-notices .cx-task-notice[data-tone=error]{background:#352020;border-color:#df7777;color:#f3a0a0}
+.cx-task-notice.active{box-shadow:inset 0 0 0 1px currentColor}
+.cx-task-notice:hover{filter:brightness(.97)}.cx-task-notice:focus-visible{outline:3px solid var(--ck-focus);outline-offset:2px}
+.cx-notices-outside{position:fixed;top:calc(64px + env(safe-area-inset-top));left:8px;z-index:200009;width:min(460px,calc(100vw - 16px));padding:0;border:0;background:transparent;pointer-events:none}
+.cx-notices-outside .cx-notice-list{max-height:26dvh}.cx-notices-outside .cx-task-notice{pointer-events:auto}
+@media(max-width:640px){.cx-task-notices{padding:6px 8px;gap:4px}.cx-notice-list{gap:5px;max-height:min(114px,calc(var(--cx-viewport-height,100dvh) * .14))}.cx-task-notices .cx-task-notice{flex:1 1 105px;min-width:0;max-width:190px;padding:6px 8px;min-height:46px}.cx-notice-tools{width:70px}.cx-notices-outside{padding:0}.cx-notices-outside .cx-task-notice{flex:0 1 calc(50% - 3px)}}
 
 /* ANY retry preference is independent of unsaved provider fields. */
 #cx-root .cx-any-retry{padding:12px 16px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}

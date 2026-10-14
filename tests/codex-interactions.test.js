@@ -38,10 +38,10 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   base.push({id:'err1',kind:'error',text:'rate limit exceeded',created:20,data:{}});await refresh();
   assert((await page.locator('.cx-item-error').innerText()).includes('rate limit exceeded'));
   assert(!(await page.locator('#cx-message').innerText()).includes('provider failed'));
-  assert.equal(await page.locator('#cx-other-errors').isVisible(),false);
+  assert.equal(await page.locator('[data-window-id=two]').getAttribute('data-tone'),'ok');
   windows[1].error='另一窗口限流';windows[1].status='running';await refresh();
-  assert((await page.locator('#cx-other-errors').innerText()).includes('任务2：另一窗口限流'));
-  windows[1].error='';await refresh();assert.equal(await page.locator('#cx-other-errors').isVisible(),false);
+  assert.equal(await page.locator('[data-window-id=two]').getAttribute('data-tone'),'error');assert((await page.locator('[data-window-id=two]').getAttribute('title')).includes('另一窗口限流'));
+  windows[1].error='';await refresh();assert.equal(await page.locator('[data-window-id=two]').getAttribute('data-tone'),'ok');
   base.push({id:'recovered',kind:'agentMessage',text:'已经恢复，继续处理。',created:21,data:{}});windows[0].error='';await refresh();
   assert(await page.locator('#cx-feed').evaluate(e=>{var all=[...e.children];return all.indexOf(e.querySelector('[data-item-id=err1]'))<all.indexOf(e.querySelector('[data-item-id=recovered]'));}));
   windows[0].status='failed';await refresh();assert.equal(await page.locator('.cx-task-status').textContent(),'运行异常');
