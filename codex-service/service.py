@@ -24,7 +24,7 @@ from key_store import KeyStore
 from ag_retry import AgRetry, CONTINUE_TASK, is_ag
 from any_retry import AnyRetry, is_any
 
-VERSION = '1.4.4'
+VERSION = '1.4.5'
 # ANY native request/stream retries stay disabled; the switch owns continuation.
 ANY_PROFILE_ID = '75c76315-eb66-4fa0-ab6d-f0d2b9ef344e'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
@@ -219,6 +219,7 @@ class Engine:
                             continue
                         rid = str(event['id'])
                         self.requests[rid] = event
+                        self.manager.progress(self.wid, event.get('params', {}).get('turnId'))
                         self.manager.store.item(self.wid, 'request:'+rid, 'request', '', self.manager.clean(event))
                         self.manager.store.update(self.wid, status='waiting')
                     else:
@@ -559,6 +560,17 @@ class Manager:
         except Exception:
             pass
 
+    def progress(self, wid, turn_id=None):
+        """Clear only the current runtime alert after actual execution resumes."""
+        with self.store.lock:
+            window = self.store.one(wid)
+            if not window['error'] or window['status'] not in ('running', 'waiting'):
+                return
+            if turn_id and turn_id != window['turn_id']:
+                return
+            # A retry being queued/started, usage update, or user input is not recovery.
+            self.store.update(wid, error='')
+
     def log_problem(self, wid, text):
         with self.store.lock:
             if wid in self.automatic_retries and self.automatic_retries[wid].accepts(text):
@@ -637,6 +649,20 @@ class Manager:
             return  # Buffered notifications must not reopen a window being stopped.
         method, p = event.get('method', ''), self.clean(event.get('params', {}))
         wid = engine.wid
+        if method in ('item/agentMessage/delta', 'item/plan/delta',
+                      'item/commandExecution/outputDelta', 'item/reasoning/summaryTextDelta',
+                      'item/reasoning/textDelta') and p.get('delta'):
+            self.progress(wid, p.get('turnId'))
+        elif method in ('item/started', 'item/completed'):
+            item = p.get('item', {})
+            kind = item.get('type')
+            if ((kind in ('agentMessage', 'plan') and item.get('text'))
+                    or (kind == 'reasoning' and any(item.get('summary') or []))
+                    or kind in ('commandExecution', 'fileChange', 'mcpToolCall',
+                                'dynamicToolCall', 'webSearch', 'imageView')):
+                self.progress(wid, p.get('turnId'))
+        elif method == 'turn/plan/updated' and p.get('plan'):
+            self.progress(wid, p.get('turnId'))
         if method == 'turn/started':
             run = self.automatic_retries.get(wid)
             self.store.update(wid, status='running', turn_id=p['turn']['id'],
@@ -666,8 +692,6 @@ class Manager:
                 item = {'type': kind, 'id': item['id'], 'status': 'completed' if method.endswith('completed') else 'running'}
             elif kind in ('agentMessage','plan'):
                 text = item.get('text', '')
-                if kind == 'agentMessage' and text and self.store.one(wid)['error']:
-                    self.store.update(wid, error='')
             elif kind == 'commandExecution':
                 text = item.get('aggregatedOutput') or ''
             elif kind == 'fileChange':
@@ -678,8 +702,6 @@ class Manager:
                 item = {'id':item['id'], 'type':kind, 'status':item.get('status'), 'command':item.get('command','')}
             self.store.item(wid, item['id'], kind, text, item)
         elif method in ('item/agentMessage/delta','item/plan/delta','item/commandExecution/outputDelta','item/reasoning/summaryTextDelta'):
-            if method == 'item/agentMessage/delta' and p.get('delta') and self.store.one(wid)['error']:
-                self.store.update(wid, error='')
             kind = {'item/agentMessage/delta':'agentMessage','item/plan/delta':'plan',
                     'item/commandExecution/outputDelta':'commandExecution','item/reasoning/summaryTextDelta':'reasoning'}[method]
             iid = p['itemId']
@@ -698,14 +720,18 @@ class Manager:
             text = self.redact(str((error.get('message') if isinstance(error, dict) else error) or p.get('message') or 'Codex 运行出错'))
             with self.store.lock:
                 run = self.automatic_retries.get(wid)
-                if run and run.accepts(p):
+                window = self.store.one(wid)
+                active = (window['status'] in ('starting', 'running', 'waiting')
+                          and (not p.get('turnId') or p['turnId'] == window['turn_id']))
+                if active and run and run.accepts(p):
                     self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 过载，等待自动重试')
                     self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', text,
                                     {'willRetry':bool(p.get('willRetry'))})
                 else:
-                    self.store.update(wid, error=text)
+                    if active:
+                        self.store.update(wid, error=text)
                     self.store.item(wid, 'error:'+uuid.uuid4().hex, 'error', text,
-                                    {'willRetry':bool(p.get('willRetry'))})
+                                    {'willRetry':bool(p.get('willRetry')), 'turnId':p.get('turnId')})
         elif method in ('warning','configWarning'):
             self.log_problem(wid, p.get('message') or p.get('summary') or str(p.get('error', p)))
         elif method == 'serverRequest/resolved':

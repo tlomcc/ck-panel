@@ -14,7 +14,7 @@
   function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'cx-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2); }
   function current() { return windows.find(function(w){return w.id===selected;}); }
   function opened() { return root && !root.hidden; }
-  function message(text, bad) { clearTimeout(messageTimer);$('message').textContent=text||''; $('message').classList.toggle('cx-error',!!bad);if(text&&!bad)messageTimer=setTimeout(function(){$('message').textContent='';},4000); }
+  function message(text, bad, source) { clearTimeout(messageTimer);$('message').textContent=text||''; $('message').dataset.source=source||'';$('message').classList.toggle('cx-error',!!bad);if(text&&!bad)messageTimer=setTimeout(function(){$('message').textContent='';},4000); }
   function stamp(ts) { return new Date(ts*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
   function draftKey(id) { return 'ck_codex_draft_'+id; }
   function saveDraft(){
@@ -439,6 +439,7 @@
       var reset=cursor===0;cursor=snapshot.cursor;confirmedAt.set(wid,Date.now());windows=windows.map(function(w){return w.id===wid?newerWindow(w,snapshot.window):w;});renderFeed(snapshot.items,reset);
       var next=snapshot.schedules||[];if(JSON.stringify(schedules)!==JSON.stringify(next)){schedules=next;renderSchedules();}renderToolbar();renderWindows();renderQuestionNotice();
       $('connection').textContent='已连接';$('connection').dataset.state='ok';
+      if($('message').dataset.source==='sync')message('');
     }
     try{
       if(!access){showTab(tab);return;}
@@ -450,7 +451,10 @@
       if(!valid())return;
       if(full)message('');return true;
     }catch(e){
-      if(!valid())return;message(e.message,true);$('connection').textContent='连接待恢复';$('connection').dataset.state='error';
+      if(!valid())return;
+      // Read recovery must not erase an unresolved send/save/action failure.
+      if(!$('message').classList.contains('cx-error')||$('message').dataset.source==='sync')message(e.message,true,'sync');
+      $('connection').textContent='连接待恢复';$('connection').dataset.state='error';
       if(e.status===401){config=null;windowCache.clear();cancelStatus();showTab(tab);}return false;
     }finally{
       if(refreshController===controller){controller.abort();refreshController=null;loading=false;
