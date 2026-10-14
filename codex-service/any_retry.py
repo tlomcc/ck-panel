@@ -35,7 +35,10 @@ class AnyRetry:
         self.due = 0
         self.pending = False
 
-    def schedule(self):
+    def accepts(self, error):
+        return retryable(error)
+
+    def schedule(self, error=None):
         self.pending = True
         self.due = time.monotonic() + random.SystemRandom().randint(1, 10)
 

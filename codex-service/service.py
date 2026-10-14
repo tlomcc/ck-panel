@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import queue
 import re
@@ -20,9 +21,10 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit, parse_qs
 from urllib.request import Request, urlopen
 from key_store import KeyStore
-from any_retry import AnyRetry, CONTINUE_TASK, is_any, retryable
+from any_retry import AnyRetry, CONTINUE_TASK, is_any
+from ag_retry import AgRetry, is_ag
 
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
 STATE = Path(os.environ.get('CK_CODEX_STATE', '/var/lib/ck-codex'))
 WORKSPACE = Path(os.environ.get('CK_CODEX_WORKSPACE', '/home/ckcodex/workspace'))
@@ -65,6 +67,11 @@ class Store:
         CREATE TABLE IF NOT EXISTS tasks (
           request_id TEXT PRIMARY KEY, window_id TEXT REFERENCES windows(id) ON DELETE CASCADE,
           text TEXT, status TEXT, created REAL, turn_id TEXT DEFAULT '');
+        CREATE TABLE IF NOT EXISTS schedules (
+          request_id TEXT PRIMARY KEY, window_id TEXT REFERENCES windows(id) ON DELETE CASCADE,
+          text TEXT NOT NULL, scheduled_for REAL NOT NULL, profile TEXT NOT NULL,
+          status TEXT NOT NULL, created REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS schedules_due ON schedules(status,scheduled_for);
         ''')
         self.db.execute("UPDATE tasks SET status='interrupted' WHERE status IN ('queued','starting','running','waiting')")
         self.db.execute("UPDATE windows SET status='interrupted', error='服务重启，上一任务已中断；请检查结果后继续。' WHERE status IN ('queued','starting','running','waiting')")
@@ -79,7 +86,16 @@ class Store:
 
     def list(self):
         with self.lock:
-            return [dict(r) for r in self.db.execute('SELECT * FROM windows ORDER BY updated DESC')]
+            return [dict(r) for r in self.db.execute("""SELECT w.*,
+                (SELECT count(*) FROM schedules s WHERE s.window_id=w.id AND s.status='scheduled') AS scheduled_count
+                FROM windows w ORDER BY updated DESC""")]
+
+    def schedules(self, wid):
+        with self.lock:
+            return [dict(r) for r in self.db.execute("""SELECT s.*,COALESCE(t.status,s.status) AS state
+                FROM schedules s LEFT JOIN tasks t ON t.request_id=s.request_id WHERE s.window_id=?
+                ORDER BY CASE WHEN s.status='scheduled' THEN 0 ELSE 1 END,
+                CASE WHEN s.status='scheduled' THEN s.scheduled_for ELSE -s.scheduled_for END LIMIT 100""", (wid,))]
 
     def update(self, wid, **fields):
         with self.lock:
@@ -110,7 +126,7 @@ class Store:
             items = [dict(r) for r in rows]
             for item in items:
                 item['data'] = json.loads(item['data'])
-            return {'window': window, 'items': items, 'cursor': window['seq']}
+            return {'window': window, 'items': items, 'cursor': window['seq'], 'schedules': self.schedules(wid)}
 
 
 class Engine:
@@ -239,7 +255,7 @@ class Manager:
         self.root, self.engine_factory = root, engine_factory
         self.lock = threading.RLock()
         self.engines = {}
-        self.any_retries = {}  # In memory: only a manual submit can arm a run.
+        self.any_retries = {}  # Armed only for a new submission or due schedule.
         self.config_path = root / 'config.json'
         self.key_store = KeyStore(root)
         self.config = self.key_store.load(self.config_path, write_json)
@@ -286,7 +302,7 @@ class Manager:
                 'version': VERSION, 'cli_version': self.config.get('cli_version'),
                 'workspace': str(WORKSPACE), 'servers': self.config.get('servers', []),
                 'backup': self.config.get('backup', {}), 'max_running': None, 'parallel_windows': True,
-                'key_storage': 'encrypted', 'efforts': list(EFFORTS)}
+                'key_storage': 'encrypted', 'efforts': list(EFFORTS), 'scheduling': True}
 
     def save_config(self, body):
         with self.lock:
@@ -319,6 +335,11 @@ class Manager:
             for window in self.store.list():
                 if window['profile'] not in ids:
                     raise Problem('仍有窗口使用待删除的 API，请先切换或删除这些窗口', 409)
+            with self.store.lock:
+                for row in self.store.db.execute("""SELECT s.profile FROM schedules s LEFT JOIN tasks t
+                    ON t.request_id=s.request_id WHERE s.status='scheduled' OR t.status IN ('queued','starting','running','waiting')"""):
+                    if row['profile'] not in ids:
+                        raise Problem('仍有定时任务使用此 API，请先取消或等待任务结束', 409)
             default = body.get('default_profile') or out[0]['id']
             if default not in ids:
                 raise Problem('默认 API 不存在')
@@ -356,10 +377,11 @@ class Manager:
                     default = pid
             return self.save_config({'profiles': profiles, 'default_profile': default})
 
-    def engine(self, wid, fresh_config=False):
+    def engine(self, wid, fresh_config=False, profile=None):
+        profile = profile or self.profile(self.store.one(wid)['profile'])
         if fresh_config and wid in self.engines:
             window = self.store.one(wid)
-            if self.engines[wid].profile_fingerprint != json.dumps(self.profile(window['profile']), sort_keys=True):
+            if self.engines[wid].profile_fingerprint != json.dumps(profile, sort_keys=True):
                 self.engines.pop(wid).close()
         if wid not in self.engines:
             # Unload idle processes, preserving their persisted Codex sessions.
@@ -370,7 +392,7 @@ class Manager:
                     engine.close()
                     self.engines.pop(other, None)
             window = self.store.one(wid)
-            engine = self.engine_factory(self, wid, self.profile(window['profile']))
+            engine = self.engine_factory(self, wid, profile)
             self.engines[wid] = engine
             if window['thread_id']:
                 engine.rpc('thread/resume', {'threadId': window['thread_id'], 'cwd': window['cwd'],
@@ -409,6 +431,8 @@ class Manager:
     def submit(self, wid, body):
         with self.lock, self.store.lock:
             key = request_key(body)
+            if self.store.db.execute('SELECT 1 FROM schedules WHERE request_id=?', (key,)).fetchone():
+                raise Problem('请求编号已用于定时任务，请刷新核对', 409)
             old = self.store.db.execute('SELECT * FROM tasks WHERE request_id=?', (key,)).fetchone()
             if old:
                 if old['window_id'] != wid:
@@ -432,7 +456,58 @@ class Manager:
             self.store.update(wid, status='queued', error='')
             if is_any(self.profile(window['profile'])):
                 self.any_retries[wid] = AnyRetry(key)
+            elif is_ag(self.profile(window['profile'])):
+                self.any_retries[wid] = AgRetry(key)
             return {'accepted': True, 'request_id': key, 'window': self.store.one(wid)}
+
+    def schedule(self, wid, body):
+        with self.lock, self.store.lock:
+            key = request_key(body)
+            window = self.store.one(wid)
+            old = self.store.db.execute('SELECT * FROM schedules WHERE request_id=?', (key,)).fetchone()
+            if old:
+                if old['window_id'] != wid:
+                    raise Problem('请求编号已用于另一个窗口', 409)
+                return {'accepted': True, 'schedule': dict(old)}
+            if self.store.db.execute('SELECT 1 FROM tasks WHERE request_id=?', (key,)).fetchone():
+                raise Problem('请求编号已用于其他任务', 409)
+            if window['status'] == 'closed' or not window['thread_id']:
+                raise Problem('请先打开一个已创建完成的窗口', 409)
+            text, due = str(body.get('text', '')).strip(), body.get('scheduled_for')
+            if not text or len(text) > 60000:
+                raise Problem('任务内容需为 1 到 60000 个字符')
+            if type(due) not in (int, float) or not math.isfinite(due) or not time.time() < due <= 253402271940:
+                raise Problem('请选择未来的执行时间（北京时间）')
+            profile = self.profile(window['profile'])
+            if not profile.get('api_key'):
+                raise Problem('该 API 尚未设置密钥')
+            count = self.store.db.execute("SELECT count(*) FROM schedules WHERE window_id=? AND status='scheduled'", (wid,)).fetchone()[0]
+            if count >= 50:
+                raise Problem('每个窗口最多保留 50 个待执行定时任务')
+            self.store.db.execute('INSERT INTO schedules VALUES(?,?,?,?,?,?,?)', (key,wid,text,due,profile['id'],'scheduled',time.time()))
+            self.store.db.commit()
+            self.store.update(wid)
+            return {'accepted': True, 'request_id': key}
+
+    def dispatch_due(self):
+        # Persist the claim and queue together before contacting Codex. Pending
+        # schedules survive restarts; claimed/running tasks are never replayed.
+        with self.lock, self.store.lock:
+            rows = self.store.db.execute("SELECT * FROM schedules WHERE status='scheduled' AND scheduled_for<=? ORDER BY scheduled_for,created", (time.time(),)).fetchall()
+            for row in rows:
+                wid, key = row['window_id'], row['request_id']
+                window = self.store.one(wid)
+                if window['status'] in ACTIVE | {'closed','opening'} or not window['thread_id']:
+                    continue
+                with self.store.db:
+                    self.store.db.execute('INSERT INTO tasks VALUES(?,?,?,?,?,?)', (key,wid,row['text'],'queued',time.time(),''))
+                    self.store.db.execute("UPDATE schedules SET status='dispatched' WHERE request_id=?", (key,))
+                    self.store.db.execute("UPDATE windows SET status='queued',error='',seq=seq+1,updated=? WHERE id=?", (time.time(),wid))
+                self.store.item(wid,'user:'+key,'userMessage',self.redact(row['text']), {'scheduled_for':row['scheduled_for']})
+                if is_any(self.profile(row['profile'])):
+                    self.any_retries[wid] = AnyRetry(key)
+                elif is_ag(self.profile(row['profile'])):
+                    self.any_retries[wid] = AgRetry(key)
 
     def finish(self, wid, status, error=''):
         with self.store.lock:
@@ -449,21 +524,21 @@ class Manager:
 
     def log_problem(self, wid, text):
         with self.store.lock:
-            if wid in self.any_retries and retryable(text):
-                return  # The single counter owns transient ANY diagnostics.
+            if wid in self.any_retries and self.any_retries[wid].accepts(text):
+                return  # One counter owns diagnostics for this automatic run.
         self.store.item(wid, 'diagnostic', 'warning', self.redact(text))
 
-    def schedule_any_retry(self, wid, turn):
+    def schedule_retry(self, wid, turn):
         with self.store.lock:
             run = self.any_retries.get(wid)
-            if not run or turn.get('status') != 'failed' or not retryable(turn.get('error') or {}):
+            if not run or turn.get('status') != 'failed' or not run.accepts(turn.get('error') or {}):
                 return False
             if run.pending:
                 return True  # Duplicate completion cannot reset the delay.
             task = self.store.db.execute('SELECT status FROM tasks WHERE request_id=?', (run.request_id,)).fetchone()
             if not task or task['status'] not in ('starting', 'running', 'waiting'):
                 return False
-            run.schedule()
+            run.schedule(turn.get('error'))
             self.store.db.execute("UPDATE tasks SET status='queued',turn_id='' WHERE request_id=?", (run.request_id,))
             self.store.db.commit()
             self.store.update(wid, status='queued', turn_id='', error='')
@@ -474,6 +549,7 @@ class Manager:
         while not self.quit.wait(.35):
             try:
                 with self.lock:
+                    self.dispatch_due()
                     # Each window owns an engine and an active turn. Other windows,
                     # including those awaiting user input, must not block this one.
                     with self.store.lock:
@@ -495,8 +571,10 @@ class Manager:
                     self.store.update(wid, status='starting')
                     try:
                         window = self.store.one(wid)
-                        engine = self.engine(wid, fresh_config=True)
-                        profile = self.profile(window['profile'])
+                        with self.store.lock:
+                            scheduled = self.store.db.execute('SELECT profile FROM schedules WHERE request_id=?', (task['request_id'],)).fetchone()
+                        profile = self.profile(scheduled['profile'] if scheduled else window['profile'])
+                        engine = self.engine(wid, fresh_config=True, profile=profile)
                         response = engine.rpc('turn/start', {'threadId': window['thread_id'],
                                              'input': [{'type': 'text', 'text': task['text']}],
                                              'model': profile['model'], 'effort': profile.get('effort', 'high')})
@@ -531,7 +609,7 @@ class Manager:
                 if window['turn_id'] and window['turn_id'] != turn.get('id'):
                     return  # Ignore an old turn after the next attempt has started.
                 engine.last_completed_turn_id = turn.get('id')
-                if not self.schedule_any_retry(wid, turn):
+                if not self.schedule_retry(wid, turn):
                     self.finish(wid, {'completed':'completed','interrupted':'interrupted','failed':'failed'}.get(turn['status'], 'failed'),
                                 str((turn.get('error') or {}).get('message', '')))
             for rid in list(engine.requests):
@@ -598,6 +676,8 @@ class Manager:
                     self.engines.pop(wid, None)
                 with self.store.lock:
                     self.store.db.execute("UPDATE tasks SET status='interrupted' WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (wid,))
+                    if action in ('close','delete'):
+                        self.store.db.execute("UPDATE schedules SET status='cancelled' WHERE window_id=? AND status='scheduled'", (wid,))
                     self.store.db.commit()
                 self.store.update(wid, status='closed' if action=='close' else 'interrupted', turn_id='', error='')
                 if action == 'delete':
@@ -621,6 +701,17 @@ class Manager:
                         self.store.db.execute('DELETE FROM windows WHERE id=?', (wid,))
                         self.store.db.commit()
                     return {'deleted': True, 'id': wid}
+            elif action == 'cancel-schedule':
+                key = request_key(body)
+                with self.store.lock:
+                    row = self.store.db.execute('SELECT status FROM schedules WHERE request_id=? AND window_id=?', (key,wid)).fetchone()
+                    if not row:
+                        raise Problem('定时任务不存在', 404)
+                    if row['status'] not in ('scheduled','cancelled'):
+                        raise Problem('定时任务已开始，请使用「停止任务」', 409)
+                    self.store.db.execute("UPDATE schedules SET status='cancelled' WHERE request_id=?", (key,))
+                    self.store.db.commit()
+                self.store.update(wid)
             elif action == 'reopen':
                 if window['status'] in ACTIVE:
                     raise Problem('窗口正在执行', 409)
@@ -824,7 +915,10 @@ class Handler(BaseHTTPRequestHandler):
                     after = max(0,int(parse_qs(path.query).get('after',['0'])[0]))
                     result = self.manager.store.snapshot(wid,after)
                 elif self.command=='POST' and len(parts)==3:
-                    result = self.manager.submit(wid,body) if parts[2]=='send' else self.manager.action(wid,parts[2],body)
+                    if parts[2]=='schedule':
+                        result = self.manager.schedule(wid,body)
+                    else:
+                        result = self.manager.submit(wid,body) if parts[2]=='send' else self.manager.action(wid,parts[2],body)
                 else:
                     raise Problem('接口不存在',404)
             else:

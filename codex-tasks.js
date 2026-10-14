@@ -4,6 +4,7 @@
   var timer = 0, loading = false, generation = 0, previousFocus, formDirty = false, busy = false;
   var endpoint = localStorage.getItem('ck_codex_endpoint') || 'https://tlomcc.cc.cd:18443/codex';
   var access = '', accessReady;
+  var draftOwner = '', schedules = [];
   function loadAccess(){if(!accessReady)accessReady=CKCodexStorage.load().then(function(value){access=value;}).catch(function(){message('无法读取加密连接密钥，请重新填写。',true);});return accessReady;}
   var labels = {idle:'等待任务',opening:'正在创建',queued:'排队中',starting:'正在启动',running:'执行中',waiting:'等待你回复',completed:'已完成',interrupted:'已停止',failed:'需要检查',closed:'已关闭'};
   var $ = function (id) { return document.getElementById('cx-'+id); };
@@ -15,6 +16,39 @@
   function message(text, bad) { $('message').textContent=text||''; $('message').classList.toggle('cx-error',!!bad); }
   function stamp(ts) { return new Date(ts*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
   function draftKey(id) { return 'ck_codex_draft_'+id; }
+  function saveDraft(){
+    if(!selected||draftOwner!==selected)return;
+    try{
+      localStorage.setItem(draftKey(selected),$('input').value);
+      localStorage.setItem(draftKey(selected)+'_time',$('schedule-time').value);
+      $('draft-status').textContent=$('input').value||$('schedule-time').value?'草稿已自动保存':'';
+    }catch(_){$('draft-status').textContent='草稿保存失败，请保留此页面并复制内容。';}
+  }
+  function restoreDraft(id){
+    draftOwner=id;
+    $('input').value=id?localStorage.getItem(draftKey(id))||'':'';
+    $('schedule-time').value=id?localStorage.getItem(draftKey(id)+'_time')||'':'';
+    $('draft-status').textContent=$('input').value||$('schedule-time').value?'已恢复草稿':'';
+    resizeInput();
+  }
+  function removeDraft(id){
+    localStorage.removeItem(draftKey(id));localStorage.removeItem(draftKey(id)+'_time');
+    localStorage.removeItem('ck_codex_pending_'+id);sessionStorage.removeItem('ck_codex_pending_'+id);
+  }
+  function scheduleStamp(ts){return new Date(ts*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}
+  function renderSchedules(){
+    var list=$('schedules');list.replaceChildren();list.hidden=!schedules.length;
+    if(!schedules.length)return;
+    list.append(node('h4','','定时任务 · 北京时间'));
+    schedules.forEach(function(s){
+      var row=node('details','cx-scheduled'),summary=node('summary'),pending=s.state==='scheduled';
+      var status=pending?(s.scheduled_for<=Date.now()/1000?'到点，等待窗口空闲':'待执行'):s.state==='cancelled'?'已取消':labels[s.state]||s.state;
+      summary.append(node('span','',scheduleStamp(s.scheduled_for)),node('strong','',status));row.append(summary,node('p','cx-text',s.text));
+      var provider=config.profiles.find(function(p){return p.id===s.profile;});if(provider)row.append(node('small','cx-muted','供应商：'+provider.name+' · 执行时使用该供应商的最新配置'));
+      if(pending)row.append(button('取消定时任务',function(){act('cancel-schedule',{request_id:s.request_id});}));
+      list.append(row);
+    });
+  }
   function chooseDialog(title, choices, opts){
     return new Promise(function(resolve){
       var dlg=node('dialog','cx-dialog cx-picker'),heading=node('h3','',title),list=node('div','cx-picker-list'),answer=null;
@@ -71,7 +105,7 @@
       '<div id="cx-tasks" class="cx-workspace" hidden><aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-head"><h3>任务窗口</h3><button type="button" id="cx-new" class="btn btn-blue btn-sm">＋ 新窗口</button></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></aside>'+
       '<main class="cx-main"><div id="cx-window-toolbar" class="cx-window-toolbar"><button type="button" id="cx-window-toggle" class="btn btn-outline btn-sm cx-window-toggle" aria-expanded="false" aria-controls="cx-window-sidebar">窗口</button><div class="cx-window-heading"><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div><details class="cx-window-menu"><summary aria-label="窗口操作">···</summary><div class="cx-window-actions"><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button></div></details></div>'+
       '<div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立的 Codex 会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div>'+
-      '<div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="2" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span><span id="cx-usage"></span><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
+      '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="2" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间 <span>（北京时间，可不选）</span></label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div><div class="cx-compose-bar"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span><span id="cx-usage"></span><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
       '<section id="cx-api" class="cx-api" hidden><div class="cx-section-heading"><div><h3>Codex API 配置</h3><p>每个供应商单独保存，下次任务生效。密钥加密保存，无需设置密码。</p></div><button id="cx-add-profile" type="button" class="btn btn-outline btn-sm">添加供应商</button></div><div id="cx-profiles"></div><p id="cx-api-state" class="cx-muted" role="status"></p></section>'+
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
       '</section>';
@@ -87,8 +121,10 @@
     $('delete-window').onclick=deleteWindow;
     $('stop').onclick=function(){act('stop');};
     $('compose').onsubmit=function(e){e.preventDefault();send();};
-    $('input').oninput=function(){if(selected)localStorage.setItem(draftKey(selected),$('input').value);resizeInput();};
-    $('input').onkeydown=function(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}};
+    $('input').oninput=function(){saveDraft();resizeInput();};
+    $('schedule-time').oninput=function(){saveDraft();renderToolbar();};
+    $('schedule-clear').onclick=function(){$('schedule-time').value='';saveDraft();renderToolbar();};
+    $('input').onkeydown=function(e){if(!e.isComposing&&e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}};
     $('profile').onchange=function(){act('profile',{profile:$('profile').value});};
     $('login').onsubmit=async function(e){
       e.preventDefault();var url=$('endpoint').value.trim().replace(/\/+$/,'');
@@ -111,7 +147,7 @@
     });
   }
   function resizeInput(){var input=$('input');input.style.height='auto';input.style.height=Math.min(180,input.scrollHeight)+'px';}
-  function close(){generation++;clearTimeout(timer);root.hidden=true;document.body.classList.remove('cx-open');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();}
+  function close(){saveDraft();generation++;clearTimeout(timer);root.hidden=true;document.body.classList.remove('cx-open');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();}
   function showTab(name){
     tab=name;['tasks','api','info'].forEach(function(n){$(n).hidden=!config||n!==name;$('tab-'+n).classList.toggle('active',n===name);$('tab-'+n).setAttribute('aria-current',n===name?'page':'false');});
     $('login').hidden=!!config;
@@ -123,21 +159,24 @@
     var query=$('search').value.trim().toLowerCase(), list=$('windows');list.replaceChildren();
     windows.filter(function(w){return !query||w.title.toLowerCase().includes(query);}).forEach(function(w){
       var b=node('button','cx-window'+(w.id===selected?' active':''));b.type='button';b.dataset.status=w.status;
-      b.append(node('strong','',w.title),node('span','',labels[w.status]||w.status),node('small','',stamp(w.updated)));
+      b.append(node('strong','',w.title),node('span','',(labels[w.status]||w.status)+(w.scheduled_count?' · '+w.scheduled_count+' 个定时任务':'')),node('small','',stamp(w.updated)));
       b.onclick=function(){select(w.id);};list.append(b);
     });
     if(!list.childElementCount)list.append(node('p','cx-muted',windows.length?'没有匹配的窗口':'还没有窗口，点击「新窗口」。'));
   }
   function renderToolbar(){
+    if(!config)return;
     var w=current(), running=w&&['queued','starting','running','waiting'].includes(w.status);
+    var timed=!!$('schedule-time').value;
     $('window-title').textContent=w?w.title:'选择或新建任务窗口';
     $('window-meta').textContent=w?(labels[w.status]||w.status)+' · '+(w.thread_id?'Codex '+w.thread_id.slice(0,8):'正在创建'):'每个窗口都有自己的任务记录';
     ['rename','close-window','delete-window'].forEach(function(n){$(n).disabled=!w||busy;});
     $('close-window').textContent=w&&w.status==='closed'?'重新打开':'关闭窗口';
     $('stop').hidden=!running;$('stop').disabled=busy;
     $('input').disabled=!w||w.status==='closed';
-    $('send').disabled=!w||busy||['closed','queued','starting','waiting','opening'].includes(w.status);
-    $('send').textContent=w&&w.status==='running'?'补充指令':'开始执行';
+    $('send').disabled=!w||busy||(timed?['closed','opening']:['closed','queued','starting','waiting','opening']).includes(w.status);
+    $('send').textContent=timed?'定时发送':w&&w.status==='running'?'补充指令':'开始执行';
+    $('schedule-time').disabled=!w||w.status==='closed';$('schedule-clear').hidden=!timed;
     $('profile').disabled=!w||running||busy;
     var chosen=w?w.profile:config.default_profile;
     if($('profile').dataset.items!==JSON.stringify(config.profiles)){
@@ -148,7 +187,7 @@
     var usage={};try{usage=JSON.parse(w&&w.usage||'{}');}catch(_){}
     var total=usage.total||{};$('usage').textContent=total.totalTokens?Number(total.totalTokens).toLocaleString()+' tokens':'';
     if(w&&w.error)message(w.error,true);
-    $('compose-hint').textContent=w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已提交，正在启动。':w&&w.status==='running'?'正在服务器执行。可以补充指令；关闭此页面后任务继续。':'不同窗口可同时执行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
+    $('compose-hint').textContent=timed?'按北京时间执行，退出页面仍有效；窗口忙碌时等待空闲。':w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已提交，正在启动。':w&&w.status==='running'?'正在服务器执行。可以补充指令，或选择时间安排下一任务。':'不选时间即刻执行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
   }
   function copy(text){navigator.clipboard.writeText(text).then(function(){message('已复制');}).catch(function(){message('复制失败，请选中文字手动复制',true);});}
   function card(item){
@@ -200,10 +239,10 @@
     });
   }
   async function select(id){
-    if(selected)localStorage.setItem(draftKey(selected),$('input').value);
+    saveDraft();
     $('tasks').classList.remove('cx-sidebar-open');$('window-toggle').setAttribute('aria-expanded','false');
     selected=id;cursor=0;items.clear();$('feed').replaceChildren();$('pending').replaceChildren();delete $('pending').dataset.signature;
-    $('input').value=localStorage.getItem(draftKey(id))||'';localStorage.setItem('ck_codex_selected',id);generation++;
+    restoreDraft(id);schedules=[];renderSchedules();localStorage.setItem('ck_codex_selected',id);generation++;
     renderWindows();renderToolbar();await refresh(false);
   }
   async function refresh(full){
@@ -213,11 +252,12 @@
       if(!access){showTab(tab);return;}
       if(!config||full){config=await request('/config');if(token!==generation)return;showTab(tab);}
       var response=await request('/threads');if(token!==generation)return;windows=response.windows;
-      if(selected&&!windows.some(function(w){return w.id===selected;})){selected='';cursor=0;items.clear();$('feed').replaceChildren();}
-      if(!selected&&windows.length){selected=windows[0].id;id=selected;cursor=0;items.clear();$('input').value=localStorage.getItem(draftKey(id))||'';}
+      if(selected&&!windows.some(function(w){return w.id===selected;})){removeDraft(selected);selected='';cursor=0;items.clear();$('feed').replaceChildren();schedules=[];renderSchedules();restoreDraft('');}
+      if(!selected&&windows.length){selected=windows[0].id;id=selected;cursor=0;items.clear();restoreDraft(id);localStorage.setItem('ck_codex_selected',id);}
       renderWindows();renderToolbar();$('connection').textContent='已连接';$('connection').dataset.state='ok';
       if(selected){id=selected;var snapshot=await request('/threads/'+id+'?after='+cursor);if(token!==generation||id!==selected)return;
-        var reset=cursor===0;cursor=snapshot.cursor;windows=windows.map(function(w){return w.id===id?snapshot.window:w;});renderFeed(snapshot.items,reset);renderToolbar();}
+        var reset=cursor===0;cursor=snapshot.cursor;windows=windows.map(function(w){return w.id===id?Object.assign({},w,snapshot.window):w;});renderFeed(snapshot.items,reset);
+        var next=snapshot.schedules||[];if(JSON.stringify(schedules)!==JSON.stringify(next)){schedules=next;renderSchedules();}renderToolbar();}
       if(full&&!(current()&&current().error))message('已同步服务器状态');
     }catch(e){
       if(token!==generation)return;message(e.message,true);$('connection').textContent='连接待恢复';$('connection').dataset.state='error';
@@ -235,21 +275,33 @@
   async function renameWindow(){var w=current();if(!w)return;var title=await taskDialog('窗口名称','为这个任务取一个便于查找的名称。',w.title);if(title)act('rename',{title:title});}
   async function deleteWindow(){
     var w=current();if(!w)return;
-    if(await taskDialog('删除 Codex 窗口','删除「'+w.title+'」？正在执行的任务会停止，CK 记录与 VPS 上对应的 Codex 会话会一起删除。已修改的项目文件保留。'))act('delete');
+    if(await taskDialog('删除 Codex 窗口','删除「'+w.title+'」？当前任务会停止，定时任务会取消，草稿、CK 记录与对应 Codex 会话会一起删除。已修改的项目文件保留。'))act('delete');
   }
   async function act(name,body){
     if(!selected||busy)return;busy=true;renderToolbar();var id=selected;
-    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){localStorage.removeItem(draftKey(id));selected='';cursor=0;items.clear();$('feed').replaceChildren();}message({stop:'任务已停止',close:'窗口已关闭，记录已保留',reopen:'窗口已重新打开',delete:'CK 与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复'}[name]||'已完成');await refresh(false);}
+    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){removeDraft(id);if(selected===id){selected='';cursor=0;items.clear();$('feed').replaceChildren();restoreDraft('');schedules=[];renderSchedules();}}message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');await refresh(false);}
     catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
   }
   async function send(){
-    var w=current(),text=$('input').value.trim();if(!w||!text||busy)return;
-    var mode=w.status==='running'?'steer':'send',key='ck_codex_pending_'+w.id, pending;
-    try{pending=JSON.parse(sessionStorage.getItem(key)||'null');}catch(_){}
-    if(!pending||pending.text!==text)pending={text:text,mode:mode,request_id:uid()};
+    var w=current(),raw=$('input').value,text=raw.trim(),when=$('schedule-time').value;if(!w||!text||busy)return;
+    if(!$('schedule-time').reportValidity())return;
+    var mode=when?'schedule':w.status==='running'?'steer':'send',key='ck_codex_pending_'+w.id,pending,due;
+    saveDraft();
+    try{pending=JSON.parse(localStorage.getItem(key)||sessionStorage.getItem(key)||'null');}catch(_){}
+    var same=pending&&pending.text===text&&(pending.when||'')===when;
+    if(when){
+      due=Date.parse(when+':00+08:00')/1000;
+      if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when)||!Number.isFinite(due)||(!same&&due<=Date.now()/1000)){message('请选择未来的执行时间（北京时间）',true);return;}
+      if(!config.scheduling){message('定时服务正在等待空闲启用，请稍后刷新。草稿已保留。',true);return;}
+    }
+    if(!same)pending={text:text,when:when,mode:mode,request_id:uid()};
     mode=pending.mode;
-    sessionStorage.setItem(key,JSON.stringify(pending));busy=true;renderToolbar();
-    try{await request('/threads/'+w.id+'/'+mode,{text:text,request_id:pending.request_id});sessionStorage.removeItem(key);localStorage.removeItem(draftKey(w.id));if(selected===w.id){$('input').value='';resizeInput();}message(mode==='steer'?'补充指令已发送':'任务已提交到服务器');await refresh(false);}
+    try{localStorage.setItem(key,JSON.stringify(pending));}catch(_){message('无法保存发送编号，请恢复浏览器存储后再发送。草稿仍在输入框中。',true);return;}
+    busy=true;renderToolbar();
+    try{await request('/threads/'+w.id+'/'+mode,{text:text,request_id:pending.request_id,scheduled_for:due});sessionStorage.removeItem(key);localStorage.removeItem(key);
+      if(selected===w.id){if($('input').value===raw&&$('schedule-time').value===when){$('input').value='';$('schedule-time').value='';saveDraft();resizeInput();}}
+      else if(localStorage.getItem(draftKey(w.id))===raw&&(localStorage.getItem(draftKey(w.id)+'_time')||'')===when)removeDraft(w.id);
+      message(mode==='schedule'?'已安排 '+scheduleStamp(due)+'（北京时间）执行':mode==='steer'?'补充指令已发送':'任务已提交到服务器');await refresh(false);}
     catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
   }
   function field(label,type,value,name){var wrap=node('label','',label), input=node(type==='select'?'select':'input');if(type!=='select')input.type=type;input.name=name;input.value=value||'';input.autocomplete='off';wrap.append(input);return wrap;}
@@ -325,8 +377,9 @@
     var servers=node('div','cx-server-list');(config.servers||[]).forEach(function(s){var row=node('article','cx-server');row.append(node('h4','',s.name),node('p','',s.address||''),node('p','cx-muted',s.status||''));servers.append(row);});target.append(servers);
     target.append(node('p','cx-muted','关闭窗口会停止任务并保留会话；删除窗口会同步删除会话。浏览器关闭或息屏不停止任务。服务重启后会明确标记中断，避免重复执行已经完成的操作。'));
   }
-  window.ckOpenCodex=async function(name){make();previousFocus=document.activeElement;root.hidden=false;document.body.classList.add('cx-open');selected=selected||localStorage.getItem('ck_codex_selected')||'';showTab(name||'tasks');$('exit').focus();await loadAccess();if(opened())refresh(true);};
-  document.addEventListener('visibilitychange',function(){if(document.hidden)clearTimeout(timer);else if(opened())refresh(false);});
+  window.ckOpenCodex=async function(name){make();previousFocus=document.activeElement;root.hidden=false;document.body.classList.add('cx-open');selected=selected||localStorage.getItem('ck_codex_selected')||'';if(draftOwner!==selected)restoreDraft(selected);showTab(name||'tasks');$('exit').focus();await loadAccess();if(opened())refresh(true);};
+  document.addEventListener('visibilitychange',function(){if(document.hidden){if(root)saveDraft();clearTimeout(timer);}else if(opened())refresh(false);});
+  window.addEventListener('pagehide',function(){if(root)saveDraft();});
   window.addEventListener('online',function(){if(opened())refresh(false);});
   function openLinkedTab(){if(location.hash==='#codex-tasks'||location.hash==='#codex-api')window.ckOpenCodex(location.hash==='#codex-api'?'api':'tasks');}
   window.addEventListener('hashchange',openLinkedTab);
