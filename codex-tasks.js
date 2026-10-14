@@ -165,9 +165,9 @@
     if(root)return;
     root=node('div','cx-overlay');root.id='cx-root';root.hidden=true;
     root.innerHTML='<section class="cx-shell" role="dialog" aria-modal="true" aria-labelledby="cx-title">'+
-      '<header class="cx-head"><button id="cx-exit" type="button" class="btn btn-outline btn-sm">返回 CK</button><button type="button" id="cx-window-toggle" class="btn btn-outline btn-sm cx-window-toggle" aria-expanded="false" aria-controls="cx-window-sidebar">菜单</button><div id="cx-page-heading" class="cx-brand"><h2 id="cx-title">Codex</h2></div><div id="cx-window-toolbar" class="cx-window-toolbar"><div class="cx-window-heading"><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div><details class="cx-window-menu"><summary aria-label="窗口操作">···</summary><div class="cx-window-actions"><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button></div></details></div><span id="cx-connection" class="cx-badge">尚未连接</span><button id="cx-refresh" type="button" class="cx-refresh" aria-label="刷新当前页面" title="刷新">刷新</button></header>'+
+      '<header class="cx-head"><button type="button" id="cx-window-toggle" class="btn btn-outline btn-sm cx-window-toggle" aria-expanded="false" aria-controls="cx-window-sidebar">菜单</button><div id="cx-page-heading" class="cx-brand"><h2 id="cx-title">Codex</h2></div><div id="cx-window-toolbar" class="cx-window-toolbar"><div class="cx-window-heading"><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div><details class="cx-window-menu"><summary aria-label="窗口操作">···</summary><div class="cx-window-actions"><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button></div></details></div><span id="cx-connection" class="cx-badge">尚未连接</span><button id="cx-refresh" type="button" class="cx-refresh" aria-label="刷新当前页面" title="刷新">刷新</button><button id="cx-exit" type="button" class="btn btn-outline btn-sm">返回 CK</button></header>'+
       '<p id="cx-message" class="cx-message" role="status" aria-live="polite"></p><div id="cx-other-errors" class="cx-other-errors" role="status" aria-live="polite" aria-label="其他窗口当前异常" hidden></div><div id="cx-body" class="cx-body"><button id="cx-sidebar-backdrop" class="cx-sidebar-backdrop" type="button" aria-label="收起 Codex 菜单" tabindex="-1"></button>'+
-      '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation" aria-label="Codex 导航"><button id="cx-tab-tasks" type="button">任务窗口</button><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>我的窗口</h3><button type="button" id="cx-new" class="btn btn-blue btn-sm">＋ 新窗口</button></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div></aside>'+
+      '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation cx-navigation-top" aria-label="任务导航"><button id="cx-tab-tasks" type="button">任务窗口</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>我的窗口</h3><button type="button" id="cx-new" class="btn btn-blue btn-sm">＋ 新窗口</button></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div><nav class="cx-navigation cx-navigation-bottom" aria-label="Codex 设置"><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav></aside>'+
       '<form id="cx-login" class="cx-login" hidden><h3>连接你的 Codex</h3><p>使用「VPS 管理 → Codex 任务中心 → 查看访问密钥」里的专用密钥。只需在这台设备填写一次。</p><label>服务地址<input id="cx-endpoint" type="url" required autocomplete="off"></label><label>Codex 访问密钥<input id="cx-access" type="password" required autocomplete="off"></label><button class="btn btn-blue" type="submit">连接</button><small>这是任务中心的访问密钥。模型 API 密钥在连接后单独配置。</small></form>'+
       '<div id="cx-tasks" class="cx-workspace" hidden><main class="cx-main">'+
       '<div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立的 Codex 会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div>'+
@@ -235,7 +235,7 @@
   function showTab(name){
     tab=['tasks','api','info'].includes(name)?name:'tasks';name=tab;root.dataset.page=name;
     $('title').textContent={tasks:'Codex 任务',api:'Codex API 配置',info:'Codex 工作资料'}[name];
-    $('page-heading').hidden=!!config&&name==='tasks';$('window-toolbar').hidden=!config||name!=='tasks';$('task-list').hidden=!config||name!=='tasks';
+    $('page-heading').hidden=!!config&&name==='tasks';$('window-toolbar').hidden=!config||name!=='tasks';$('task-list').hidden=!config;
     ['tasks','api','info'].forEach(function(n){$(n).hidden=!config||n!==name;$('tab-'+n).classList.toggle('active',n===name);$('tab-'+n).setAttribute('aria-current',n===name?'page':'false');});
     $('login').hidden=!!config;
     if(!config){$('endpoint').value=endpoint;return;}
@@ -394,7 +394,7 @@
     restoreDraft(id);schedules=cached?cached.schedules:[];renderSchedules();$('schedule-options').open=false;questionIndex=cached?cached.questionIndex:-1;var questions=questionItems();$('question-nav').hidden=!questions.length;if(questions.length)$('question-nav').querySelector('span').textContent=questions.length+' 处提问';
   }
   async function select(id){
-    closeSidebar();if(id===selected){refresh(false);return;}
+    showTab('tasks');closeSidebar();if(id===selected){refresh(false);return;}
     saveDraft();
     rememberWindow();cancelRefresh();restoreWindow(id);message('');localStorage.setItem('ck_codex_selected',id);
     renderWindows();renderToolbar();await refresh(false);
@@ -471,7 +471,7 @@
   }
   async function act(name,body){
     if(!selected||busy)return;busy=true;renderToolbar();var id=selected;
-    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){removeDraft(id);windowCache.delete(id);if(selected===id)restoreWindow('');}message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');cancelRefresh();refreshStatus(true);await refresh(false);}
+    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){cancelStatus();cancelRefresh();windows=windows.filter(function(w){return w.id!==id;});removeDraft(id);windowCache.delete(id);confirmedAt.delete(id);localStorage.removeItem('ck_codex_selected');if(selected===id)restoreWindow('');renderWindows();renderToolbar();}message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');cancelRefresh();await refreshStatus(true);await refresh(false);}
     catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
   }
   async function send(){
