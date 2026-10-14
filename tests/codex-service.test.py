@@ -194,12 +194,15 @@ class AnyRetryLifecycle(Lifecycle):
     def test_unbounded_retries_one_counter_then_success_no_restart(self):
         wid,engine=self.start_task()
         for count in range(1,13):
+            self.m.event(engine,{'method':'error','params':{'error':{'message':'high demand'}}})
+            self.assertIn('等待自动重试',self.m.store.one(wid)['error'])
             self.complete(wid,engine)
             run=self.m.any_retries[wid]
             self.assertTrue(run.pending)
             self.assertGreater(run.due,time.monotonic())
             run.due=0
             self.wait_for(lambda:run.count==count and self.m.store.one(wid)['status']=='running')
+            self.assertEqual(self.m.store.one(wid)['error'],'')
             self.m.log_problem(wid,'high demand')
         self.complete(wid,engine,'completed','')
         self.assertNotIn(wid,self.m.any_retries)

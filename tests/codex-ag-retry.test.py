@@ -26,9 +26,12 @@ class AG(unittest.TestCase):
     def test_rate_limit_continues_original_thread_then_stops_after_success(self):
         wid,engine=self.start()
         for count in range(1,5):
+            self.m.event(engine,{'method':'error','params':{'error':{'message':'429 rate limit reached'}}})
+            self.assertEqual(self.m.store.one(wid)['error'],'AG 限流，等待自动继续')
             self.complete(wid,engine,message='429 rate limit reached')
             run=self.m.any_retries[wid];self.assertIsInstance(run,AgRetry);self.assertEqual(run.delay,[10,20,40,60][count-1]);run.due=0
             self.wait_for(lambda:run.count==count and self.m.store.one(wid)['status']=='running')
+            self.assertEqual(self.m.store.one(wid)['error'],'')
         starts=[p for method,p in engine.calls if method=='turn/start']
         self.assertEqual(len(starts),5);self.assertEqual(len({p['threadId'] for p in starts}),1)
         self.assertEqual(starts[-1]['input'][0]['text'],f.service.CONTINUE_TASK)

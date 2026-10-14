@@ -548,7 +548,8 @@ class Manager:
             run.schedule(turn.get('error'))
             self.store.db.execute("UPDATE tasks SET status='queued',turn_id='' WHERE request_id=?", (run.request_id,))
             self.store.db.commit()
-            self.store.update(wid, status='queued', turn_id='', error='上游过载，等待自动重试')
+            self.store.update(wid, status='queued', turn_id='',
+                              error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else '上游过载，等待自动重试')
             self.store.item(wid, 'any-retry:'+run.request_id, 'warning', run.text)
             return True
 
@@ -590,7 +591,7 @@ class Manager:
                             self.store.db.execute("UPDATE tasks SET turn_id=?,status=CASE WHEN status='starting' THEN 'running' ELSE status END WHERE request_id=?", (turn_id, task['request_id']))
                             self.store.db.commit()
                         if self.store.one(wid)['status'] == 'starting':
-                            self.store.update(wid, status='running', turn_id=turn_id)
+                            self.store.update(wid, status='running', turn_id=turn_id, error='')
                     except Exception as exc:
                         # An ambiguous timeout must not start a second task while the old engine runs.
                         engine = self.engines.pop(wid, None)
@@ -661,8 +662,9 @@ class Manager:
             error = p.get('error') or {}
             text = self.redact(str((error.get('message') if isinstance(error, dict) else error) or p.get('message') or 'Codex 运行出错'))
             with self.store.lock:
-                if wid in self.any_retries and retryable(p):
-                    self.store.update(wid, error='上游过载，等待自动重试')
+                run = self.any_retries.get(wid)
+                if run and run.accepts(p):
+                    self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else '上游过载，等待自动重试')
                 else:
                     self.store.update(wid, error=text)
                     self.store.item(wid, 'error:'+str(p.get('turnId') or 'current'), 'error', text,
