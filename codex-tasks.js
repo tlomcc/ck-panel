@@ -111,7 +111,11 @@
     var list=$('notice-list'),signature=JSON.stringify([inside,tab,selected,active.map(function(w){return [w.id,w.title,windowState(w),w.error,w.scheduled_count,completionSeen(w)];})]);
     if(list.dataset.signature===signature)return;
     list.dataset.signature=signature;
-    var prior=new Map(Array.from(list.children).map(function(b){return [b.dataset.windowId,b];}));
+    var prior=new Map();
+    Array.from(list.children).forEach(function(b){
+      // Remove stale copies left by overlapping create/list responses.
+      if(prior.has(b.dataset.windowId))b.remove();else prior.set(b.dataset.windowId,b);
+    });
     active.forEach(function(w,index){
       var b=prior.get(w.id);prior.delete(w.id);
       if(!b){b=button('',function(){openTaskNotice(w.id);},'cx-task-notice');b.dataset.windowId=w.id;b.append(node('strong'),node('span'));}
@@ -582,7 +586,11 @@
     if(busy)return;busy=true;$('new').disabled=true;message('正在创建 Codex 会话…');
     var key=sessionStorage.getItem('ck_codex_create')||uid();sessionStorage.setItem('ck_codex_create',key);
     var next=windows.reduce(function(n,w){var match=/^任务\s*(\d+)$/.exec(w.title);return match?Math.max(n,Number(match[1])):n;},0)+1;
-    try{var w=await request('/threads',{request_id:key,title:'任务'+next,auto_title:true,profile:config.default_profile});sessionStorage.removeItem('ck_codex_create');windows.unshift(w);await select(w.id);message('新窗口已创建');}
+    try{var w=await request('/threads',{request_id:key,title:'任务'+next,auto_title:true,profile:config.default_profile});sessionStorage.removeItem('ck_codex_create');
+      // A status poll may already contain this server-created window.
+      w=newerWindow(windows.find(function(row){return row.id===w.id;}),w);
+      windows=[w].concat(windows.filter(function(row){return row.id!==w.id;}));
+      await select(w.id);message('新窗口已创建');}
     catch(e){message(e.message,true);}finally{busy=false;$('new').disabled=false;renderToolbar();}
   }
   async function renameWindow(){var w=current();if(!w)return;var title=await taskDialog('窗口名称','为这个任务取一个便于查找的名称。',w.title);if(title)act('rename',{title:title});}
