@@ -42,14 +42,14 @@ const server=http.createServer((req,res)=>{
     const notice=id=>page.locator('#cx-notice-list [data-window-id="'+id+'"]');
     const sync=async()=>{await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.waitForTimeout(130);};
     const menu=async()=>{if(width<=640&&!await page.locator('#cx-window-sidebar').isVisible())await page.locator('#cx-window-toggle').click();};
-    const refresh=async()=>{await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelector('#cx-refresh').textContent!=='刷新中…');};
+    const refresh=async()=>{if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelector('#cx-refresh').textContent!=='刷新中…');};
     await page.goto('http://127.0.0.1:'+server.address().port+'/');await page.waitForTimeout(250);assert(!await page.locator('#cx-task-notices').isVisible());await page.evaluate(()=>ckOpenCodex('api'));await notice('done').waitFor();
     assert(await page.locator('#cx-root').isVisible());assert.equal(await notice('run').getAttribute('data-tone'),'ok');assert.equal(await notice('bad').getAttribute('data-tone'),'error');assert.equal(await notice('closed').count(),0);
     const strips=await page.locator('#cx-task-notices').boundingBox();assert(strips.x<16&&strips.y<125);assert(Math.abs(strips.width-width/3)<2);const box=await notice('done').boundingBox();assert(box.height<=25&&box.width<=width/3);const runBox=await notice('run').boundingBox();assert.equal(runBox.x,box.x);assert(runBox.y+runBox.height<=box.y);
     assert((await notice('done').innerText()).includes('未查看'));
     // Clicking cannot dismiss a completed result before the detail request succeeds.
     failDetail='done';await notice('done').click();await page.getByText('记录读取失败',{exact:true}).waitFor();assert(await notice('done').isVisible());
-    failDetail='';holdId='done';await page.locator('#cx-refresh').click();while(!held)await page.waitForTimeout(20);
+    failDetail='';holdId='done';if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();while(!held)await page.waitForTimeout(20);
     assert(await notice('done').isVisible());holdId='';release();await notice('done').waitFor({state:'detached'});
     await menu();assert(await page.locator('#cx-windows').getByRole('button',{name:/完成窗口/}).isVisible());
     assert.equal(await page.locator('#cx-window-sidebar nav button').allTextContents().then(x=>x.join(',')),'API 配置,工作资料');
