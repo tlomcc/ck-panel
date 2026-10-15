@@ -56,7 +56,9 @@ class Batch:
     def notify(self):
         with self.cv:
             self.revision += 1
-            data = {'windows': [dict(row) for row in self.rows], 'winner': self.winner,
+            visible = [self.rows[self.winner-1]] if self.winner else self.rows
+            data = {'windows': [dict(row) for row in visible], 'winner': self.winner,
+                    'removed_count': len(self.rows)-1 if self.winner else 0,
                     'created': self.created, 'revision': self.revision}
         self.publish(data)
 

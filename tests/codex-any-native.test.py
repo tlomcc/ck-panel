@@ -73,7 +73,7 @@ class NativeRace(unittest.TestCase):
                 self.assertEqual(len(bodies),6 if retry else 3);self.assertEqual(len(set(bodies[:3])),1);self.assertEqual(len(set(bodies[-3:])),1);self.assertEqual(len(tools_round),1)
                 folders=[i for i in snapshot['items'] if i['kind']=='anyRace'];self.assertEqual(len(folders),1);self.assertEqual(folders[0]['data']['retry'],1 if retry else 0)
                 self.assertEqual(sum(w['state']=='winner' for w in folders[0]['data']['windows']),1)
-                self.assertEqual(sum(w['state']=='cancelled' for w in folders[0]['data']['windows']),2)
+                self.assertEqual(len(folders[0]['data']['windows']),1);self.assertEqual(folders[0]['data']['removed_count'],2)
                 self.assertIn('fixture complete',str(snapshot['items']))
             finally:
                 engines=list(manager.engines.values());manager.shutdown()

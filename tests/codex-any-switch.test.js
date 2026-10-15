@@ -11,7 +11,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   let config={profiles:[{id:any,name:'any',model:'test-model',effort:'high',base_url:'https://a.test/v1',has_key:true},{id:'q',name:'AG',model:'test-model',effort:'high',base_url:'https://b.test/v1',has_key:true}],default_profile:any,any_retry_switch:true,any_retry_profile:any,any_auto_retry:false,any_retry_controls:true,any_retry_mode:"off",any_retry_limit:3,any_parallel_count:2,any_parallel_enabled:false};
   let switches=[],saves=0,fail=false,parallel=[];
   const w={id:'race-task',title:'并发请求任务',profile:any,status:'completed',updated:1,seq:3};
-  const folder={id:'any-race:task',kind:'anyRace',created:1,text:'',data:{count:3,retry:2,winner:2,windows:[{number:1,state:'cancelled'},{number:2,state:'winner'},{number:3,state:'failed',detail:'HTTP 503'}]}};
+  const folder={id:'any-race:task',kind:'anyRace',created:1,text:'',data:{count:3,retry:2,winner:2,removed_count:2,windows:[{number:2,state:'winner'}]}};
   await page.route('https://codex.test/codex/**',async route=>{
    const url=new URL(route.request().url());let result={};
    if(url.pathname.endsWith('/config'))result=config;
@@ -44,8 +44,8 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await card.getByLabel('多开窗口数').fill('');await card.getByRole('button',{name:'关闭多开',exact:true}).click();await card.getByText('已关闭多开，后续请求使用单窗口。',{exact:true}).waitFor();
   assert.deepEqual(parallel.at(-1),{enabled:false,count:3});
   await page.evaluate(()=>window.ckOpenCodex('tasks'));await page.locator('.cx-any-folder').waitFor();
-  await page.locator('.cx-any-folder>details>summary').click();assert.equal(await page.locator('.cx-any-window').count(),3);assert((await page.locator('.cx-any-folder').innerText()).includes('窗口 2 胜出'));
-  await page.locator('.cx-any-window[data-state=winner]>summary').click();assert(await page.getByText('此窗口的回复与后续执行显示在下方任务记录。',{exact:true}).isVisible());
+  await page.locator('.cx-any-folder>details>summary').click();assert.equal(await page.locator('.cx-any-window').count(),1);assert((await page.locator('.cx-any-folder').innerText()).includes('窗口 2 胜出'));
+  assert(await page.getByText('已保留胜出窗口，其余 2 个请求窗口已自动关闭并删除。',{exact:true}).isVisible());await page.locator('.cx-any-window[data-state=winner]>summary').click();assert(await page.getByText('此窗口的回复与后续执行显示在下方任务记录。',{exact:true}).isVisible());
   await page.screenshot({path:'/home/ckcodex/workspace/work/any-controls-20261015/any-folder-'+width+'.png'});
   await page.evaluate(()=>location.hash='codex-tasks');await page.reload();await page.locator('.cx-any-folder').waitFor();assert((await page.locator('.cx-any-folder').innerText()).includes('窗口 2 胜出'));
   config.any_retry_controls=false;await page.evaluate(()=>window.ckOpenCodex('api'));await card.locator('summary').click();assert(await unlimited.isDisabled());assert(await card.getByRole('button',{name:'开启多开 / 保存个数',exact:true}).isDisabled());
