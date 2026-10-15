@@ -22,7 +22,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
    await route.fulfill({json:result});
   });
   await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');await page.locator('.cx-item-agentMessage').waitFor();
-  const refresh=async()=>{await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');};
+  const refresh=async()=>{if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');};
   assert.equal(await page.locator('.cx-task-status').textContent(),'正常运行');
   for(const dark of [false,true]){await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);assert.equal(await page.locator('.cx-task-status').evaluate(e=>getComputedStyle(e).color),await page.locator('#cx-root').evaluate(e=>getComputedStyle(e).getPropertyValue('--ck-accent-strong').trim()).then(hex=>{const n=parseInt(hex.slice(1),16);return `rgb(${n>>16}, ${(n>>8)&255}, ${n&255})`;}));}
   const positions=await page.evaluate(()=>['.cx-item-userMessage .cx-text','.cx-item-agentMessage .cx-text'].map(s=>document.querySelector(s).getBoundingClientRect().left));assert(Math.abs(positions[0]-positions[1])<1);
@@ -32,8 +32,8 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.locator('.cx-detail summary').click();assert.equal(await page.locator('.cx-detail').getAttribute('open'),'');await page.locator('#cx-window-title').click();assert.equal(await page.locator('.cx-detail').getAttribute('open'),null);
   const copy=page.locator('.cx-item-userMessage .cx-copy');await copy.click();await page.waitForFunction(()=>window.copied.length===1);assert.equal(await copy.textContent(),'已复制');
   await page.evaluate(()=>window.copyFail=true);await copy.click();base[0].text='更新中的任务文字';await refresh();await page.waitForFunction(()=>document.querySelector('.cx-item-userMessage .cx-copy').textContent==='复制失败');await page.evaluate(()=>window.copyFail=false);
-  delay=160;await page.locator('#cx-refresh').click();assert.equal(await page.locator('#cx-refresh').textContent(),'刷新中…');assert(await page.locator('#cx-refresh').isDisabled());await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');delay=0;
-  fail=true;await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='刷新失败');fail=false;
+  delay=160;if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();assert.equal(await page.locator('#cx-refresh').textContent(),'刷新中…');assert(await page.locator('#cx-refresh').isDisabled());await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');delay=0;
+  fail=true;if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='刷新失败');fail=false;
   windows[0].error='provider failed';await refresh();assert.equal(await page.locator('.cx-task-status').textContent(),'运行出错');assert.equal(await page.locator('.cx-task-status').getAttribute('data-status'),'error');assert(await page.locator('#cx-stop').isVisible());
   base.push({id:'err1',kind:'error',text:'rate limit exceeded',created:20,data:{}});await refresh();
   assert((await page.locator('.cx-item-error').innerText()).includes('rate limit exceeded'));
@@ -56,7 +56,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.reload();await page.locator('.cx-item-question').first().waitFor();assert.equal(await page.locator('.cx-item-question').count(),2);assert((await page.locator('.cx-item-question').first().innerText()).includes('已结束'));
   await page.locator('#cx-exit').click();assert(!await page.locator('#cx-task-notices').isVisible());assert.equal(await page.locator('#cx-question-outside').count(),0);await page.evaluate(()=>ckOpenCodex('tasks'));await page.locator('.cx-question').waitFor();assert(await page.locator('#cx-tasks').isVisible());
   await page.goto('http://127.0.0.1:'+server.address().port+'/');assert.equal(await page.locator('#cx-root').isVisible(),false);await page.evaluate(()=>ckOpenCodex('tasks'));await page.locator('.cx-question').waitFor();
-  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-workspace-check/interactions-'+width+'.png'});
+  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-refresh-menu-20261015/interactions-'+width+'.png'});
   if(width<640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-new').click();await page.waitForFunction(()=>document.getElementById('cx-window-title').textContent==='任务3');if(width<640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-new').click();await page.waitForFunction(()=>document.getElementById('cx-window-title').textContent==='任务4');assert.deepEqual(created.map(w=>w.title),['任务3','任务4']);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);console.log(width+': outside dismissal, feedback, status, alignment, question navigation/copy/history/cross-window alert, sequential names PASS');await context.close();
  }}finally{await browser.close();server.close();}

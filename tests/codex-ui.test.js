@@ -41,7 +41,7 @@ const server = http.createServer((req, res) => {
       for(const text of ['PRIVATE_COMMAND','PRIVATE_PATH','PRIVATE_DIFF','PRIVATE_PATCH','RAW_TOOL_PAYLOAD','RAW_OUTPUT'])assert(!(await page.locator('#cx-feed').innerText()).includes(text));
       assert.equal(await page.locator('.cx-detail summary').first().textContent(),'执行命令');
       assert.equal(await page.locator('.cx-detail[open]').count(),0);
-      await page.locator('#cx-refresh').click();
+      if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();
       await page.waitForTimeout(300);
       assert.equal(await page.locator('.cx-detail[open]').count(),0);
       await page.locator('.cx-question[role=alert]').waitFor();

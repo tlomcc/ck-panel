@@ -74,7 +74,7 @@ const server=http.createServer((req,res)=>{
     while(detailFailures===failures)await page.waitForTimeout(50);
     assert.equal(await banner.innerText(),'停止请求失败，请核对任务');
     failDetail=false;await page.waitForTimeout(1200);assert.equal(await banner.innerText(),'停止请求失败，请核对任务');
-    await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelector('#cx-message').textContent==='');
+    if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelector('#cx-message').textContent==='已刷新');
     // A delayed old detail response cannot overwrite a newer healthy list response.
     rows[0].error='older error';rows[0].seq++;holdDetail=true;
     while(!held)await page.waitForTimeout(50);
