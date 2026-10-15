@@ -6,6 +6,7 @@
   var endpoint = localStorage.getItem('ck_codex_endpoint') || 'https://tlomcc.cc.cd:18443/codex';
   var access = '', accessReady;
   var draftOwner = '', schedules = [];
+  var userJump = null;
   function loadAccess(){if(!accessReady)accessReady=CKCodexStorage.load().then(function(value){access=value;}).catch(function(){message('无法读取加密连接密钥，请重新填写。',true);});return accessReady;}
   var labels = {idle:'等待任务',opening:'正在创建',queued:'排队中',starting:'正在启动',running:'正常运行',waiting:'等待你回复',completed:'已完成',interrupted:'已停止',failed:'运行异常',closed:'已关闭'};
   var $ = function (id) { return document.getElementById('cx-'+id); };
@@ -205,7 +206,7 @@
       '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation cx-navigation-top" aria-label="Codex 设置"><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>已查看 / 已关闭</h3></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div></aside>'+
       '<form id="cx-login" class="cx-login" hidden><h3>连接你的 Codex</h3><p>使用「VPS 管理 → Codex 任务中心 → 查看访问密钥」里的专用密钥。只需在这台设备填写一次。</p><label>服务地址<input id="cx-endpoint" type="url" required autocomplete="off"></label><label>Codex 访问密钥<input id="cx-access" type="password" required autocomplete="off"></label><button class="btn btn-blue" type="submit">连接</button><small>这是任务中心的访问密钥。模型 API 密钥在连接后单独配置。</small></form>'+
       '<div id="cx-tasks" class="cx-workspace" hidden><main class="cx-main">'+
-      '<div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立的 Codex 会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div>'+
+      '<div id="cx-feed-area" class="cx-feed-area"><div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立的 Codex 会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div><nav id="cx-user-nav" class="cx-user-nav" aria-label="用户消息跳转" hidden><button id="cx-user-prev" type="button" aria-label="上一条用户消息" title="上一条用户消息" aria-controls="cx-feed">↑</button><span id="cx-user-position" role="status" aria-live="polite">用户</span><button id="cx-user-next" type="button" aria-label="下一条用户消息" title="下一条用户消息" aria-controls="cx-feed">↓</button></nav></div>'+
       '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="1" aria-describedby="cx-compose-hint" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><div class="cx-compose-settings"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span></div><div class="cx-compose-meta"><details id="cx-schedule-options" class="cx-schedule-options"><summary id="cx-schedule-summary" title="安排一次性定时任务">定时</summary><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间（北京时间）</label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div></details><span id="cx-usage"></span></div><div class="cx-compose-actions"><span class="cx-stop-slot"><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button></span><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
       '<section id="cx-api" class="cx-api" hidden><div class="cx-section-heading"><div><h3>Codex API 配置</h3><p>每个供应商单独保存，下次任务生效。密钥加密保存，无需设置密码。</p></div><button id="cx-add-profile" type="button" class="btn btn-outline btn-sm">添加供应商</button></div><div id="cx-profiles"></div><p id="cx-api-state" class="cx-muted" role="status"></p></section>'+
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
@@ -243,7 +244,10 @@
     $('add-profile').onclick=function(){var row=addProfile({id:uid(),name:'新供应商',base_url:'https://',model:'',effort:'high'},true);row.dataset.dirty='true';formDirty=true;row.scrollIntoView({block:'nearest'});row.querySelector('[name=name]').focus();};
     var notice=button('',jumpToWaiting,'cx-question-notice');notice.id='cx-question-notice';notice.hidden=true;$('message').after(notice);
     var jump=node('div','cx-question-nav');jump.id='cx-question-nav';jump.hidden=true;
-    jump.append(node('span'),button('上一处',function(){jumpQuestion(-1);}),button('回到提问',function(){jumpQuestion(0);}),button('下一处',function(){jumpQuestion(1);}));$('feed').before(jump);
+    jump.append(node('span'),button('上一处',function(){jumpQuestion(-1);}),button('回到提问',function(){jumpQuestion(0);}),button('下一处',function(){jumpQuestion(1);}));$('feed-area').before(jump);
+    $('user-prev').onclick=function(){jumpUserMessage(-1);};
+    $('user-next').onclick=function(){jumpUserMessage(1);};
+    $('feed').addEventListener('scroll',renderUserNavigation,{passive:true});
     root.addEventListener('pointerdown',function(e){if(!e.target.closest('dialog'))dismiss(e.target);});
     root.addEventListener('click',function(e){if(e.target.closest('.cx-window-actions button'))root.querySelector('.cx-window-menu').open=false;});
     root.addEventListener('keydown',function(e){
@@ -356,6 +360,36 @@
     return el;
   }
   function questionItems(){return Array.from(items.values()).filter(function(i){return ['request','resolved'].includes(i.kind)&&i.data.method;});}
+  function userMessages(){return Array.from($('feed').querySelectorAll('.cx-item-userMessage'));}
+  function activeUserMessage(){
+    return userJump&&Math.abs($('feed').scrollTop-userJump.scroll)<2?userMessages().find(function(el){return el.dataset.itemId===userJump.id;}):null;
+  }
+  function userMessageTarget(direction,messages,anchor){
+    if(anchor)return messages[messages.indexOf(anchor)+direction];
+    var top=$('feed').getBoundingClientRect().top+parseFloat(getComputedStyle($('feed')).paddingTop);
+    return direction<0?messages.slice().reverse().find(function(el){return el.getBoundingClientRect().top<=top+2;}):messages.find(function(el){return el.getBoundingClientRect().top>=top-2;});
+  }
+  function positionUserMessage(el){
+    var feed=$('feed');
+    // Set the position immediately so repeated taps advance even when the last message cannot reach the top.
+    feed.scrollTop+=el.getBoundingClientRect().top-feed.getBoundingClientRect().top-parseFloat(getComputedStyle(feed).paddingTop);
+    userJump={id:el.dataset.itemId,scroll:feed.scrollTop};
+  }
+  function renderUserNavigation(){
+    var messages=userMessages(),anchor=activeUserMessage();if(!anchor)userJump=null;
+    $('user-nav').hidden=!messages.length;
+    $('user-prev').disabled=!userMessageTarget(-1,messages,anchor);
+    $('user-next').disabled=!userMessageTarget(1,messages,anchor);
+    messages.forEach(function(el){el.classList.toggle('cx-user-highlight',el===anchor);});
+    var label=anchor?(messages.indexOf(anchor)+1)+' / '+messages.length:'用户';
+    if($('user-position').textContent!==label)$('user-position').textContent=label;
+    $('user-position').setAttribute('aria-label',anchor?'第 '+(messages.indexOf(anchor)+1)+' 条，共 '+messages.length+' 条用户消息':'共 '+messages.length+' 条用户消息');
+  }
+  function jumpUserMessage(direction){
+    var messages=userMessages(),target=userMessageTarget(direction,messages,activeUserMessage());
+    if(target)positionUserMessage(target);
+    renderUserNavigation();
+  }
   function focusQuestion(id){var box=Array.from($('pending').children).find(function(n){return n.dataset.itemId===id;});if(box){box.scrollIntoView({block:'nearest'});(box.querySelector('textarea,button')||box).focus({preventScroll:true});}}
   function jumpQuestion(direction){
     var questions=questionItems();if(!questions.length)return;
@@ -376,8 +410,8 @@
     jumpQuestion(0);var q=questionItems().find(function(i){return i.kind==='request';});if(q)focusQuestion(q.id);
   }
   function renderFeed(changed, reset){
-    var feed=$('feed'),nearEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<100;
-    if(reset)feed.replaceChildren();
+    var feed=$('feed'),nearEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<100,anchor=activeUserMessage();
+    if(reset){feed.replaceChildren();userJump=null;anchor=null;}
     var existing=new Map(Array.from(feed.children).map(function(el){return [el.dataset.itemId,el];}));
     changed.forEach(function(item){
       var previous=items.get(item.id);if(item.kind==='resolved'&&!item.data.method&&previous&&previous.data.method)item=Object.assign({},item,{data:previous.data});
@@ -394,10 +428,13 @@
     });
     if(!feed.childElementCount){var empty=node('div','cx-empty');empty.append(node('span','','>_'),node('h3','','窗口已准备好'),node('p','','输入任务后，Codex 会在美国 VPS 上开始执行。'));feed.append(empty);}
     if(changed.length&&feed.querySelector('.cx-empty')&&feed.childElementCount>1)feed.querySelector('.cx-empty').remove();
-    if(nearEnd||reset)feed.scrollTop=feed.scrollHeight;
     renderPending();
     var questions=questionItems();$('question-nav').hidden=!questions.length;
     if(questions.length){questionIndex=Math.min(questionIndex,questions.length-1);$('question-nav').querySelector('span').textContent=questions.length+' 处提问';}
+    $('user-nav').hidden=!userMessages().length;
+    if(anchor){var target=userMessages().find(function(el){return el.dataset.itemId===anchor.dataset.itemId;});if(target)positionUserMessage(target);}
+    else if(nearEnd||reset)feed.scrollTop=feed.scrollHeight;
+    renderUserNavigation();
   }
   function renderPending(){
     var pending=$('pending');var live=Array.from(items.values()).filter(function(item){return item.kind==='request';});
@@ -423,16 +460,17 @@
   function rememberWindow(){
     if(!selected||!cursor)return;
     var feed=$('feed');windowCache.delete(selected);
-    windowCache.set(selected,{cursor:cursor,items:items,nodes:Array.from(feed.childNodes),pending:Array.from($('pending').childNodes),signature:$('pending').dataset.signature,questionIndex:questionIndex,scroll:feed.scrollTop,schedules:schedules});
+    windowCache.set(selected,{cursor:cursor,items:items,nodes:Array.from(feed.childNodes),pending:Array.from($('pending').childNodes),signature:$('pending').dataset.signature,questionIndex:questionIndex,scroll:feed.scrollTop,userJump:activeUserMessage()?userJump:null,schedules:schedules});
     // Keep the most recent windows in this page only; never persist task output.
     while(windowCache.size>8)windowCache.delete(windowCache.keys().next().value);
   }
   function restoreWindow(id){
-    var cached=windowCache.get(id),feed=$('feed');selected=id;cursor=cached?cached.cursor:0;items=cached?cached.items:new Map();
+    var cached=windowCache.get(id),feed=$('feed');selected=id;cursor=cached?cached.cursor:0;items=cached?cached.items:new Map();userJump=cached?cached.userJump:null;
     feed.replaceChildren();$('pending').replaceChildren();delete $('pending').dataset.signature;
     if(cached){cached.nodes.forEach(function(n){feed.append(n);});cached.pending.forEach(function(n){$('pending').append(n);});if(cached.signature)$('pending').dataset.signature=cached.signature;feed.scrollTop=cached.scroll;}
     else if(id){var loadingNote=node('div','cx-empty');loadingNote.append(node('p','','正在读取窗口记录…'));feed.append(loadingNote);}
     restoreDraft(id);schedules=cached?cached.schedules:[];renderSchedules();$('schedule-options').open=false;questionIndex=cached?cached.questionIndex:-1;var questions=questionItems();$('question-nav').hidden=!questions.length;if(questions.length)$('question-nav').querySelector('span').textContent=questions.length+' 处提问';
+    renderUserNavigation();
   }
   async function select(id){
     showTab('tasks');closeSidebar();if(id===selected){refresh(false);return;}
