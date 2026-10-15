@@ -39,8 +39,8 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
   await page.locator('[data-item-id=a3]').evaluate(el=>{const f=document.getElementById('cx-feed');f.scrollTop+=el.getBoundingClientRect().top-f.getBoundingClientRect().top+80;});
   await page.waitForFunction(()=>!document.querySelector('.cx-user-highlight'));await next.click();await at('u4');
   await page.locator('#cx-input').fill('未发送草稿');
-  await page.locator('[data-window-id=two]').click();await page.locator('[data-item-id=other]').waitFor();await prev.click();await at('other');assert(await prev.isDisabled());assert(await next.isDisabled());
-  await page.locator('[data-window-id=one]').click();await page.locator('[data-item-id=u4]').waitFor();await at('u4');assert.equal(await page.locator('#cx-input').inputValue(),'未发送草稿');await next.click();await at('u5');
+  await page.locator('[data-window-id=two]').click({position:{x:2,y:6}});await page.locator('[data-item-id=other]').waitFor();await prev.click();await at('other');assert(await prev.isDisabled());assert(await next.isDisabled());
+  await page.locator('[data-window-id=one]').click({position:{x:2,y:6}});await page.locator('[data-item-id=u4]').waitFor();await at('u4');assert.equal(await page.locator('#cx-input').inputValue(),'未发送草稿');await next.click();await at('u5');
   // A short final user message is clamped by the scroll boundary, yet the next click advances.
   records.one.push(message('u6','userMessage','第六条，末尾短消息'));await refresh();assert(!await next.isDisabled());await next.click();await at('u6');assert(await next.isDisabled());await prev.click();await at('u5');
   records.one.push(message('a6','agentMessage','后续输出\n'.repeat(15)));await refresh();await at('u5');
@@ -50,7 +50,7 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
   const geometry=await page.evaluate(()=>{const n=document.getElementById('cx-user-nav').getBoundingClientRect(),f=document.getElementById('cx-feed').getBoundingClientRect(),c=document.getElementById('cx-compose').getBoundingClientRect();return {left:n.left,right:n.right,feedRight:f.right,bottom:n.bottom,composeTop:c.top,overflow:document.documentElement.scrollWidth>innerWidth};});assert(geometry.left>=geometry.feedRight-1);assert(geometry.right<=width);assert(geometry.bottom<=geometry.composeTop);assert(!geometry.overflow);
   for(const dark of [false,true]){await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);await page.screenshot({path:out+'/jump-'+width+(dark?'-dark':'')+'.png'});}
   if(width===390){await page.locator('#cx-input').focus();await page.evaluate(()=>window.testKeyboard(420));await page.waitForTimeout(80);assert(await prev.isVisible());const bottom=await next.evaluate(el=>el.getBoundingClientRect().bottom);assert(bottom<420);await page.evaluate(()=>window.testKeyboard(900));}
-  await page.locator('[data-window-id=empty]').click();await page.locator('#cx-user-nav').waitFor({state:'hidden'});
+  await page.locator('[data-window-id=empty]').click({position:{x:2,y:6}});await page.locator('#cx-user-nav').waitFor({state:'hidden'});
   assert(!await page.locator('#cx-question-nav').isVisible());
   // Ordinary lists, quoted examples, code and the user's own question are not assistant questions.
   const example='any 同时请求 n 个窗口时，哪个时点选中胜出窗口并断开其余窗口？\n- 最先开始正常回复或执行的窗口胜出（推荐，尽早断开其余请求）\n- 最先完整完成任务的窗口胜出（其余窗口也可能已经执行相同操作）';
