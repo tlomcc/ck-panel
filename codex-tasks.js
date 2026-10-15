@@ -244,7 +244,7 @@
     $('add-profile').onclick=function(){var row=addProfile({id:uid(),name:'新供应商',base_url:'https://',model:'',effort:'high'},true);row.dataset.dirty='true';formDirty=true;row.scrollIntoView({block:'nearest'});row.querySelector('[name=name]').focus();};
     var notice=button('',jumpToWaiting,'cx-question-notice');notice.id='cx-question-notice';notice.hidden=true;$('message').after(notice);
     var jump=node('div','cx-question-nav');jump.id='cx-question-nav';jump.hidden=true;
-    jump.append(node('span'),button('上一处',function(){jumpQuestion(-1);}),button('回到提问',function(){jumpQuestion(0);}),button('下一处',function(){jumpQuestion(1);}));$('feed-area').before(jump);
+    jump.append(node('span'),button('上一处',function(){jumpQuestion(-1);}),button('回到提问',function(){jumpQuestion(0);}),button('下一处',function(){jumpQuestion(1);}));$('feed-area').after(jump);
     $('user-prev').onclick=function(){jumpUserMessage(-1);};
     $('user-next').onclick=function(){jumpUserMessage(1);};
     $('feed').addEventListener('scroll',renderUserNavigation,{passive:true});
@@ -345,7 +345,9 @@
     }else{
       var head=node('header','cx-item-head');head.append(node('strong','',titles[item.kind]),node('time','',stamp(item.created)));
       if(item.text)head.append(copyButton(item.text));
-      el.append(head,node('div','cx-text',item.text|| (item.kind==='contextCompaction'?'Codex 已压缩当前上下文，继续任务。':'正在处理…')));
+      el.append(head);
+      if(item.kind==='agentMessage'&&item.text)appendAssistantText(el,item.text);
+      else el.append(node('div','cx-text',item.text|| (item.kind==='contextCompaction'?'Codex 已压缩当前上下文，继续任务。':'正在处理…')));
     }
     return el;
   }
@@ -359,7 +361,32 @@
     if(item.kind==='request')el.append(button('前往回复',function(){focusQuestion(item.id);},'cx-reply-jump'));
     return el;
   }
-  function questionItems(){return Array.from(items.values()).filter(function(i){return ['request','resolved'].includes(i.kind)&&i.data.method;});}
+  function appendAssistantText(el,text){
+    var lines=text.split('\n'),start=0,fence='';
+    var option=/^\s{0,3}(?:[-*+•]|\d+[.)、]|[A-Da-d][.)、]|[（(]\d+[）)])\s+(.+)$/;
+    for(var i=0;i<lines.length;i++){
+      var marker=/^\s{0,3}(`{3,}|~{3,})/.exec(lines[i]);
+      if(marker){if(!fence)fence=marker[1][0];else if(marker[1][0]===fence)fence='';continue;}
+      // Recognize explicit choice questions, leaving ordinary lists, quotes and code untouched.
+      if(fence||/^\s*(?:>|[-*+]\s|\d+[.)、]\s)/.test(lines[i])||!/[?？][\s*_”」』"）)]*$/.test(lines[i]))continue;
+      var options=[],j=i+1,end=j;
+      while(j<lines.length){
+        if(!lines[j].trim()){j++;continue;}
+        var match=option.exec(lines[j]);
+        if(match){options.push(match[1]);end=++j;continue;}
+        if(options.length&&/^\s{2,}\S/.test(lines[j])&&!/^\s*(?:>|`{3,}|~{3,})/.test(lines[j])){options[options.length-1]+='\n'+lines[j].trim();end=++j;continue;}
+        break;
+      }
+      if(options.length<2)continue;
+      if(i>start)el.append(node('div','cx-text',lines.slice(start,i).join('\n')));
+      var box=node('section','cx-text-question');box.tabIndex=-1;box.setAttribute('aria-label','Codex 提问');
+      box.append(node('strong','cx-text-question-label','Codex 提问'),node('div','cx-text',lines[i]));
+      options.forEach(function(text){var row=node('div','cx-choice-row');row.append(node('span','cx-option-text',text),copyButton(text,'复制选项：'+text));box.append(row);});
+      el.append(box);el.classList.add('cx-item-text-question');start=end;i=end-1;
+    }
+    if(start<lines.length)el.append(node('div','cx-text',lines.slice(start).join('\n')));
+  }
+  function questionItems(){return Array.from($('feed').querySelectorAll('.cx-item-question,.cx-item-text-question')).map(function(el){return items.get(el.dataset.itemId);}).filter(Boolean);}
   function userMessages(){return Array.from($('feed').querySelectorAll('.cx-item-userMessage'));}
   function activeUserMessage(){
     return userJump&&Math.abs($('feed').scrollTop-userJump.scroll)<2?userMessages().find(function(el){return el.dataset.itemId===userJump.id;}):null;
@@ -393,10 +420,12 @@
   function focusQuestion(id){var box=Array.from($('pending').children).find(function(n){return n.dataset.itemId===id;});if(box){box.scrollIntoView({block:'nearest'});(box.querySelector('textarea,button')||box).focus({preventScroll:true});}}
   function jumpQuestion(direction){
     var questions=questionItems();if(!questions.length)return;
-    if(!direction)questionIndex=Math.max(0,questions.findIndex(function(i){return i.kind==='request';}));
+    if(!direction){questionIndex=questions.findIndex(function(i){return i.kind==='request';});if(questionIndex<0)questionIndex=questions.length-1;}
     else questionIndex=(questionIndex+direction+questions.length)%questions.length;
     var id=questions[questionIndex].id,el=Array.from($('feed').children).find(function(n){return n.dataset.itemId===id;});
-    if(el){el.scrollIntoView({block:'start'});el.focus({preventScroll:true});el.classList.add('cx-question-highlight');setTimeout(function(){el.classList.remove('cx-question-highlight');},1800);}
+    userJump=null;
+    if(el){var target=el.querySelector('.cx-text-question')||el;target.scrollIntoView({block:'start'});target.focus({preventScroll:true});target.classList.add('cx-question-highlight');setTimeout(function(){target.classList.remove('cx-question-highlight');},1800);}
+    renderUserNavigation();
     $('question-nav').querySelector('span').textContent='提问 '+(questionIndex+1)+' / '+questions.length;
   }
   function renderQuestionNotice(){
