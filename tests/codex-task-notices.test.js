@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
-const root=path.resolve(__dirname,'..'),out='/home/ckcodex/workspace/work/codex-task-notices-20261014';
+const root=path.resolve(__dirname,'..'),out=process.env.CX_TEST_OUT||'/home/ckcodex/workspace/work/codex-floating-strips-20261015';
 const server=http.createServer((req,res)=>{
   const file=path.resolve(root,new URL(req.url,'http://local').pathname.slice(1)||'index.html');
   if(!file.startsWith(root+'/')||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);return res.end();}
@@ -40,47 +40,70 @@ const server=http.createServer((req,res)=>{
       await route.fulfill({json:result}).catch(()=>{});
     });
     const notice=id=>page.locator('#cx-notice-list [data-window-id="'+id+'"]');
+    const viewed=async id=>page.waitForFunction(id=>{const e=document.querySelector('#cx-notice-list [data-window-id="'+id+'"]');return e&&!e.textContent.includes('未查看');},id);
     const sync=async()=>{await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.waitForTimeout(130);};
     const menu=async()=>{if(width<=640&&!await page.locator('#cx-window-sidebar').isVisible())await page.locator('#cx-window-toggle').click();};
     const refresh=async()=>{if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelector('#cx-refresh').textContent!=='刷新中…');};
     await page.goto('http://127.0.0.1:'+server.address().port+'/');await page.waitForTimeout(250);assert(!await page.locator('#cx-task-notices').isVisible());await page.evaluate(()=>ckOpenCodex('api'));await notice('done').waitFor();
     assert(await page.locator('#cx-root').isVisible());assert.equal(await notice('run').getAttribute('data-tone'),'ok');assert.equal(await notice('bad').getAttribute('data-tone'),'error');assert.equal(await notice('closed').count(),0);
-    const strips=await page.locator('#cx-task-notices').boundingBox();assert(strips.x<16&&strips.y<125);assert(Math.abs(strips.width-width/3)<2);const box=await notice('done').boundingBox();assert(box.height<=25&&box.width<=width/3);const runBox=await notice('run').boundingBox();assert.equal(runBox.x,box.x);assert(runBox.y+runBox.height<=box.y);
+    const strips=await page.locator('#cx-task-notices').boundingBox();assert(strips.x<(width<=640?16:width<=900?216:240)&&strips.y<125);assert(Math.abs(strips.width-width/3)<2);const box=await notice('done').boundingBox();assert(box.height<=25&&box.width<=width/3);const runBox=await notice('run').boundingBox();assert.equal(runBox.x,box.x);assert(runBox.y+runBox.height<=box.y);
     assert((await notice('done').innerText()).includes('未查看'));
     // Clicking cannot dismiss a completed result before the detail request succeeds.
     failDetail='done';await notice('done').click();await page.getByText('记录读取失败',{exact:true}).waitFor();assert(await notice('done').isVisible());
     failDetail='';holdId='done';if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();while(!held)await page.waitForTimeout(20);
-    assert(await notice('done').isVisible());holdId='';release();await notice('done').waitFor({state:'detached'});
-    await menu();assert(await page.locator('#cx-windows').getByRole('button',{name:/完成窗口/}).isVisible());
+    assert(await notice('done').isVisible());holdId='';release();await viewed('done');
+    await menu();assert.equal(await page.locator('#cx-windows').getByRole('button',{name:/完成窗口/}).count(),0);assert(await page.locator('#cx-windows').getByRole('button',{name:/关闭窗口/}).isVisible());
     assert.equal(await page.locator('#cx-window-sidebar nav button').allTextContents().then(x=>x.join(',')),'API 配置,工作资料');
     if(width<=640)await page.locator('#cx-window-title').click();
     await notice('run').click();await page.getByText('记录 run / 10',{exact:true}).waitFor();await page.locator('#cx-input').fill('保留运行窗口草稿');
+    // The rail overlays the feed: no reserved row, no full-width hit target.
+    const floating=await page.evaluate(()=>{
+      const rail=document.querySelector('#cx-task-notices'),feed=document.querySelector('#cx-feed');
+      const a=feed.getBoundingClientRect(),r=rail.getBoundingClientRect();
+      rail.style.display='none';const b=feed.getBoundingClientRect();rail.style.removeProperty('display');
+      const hit=document.elementFromPoint(r.right+12,r.top+12);
+      return {top:a.top,bodyTop:document.querySelector("#cx-body").getBoundingClientRect().top,height:a.height,withoutRail:{top:b.top,height:b.height},overlap:r.top<a.bottom&&r.bottom>a.top,rightUsable:feed.contains(hit),position:getComputedStyle(rail).position};
+    });
+    assert.equal(floating.position,'absolute');assert(Math.abs(floating.top-floating.bodyTop)<1,JSON.stringify(floating));
+    assert.equal(floating.top,floating.withoutRail.top);assert.equal(floating.height,floating.withoutRail.height);assert(floating.overlap&&floating.rightUsable,JSON.stringify(floating));
+    const fixedBefore=await page.locator('#cx-task-notices').boundingBox();
+    await page.evaluate(()=>{const spacer=document.createElement('div');spacer.id='scroll-fixture';spacer.style.height='1800px';document.querySelector('#cx-feed').append(spacer);});
+    await page.mouse.move(fixedBefore.x+fixedBefore.width+20,fixedBefore.y+20);await page.mouse.wheel(0,300);await page.waitForTimeout(120);
+    assert(await page.locator('#cx-feed').evaluate(e=>e.scrollTop>0));assert.equal((await page.locator('#cx-task-notices').boundingBox()).y,fixedBefore.y);
+    await page.evaluate(()=>{document.querySelector('#scroll-fixture').remove();document.querySelector('#cx-feed').scrollTop=0;});
+    if(width<=640){await menu();assert(await page.locator('#cx-tab-api').evaluate(e=>{const r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+20,r.y+r.height/2));}));await page.locator('#cx-window-title').click();}
     await notice('bad').click();await page.getByText('记录 bad / 12',{exact:true}).waitFor();assert(await notice('bad').isVisible());
     await notice('run').click();assert.equal(await page.locator('#cx-input').inputValue(),'保留运行窗口草稿');
     // Settings polls may update status, but never acknowledge a completion.
     await menu();await page.locator('#cx-tab-api').click();bump('run',{status:'completed'});await refresh();
     assert((await notice('run').innerText()).includes('未查看'));await page.waitForTimeout(500);assert(await notice('run').isVisible());
-    await notice('run').click();await notice('run').waitFor({state:'detached'});
-    await page.locator('#cx-exit').click();assert(!await page.locator('#cx-task-notices').isVisible());assert.equal(await page.locator('.cx-question-outside').count(),0);await page.reload();await page.waitForTimeout(200);assert(!await page.locator('#cx-task-notices').isVisible());await page.evaluate(()=>ckOpenCodex('api'));await notice('bad').waitFor();assert.equal(await notice('done').count(),0);assert.equal(await notice('run').count(),0);
+    await notice('run').click();await viewed('run');
+    await page.locator('#cx-exit').click();assert(!await page.locator('#cx-task-notices').isVisible());assert.equal(await page.locator('.cx-question-outside').count(),0);await page.reload();await page.waitForTimeout(200);assert(!await page.locator('#cx-task-notices').isVisible());await page.evaluate(()=>ckOpenCodex('api'));await notice('bad').waitFor();assert.equal(await notice('done').count(),1);await viewed('done');assert.equal(await notice('run').count(),1);await viewed('run');
     // Another completion in the same window must notify again, even if the running transition was missed.
     bump('done',{status:'completed'});bump('run',{status:'completed'});await sync();await notice('done').waitFor();await notice('run').waitFor();
-    await notice('done').click();await notice('done').waitFor({state:'detached'});assert(await notice('run').isVisible(),'switching from settings must not mark another window seen');
+    await notice('done').click();await viewed('done');assert((await notice('run').innerText()).includes('未查看'),'switching from settings must not mark another window seen');
     // An older detail response cannot acknowledge a newer completion seen by the list poll.
     holdId='run';held=false;await notice('run').click();while(!held)await page.waitForTimeout(20);
-    bump('run',{status:'completed'});await sync();holdId='';release();await page.waitForTimeout(150);assert(await notice('run').isVisible());
-    await refresh();await notice('run').waitFor({state:'detached'});
+    bump('run',{status:'completed'});await sync();holdId='';release();await page.waitForTimeout(150);assert((await notice('run').innerText()).includes('未查看'));
+    await refresh();await viewed('run');
     // A response arriving while hidden does not count as viewed.
     bump('done',{status:'completed'});await sync();holdId='done';held=false;await notice('done').click();while(!held)await page.waitForTimeout(20);
-    await page.evaluate(()=>window.setHidden(true));holdId='';release();await page.waitForTimeout(80);assert(await notice('done').isVisible());
-    await page.evaluate(()=>window.setHidden(false));await notice('done').waitFor({state:'detached'});
+    await page.evaluate(()=>window.setHidden(true));holdId='';release();await page.waitForTimeout(80);assert((await notice('done').innerText()).includes('未查看'));
+    await page.evaluate(()=>window.setHidden(false));await viewed('done');
     // Read completion with a future schedule remains reachable until that schedule is gone.
     bump('done',{scheduled_count:1});await sync();await refresh();assert(await notice('done').isVisible());assert((await notice('done').innerText()).includes('1 个定时任务'));
-    bump('done',{scheduled_count:0});await refresh();await notice('done').waitFor({state:'detached'});
+    bump('done',{scheduled_count:0});await refresh();await viewed('done');
     await notice('bad').click();bump('bad',{status:'running',error:''});await sync();assert.equal(await notice('bad').getAttribute('data-tone'),'ok');
     failList=true;await sync();assert.equal(await notice('wait').getAttribute('data-tone'),'error');assert((await notice('wait').innerText()).includes('待同步'));
     failList=false;await sync();assert.equal(await notice('wait').getAttribute('data-tone'),'ok');
     // Confirm multiple compact cards, actual theme colors, keyboard bounds, and no horizontal overflow.
     for(let i=0;i<6;i++)rows.push({id:'extra'+i,title:'额外任务 '+i,status:i%2?'completed':'running',seq:20+i,created:10+i,updated:100,profile:'p',error:''});await sync();
+    const expanded=await page.locator('#cx-task-notices').evaluate(rail=>{
+      const boxes=[...rail.querySelectorAll('.cx-task-notice')].map(e=>e.getBoundingClientRect()),r=rail.getBoundingClientRect();
+      return {count:boxes.length,allVisible:boxes.every((b,i)=>b.top>=r.top&&b.bottom<=r.bottom+1&&(!i||b.top>=boxes[i-1].bottom)&&b.x===boxes[0].x),noClipping:rail.scrollHeight<=rail.clientHeight+1};
+    });
+    assert.equal(expanded.count,rows.filter(w=>w.status!=='closed').length);assert(expanded.allVisible&&expanded.noClipping,JSON.stringify(expanded));
+    const translucent=await notice('run').evaluate(e=>getComputedStyle(e).backgroundColor);assert(translucent.includes('/ 0.65')||translucent.includes(', 0.65)'),translucent);
     for(const dark of [false,true]){
       await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);
       const good=await notice('bad').evaluate(e=>getComputedStyle(e).backgroundColor);bump('bad',{error:'测试失败'});await sync();const bad=await notice('bad').evaluate(e=>getComputedStyle(e).backgroundColor);assert.notEqual(good,bad);bump('bad',{error:''});await sync();
@@ -88,7 +111,7 @@ const server=http.createServer((req,res)=>{
     }
     if(width<=640){await page.locator('#cx-input').focus();await page.evaluate(()=>window.keyboard(420,75));await page.waitForTimeout(80);const box=await page.locator('#cx-compose').boundingBox();await page.screenshot({path:out+'/keyboard-'+width+'.png'});assert(box.y+box.height<=496,JSON.stringify({box,root:await page.locator('#cx-root').boundingBox(),shell:await page.locator('.cx-shell').boundingBox(),rail:await page.locator('#cx-task-notices').boundingBox()}));assert((await page.locator('#cx-feed').boundingBox()).height>80);await page.evaluate(()=>window.keyboard(900,0));}
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(posts,[]);assert.deepEqual(errors,[]);
-    console.log(width+': placement, colors, unread persistence, successful view, settings/background/race isolation, archive, drafts, schedules, recovery, keyboard PASS');
+    console.log(width+': floating layout, click-through, scroll, menu layering, colors, unread persistence, successful view, settings/background/race isolation, completed windows stay expanded, all rows visible, translucent background, drafts, schedules, recovery, keyboard PASS');
     await context.close();
   }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});
