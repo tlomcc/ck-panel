@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent CK task service. No CK gateway imports or upstream forwarding."""
+"""Independent CK task service, including an isolated ANY request race transport."""
 import base64
 import hashlib
 import hmac
@@ -23,8 +23,9 @@ from urllib.request import Request, urlopen
 from key_store import KeyStore
 from ag_retry import AgRetry, CONTINUE_TASK, is_ag
 from any_retry import AnyRetry, is_any
+from any_race import RaceProxy
 
-VERSION = '1.4.5'
+VERSION = '1.5.0'
 # ANY native request/stream retries stay disabled; the switch owns continuation.
 ANY_PROFILE_ID = '75c76315-eb66-4fa0-ab6d-f0d2b9ef344e'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
@@ -77,6 +78,14 @@ class Store:
         ''')
         self.db.execute("UPDATE tasks SET status='interrupted' WHERE status IN ('queued','starting','running','waiting')")
         self.db.execute("UPDATE windows SET status='interrupted', error='服务重启，上一任务已中断；请检查结果后继续。' WHERE status IN ('queued','starting','running','waiting')")
+        for row in self.db.execute("SELECT window_id,id,data FROM items WHERE kind='anyRace'").fetchall():
+            data = json.loads(row['data'])
+            if any(w.get('state') == 'requesting' for w in data.get('windows', [])):
+                for w in data['windows']:
+                    if w.get('state') == 'requesting':
+                        w.update(state='cancelled', detail='服务重启，连接已断开；不会自动重发。')
+                self.db.execute('UPDATE items SET data=? WHERE window_id=? AND id=?',
+                                (json.dumps(data, ensure_ascii=False), row['window_id'], row['id']))
         self.db.commit()
 
     def one(self, wid):
@@ -149,6 +158,10 @@ class Engine:
         skills = manager.root / 'skills'
         if skills.exists() and not (home / 'skills').exists():
             (home / 'skills').symlink_to(skills, target_is_directory=True)
+        self.transport_id = None
+        base_url = profile['base_url']
+        if is_any(profile):
+            self.transport_id, base_url = manager.any_transport().register(wid, profile)
         config = '\n'.join([
             'model_provider = "ck_tasks"',
             'model = ' + json.dumps(profile['model']),
@@ -157,7 +170,7 @@ class Engine:
             'web_search = "disabled"',
             '[features]', 'multi_agent = false',
             '[model_providers.ck_tasks]', 'name = "CK Codex independent API"',
-            'base_url = ' + json.dumps(profile['base_url']),
+            'base_url = ' + json.dumps(base_url),
             'env_key = "CK_CODEX_API_KEY"', 'wire_api = "responses"',
             'requires_openai_auth = false',
             'request_max_retries = ' + ('0' if profile.get('id') == ANY_PROFILE_ID else '2'),
@@ -242,6 +255,9 @@ class Engine:
 
     def close(self):
         self.stopping = True
+        if self.transport_id:
+            self.manager.race_proxy.unregister(self.transport_id)
+            self.transport_id = None
         if self.proc.poll() is None:
             try:
                 os.killpg(self.proc.pid, signal.SIGTERM)
@@ -260,6 +276,8 @@ class Manager:
         self.root, self.engine_factory = root, engine_factory
         self.lock = threading.RLock()
         self.engines = {}
+        self.race_proxy = None
+        self.any_retry_counts = {}
         self.automatic_retries = {}  # In-memory runs; never replayed after restart.
         self.config_path = root / 'config.json'
         self.key_store = KeyStore(root)
@@ -282,6 +300,10 @@ class Manager:
             key = p.get('api_key', '')
             if key:
                 text = text.replace(key, '[密钥已隐藏]')
+        if self.race_proxy:
+            with self.race_proxy.lock:
+                for transport_id in self.race_proxy.routes:
+                    text = text.replace(transport_id, '[本地通道]')
         text = re.sub(r'(?i)(Bearer\s+)[^\s"\x27,]+', r'\1[已隐藏]', text)
         return text
 
@@ -308,32 +330,71 @@ class Manager:
                 'workspace': str(WORKSPACE), 'servers': self.config.get('servers', []),
                 'backup': self.config.get('backup', {}), 'max_running': None, 'parallel_windows': True,
                 'key_storage': 'encrypted', 'efforts': list(EFFORTS), 'scheduling': True, 'any_retry_switch': True,
-                'any_retry_profile': ANY_PROFILE_ID, 'any_auto_retry': self.config.get('any_auto_retry') is True}
+                'any_retry_profile': ANY_PROFILE_ID, 'any_auto_retry': self.retry_mode() != 'off',
+                'any_retry_controls': True, 'any_retry_mode': self.retry_mode(),
+                'any_retry_limit': self.config.get('any_retry_limit', 3),
+                'any_parallel_enabled': self.config.get('any_parallel_enabled') is True,
+                'any_parallel_count': self.config.get('any_parallel_count', 2), 'any_parallel_max': 8}
+
+    def retry_mode(self):
+        return self.config.get('any_retry_mode', 'unlimited' if self.config.get('any_auto_retry') is True else 'off')
+
+    def new_any_retry(self, key):
+        run = AnyRetry(key, self.config.get('any_retry_limit', 3) if self.retry_mode() == 'limited' else None)
+        run.count = self.any_retry_counts.get(key, 0)
+        return run
 
     def set_any_retry(self, body):
-        enabled = body.get('enabled')
-        if type(enabled) is not bool:
-            raise Problem('自动重试开关必须为开启或关闭')
+        mode = body.get('mode')
+        if mode is None:  # Retain compatibility with cached panels.
+            if type(body.get('enabled')) is not bool:
+                raise Problem('请选择关闭、无限重试或设置次数')
+            mode = 'unlimited' if body['enabled'] else 'off'
+        if mode not in ('off', 'unlimited', 'limited'):
+            raise Problem('重试模式无效')
         with self.lock, self.store.lock:
-            updated = dict(self.config, any_auto_retry=enabled)
+            limit = body.get('limit', self.config.get('any_retry_limit', 3))
+            if type(limit) is not int or not 1 <= limit <= 1000000:
+                raise Problem('重试次数需要是 1 到 1000000 的整数')
+            updated = dict(self.config, any_auto_retry=mode != 'off', any_retry_mode=mode, any_retry_limit=limit)
             write_json(self.config_path, self.key_store.encode(updated))
             self.config = updated
-            if not enabled:
-                for wid, run in list(self.automatic_retries.items()):
-                    if isinstance(run, AnyRetry):
+            for wid, run in list(self.automatic_retries.items()):
+                if not isinstance(run, AnyRetry):
+                    continue
+                run.limit = limit if mode == 'limited' else None
+                if mode == 'off' or not run.available():
+                    if mode == 'off' or run.pending:
                         self.automatic_retries.pop(wid, None)
-                        if run.pending:
-                            self.finish(wid, 'interrupted', 'any 自动重试已关闭，待重试已取消。')
-            else:
-                # Arm unfinished ANY tasks, but never replay a failed/completed task.
+                    if run.pending:
+                        self.finish(wid, 'interrupted', 'any 自动重试已关闭或达到次数上限，待重试已取消。')
+                self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', run.text)
+            if mode != 'off':
                 for task in self.store.db.execute("""SELECT t.request_id,t.window_id,
                         COALESCE(s.profile,w.profile) AS profile FROM tasks t
                         JOIN windows w ON w.id=t.window_id
                         LEFT JOIN schedules s ON s.request_id=t.request_id
                         WHERE t.status IN ('queued','starting','running','waiting')""").fetchall():
                     if task['profile'] == ANY_PROFILE_ID:
-                        self.automatic_retries.setdefault(task['window_id'], AnyRetry(task['request_id']))
+                        self.automatic_retries.setdefault(task['window_id'], self.new_any_retry(task['request_id']))
             return self.public_config()
+
+    def set_any_parallel(self, body):
+        if type(body.get('enabled')) is not bool:
+            raise Problem('多开开关必须为开启或关闭')
+        count = body.get('count')
+        if type(count) is not int or not 2 <= count <= 8:
+            raise Problem('多开窗口数需要是 2 到 8 的整数')
+        with self.lock:
+            updated = dict(self.config, any_parallel_enabled=body['enabled'], any_parallel_count=count)
+            write_json(self.config_path, self.key_store.encode(updated))
+            self.config = updated
+            return self.public_config()
+
+    def any_transport(self):
+        if self.race_proxy is None:
+            self.race_proxy = RaceProxy(self)
+        return self.race_proxy
 
     def save_config(self, body):
         with self.lock:
@@ -490,8 +551,8 @@ class Manager:
             self.store.db.commit()
             self.store.item(wid, 'user:'+key, 'userMessage', self.redact(text))
             self.store.update(wid, status='queued', error='')
-            if is_any(self.profile(window['profile'])) and self.config.get('any_auto_retry') is True:
-                self.automatic_retries[wid] = AnyRetry(key)
+            if is_any(self.profile(window['profile'])) and self.retry_mode() != 'off':
+                self.automatic_retries[wid] = self.new_any_retry(key)
             elif is_ag(self.profile(window['profile'])):
                 self.automatic_retries[wid] = AgRetry(key)
             return {'accepted': True, 'request_id': key, 'window': self.store.one(wid)}
@@ -540,8 +601,8 @@ class Manager:
                     self.store.db.execute("UPDATE schedules SET status='dispatched' WHERE request_id=?", (key,))
                     self.store.db.execute("UPDATE windows SET status='queued',error='',seq=seq+1,updated=? WHERE id=?", (time.time(),wid))
                 self.store.item(wid,'user:'+key,'userMessage',self.redact(row['text']), {'scheduled_for':row['scheduled_for']})
-                if is_any(self.profile(row['profile'])) and self.config.get('any_auto_retry') is True:
-                    self.automatic_retries[wid] = AnyRetry(key)
+                if is_any(self.profile(row['profile'])) and self.retry_mode() != 'off':
+                    self.automatic_retries[wid] = self.new_any_retry(key)
                 elif is_ag(self.profile(row['profile'])):
                     self.automatic_retries[wid] = AgRetry(key)
 
@@ -550,6 +611,8 @@ class Manager:
             if error and self.store.one(wid)['error'] != self.redact(error):
                 self.store.item(wid, 'error:'+uuid.uuid4().hex, 'error', self.redact(error))
             self.automatic_retries.pop(wid, None)
+            for row in self.store.db.execute("SELECT request_id FROM tasks WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (wid,)):
+                self.any_retry_counts.pop(row['request_id'], None)
             self.store.db.execute("UPDATE tasks SET status=? WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (status, wid))
             self.store.db.commit()
             self.store.update(wid, status=status, error=self.redact(error), turn_id='')
@@ -582,6 +645,9 @@ class Manager:
             run = self.automatic_retries.get(wid)
             if not run or turn.get('status') != 'failed' or not run.accepts(turn.get('error') or {}):
                 return False
+            if isinstance(run, AnyRetry) and not run.available():
+                self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', run.text+' · 已达上限')
+                return False
             if run.pending:
                 return True  # Duplicate completion cannot reset the delay.
             task = self.store.db.execute('SELECT status FROM tasks WHERE request_id=?', (run.request_id,)).fetchone()
@@ -612,6 +678,8 @@ class Manager:
                         run = self.automatic_retries.get(task['window_id'])
                         if run:
                             run.starting()
+                            if isinstance(run, AnyRetry):
+                                self.any_retry_counts[run.request_id] = run.count
                             if run.count:
                                 task['text'] = CONTINUE_TASK
                                 self.store.item(task['window_id'], 'auto-retry:'+run.request_id, 'warning', run.text)
@@ -625,6 +693,10 @@ class Manager:
                             scheduled = self.store.db.execute('SELECT profile FROM schedules WHERE request_id=?', (task['request_id'],)).fetchone()
                         profile = self.profile(scheduled['profile'] if scheduled else window['profile'])
                         engine = self.engine(wid, fresh_config=True, profile=profile)
+                        if is_any(profile) and self.race_proxy:
+                            self.race_proxy.arm(wid, task['request_id'],
+                                self.config.get('any_parallel_count', 2) if self.config.get('any_parallel_enabled') is True else 1,
+                                run.count if run else 0)
                         response = engine.rpc('turn/start', {'threadId': window['thread_id'],
                                              'input': [{'type': 'text', 'text': task['text']}],
                                              'model': profile['model'], 'effort': profile.get('effort', 'high')})
@@ -723,7 +795,7 @@ class Manager:
                 window = self.store.one(wid)
                 active = (window['status'] in ('starting', 'running', 'waiting')
                           and (not p.get('turnId') or p['turnId'] == window['turn_id']))
-                if active and run and run.accepts(p):
+                if active and run and run.accepts(p) and (not isinstance(run, AnyRetry) or run.available()):
                     self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 过载，等待自动重试')
                     self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', text,
                                     {'willRetry':bool(p.get('willRetry'))})
@@ -747,6 +819,8 @@ class Manager:
             if action in ('stop','close','delete'):
                 with self.store.lock:
                     self.automatic_retries.pop(wid, None)
+                    for row in self.store.db.execute('SELECT request_id FROM tasks WHERE window_id=?', (wid,)):
+                        self.any_retry_counts.pop(row['request_id'], None)
                 engine = self.engines.get(wid)
                 if engine:
                     engine.stopping = True
@@ -924,6 +998,9 @@ class Manager:
             for engine in list(self.engines.values()):
                 engine.close()
             self.engines.clear()
+            if self.race_proxy:
+                self.race_proxy.close()
+                self.race_proxy = None
 
 
 def request_key(body):
@@ -991,6 +1068,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.manager.save_config(body) if self.command=='POST' else self.manager.public_config()
             elif path.path == '/profiles/any-retry' and self.command == 'POST':
                 result = self.manager.set_any_retry(body)
+            elif path.path == '/profiles/any-parallel' and self.command == 'POST':
+                result = self.manager.set_any_parallel(body)
             elif path.path in ('/profiles/save', '/profiles/delete') and self.command=='POST':
                 result = self.manager.save_profile(body, delete=path.path.endswith('/delete'))
             elif path.path=='/models' and self.command=='POST':

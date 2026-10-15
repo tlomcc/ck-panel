@@ -29,14 +29,18 @@ def retryable(error):
 
 
 class AnyRetry:
-    def __init__(self, request_id):
+    def __init__(self, request_id, limit=None):
         self.request_id = request_id
+        self.limit = limit
         self.count = 0
         self.due = 0
         self.pending = False
 
     def accepts(self, error):
         return retryable(error)
+
+    def available(self):
+        return self.limit is None or self.count < self.limit
 
     def schedule(self, error=None):
         self.pending = True
@@ -52,4 +56,5 @@ class AnyRetry:
 
     @property
     def text(self):
-        return f'已重试 {self.count} 次'
+        return (f'已重试 {self.count} 次' if self.limit is None
+                else f'已重试 {self.count} / {self.limit} 次')
