@@ -88,7 +88,16 @@
   function seenKey(id){return 'ck_codex_seen_'+encodeURIComponent(endpoint)+'_'+id;}
   function completionVersion(w){return String(w.seq||w.updated||0);}
   function completionSeen(w){try{return localStorage.getItem(seenKey(w.id))===completionVersion(w);}catch(_){return false;}}
-  function archivedWindow(w){return w.status==='closed';}
+  function completedArchive(w){return w.status==='completed'&&!w.error&&!w.scheduled_count&&completionSeen(w);}
+  function archivedWindow(w){return w.status==='closed'||completedArchive(w);}
+  function markCurrentWindow(b,w){
+    var active=opened()&&tab==='tasks'&&w.id===selected;
+    b.classList.toggle('active',active);
+    if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+    var badge=b.querySelector('.cx-current-window');
+    if(active&&!badge){badge=node('b','cx-current-window','当前');b.querySelector('strong').after(badge);}
+    if(!active&&badge)badge.remove();
+  }
   function markCompletionSeen(snapshot){
     var w=current();
     // A list poll, cached feed, failed read, or background settings page is not a view.
@@ -123,9 +132,9 @@
       var label=stale?'连接异常 · 待同步':w.status==='completed'&&!completionSeen(w)?'已完成 · 未查看':statusLabel(w);
       if(w.scheduled_count)label+=' · '+w.scheduled_count+' 个定时任务';
       b.dataset.status=stale?'unknown':status(w);b.dataset.tone=bad?'error':'ok';
-      b.classList.toggle('active',inside&&tab==='tasks'&&w.id===selected);
+      markCurrentWindow(b,w);
       b.querySelector('strong').textContent=w.title;b.querySelector('span').textContent=label;
-      b.title=w.title+' · '+label+(w.error?'：'+w.error:'');b.setAttribute('aria-label',b.title+'，点击查看');
+      b.title=w.title+' · '+label+(w.error?'：'+w.error:'');b.setAttribute('aria-label',b.title+(b.classList.contains('active')?'，当前窗口':'')+'，点击查看');
       if(list.children[index]!==b)list.insertBefore(b,list.children[index]||null);
     });
     prior.forEach(function(b){
@@ -227,6 +236,8 @@
     $('window-toggle').onclick=function(){var open=$('body').classList.toggle('cx-sidebar-open');$('window-toggle').setAttribute('aria-expanded',String(open));};
     $('sidebar-backdrop').onclick=closeSidebar;
     $('search').oninput=renderWindows;
+    var deleteAll=button('删除全部已完成窗口',function(){deleteArchivedWindows(windows.filter(completedArchive));},'cx-delete-completed');deleteAll.id='cx-delete-completed';$('search').before(deleteAll);
+    root.querySelector('.cx-sidebar-head h3').textContent='已收纳窗口';
     $('rename').onclick=function(){renameWindow();};
     $('close-window').onclick=function(){var w=current();if(w)act(w.status==='closed'?'reopen':'close');};
     $('delete-window').onclick=deleteWindow;
@@ -285,7 +296,7 @@
     ['rename','close-window','delete-window'].forEach(function(n){$(n).hidden=!config||name!=='tasks';});
     root.querySelector('.cx-window-menu summary').setAttribute('aria-label',config&&name==='tasks'?'窗口操作':'页面操作');
     ['tasks','api','info'].forEach(function(n){$(n).hidden=!config||n!==name;$('tab-'+n).classList.toggle('active',n===name);$('tab-'+n).setAttribute('aria-current',n===name?'page':'false');});
-    $('login').hidden=!!config;renderTaskNotices();
+    $('login').hidden=!!config;renderWindows();
     if(!config){$('endpoint').value=endpoint;return;}
     if(name==='api'&&!formDirty)renderApi();
     if(name==='info')renderInfo();
@@ -297,14 +308,17 @@
   function renderWindows(){
     renderTaskNotices();
     var query=$('search').value.trim().toLowerCase(),list=$('windows');
-    var signature=JSON.stringify([query,selected,windows.map(function(w){return [w.id,w.title,windowState(w),w.status,stamp(w.updated),w.scheduled_count,archivedWindow(w)];})]);
+    var completed=windows.filter(completedArchive);$('delete-completed').hidden=!completed.length;$('delete-completed').disabled=busy;
+    var signature=JSON.stringify([query,selected,tab,busy,windows.map(function(w){return [w.id,w.title,windowState(w),w.status,stamp(w.updated),w.scheduled_count,archivedWindow(w)];})]);
     if(signature===windowListSignature)return;windowListSignature=signature;list.replaceChildren();
     windows.filter(function(w){return archivedWindow(w)&&(!query||w.title.toLowerCase().includes(query));}).forEach(function(w){
-      var b=node('button','cx-window'+(w.id===selected?' active':''));b.type='button';b.dataset.status=windowState(w)==='状态待同步'?'unknown':status(w);b.title='上次服务器状态：'+(labels[w.status]||w.status);
+      var row=node('div','cx-window-row'),b=node('button','cx-window');b.type='button';b.dataset.windowId=w.id;b.dataset.status=windowState(w)==='状态待同步'?'unknown':status(w);b.title='上次服务器状态：'+(labels[w.status]||w.status);
       b.append(node('strong','',w.title),node('span','',windowState(w)+(w.scheduled_count?' · '+w.scheduled_count+' 个定时任务':'')),node('small','',stamp(w.updated)));
-      b.onclick=function(){select(w.id);};list.append(b);
+      markCurrentWindow(b,w);b.onclick=function(){select(w.id);};row.append(b);
+      if(completedArchive(w)){var remove=button('删除',function(){deleteArchivedWindows([w]);},'cx-delete-archived');remove.disabled=busy;remove.setAttribute('aria-label','删除已完成窗口：'+w.title);row.append(remove);}
+      list.append(row);
     });
-    if(!list.childElementCount)list.append(node('p','cx-muted',query?'没有匹配的窗口':'关闭的窗口会收在这里。'));
+    if(!list.childElementCount)list.append(node('p','cx-muted',query?'没有匹配的窗口':'已查看的完成窗口和已关闭窗口会收在这里。'));
   }
   function renderToolbar(){
     if(!config)return;
@@ -598,9 +612,39 @@
     var w=current();if(!w)return;
     if(await taskDialog('删除 Codex 窗口','删除「'+w.title+'」？当前任务会停止，定时任务会取消，草稿、CK 记录与对应 Codex 会话会一起删除。已修改的项目文件保留。'))act('delete');
   }
+  function forgetDeletedWindow(id){
+    cancelStatus();windows=windows.filter(function(w){return w.id!==id;});
+    localStorage.removeItem(seenKey(id));removeDraft(id);windowCache.delete(id);confirmedAt.delete(id);
+    if(localStorage.getItem('ck_codex_selected')===id)localStorage.removeItem('ck_codex_selected');
+    if(selected===id){cancelRefresh();restoreWindow('');}
+    renderWindows();renderToolbar();
+  }
+  async function deleteArchivedWindows(targets){
+    if(busy||!targets.length)return;
+    var snapshots=targets.map(function(w){return {id:w.id,title:w.title,version:completionVersion(w)};});
+    var names=snapshots.length===1?'「'+snapshots[0].title+'」':snapshots.length+' 个已收纳的完成窗口';
+    if(!await taskDialog('删除已完成窗口','删除'+names+'？草稿、CK 记录与对应 Codex 会话会一起删除，已修改的项目文件保留。'))return;
+    if(busy)return;busy=true;renderWindows();renderToolbar();
+    var deleted=0,skipped=0,failures=[];
+    try{
+      for(var snapshot of snapshots){
+        try{
+          // Recheck each target without opening it or marking other results viewed.
+          var latest=await request('/threads'),w=latest.windows.find(function(row){return row.id===snapshot.id;});
+          if(!w){forgetDeletedWindow(snapshot.id);skipped++;continue;}
+          if(!completedArchive(w)||completionVersion(w)!==snapshot.version){skipped++;continue;}
+          await request('/threads/'+snapshot.id+'/delete',{});forgetDeletedWindow(snapshot.id);deleted++;
+        }catch(e){failures.push(snapshot.title+'：'+e.message);}
+      }
+      await refreshStatus(true);await refresh(false);
+    }finally{
+      busy=false;renderWindows();renderToolbar();
+      message('已删除 '+deleted+' 个完成窗口'+(skipped?'；'+skipped+' 个状态已变化或已移除，已跳过':'')+(failures.length?'；'+failures.length+' 个未删除：'+failures.join('；'):''),!!failures.length);
+    }
+  }
   async function act(name,body){
     if(!selected||busy)return;busy=true;renderToolbar();var id=selected;
-    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete'){cancelStatus();cancelRefresh();windows=windows.filter(function(w){return w.id!==id;});localStorage.removeItem(seenKey(id));removeDraft(id);windowCache.delete(id);confirmedAt.delete(id);localStorage.removeItem('ck_codex_selected');if(selected===id)restoreWindow('');renderWindows();renderToolbar();}message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');cancelRefresh();await refreshStatus(true);await refresh(false);}
+    try{await request('/threads/'+id+'/'+name,body||{});if(name==='delete')forgetDeletedWindow(id);message({stop:'当前任务已停止，待执行的定时任务保留',close:'窗口已关闭，定时任务已取消，草稿与记录保留',reopen:'窗口已重新打开',delete:'窗口、草稿与 Codex 会话已删除',rename:'名称已更新',profile:'已切换接口',answer:'已回复','cancel-schedule':'定时任务已取消'}[name]||'已完成');cancelRefresh();await refreshStatus(true);await refresh(false);}
     catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
   }
   async function send(){
