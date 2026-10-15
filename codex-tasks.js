@@ -69,16 +69,16 @@
     }catch(e){message(e.message,true);}finally{busy=false;renderToolbar();}
   }
   function renderSchedules(){
-    var visible=schedules.filter(function(s){return s.state!=='cancelled';});
+    var visible=schedules.filter(function(s){return s.state==='scheduled';});
     var list=$('schedules');list.replaceChildren();list.hidden=!visible.length;
     if(!visible.length)return;
     list.append(node('h4','','定时任务 · 北京时间'));
     visible.forEach(function(s){
-      var row=node('details','cx-scheduled'),summary=node('summary'),pending=s.state==='scheduled';
-      var status=pending?(s.scheduled_for<=Date.now()/1000?'到点，等待窗口空闲':'待执行'):labels[s.state]||s.state;
+      var row=node('details','cx-scheduled'),summary=node('summary');
+      var status=s.scheduled_for<=Date.now()/1000?'到点，等待窗口空闲':'待执行';
       summary.append(node('span','',scheduleStamp(s.scheduled_for)),node('strong','',status));row.append(summary,node('p','cx-text',s.text));
       var provider=config.profiles.find(function(p){return p.id===s.profile;});if(provider)row.append(node('small','cx-muted','供应商：'+provider.name+' · 执行时使用该供应商的最新配置'));
-      if(pending)row.append(button('取消定时任务',function(){cancelSchedule(s);}));
+      row.append(button('取消定时任务',function(){cancelSchedule(s);}));
       list.append(row);
     });
   }
