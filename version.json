@@ -1,5 +1,5 @@
 {
-  "version": "chat-v333-codex-schedule-normal-window",
+  "version": "chat-v334-codex-schedule-normal-window",
   "notes": [
     "定时任务到点开始后恢复普通窗口，不再显示定时任务标题、时间和重复状态。",
     "待执行的定时任务继续显示北京时间，并保留取消入口。"
