@@ -334,6 +334,14 @@
     catch(_){feedback(b,'复制失败','error');message('复制失败，请选中文字手动复制',true);}
   }
   function card(item){
+    if(item.kind==='anyRace'){
+      var group=node('article','cx-item cx-any-folder');group.dataset.itemId=item.id;
+      var folder=node('details'),summary=node('summary'),d=item.data||{},winner=d.winner;
+      summary.textContent='any 请求文件夹 · '+(winner?'窗口 '+winner+' 胜出':(d.count||0)+' 个窗口')+' · '+(d.retry?'第 '+d.retry+' 次重试':'首次请求');folder.append(summary);
+      if(winner)folder.append(node('p','cx-muted','已保留胜出窗口，其余 '+(d.removed_count==null?Math.max(0,(d.count||1)-1):d.removed_count)+' 个请求窗口已自动关闭并删除。'));
+      (d.windows||[]).filter(function(w){return !winner||w.number===winner;}).forEach(function(w){var child=node('details','cx-any-window'),head=node('summary');child.dataset.state=w.state;head.textContent='窗口 '+w.number+' · '+({requesting:'正在请求',winner:'已胜出',cancelled:'已断开',failed:'请求失败'}[w.state]||w.state);child.append(head,node('p','cx-muted',w.detail||(w.state==='winner'?'此窗口的回复与后续执行显示在下方任务记录。':w.state==='cancelled'?'连接已断开，不会执行任务。':'与本次用户消息使用相同内容和上下文。')));folder.append(child);});
+      group.append(folder);return group;
+    }
     if(['request','resolved'].includes(item.kind)&&item.data.method)return questionCard(item);
     var titles={userMessage:'你的任务',agentMessage:item.data.phase==='final_answer'?'完成回复':'Codex',reasoning:'思考摘要',commandExecution:'执行命令',fileChange:'修改文件',diff:'本轮改动',plan:'执行计划',warning:'运行提示',error:'运行出错',resolved:'已处理',contextCompaction:'已整理上下文'};
     var el=node('article','cx-item cx-item-'+item.kind);el.dataset.itemId=item.id;
@@ -672,18 +680,38 @@
     };
     if(p.id===(config.any_retry_profile||'75c76315-eb66-4fa0-ab6d-f0d2b9ef344e')){
       var retryBox=node('div','cx-any-retry'),retryState=node('p','cx-muted');retryState.setAttribute('role','status');
-      var retryButton=button('',async function(){
-        retryButton.disabled=true;retryState.textContent='正在保存…';
+      var retryHeading=node('strong','','自动重试'),retryActions=node('div','cx-any-actions');
+      var limit=node('input');limit.type='number';limit.required=true;limit.min='1';limit.max='1000000';limit.step='1';limit.value=config.any_retry_limit||3;limit.setAttribute('aria-label','最多重试次数');
+      var limitLabel=node('label','cx-any-number','最多重试');limitLabel.append(limit,document.createTextNode('次'));
+      var modes=[['off','关闭重试'],['unlimited','开启无限重试'],['limited','设置重试次数']],retryButtons=[];
+      var retrySaving=false;
+      async function saveRetry(mode){
+        if(retrySaving)return;
+        if(mode==='limited'&&!limit.reportValidity())return;
+        retrySaving=true;syncRetry();retryState.textContent='正在保存…';
         try{
-          config=await request('/profiles/any-retry',{enabled:config.any_auto_retry!==true});
-          syncRetry();retryState.textContent=config.any_auto_retry?'已开启；仅对未完成任务生效，不会重跑历史失败。':'已关闭；待重试已取消，正在执行的请求完成后不再重试。';
+          var payload={mode:mode};if(mode==='limited')payload.limit=Number(limit.value);
+          config=await request('/profiles/any-retry',payload);
+          retryState.textContent=mode==='off'?'已关闭；待重试已取消。':mode==='unlimited'?'已开启无限重试。':'已设置：首次失败后，最多再试 '+config.any_retry_limit+' 次。';
         }catch(error){retryState.textContent=error.message;}
-        finally{retryButton.disabled=!config.any_retry_switch;}
-      });
-      retryButton.classList.add('cx-any-retry-toggle');retryButton.setAttribute('role','switch');
-      function syncRetry(){var enabled=config.any_auto_retry===true;retryButton.textContent='自动重试：'+(enabled?'开启':'关闭');retryButton.setAttribute('aria-checked',String(enabled));retryButton.disabled=!config.any_retry_switch;}
-      syncRetry();retryState.textContent=config.any_retry_switch?'适用于所有 any 窗口，默认关闭。开启后，过载失败随机等 1～10 秒继续；关闭立即取消待重试。':'后端更新中，开关暂不可用，请稍后刷新。';
-      retryBox.append(retryButton,retryState);row.insertBefore(retryBox,form);
+        finally{retrySaving=false;syncRetry();}
+      }
+      modes.forEach(function(pair){var b=button(pair[1],function(){saveRetry(pair[0]);});b.dataset.mode=pair[0];retryButtons.push(b);retryActions.append(b);});
+      function syncRetry(){var mode=config.any_retry_mode||(config.any_auto_retry?'unlimited':'off');retryButtons.forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mode===mode));b.disabled=retrySaving||!config.any_retry_controls;});limit.disabled=retrySaving||!config.any_retry_controls;retryHeading.textContent='自动重试 · '+({off:'已关闭',unlimited:'无限次',limited:'最多 '+config.any_retry_limit+' 次'}[mode]);}
+      syncRetry();retryState.textContent=config.any_retry_controls?'首次请求不计入重试次数；过载失败随机等待 1～10 秒继续。成功或停止后结束。':'后端更新中，请稍后刷新。';
+      var parallelHeading=node('strong','','多开请求窗口'),parallelState=node('p','cx-muted');parallelState.setAttribute('role','status');
+      var parallelCount=node('input');parallelCount.type='number';parallelCount.required=true;parallelCount.min='2';parallelCount.max=config.any_parallel_max||8;parallelCount.step='1';parallelCount.value=config.any_parallel_count||2;parallelCount.setAttribute('aria-label','多开窗口数');
+      var parallelLabel=node('label','cx-any-number','同时请求');parallelLabel.append(parallelCount,document.createTextNode('个窗口（2～'+(config.any_parallel_max||8)+'）'));
+      var parallelSaving=false,parallelActions=node('div','cx-any-actions');
+      async function saveParallel(enabled){
+        if(parallelSaving||(enabled&&!parallelCount.reportValidity()))return;parallelSaving=true;syncParallel();parallelState.textContent='正在保存…';
+        try{config=await request('/profiles/any-parallel',{enabled:enabled,count:enabled?Number(parallelCount.value):(config.any_parallel_count||2)});parallelState.textContent=enabled?'已开启：每轮同时请求 '+config.any_parallel_count+' 个窗口。':'已关闭多开，后续请求使用单窗口。';}
+        catch(error){parallelState.textContent=error.message;}finally{parallelSaving=false;syncParallel();}
+      }
+      var parallelOff=button('关闭多开',function(){saveParallel(false);}),parallelOn=button('开启多开 / 保存个数',function(){saveParallel(true);});parallelActions.append(parallelOff,parallelOn);
+      function syncParallel(){var enabled=config.any_parallel_enabled===true;parallelHeading.textContent='多开请求窗口 · '+(enabled?config.any_parallel_count+' 个':'已关闭');parallelOff.setAttribute('aria-pressed',String(!enabled));parallelOn.setAttribute('aria-pressed',String(enabled));[parallelOff,parallelOn,parallelCount].forEach(function(n){n.disabled=parallelSaving||!config.any_retry_controls;});}
+      syncParallel();parallelState.textContent='同一任务放在一个文件夹，最先正常返回的窗口胜出，其余自动关闭并删除。可与重试配合：每次重试再同时请求所设个数。设置在下一次请求生效。';
+      retryBox.append(retryHeading,retryActions,limitLabel,retryState,parallelHeading,parallelLabel,parallelActions,parallelState);row.insertBefore(retryBox,form);
     }
     row.syncDefault=function(){if(row.dataset.dirty!=='true')check.checked=p.id===config.default_profile;header();};
     $('profiles').append(row);return row;

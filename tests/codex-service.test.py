@@ -217,7 +217,9 @@ class AnyNoRetryLifecycle(Lifecycle):
         for profile,expected in [(self.profile,0),(dict(self.profile,id='other'),2)]:
             wid=uuid.uuid4().hex
             with patch.object(service.subprocess,'Popen'), patch.object(service.threading.Thread,'start'), \
-                 patch.object(service.Engine,'rpc'), patch.object(service.Engine,'send'):
+                 patch.object(service.Engine,'rpc'), patch.object(service.Engine,'send'), \
+                 patch.object(service.Manager,'any_transport') as transport:
+                transport.return_value.register.return_value=('fixture-channel','http://127.0.0.1:1/fixture-channel')
                 service.Engine(self.m,wid,profile)
             config=(self.m.window_home(wid)/'config.toml').read_text()
             self.assertIn(f'request_max_retries = {expected}',config)

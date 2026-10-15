@@ -100,3 +100,15 @@ body.dark .cx-task-notices .cx-task-notice[data-tone=error],html.dark .cx-task-n
 #cx-root .cx-any-retry{padding:12px 16px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 #cx-root .cx-any-retry p{margin:0;line-height:1.5}
 #cx-root .cx-any-retry-toggle[aria-checked="true"]{border-color:var(--ck-accent,#2563eb);color:var(--ck-accent,#2563eb)}
+
+#cx-root .cx-any-actions{display:flex;flex-wrap:wrap;gap:6px}
+#cx-root .cx-any-actions [aria-pressed="true"]{border-color:var(--ck-accent,#2563eb);color:var(--ck-accent,#2563eb);background:var(--ck-accent-soft,rgba(37,99,235,.08))}
+#cx-root .cx-any-number{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
+#cx-root .cx-any-number input{width:100px;min-width:0;font-size:16px}
+#cx-root .cx-any-retry>strong:not(:first-child){margin-top:8px}
+#cx-root .cx-any-folder{border:1px solid var(--ck-border,#d8dee8);border-radius:8px;padding:10px 12px;max-width:100%;font-size:13px}
+#cx-root .cx-any-folder summary{cursor:pointer;line-height:1.6;overflow-wrap:anywhere}
+#cx-root .cx-any-window{margin:6px 0 0 12px;border-left:2px solid var(--ck-border,#d8dee8);padding-left:10px}
+#cx-root .cx-any-window[data-state="winner"]{border-color:#16a34a}
+#cx-root .cx-any-window[data-state="failed"]{border-color:#dc2626}
+#cx-root .cx-any-window p{margin:4px 0;white-space:pre-wrap}
