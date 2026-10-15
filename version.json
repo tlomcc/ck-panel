@@ -1,5 +1,5 @@
 {
-  "version": "chat-v331-codex-floating-strips",
+  "version": "chat-v332-codex-floating-strips",
   "notes": [
     "任务窗口全部在左侧上下平铺悬浮，不再为窗口预留整排顶部空间。",
     "取消只显示少数几条的高度限制；已完成且查看过的窗口继续平铺，关闭后才收进菜单。",

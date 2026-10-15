@@ -29,9 +29,9 @@ const server=http.createServer((req,res)=>{if(req.url==='/blank'){res.setHeader(
   await page.locator('#cx-tab-api').click();if(width<=640)await page.locator('#cx-window-toggle').click();
   assert(await page.locator('#cx-task-list').isVisible());await page.locator('#cx-windows').evaluate(e=>e.scrollTop=0);await page.locator('#cx-windows .cx-window').first().click();
   assert(await page.locator('#cx-tasks').isVisible());
-  windows=windows.slice(0,1);await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelectorAll('#cx-windows .cx-window').length===1);
+  windows=windows.slice(0,1);if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.querySelectorAll('#cx-windows .cx-window').length===1);
   await page.locator('#cx-input').fill('待删除草稿');await page.locator('.cx-window-menu summary').click();await page.locator('#cx-delete-window').click();await page.locator('dialog button[type=submit]').click();
-  await page.waitForFunction(()=>document.querySelectorAll('#cx-windows .cx-window').length===0);await page.locator('#cx-refresh').click();await page.waitForTimeout(1700);
+  await page.waitForFunction(()=>document.querySelectorAll('#cx-windows .cx-window').length===0);if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForTimeout(1700);
   assert.equal(await page.locator('#cx-window-title').textContent(),'选择或新建任务窗口');assert(await page.locator('#cx-input').isDisabled());
   assert(!calls.some(([p,m])=>p.endsWith('/threads')&&m==='POST'),'deletion created a new native window');
   await page.reload();await page.waitForFunction(()=>document.querySelector('#cx-windows')?.textContent.includes('还没有窗口'));assert.equal(await page.locator('#cx-windows .cx-window').count(),0);
