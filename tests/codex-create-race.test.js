@@ -49,7 +49,7 @@ const server=http.createServer((req,res)=>{
   created.title='任务9 · 已更新';created.seq++;
   await page.waitForFunction(()=>document.querySelector('#cx-notice-list [data-window-id=new] strong').textContent==='任务9 · 已更新');
   assert.equal(await page.locator('#cx-notice-list [data-window-id=new]').count(),1,'poll must remove stale duplicate notices');
-  await page.locator('#cx-notice-list [data-window-id=old]').click();
+  await page.locator('#cx-notice-list [data-window-id=old]').click({position:{x:2,y:6}});
   assert.equal(await page.locator('#cx-input').inputValue(),'原窗口的未发送草稿');
   // Distinct windows may intentionally share a title and must both remain visible.
   old.title=created.title;old.seq++;
