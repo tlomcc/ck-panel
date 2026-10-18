@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v342-subscription-remaining';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v343-subscription-wake';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2669,6 +2669,7 @@ function chatNormalizeCacheStrategy(value){
 // 策略，网关会在切到具体候选时按候选自己的策略覆盖掉——那份也来自供应商。
 function chatEffectiveCacheStrategy(cfg){
   cfg=cfg||{};
+  if(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription())return 'native_stable';
   var pollingOn=chatPollingEnabledForConfig(cfg);
   if(!pollingOn){
     var bound=providerNormalizeCacheStrategy(cfg.mainRouteCacheStrategy);
@@ -2678,6 +2679,7 @@ function chatEffectiveCacheStrategy(cfg){
 }
 function chatCacheNoticeStrategy(cfg){
   cfg=cfg||{};
+  if(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription())return 'native_stable';
   var pollingOn=chatPollingEnabledForConfig(cfg);
   if(pollingOn){
     var live=chatPollingLiveState||apiPollingStatusState.data||{};

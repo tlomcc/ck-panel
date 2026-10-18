@@ -64,3 +64,17 @@ test('a response body that never arrives also times out',async()=>{
  const x=setup(),pending=x.c.chatWakeRefresh();x.calls[0].resolve({ok:true,json:()=>new Promise(()=>{})});
  await flush();x.expire();await pending;assert.equal(x.c.chatWakeBusy,false);assert.equal(x.timers.size,0);
 });
+test('subscription uses an independent 1h mode and sends no stale API provider',async()=>{
+ const {c,calls}=setup();
+ c.CKBackendRoute={isSubscription:()=>true};
+ c.cfg.mainRouteProviderId='old-api';c.cfg.mainRouteCacheStrategy='native_5m';
+ assert.equal(c.chatWakeMode(c.cfg),'1h');
+ const saving=c.chatWakeSave({enabled:true});
+ const body=JSON.parse(calls[0].options.body);
+ assert.equal(body.provider_id,'claude-subscription');
+ assert.equal(body.execution_backend,'claude_code_subscription');
+ calls[0].resolve(json({ok:true,enabled:true,mode:'1h',interval_seconds:3000}));await saving;
+ assert.equal(c.chatWakeState.a.interval_seconds,3000);
+ c.CKBackendRoute.isSubscription=()=>false;
+ assert.equal(c.chatWakeMode(c.cfg),'5m');
+});

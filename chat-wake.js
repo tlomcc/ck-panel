@@ -1,6 +1,8 @@
 /* Server-owned clocks keep running while the phone sleeps. */
 var chatWakeState={},chatWakeBusy=false,chatWakeWriteBusy=false,chatWakeLastFetch=0,chatWakePending=null,chatWakePendingScope='',chatWakeRevisions={};
+function chatWakeSubscription(){return typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription();}
 function chatWakeMode(cfg){
+  if(chatWakeSubscription())return '1h';
   cfg=cfg||chatLoadConfig();
   var strategy=chatPollingEnabledForConfig(cfg)?chatCacheNoticeStrategy(cfg):providerNormalizeCacheStrategy(cfg.mainRouteCacheStrategy);
   return strategy==='native_stable'?'1h':['native_5m','single_5m','assistant_latest','native_tiered'].includes(strategy)?'5m':'';
@@ -18,14 +20,14 @@ function chatWakeCountdown(state,now){
 }
 function chatWakeRender(){
   if(typeof chatLoadConfig!=='function')return;
-  var cfg=chatLoadConfig(),s=chatWakeState[cfg.sessionId]||{},mode=chatWakeMode(cfg),enabled=s.enabled===true;
+  var cfg=chatLoadConfig(),s=chatWakeState[cfg.sessionId]||{},mode=chatWakeMode(cfg),enabled=s.enabled===true,subscription=chatWakeSubscription();
   var icon=document.getElementById('chat-wake-shortcut');
   if(icon){icon.hidden=!chatWakeShortcut();icon.setAttribute('aria-pressed',String(enabled));icon.title=enabled?'关闭当前窗口唤醒':'开启当前窗口唤醒';icon.setAttribute('aria-label',icon.title);icon.disabled=chatWakeWriteBusy;}
   var countdown=document.getElementById('chat-wake-countdown');
   if(countdown){var time=chatWakeCountdown(s);countdown.textContent=time;countdown.setAttribute('aria-label',time==='--:--'?(enabled?'等待正常聊天开始计时':'唤醒已关闭'):'距下次唤醒 '+time);}
   var visible=document.getElementById('chat-wake-visibility');if(visible)visible.value=chatWakeShortcut()?'show':'settings';
   var toggle=document.getElementById('chat-wake-enabled');if(toggle){toggle.checked=enabled;toggle.disabled=chatWakeWriteBusy||!mode;}
-  var seconds=Number(s.interval_seconds)||Number(s.interval)*60||(mode==='1h'?3000:240);
+  var seconds=subscription&&s.mode!=='1h'?3000:Number(s.interval_seconds)||Number(s.interval)*60||(mode==='1h'?3000:240);
   ['minutes','seconds'].forEach(function(part){var input=document.getElementById('chat-wake-'+part);if(!input)return;
     input.max=part==='minutes'?(mode==='1h'?59:4):59;input.disabled=chatWakeWriteBusy||!mode;
     if(document.activeElement!==input)input.value=String(part==='minutes'?Math.floor(seconds/60):seconds%60).padStart(2,'0');});
@@ -33,12 +35,13 @@ function chatWakeRender(){
   var idleToggle=document.getElementById('chat-wake-idle-enabled'),idleMinutes=document.getElementById('chat-wake-idle-minutes');
   if(idleToggle){idleToggle.checked=s.idle_shutdown_enabled===true;idleToggle.disabled=chatWakeWriteBusy;}
   if(idleMinutes){idleMinutes.disabled=chatWakeWriteBusy;if(document.activeElement!==idleMinutes)idleMinutes.value=s.idle_shutdown_minutes||30;}
-  if(label)label.textContent=mode?(mode==='1h'?'1h · 最长 59分50秒':'5min · 最长 04分50秒')+'，保留 10 秒缓冲。':'当前供应商策略不使用 5min / 1h 唤醒';
+  if(label)label.textContent=subscription?'Claude 订阅 · 1h 缓存，默认每 50 分钟唤醒，最长 59分50秒。唤醒消耗订阅额度，遵守额度保护。':mode?(mode==='1h'?'1h · 最长 59分50秒':'5min · 最长 04分50秒')+'，保留 10 秒缓冲。':'当前供应商策略不使用 5min / 1h 唤醒';
   var status=document.getElementById('chat-wake-status');
   if(status){
     var remaining=Math.max(0,Math.ceil((Number(s.next_at||0)*1000-Date.now())/1000));
     var text=!enabled?(s.status==='auto_off'?'已因连续 '+(s.idle_shutdown_minutes||30)+' 分钟没有真实用户请求而自动关闭':'当前窗口已关闭'):!mode?'等待供应商改为 5min / 1h 策略':s.status==='waiting_chat'?'已开启，发送一条正常消息后开始维持缓存':s.status==='chatting'?'正在聊天，本轮结束后继续计时':s.status==='waking'?'正在唤醒':s.last_error?'上次唤醒失败：'+s.last_error+'；下一次按间隔重试':'下次唤醒 '+Math.floor(remaining/60)+'分'+String(remaining%60).padStart(2,'0')+'秒';
     if(enabled&&s.idle_shutdown_at)text+=' · 无新消息将于 '+new Date(s.idle_shutdown_at*1000).toLocaleTimeString('zh-CN',{hour12:false})+' 自动关闭';
+    if(enabled&&s.idle_shutdown_enabled&&Number(s.idle_shutdown_minutes)*60<=seconds)text+=' · 自动关闭时间不长于唤醒间隔，空闲时可能在首次唤醒前关闭';
     if(s.last_success_at)text+=' · 最近成功 '+new Date(s.last_success_at*1000).toLocaleTimeString('zh-CN',{hour12:false});
     if(s.usage){var u=s.usage;text+=' · 上次缓存读 '+(u.cache_read_input_tokens||0)+' / 创建 '+(u.cache_creation_input_tokens||0)+' / '+(u.output_tokens_partial?'已收到输出 ':'输出 ')+(u.output_tokens||u.completion_tokens||0)+' token'+(u.output_tokens_partial?'（结束前用量，最终结算可能更多）':'');}
     if(s.sync_error)text+=' · '+s.sync_error;
@@ -53,7 +56,7 @@ async function chatWakeRequest(changes,sessionId,requestConfig){
   try{
     var url=chatEndpoint(cfg).replace(/\/chat$/,'/wake');
     var options={cache:'no-store',signal:controller.signal};
-    if(changes){options.method='POST';options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(Object.assign({key:cfg.panelKey,session_id:sid,provider_id:cfg.mainRouteProviderId||''},changes));}
+    if(changes){options.method='POST';options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(Object.assign({key:cfg.panelKey,session_id:sid,provider_id:chatWakeSubscription()?'claude-subscription':cfg.mainRouteProviderId||'',execution_backend:chatWakeSubscription()?'claude_code_subscription':undefined},changes));}
     else url+='?key='+encodeURIComponent(cfg.panelKey)+'&session_id='+encodeURIComponent(sid);
     var response=await Promise.race([fetch(url,options),timeout]),data=await Promise.race([response.json(),timeout]);
     if(!response.ok||data.ok===false)throw new Error(data.error||'唤醒状态读取失败');
