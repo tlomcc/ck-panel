@@ -7,13 +7,14 @@
   function identity(section){return section==='records'?chatEndpoint(chatLoadConfig())+'|'+chatLoadConfig().panelKey:GRAPH_API_BASE+'|'+storedPanelKey()}
   function enabled(section,data){return section==='topics'?data.overview.settings.enabled:section==='events'?data.control.enabled:data.enabled}
   async function request(section,body){
+    var principal=identity(section);
     var cfg=section==='records'?chatLoadConfig():null;
     var path=section==='fact'?'/ck/fact-control':section==='events'?'/ck/event-automation':body?'/ck/memory-topics':'/ck/maintenance/status?section=topics&refresh=1';
     var controller=new AbortController(),timeout=setTimeout(function(){controller.abort()},45000);
     var options={cache:'no-store',signal:controller.signal};
     if(body)Object.assign(options,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     try{
-      var response=cfg?await fetch(chatEndpoint(cfg).replace(/\/chat$/,'/daily-records')+'?key='+encodeURIComponent(cfg.panelKey),options):await panelDataFetch(function(){return GRAPH_API_BASE+path},options,{label:'整理开关'});
+      var response=cfg?await fetch(chatEndpoint(cfg).replace(/\/chat$/,'/daily-records')+'?key='+encodeURIComponent(cfg.panelKey),options):await panelDataFetch(function(){if(identity(section)!==principal)throw new Error('连接已变化');return GRAPH_API_BASE+path},options,{label:'整理开关'});
       var data=await response.json();if(!response.ok||data.ok===false)throw new Error(data.error||'开关暂时无法读取');
       if(section==='topics'&&body)data={overview:{settings:data.organizer.settings},revision:data.revision};
       if(typeof enabled(section,data)!=='boolean')throw new Error('服务尚未返回开关状态');
@@ -53,4 +54,5 @@
       if(section===ckStatusTab&&id===identity(section)){state=null;render('保存未确认：'+(error.name==='AbortError'?'连接超时':error.message)+'。正在核对实际状态…')}
     }finally{busy=false;if(section===ckStatusTab&&id===identity(section))render();refresh()}
   });
+  if(currentPanelTab==='status')window.ckOrganizingEnter();
 })();
