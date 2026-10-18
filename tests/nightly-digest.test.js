@@ -136,6 +136,53 @@ test('network failures retain the outbox and back off before retrying',async()=>
   x.advance(31000);await x.sync();assert.equal(count,2);assert.equal(JSON.parse([...x.storage.values()][0]).length,1);
 });
 
+test('lost upload response recovers the saved summary with GET before resending sources',async()=>{
+  const x=setup();x.ctx.chatArchiveDigestSources(x.session,x.session.messages);
+  let uploaded,reads=0;
+  x.ctx.fetch=async(u,o)=>{uploaded=JSON.parse(o.body);throw new TypeError('Failed to fetch')};
+  assert.equal(await x.sync(),false);
+  assert.equal(x.session.digestPending.length,1);
+  x.advance(31000);
+  x.ctx.fetch=async(u,o)=>{
+    reads++;assert.equal(o.method,undefined);assert.equal(o.body,undefined);
+    const saved=result(x,uploaded);delete saved.accepted_keys;
+    return {ok:true,json:async()=>({ok:true,sessions:[saved]})};
+  };
+  assert.equal(await x.sync(),true);assert.equal(reads,1);
+  assert.equal(x.session.digestStaged.revision,2);
+  assert.equal(x.session.dailyDigests.length,0,'recovery must not publish during a warm cache');
+  assert.equal(x.session.digestPending.length,1,'GET must not acknowledge an unconfirmed source upload');
+  x.session.messages.push({role:'user',text:'上传之后的新消息',ts:x.ctx.Date.now(),turnId:'new'});
+  let next;x.ctx.fetch=async(u,o)=>{next=JSON.parse(o.body);return x.response(next)};
+  await x.sync();assert(next,'later local changes still need a real upload');
+});
+
+test('send stops waiting at 2.5 seconds but a slower summary download still stages its result',async()=>{
+  const x=setup();await x.sync();const original=x.calls[0].body;let finish,signal;
+  x.ctx.fetch=async(u,o)=>{signal=o.signal;return new Promise(r=>finish=r)};
+  const work=x.ctx.chatRefreshPreparedDigest(x.cfg,x.session);
+  const wait=[...x.timers.values()].find(t=>t.delay===2500);assert(wait);
+  wait.callback();assert.equal(await work,false);assert.equal(signal.aborted,false);
+  finish({ok:true,json:async()=>({ok:true,sessions:[result(x,original)]})});
+  await Promise.all([...x.ctx.chatNightlySyncs.values()]);
+  assert.equal(x.session.digestStaged.revision,2);assert.equal(x.session.dailyDigests.length,0);
+});
+
+test('failed polling preserves the known upload signature instead of uploading history again',async()=>{
+  const x=setup();await x.sync();x.advance(61000);
+  x.ctx.fetch=async(u,o)=>{assert.equal(o.body,undefined);throw new TypeError('Failed to fetch')};
+  assert.equal(await x.sync(),false);x.advance(31000);
+  x.ctx.fetch=async(u,o)=>{assert.equal(o.body,undefined);return x.response(null)};
+  assert.equal(await x.sync(),true);
+});
+
+test('snapshot processing errors remain distinct from network failures and hide credentials',async()=>{
+  const x=setup();x.ctx.chatApplyWindowCleanup=async()=>{throw new Error('bad '+x.cfg.panelKey+' https://example.invalid/?key=private')};
+  assert.equal(await x.sync(),false);
+  const message=x.ctx.chatNightlyStatus[x.session.id].local_error;
+  assert.match(message,/页面处理失败/);assert(!message.includes(x.cfg.panelKey));assert(!message.includes('private'));
+});
+
 test('changing XY during an upload rejects the old range and queues the new settings',async()=>{
   const x=setup();let finish,body;
   x.ctx.fetch=async(u,o)=>{body=JSON.parse(o.body);return new Promise(r=>finish=r)};

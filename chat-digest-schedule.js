@@ -166,18 +166,25 @@ function chatSyncNightlyDigest(cfg,options){
   var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim,auto.enabled,auto.keep,auto.minimum,auto.total,auto.cache_at,auto.ttl_seconds]);
   var previous=chatNightlySynced[syncKey]||{},now=Date.now(),unchanged=previous.signature===signature;
   if(!options.force&&!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(session.digestManualTrim||session.digestSettingsRequest?2000:60000)))return Promise.resolve(true);
-  var body=null;
-  if(!unchanged&&!options.readOnly){
+  // A timed-out upload may already be saved. Read its result before sending
+  // the whole source again; a read never acknowledges an uncertain upload.
+  var recovering=!options.readOnly&&previous.readBack,body=null;
+  if(!unchanged&&!options.readOnly&&!recovering){
     var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
     chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
     body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
     body.auto=auto;
   }
-  var controller=new AbortController(),timer=setTimeout(function(){controller.abort()},options.readOnly?2500:12000);
+  // The send path has its own 2.5s wait budget. Keep this background download
+  // alive afterwards so a slower phone can still receive the saved snapshot.
+  var controller=new AbortController(),timedOut=false,syncPhase='request',httpStatus=0;
+  var timer=setTimeout(function(){timedOut=true;controller.abort()},20000);
   var task=(async function(){
     try{
       var response=await fetch(chatNightlyEndpoint(cfg)+(body?'':'&session_id='+encodeURIComponent(session.id)),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal}:{cache:'no-store',signal:controller.signal});
+      httpStatus=Number(response.status)||0;syncPhase='response';
       var data=await response.json();if(!response.ok||!data||data.ok!==true)throw new Error(data&&data.error||'夜间队列暂时不可用');
+      syncPhase='apply';
       if(data.deleted){chatDigestForgetSession(session.id,cfg);return false;}
       if(!body){if(!data.sessions||!data.sessions.length){delete chatNightlySynced[syncKey];chatScheduleNightlySync(1500);return false}data=Object.assign({ok:true},data.sessions[0]);}
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;
@@ -185,7 +192,7 @@ function chatSyncNightlyDigest(cfg,options){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(0);return false;
       }
       if(typeof chatApplyWindowCleanup==='function'&&await chatApplyWindowCleanup(session,cfg,data.snapshot))return true;
-      if(!options.readOnly)chatNightlySynced[syncKey]={signature:signature,at:Date.now()};
+      if(!options.readOnly)chatNightlySynced[syncKey]={signature:recovering?undefined:signature,at:Date.now()};
       chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
       var accepted=new Set(data.accepted_keys||[]),pending=chatNightlyPending(session).filter(function(g){return !accepted.has(g.key)});
       try{if(pending.length)localStorage.setItem(chatNightlyOutboxKey(session),JSON.stringify(pending));else localStorage.removeItem(chatNightlyOutboxKey(session))}catch(e){}
@@ -224,8 +231,14 @@ function chatSyncNightlyDigest(cfg,options){
       return !data.conflict||!!knownAdvance||data.settings_accepted===true;
     }catch(error){
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;
-      if(!options.readOnly)chatNightlySynced[syncKey]={retryAt:Date.now()+30000};
-      chatNightlyStatus[session.id]={scope:scope,local_error:'同步暂未完成，原文已保留，稍后重试'};
+      if(!options.readOnly)chatNightlySynced[syncKey]=Object.assign({},previous,{retryAt:Date.now()+30000,readBack:!!(body||recovering)});
+      var message=timedOut?(body?'上传总结资料超时，稍后先取回服务器结果；原文已保留。':'取回总结超时，已保存的总结仍在服务器，稍后继续取回。'):
+        syncPhase==='apply'?'总结已取回，页面处理失败：'+chatDigestSafeError(error,cfg):
+        httpStatus>=400?'总结同步接口返回 HTTP '+httpStatus+'，原文与已完成总结已保留。':
+        syncPhase==='response'?'服务器返回的总结数据无法读取，原文与已完成总结已保留。':'与总结服务器连接中断，原文与已完成总结已保留，稍后继续同步。';
+      chatNightlyStatus[session.id]=Object.assign({},chatNightlyStatus[session.id],{scope:scope,local_error:message});
+      chatDigestLog('digest_sync',{ok:false,session_id:session.id,phase:syncPhase,http_status:httpStatus,upload:!!body,
+        error_code:timedOut?'sync_timeout':syncPhase==='apply'?'sync_apply_failed':httpStatus>=400?'sync_http_error':syncPhase==='response'?'sync_response_invalid':'sync_connection',error:chatDigestSafeError(error,cfg)});
       chatRenderNightlyStatus(session);
       chatScheduleNightlySync(30000);
       if(options.notify)toast(chatDigestSafeError(error,cfg),5000);

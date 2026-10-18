@@ -4,7 +4,7 @@
  const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,deferQueue=false,queueReady=true,nightlyError=false;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
@@ -23,7 +23,7 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;deferQueue=false;queueReady=true;nightlyError=false;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
    const groups=body.groups.filter(g=>body.candidate_keys.includes(g.key));
@@ -37,6 +37,7 @@
    if(target.pathname.endsWith('/wake'))return json({ok:true,enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240});
    if(target.pathname.endsWith('/queue')){
      queueCalls++;if(body)queueBody=body;
+     if(body&&loseUploadResponse){prepared(body);loseUploadResponse=false;throw new TypeError('Failed to fetch')}
      const reply=()=>json(body?prepared(body):{ok:true,sessions:[prepared(queueBody)]});
      if(deferQueue)return new Promise(resolve=>{releaseQueue=()=>resolve(reply())});
      return reply();
@@ -92,6 +93,17 @@
    field('chat-digest-cancel-manual').click();releaseQueue();await until(()=>!chatNightlySyncs.size,'cancelled queue did not settle');await pause(60);
    check(!session.digestManualTrim&&chatMessages.length===10&&cleanCalls.length===0,'a late result executed a cancelled manual trim');
    results.push({cancelBeforeReady:true,lateResultPreservedHistory:true});
+
+   setup('lost-upload');loseUploadResponse=true;field('chat-digest-prepare').click();
+   await until(()=>chatNightlyStatus[session.id]?.local_error,'lost upload did not expose a recoverable error');
+   check(chatMessages.length===10&&cleanCalls.length===0,'failed upload cut original history');
+   const uploaded=queueBody;chatNightlySynced[chatNightlyScope(cfg)+':'+session.id].retryAt=0;
+   await chatMaybeRollDigestAtDayBoundary();
+   await until(()=>session.digestLastSync?.status==='synced','GET recovery did not finish the prepared cut');
+   check(queueBody===uploaded,'recovery uploaded the old source again');
+   check(chatMessages.length===4&&cleanCalls.length===1&&posts.length===0,'recovery did not commit exactly one cut without a model request');
+   results.push({lostUploadRecovered:true,readBeforeResend:true,summaryReused:true});
+   await until(()=>!chatDigestMaintenanceBusy,'recovery maintenance did not settle');
 
    setup('restored');session.replyDraft={state:'running',turn_id:'restored-original'};field('chat-digest-prepare').click();
    await until(()=>session.digestStaged,'restored task did not prepare');
