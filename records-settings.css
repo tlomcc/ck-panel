@@ -14,6 +14,5 @@ body.chat-active .chat-settings .chat-wake-duration{display:flex!important;align
 .ck-records-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 @media(max-width:650px){.ck-records-page{padding:18px 12px}.ck-records-boxes{grid-template-columns:1fr;gap:14px}.ck-records-box textarea{min-height:230px}.ck-settings-tabs button{padding:8px 10px}.ck-records-box header{padding:13px 14px}}
 
-.ck-records-feedback-box{margin-top:28px}.ck-records-feedback-box .ck-records-intro{margin:16px 18px}.ck-records-feedback-box textarea{min-height:160px;border-bottom:1px solid var(--ck-line)}
-.ck-records-feedback-box>.ck-records-actions{margin:16px 18px}.ck-records-feedback-state,.ck-records-feedback-learning,.ck-records-feedback-saved{margin:16px 18px;color:var(--ck-text-soft);font-size:14px;line-height:1.8;overflow-wrap:anywhere}
-.ck-records-feedback-state,.ck-records-feedback-saved p{white-space:pre-wrap}.ck-records-feedback-learning:empty{display:none}.ck-records-feedback-learning ul{padding-left:22px}.ck-records-feedback-learning li+li{margin-top:8px}.ck-records-feedback-saved summary{cursor:pointer}.ck-records-feedback-box textarea:focus-visible{outline:2px solid var(--ck-accent);outline-offset:-3px}
+.ck-records-edit-state,.ck-records-saved{margin:14px 0 20px;color:var(--ck-text-soft);font-size:14px;line-height:1.8;overflow-wrap:anywhere}
+.ck-records-edit-state,.ck-records-saved p{white-space:pre-wrap}.ck-records-saved summary{cursor:pointer}.ck-records-saved h4{margin:14px 0 4px}.ck-records-saved p{margin:0 0 12px}.ck-records-box textarea:focus-visible{outline:2px solid var(--ck-accent);outline-offset:-3px}

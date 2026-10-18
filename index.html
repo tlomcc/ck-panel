@@ -14,27 +14,27 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v4-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v4.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="style.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="polish.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="chat.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="wechat.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="shell.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="components.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="daily-status.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="settings.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="chat-ui.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="server-status.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="subscription.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="codex-tasks.css?v=chat-v338-daily-record-feedback">
-<script>window.CK_PANEL_VERSION='chat-v338-daily-record-feedback';</script>
-<script>window.CK_PANEL_RELEASE_NOTES=["每日记录底部新增评价与建议，保存后持续用于后续整理。", "每轮整理先复核评价、提炼具体改进要求，再检查措辞和内容取舍是否落实。", "显示改进要点与落实状态；保护未保存草稿，避免多页面互相覆盖评价。"];</script>
-<link rel="stylesheet" href="notebook.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="memory-workbench.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="memory-library.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="maintenance.css?v=chat-v338-daily-record-feedback">
-<link rel="stylesheet" href="records-settings.css?v=chat-v338-daily-record-feedback">
+<link rel="stylesheet" href="tokens.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="style.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="polish.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="chat.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="wechat.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="shell.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="components.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="daily-status.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="settings.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="chat-ui.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="server-status.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="subscription.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="codex-tasks.css?v=chat-v339-daily-record-manual">
+<script>window.CK_PANEL_VERSION='chat-v339-daily-record-manual';</script>
+<script>window.CK_PANEL_RELEASE_NOTES=["每日记录支持直接编辑待办和基本信息，移除评价与建议。", "手动保存保护草稿并检测版本冲突；已有聊天仅在缓存到期后同步新版。", "每日自动整理保留原开关，手动保存不触发整理、不改变暂停或待处理状态。"];</script>
+<link rel="stylesheet" href="notebook.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="memory-workbench.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="memory-library.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="maintenance.css?v=chat-v339-daily-record-manual">
+<link rel="stylesheet" href="records-settings.css?v=chat-v339-daily-record-manual">
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><img src="icons/app-icon-v4.svg" alt=""></div><div class="startup-name">CK</div><div class="startup-subtitle">小小日常，慢慢收藏</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -43,7 +43,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><img src="icons/app-icon-v4.svg" alt=""></button><div><h1>CK</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v338" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v338-daily-record-feedback</button>
+<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v339" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">chat-v339-daily-record-manual</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -142,17 +142,14 @@
 <div class="facts-cards" id="facts-cards"><div class="empty-state small">加载中...</div></div>
 <div class="facts-more-wrap"><button class="btn btn-outline" id="facts-more" type="button" onclick="loadMoreFacts()" hidden>继续加载</button><span id="facts-more-hint"></span></div>
 </section>
-<section class="panel-tab" id="tab-records"><div class="ck-records-page"><div class="tab-head"><div><h2>每日记录</h2><p class="ck-records-intro">把要做的事和长期重要信息分开记。每天从前一天的聊天核对更新，完成的移出，变化的修正；没有重要变化时保持原记录。</p></div></div>
-<div class="ck-records-boxes"><section class="ck-records-box"><header><h3>待办追踪</h3><small id="ck-records-todos-count">0 / 5000 字</small></header><textarea id="ck-records-todos" readonly aria-label="待办追踪" placeholder="明确的待办会记录在这里。完成或取消后，在每日检查中移出。"></textarea></section><section class="ck-records-box"><header><h3>基本信息</h3><small id="ck-records-profile-count">0 / 5000 字</small></header><textarea id="ck-records-profile" readonly aria-label="基本信息" placeholder="只记录明确、常用、持续的重要信息。含混的推测不会写入。"></textarea></section></div>
+<section class="panel-tab" id="tab-records"><div class="ck-records-page"><div class="tab-head"><div><h2>每日记录</h2><p class="ck-records-intro">把要做的事和长期重要信息分开记。可以直接编辑并保存，也会每天从前一天的聊天核对更新；需要只手动维护时，可暂停每日更新。</p></div></div>
+<div class="ck-records-boxes"><section class="ck-records-box"><header><h3>待办追踪</h3><small id="ck-records-todos-count">0 / 5000 字</small></header><textarea id="ck-records-todos" oninput="ckRecordsInput('todos')" disabled aria-label="待办追踪" placeholder="明确的待办会记录在这里。完成或取消后，在每日检查中移出。"></textarea></section><section class="ck-records-box"><header><h3>基本信息</h3><small id="ck-records-profile-count">0 / 5000 字</small></header><textarea id="ck-records-profile" oninput="ckRecordsInput('profile')" disabled aria-label="基本信息" placeholder="只记录明确、常用、持续的重要信息。含混的推测不会写入。"></textarea></section></div>
+<div class="ck-records-actions"><button id="ck-records-save" type="button" class="btn btn-primary btn-sm" onclick="ckRecordsSave()" disabled>保存内容</button><button id="ck-records-merge" type="button" class="btn btn-outline btn-sm" onclick="ckRecordsMerge()" hidden>已核对，保留编辑并合并</button></div>
+<div id="ck-records-save-state" class="ck-records-edit-state" role="status" aria-live="polite">正在读取记录…</div>
+<p class="ck-records-intro">每行一条，保存后统一显示项目符号。保存后记录页立即更新；已有聊天在缓存有效期内继续使用旧版，缓存到期后的下一次聊天才同步。新窗口使用最新保存的内容。</p>
+<details class="ck-records-saved"><summary>查看服务器已保存的内容</summary><h4>待办追踪</h4><p id="ck-records-saved-todos"></p><h4>基本信息</h4><p id="ck-records-saved-profile"></p><button id="ck-records-load" type="button" class="btn btn-outline btn-sm" onclick="ckRecordsLoad()" disabled>放弃草稿，载入最新内容</button></details>
 <div id="ck-records-state" class="ck-records-status" role="status">正在读取记录</div><div class="ck-records-actions"><button type="button" class="btn btn-primary btn-sm" onclick="navTo('apiconfig');switchApiTab('records')">选择整理与检查模型</button><button type="button" class="btn btn-outline btn-sm" data-records-action onclick="ckRecordsRefresh('retry')">重新检查待处理记录</button><button id="ck-records-toggle" type="button" class="btn btn-outline btn-sm" onclick="ckRecordsToggle()">暂停每日更新</button><button type="button" class="btn btn-outline btn-sm" onclick="navTo('status');ckSelectStatusTab('records')">更新状态</button></div><p class="ck-records-intro">两个框各自最多 5000 字，待办直接写清具体日期、时段和姓名；基本信息直接写姓名与事实，不额外加日期标签。内容会作为聊天背景；新窗口直接使用，已有窗口等缓存自然到期后更新，后台检查不会打断当前缓存。暂停只停止每日更新，已保存内容仍作为背景。</p>
-<section class="ck-records-box ck-records-feedback-box" aria-labelledby="ck-records-feedback-title"><header><h3 id="ck-records-feedback-title"><label for="ck-records-feedback">评价与建议</label></h3><small id="ck-records-feedback-count">0 / 5000 字</small></header>
-<p class="ck-records-intro">哪些话写得不好，哪些内容不值得记，都可以写在这里。保存后持续有效，可随时补充或修改。每轮整理先复核你的评价、提炼具体改进要求，再整理并检查是否落实。</p>
-<textarea id="ck-records-feedback" aria-describedby="ck-records-feedback-state" placeholder="例如：别写“用户自述”这样的词，直接写姓名和事实。偶尔提到一次的偏好不用放进基本信息；明确未完成的事情要保留。" oninput="ckRecordsFeedbackInput()" disabled></textarea>
-<div class="ck-records-actions"><button id="ck-records-feedback-save" type="button" class="btn btn-primary btn-sm" onclick="ckRecordsFeedbackSave()" disabled>保存评价</button></div>
-<div id="ck-records-feedback-state" class="ck-records-feedback-state" role="status" aria-live="polite">正在读取已保存评价…</div>
-<div id="ck-records-feedback-learning" class="ck-records-feedback-learning"></div>
-<details class="ck-records-feedback-saved"><summary>查看已保存评价</summary><p id="ck-records-feedback-saved"></p><button id="ck-records-feedback-load" type="button" class="btn btn-outline btn-sm" onclick="ckRecordsFeedbackLoad()" disabled>读取已保存评价到框中</button></details>
-</section></div></section>
+</div></section>
 <section class="panel-tab mw-page ck-maintenance" id="tab-status" data-notebook="sage">
 <div class="tab-head"><span class="ck-page-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 8v5l3 2"/></svg></span><div><h2>运行状态</h2><p id="status-sub">每日 Fact 提取 · 任务与进度</p></div><button class="btn btn-outline btn-sm" type="button" onclick="ckRefreshStatus()">刷新</button></div>
 <div id="ck-status-tabs" class="ck-status-tabs" role="tablist" aria-label="状态分类"><button id="ck-status-tab-fact" type="button" role="tab" aria-selected="true" aria-controls="ck-status-fact" data-status-tab="fact" onclick="ckSelectStatusTab('fact')">每日 Fact</button><button id="ck-status-tab-topics" type="button" role="tab" aria-selected="false" aria-controls="ck-status-topics" tabindex="-1" data-status-tab="topics" onclick="ckSelectStatusTab('topics')">主题整理</button><button id="ck-status-tab-digest" type="button" role="tab" aria-selected="false" aria-controls="ck-status-digest" tabindex="-1" data-status-tab="digest" onclick="ckSelectStatusTab('digest')">截断总结</button><button id="ck-status-tab-events" type="button" role="tab" aria-selected="false" aria-controls="ck-status-events" tabindex="-1" data-status-tab="events" onclick="ckSelectStatusTab('events')">事件整理</button><button id="ck-status-tab-records" type="button" role="tab" aria-selected="false" aria-controls="ck-status-records" tabindex="-1" data-status-tab="records" onclick="ckSelectStatusTab('records')">每日记录</button></div>
@@ -244,7 +241,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v338-daily-record-feedback" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v338</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v339-daily-record-manual" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v339</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option></optgroup><optgroup label="显示与管理"><option value="display">设置</option><option value="tools">工具</option><option value="debug">调试</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13 5 5l7 4 7-4-1 8a7 7 0 1 1-12 0Z"/><path d="M9 15v1m6-1v1m-5 3q2 2 4 0"/></svg></span><div><h2>系统提示词</h2><p>给小克一张角色小卡片。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
@@ -411,29 +408,29 @@
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
 <aside id="panel-version-notes" class="panel-version-notes" aria-label="本次更新" hidden></aside>
-<script src="chat-ui.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-history.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-recovery.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-wake.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-digest.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-digest-activation.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-window-cleanup.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-digest-schedule.js?v=chat-v338-daily-record-feedback"></script>
-<script src="chat-delete-digest.js?v=chat-v338-daily-record-feedback"></script>
-<script src="backend-route.js?v=chat-v338-daily-record-feedback"></script>
-<script src="server-status.js?v=chat-v338-daily-record-feedback"></script>
-<script src="subscription.js?v=chat-v338-daily-record-feedback"></script>
-<script src="codex-storage.js?v=chat-v338-daily-record-feedback"></script>
-<script src="codex-tasks.js?v=chat-v338-daily-record-feedback"></script>
-<script src="script.js?v=chat-v338-daily-record-feedback"></script>
-<script src="memory-review.js?v=chat-v338-daily-record-feedback"></script>
-<script src="memory-workbench.js?v=chat-v338-daily-record-feedback"></script>
-<script src="settings-tabs.js?v=chat-v338-daily-record-feedback"></script>
-<script src="daily-records.js?v=chat-v338-daily-record-feedback"></script>
-<script src="maintenance.js?v=chat-v338-daily-record-feedback"></script>
-<script src="organizing-switches.js?v=chat-v338-daily-record-feedback"></script>
-<script src="script-extra.js?v=chat-v338-daily-record-feedback"></script>
-<script src="pwa.js?v=chat-v338-daily-record-feedback"></script>
-<script src="select-ui.js?v=chat-v338-daily-record-feedback"></script>
+<script src="chat-ui.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-history.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-recovery.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-wake.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-digest.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-digest-activation.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-window-cleanup.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-digest-schedule.js?v=chat-v339-daily-record-manual"></script>
+<script src="chat-delete-digest.js?v=chat-v339-daily-record-manual"></script>
+<script src="backend-route.js?v=chat-v339-daily-record-manual"></script>
+<script src="server-status.js?v=chat-v339-daily-record-manual"></script>
+<script src="subscription.js?v=chat-v339-daily-record-manual"></script>
+<script src="codex-storage.js?v=chat-v339-daily-record-manual"></script>
+<script src="codex-tasks.js?v=chat-v339-daily-record-manual"></script>
+<script src="script.js?v=chat-v339-daily-record-manual"></script>
+<script src="memory-review.js?v=chat-v339-daily-record-manual"></script>
+<script src="memory-workbench.js?v=chat-v339-daily-record-manual"></script>
+<script src="settings-tabs.js?v=chat-v339-daily-record-manual"></script>
+<script src="daily-records.js?v=chat-v339-daily-record-manual"></script>
+<script src="maintenance.js?v=chat-v339-daily-record-manual"></script>
+<script src="organizing-switches.js?v=chat-v339-manual-daily-records"></script>
+<script src="script-extra.js?v=chat-v339-daily-record-manual"></script>
+<script src="pwa.js?v=chat-v339-daily-record-manual"></script>
+<script src="select-ui.js?v=chat-v339-daily-record-manual"></script>
 </body>
 </html>
