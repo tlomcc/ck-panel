@@ -22,6 +22,7 @@ const SHELL_ASSETS = [
   './memory-workbench.js?v=chat-v338-daily-record-feedback',
   './memory-workbench.css?v=chat-v338-daily-record-feedback',
   './memory-library.css?v=chat-v338-daily-record-feedback',
+  './organizing-switches.js?v=chat-v338-daily-record-feedback',
   './maintenance.js?v=chat-v338-daily-record-feedback',
   './maintenance.css?v=chat-v338-daily-record-feedback',
   './select-ui.js?v=chat-v338-daily-record-feedback',
