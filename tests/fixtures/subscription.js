@@ -3,10 +3,12 @@
  const wait=async(fn)=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,20))}throw Error('condition timeout')};
  const $=id=>document.getElementById(id);
  const now=Date.now()/1000;
+ CKBackendRoute.current.execution='claude_code_subscription';
  let state={monitor_version:1,auth:{ready:false,state:'login_required'},event_supported:true,quota:{policy:{enabled:true,paused:false,warn_percent:70,high_percent:85,stop_percent:95},windows:[],level:'unknown',blocked:false,reason:'',last_observed_at:null}};
  const calls=[];let error=false,delay=null;
  window.storedPanelKey=()=> 'fixture-panel';
  window.fetch=async(url,options)=>{
+  if(url.includes('/ck/wake?'))return {ok:true,json:async()=>({enabled:false})};
   calls.push({url,options});
   assert(url.includes('/ck/subscription/'),'no model or unrelated endpoint');
   assert(options.headers['x-api-key']==='fixture-panel','panel auth');
@@ -21,6 +23,7 @@
  ckOpenSubscription();await wait(()=>$('ck-sub-state').textContent==='尚未登录订阅');
  assert($('ck-sub-windows').textContent.includes('—'),'unknown quota placeholder');
  assert(!$('ck-sub-windows').querySelector('progress'),'no fake 0 percent');
+ assert($('ck-sub-inline').textContent.includes('需检查'),'inline does not claim quota before login');
  assert(!$('ck-sub-save').disabled,'save before subscription');
  assert($('ck-sub-warn').value==='70','default threshold');
  state.auth.renewal={prepared:true,message:'登录维护已准备，等待官方授权',online_verified:false};
@@ -46,6 +49,8 @@
  state.quota.windows=[{key:'five_hour',used_percent:86.2,resets_at:now+1800,updated_at:now,status:'allowed_warning',expired:false,stale:false},{key:'seven_day',used_percent:32,resets_at:now+86400,updated_at:now,status:'allowed',expired:false,stale:false}];
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent==='订阅用量偏高');
  assert($('ck-sub-windows').textContent.includes('86.2%'),'official observed percentage');
+ assert($('ck-sub-windows').querySelector('strong').textContent==='13.8%','main value is remaining quota');
+ assert($('ck-sub-inline').textContent.includes('5h 13.8%')&&$('ck-sub-inline').textContent.includes('7天 68%'),'inline shows both remaining windows');
  assert($('ck-sub-windows').textContent.includes('重置：'),'reset timestamp');
  assert($('ck-sub-windows').querySelectorAll('progress').length===2,'two independent quota windows');
  const dims=()=>{const card=document.querySelector('.ck-sub-card');return {width:innerWidth,card:card.getBoundingClientRect().width,scroll:card.scrollWidth,client:card.clientWidth}};
@@ -53,6 +58,7 @@
  state.quota.windows[0].expired=true;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert(!$('ck-sub-windows').firstChild.querySelector('progress'),'expired data not shown as current');
+ assert($('ck-sub-inline').textContent.includes('5h —'),'expired inline value is unknown');
  state.quota.windows.push({key:'seven_day_opus',used_percent:98,resets_at:now+86400,updated_at:now,usage_observed_at:now-1800,status:'rejected',expired:false,stale:true,applies:false});
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-state').textContent==='订阅用量偏高','unrelated model does not pause selected model');
@@ -66,6 +72,7 @@
  assert($('ck-sub-updated').textContent.includes('上次观测'),'failed refresh clearly marks old data');
  assert($('ck-sub-save').disabled,'cannot save stale/unknown server settings');
  assert($('ck-sub-renewal').textContent.includes('暂未确认'),'failed refresh invalidates readiness display');
+ assert($('ck-sub-inline').textContent.includes('上次数据'),'inline failure marks stale observation');
  error=false;state.quota.blocked=false;state.quota.level='high';state.quota.reason='';
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-save').disabled);
  // A closed dialog must ignore the in-flight response.
@@ -73,9 +80,25 @@
  $('ck-sub-refresh').click();await wait(()=>typeof release==='function');
  $('ck-sub-close').click();state.auth.ready=false;release();await new Promise(r=>setTimeout(r,50));
  assert(!$('ck-sub-dialog').classList.contains('show'),'closed dialog stays closed');
- state.auth.ready=true;ckOpenSubscription();await wait(()=>$('ck-sub-state').textContent==='订阅用量偏高');
+ state.auth.ready=true;ckOpenSubscription();await wait(()=>$('ck-sub-state').textContent==='订阅用量偏高'&&!$('ck-sub-refresh').disabled);
+ const roundCalls=calls.length;
+ state.quota.windows[0].used_percent=90;
+ chatReleaseSendingUi(null);
+ await wait(()=>$('ck-sub-inline').textContent.includes('5h 10%'));
+ assert(calls.length===roundCalls+1,'reply completion refreshes only local monitor once: '+JSON.stringify({before:roundCalls,after:calls.length,paths:calls.slice(roundCalls).map(c=>c.url),text:$('ck-sub-inline').textContent}));
+ state.quota.windows[0].used_percent=null;
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-inline').textContent.includes('5h —')&&!$('ck-sub-inline').textContent.includes('5h 100%'),'unknown is never remaining 100%');
+ state.quota.windows[0].used_percent=90;
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ let accountRelease;delay=resolve=>{accountRelease=resolve};
+ $('ck-sub-refresh').click();await wait(()=>typeof accountRelease==='function');
+ window.storedPanelKey=()=> 'fixture-other-account';accountRelease();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert(!$('ck-sub-windows').children.length&&!$('ck-sub-inline').textContent.includes('10%'),'late data is not shown after account switch');
+ assert($('ck-sub-save').disabled,'old account settings cannot be saved to new account');
+ window.storedPanelKey=()=> 'fixture-panel';$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-save').disabled);
  $('ck-sub-close').focus();$('ck-sub-close').dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
  assert(document.activeElement===$('ck-sub-dialog').querySelector('summary'),'focus trap includes details');
  window.__subscriptionEmpty=async()=>{state.auth.ready=false;state.quota.windows=[];state.quota.level='unknown';state.quota.last_observed_at=null;$('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent==='尚未登录订阅')};
- return {calls:calls.length,policySaved:true,unknown:true,expired:true,escaped:true,closeRace:true,geometry:dims()};
+ return {calls:calls.length,policySaved:true,remaining:true,replyRefresh:true,accountRace:true,unknown:true,expired:true,escaped:true,closeRace:true,geometry:dims()};
 })();

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v341-subscription-vps-only';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v342-subscription-remaining';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -7017,6 +7017,7 @@ function chatReleaseSendingUi(request){
   chatAbort=null;
   chatActiveRequest=null;
   chatRestoreSendButton();
+  if(typeof ckRefreshSubscription==='function')ckRefreshSubscription();
   return true;
 }
 function chatFinalizeStoppedRequest(request){

@@ -1,4 +1,12 @@
 #ck-sub-dialog{z-index:1210}
+.ck-sub-inline{display:block;width:100%;padding:5px 2px 8px;border:0;background:transparent;color:var(--ck-muted,#71847d);font:inherit;font-size:12px;line-height:1.6;text-align:left;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;cursor:pointer}
+.ck-sub-inline[hidden]{display:none}
+.ck-sub-inline[data-level=warning],.ck-sub-inline[data-level=high]{color:#98702b}
+.ck-sub-inline[data-level=paused]{color:#a34e40}
+.ck-sub-inline:focus-visible{outline:2px solid var(--ck-ui-jade,#357b70);outline-offset:2px;border-radius:4px}
+body.dark .ck-sub-inline{background:var(--ck-surface,#19211d);border-radius:6px}
+body.dark .ck-sub-inline[data-level=warning],body.dark .ck-sub-inline[data-level=high]{color:#e4c074}
+body.dark .ck-sub-inline[data-level=paused]{color:#efa494}
 #ck-sub-dialog .ck-sub-card{width:min(720px,calc(100vw - 24px));max-width:720px;max-height:calc(100dvh - 28px);overflow:auto;overscroll-behavior:contain;padding:24px;border-radius:18px;background:var(--ck-surface,#fff);color:var(--ck-text,#254943);font-family:inherit}
 #ck-sub-dialog .ck-sub-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
 #ck-sub-dialog .ck-sub-kicker{font-size:11px;letter-spacing:.12em;color:var(--ck-muted,#71847d)}
