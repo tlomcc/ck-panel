@@ -16,7 +16,7 @@
    '<div class="ck-sub-summary"><div><strong id="ck-sub-state" role="status" aria-live="polite">正在读取订阅状态</strong><p id="ck-sub-detail">还没有订阅也可以先了解和设置用量保护。</p></div><button class="btn btn-outline btn-sm" type="button" id="ck-sub-refresh">刷新状态</button></div>'+
    '<p class="ck-sub-muted" id="ck-sub-renewal" role="status"></p>'+
    '<p class="ck-sub-error" id="ck-sub-error" role="alert" hidden></p>'+
-   '<div class="ck-sub-route"><span id="ck-sub-route-label"></span><button class="btn btn-outline btn-sm" type="button" id="ck-sub-connect">连接设置</button><a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">官方用量 ↗</a></div>'+
+   '<div class="ck-sub-route"><span id="ck-sub-route-label"></span><button class="btn btn-outline btn-sm" type="button" id="ck-sub-connect">连接设置</button></div>'+
    '<section aria-labelledby="ck-sub-quota-title"><h4 id="ck-sub-quota-title">官方额度</h4><div id="ck-sub-windows" class="ck-sub-windows"></div><p id="ck-sub-updated" class="ck-sub-muted">等待官方用量数据</p></section>'+
    '<form id="ck-sub-policy"><h4>用量保护</h4><p class="ck-sub-muted">设置保存在 VPS，关闭此板块后仍生效。达到暂停线后，CK 停止发起后续订阅请求。</p>'+
    '<fieldset id="ck-sub-fields" disabled><label class="ck-sub-check"><input id="ck-sub-enabled" type="checkbox" checked>启用百分比保护</label>'+
