@@ -29,7 +29,7 @@
   if(!known)parts.push('等待官方百分比');
   if(unavailable)parts.push(known?'连接中断，上次数据':'连接中断');else if(old)parts.push('上次观测');
   bar.textContent=parts.join(' · ');bar.dataset.level=q.level;
-  bar.title='随聊天返回的官方额度更新；点击查看各窗口的观测时间和保护设置。';
+  bar.title='随聊天返回的官方额度更新。';
  }
  function clearContext(){
   data=null;dataContext='';dirty=false;notified='';renderInline(null,false);
