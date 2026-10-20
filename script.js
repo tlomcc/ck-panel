@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v346-panel-performance';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v347-read-recovery';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -3424,7 +3424,7 @@ function chatEnsureMainRouteReady(){
     var control=new AbortController(),timer=setTimeout(function(){control.abort()},20000);
     return CKBackendRoute.subscriptionStatus(CKBackendRoute.current,storedPanelKey(),window.fetch.bind(window),control.signal).then(function(status){
       return status.ready?CKBackendRoute.subscriptionRoute():{ok:false,source:'claude_subscription',reason:status.message||'订阅未登录'};
-    }).catch(function(){return {ok:false,source:'claude_subscription',reason:'订阅状态无法确认，请检查连接'}}).finally(function(){clearTimeout(timer)});
+    }).catch(function(){return {ok:false,source:'claude_subscription',connectionError:true,reason:'订阅连接暂时无法确认，请稍后重试；原网关未改变'}}).finally(function(){clearTimeout(timer)});
   }
   var p=apiProvidersLoaded?Promise.resolve(true):loadApiProviders();
   return Promise.resolve(p).then(function(ok){
@@ -3441,7 +3441,7 @@ function chatEnsureMainRouteReady(){
   });
 }
 function chatHandleMainRouteNotReady(route){
-  if(route&&route.source==='claude_subscription'){chatSetStatus(route.reason);toast(route.reason);ckOpenBackendRoute();return}
+  if(route&&route.source==='claude_subscription'){chatSetStatus(route.reason);toast(route.reason);if(!route.connectionError)ckOpenBackendRoute();return}
   var windowRoute=route&&route.source==='chat_window_api';
   var reason=(route&&route.reason)||(windowRoute?'当前窗口 API 未配置':'主链路未配置');
   chatSetStatus(windowRoute?'当前窗口 API 未就绪':'主链路未配置');
@@ -10625,7 +10625,7 @@ async function chatSubmitPendingMessages(options){
   chatFollowMessagesBottom(chatShouldFollowMessages(),true,false);
   if(!out||!out.parentNode)out=chatAddBubble('assistant','',false);
   if(requestState)requestState.out=out;
-  var route=await chatAwaitPreparation(mainRouteReadyPromise,requestState,'读取供应商');
+  var route=await chatAwaitPreparation(mainRouteReadyPromise,requestState,typeof CKBackendRoute==='object'&&CKBackendRoute.isSubscription()?'检查订阅连接':'读取供应商');
   if(requestState&&requestState.stopped)return;
   if(!route||!route.ok){
     chatHandleMainRouteNotReady(route);

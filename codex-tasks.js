@@ -193,14 +193,35 @@
       dismissDialog(dlg);dlg.showModal();if(input){input.focus();input.select();}else cancel.focus();
     });
   }
+  function validSequence(value){return Number.isSafeInteger(value)&&value>=0;}
+  function responseObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
+  function validWindow(value){return responseObject(value)&&typeof value.id==='string'&&!!value.id&&validSequence(value.seq);}
+  function validResponse(path,body,value){
+    if(!responseObject(value))return false;
+    var route=path.split('?')[0];
+    if(route==='/config'||route.indexOf('/profiles/')===0)return Array.isArray(value.profiles)&&value.profiles.every(function(p){return responseObject(p)&&typeof p.id==='string'&&!!p.id;});
+    if(body)return true;
+    if(route==='/threads')return Array.isArray(value.windows)&&value.windows.every(validWindow);
+    if(/^\/threads\/[^/]+$/.test(route))return validWindow(value.window)&&value.window.id===route.slice('/threads/'.length)&&validSequence(value.cursor)&&value.cursor===value.window.seq&&Array.isArray(value.items)&&value.items.every(function(item){return responseObject(item)&&typeof item.id==='string'&&typeof item.kind==='string'&&responseObject(item.data);})&&(value.schedules===undefined||(Array.isArray(value.schedules)&&value.schedules.every(function(s){return responseObject(s)&&typeof s.request_id==='string';})));
+    return true;
+  }
   async function request(path, body, signal) {
     var controller=new AbortController(), timeout=setTimeout(function(){controller.abort();},body?55000:15000);
     function cancel(){controller.abort();}
     if(signal){if(signal.aborted)cancel();else signal.addEventListener('abort',cancel,{once:true});}
     try {
       var response=await fetch(endpoint+path,{method:body?'POST':'GET',headers:{'Authorization':'Bearer '+access,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
-      var value=await response.json().catch(function(){return {};});
-      if(!response.ok){var error=Error(value.error||'无法连接 Codex 服务');error.status=response.status;throw error;}
+      var value;
+      try{value=await response.json();}
+      catch(e){
+        // A successful HTTP status does not mean the body arrived. Never commit
+        // an empty object after an abort/truncation: it poisons config and cursor.
+        if(e.name==='AbortError'||e instanceof TypeError)throw e;
+        var invalid=Error(body?'服务器响应不完整。操作可能已执行，请刷新核对；发送编号和草稿已保留。':'服务器响应不完整，已保留现有记录，稍后自动补收。');
+        if(!response.ok)invalid.status=response.status;throw invalid;
+      }
+      if(!response.ok){var error=Error(value&&value.error||'无法连接 Codex 服务');error.status=response.status;throw error;}
+      if(!validResponse(path,body,value))throw Error(body?'服务器返回的数据不完整。请刷新核对操作结果，现有记录已保留。':'服务器返回的数据不完整，已保留现有记录，稍后自动补收。');
       return value;
     } catch(e) {
       if(signal&&signal.aborted)throw e;
@@ -570,7 +591,7 @@
     function valid(){return token===generation&&refreshController===controller&&!controller.signal.aborted;}
     async function readWindow(wid){
       var snapshot=await request('/threads/'+wid+'?after='+cursor,null,controller.signal);if(!valid()||wid!==selected)return;
-      var reset=cursor===0;cursor=snapshot.cursor;confirmedAt.set(wid,Date.now());windows=windows.map(function(w){return w.id===wid?newerWindow(w,snapshot.window):w;});renderFeed(snapshot.items,reset);
+      var reset=cursor===0;renderFeed(snapshot.items,reset);cursor=snapshot.cursor;confirmedAt.set(wid,Date.now());windows=windows.map(function(w){return w.id===wid?newerWindow(w,snapshot.window):w;});
       markCompletionSeen(snapshot.window);
       var next=snapshot.schedules||[];if(JSON.stringify(schedules)!==JSON.stringify(next)){schedules=next;renderSchedules();}renderToolbar();renderWindows();renderQuestionNotice();
       $('connection').textContent='已连接';$('connection').dataset.state='ok';

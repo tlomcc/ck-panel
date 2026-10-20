@@ -16,7 +16,7 @@ const server = http.createServer((req, res) => {
       const context = await browser.newContext({viewport:{width,height:900}, serviceWorkers:'block'});
       await context.addInitScript(() => { localStorage.setItem('ck_codex_access','test'); localStorage.setItem('ck_codex_endpoint','https://codex.test/codex'); });
       const page = await context.newPage();
-      const w = {id:'window-one',title:'测试窗口',profile:'p',thread_id:'native',status:'completed',updated:1};
+      const w = {id:'window-one',title:'测试窗口',profile:'p',thread_id:'native',status:'completed',updated:1,seq:1};
       let seq=1, kind='request', modelsFail=false;
       const items = () => [
         {id:'text',kind:'agentMessage',text:'完整文字内容。'.repeat(1500),data:{},created:1},
@@ -29,10 +29,10 @@ const server = http.createServer((req, res) => {
       await page.route('https://codex.test/codex/**', async route => {
         const url=new URL(route.request().url()); let result={};
         if(url.pathname.endsWith('/config'))result={profiles:[{id:'p',name:'测试接口',model:'model-a',base_url:'https://test/v1',effort:'high',has_key:true}],default_profile:'p',workspace:'/workspace'};
-        else if(url.pathname.endsWith('/threads'))result={windows:[w]};
+        else if(url.pathname.endsWith('/threads'))result={windows:[{...w,seq}]};
         else if(url.pathname.endsWith('/models')){if(modelsFail)return route.fulfill({status:502,json:{error:'HTTP 401'}});result={models:['model-a','model-b','model-c']};}
         else if(url.pathname.endsWith('/answer')){kind='resolved';seq++;}
-        else if(url.pathname.includes('/threads/'))result={window:w,items:items(),cursor:seq++};
+        else if(url.pathname.includes('/threads/'))result={window:{...w,seq},items:items(),cursor:seq++};
         await route.fulfill({json:result});
       });
       await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');
