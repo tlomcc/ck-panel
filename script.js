@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v345-quota-display-only';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v346-panel-performance';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8811,6 +8811,7 @@ function chatStopMessage(){
   chatFinalizeStoppedRequest(request);
   return true;
 }
+var chatInputMeasure=null;
 function chatAutosizeInput(input){
   if(!input)return;
   var styles=window.getComputedStyle?window.getComputedStyle(input):null;
@@ -8822,10 +8823,28 @@ function chatAutosizeInput(input){
   if(isNaN(paddingBottom))paddingBottom=0;
   var min=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?34:36;
   var max=Math.ceil(lineHeight*3+paddingTop+paddingBottom);
-  input.style.height='auto';
-  input.style.height=Math.min(max,Math.max(min,input.scrollHeight))+'px';
-  input.style.overflowY=input.scrollHeight>max?'auto':'hidden';
-  chatLayoutCompose();
+  // Measure outside the flex layout: resetting the live textarea to auto makes
+  // every keystroke lay out the entire visible conversation twice.
+  if(!chatInputMeasure){
+    chatInputMeasure=document.createElement('textarea');
+    chatInputMeasure.tabIndex=-1;
+    chatInputMeasure.setAttribute('aria-hidden','true');
+    chatInputMeasure.style.cssText='position:fixed;left:-10000px;top:0;height:0;min-height:0;max-height:none;overflow:hidden;visibility:hidden;pointer-events:none;contain:layout style paint;';
+    document.body.appendChild(chatInputMeasure);
+  }
+  var measure=chatInputMeasure;
+  ['width','boxSizing','fontFamily','fontSize','fontWeight','fontStyle','lineHeight','letterSpacing','wordSpacing','textIndent','textTransform','paddingTop','paddingBottom','paddingLeft','paddingRight','borderTopWidth','borderBottomWidth','borderLeftWidth','borderRightWidth','borderStyle','whiteSpace','wordBreak','overflowWrap','tabSize'].forEach(function(name){
+    if(styles&&measure.style[name]!==styles[name])measure.style[name]=styles[name];
+  });
+  measure.wrap=input.wrap;
+  measure.value=input.value||input.placeholder||' ';
+  var height=measure.scrollHeight;
+  var nextHeight=Math.min(max,Math.max(min,height))+'px';
+  var changed=input.style.height!==nextHeight;
+  if(changed)input.style.height=nextHeight;
+  var overflow=height>max?'auto':'hidden';
+  if(input.style.overflowY!==overflow)input.style.overflowY=overflow;
+  if(changed)chatLayoutCompose();
 }
 function chatIsInputActive(){
   var input=document.getElementById('chat-input');
@@ -8860,7 +8879,10 @@ function chatLayoutCompose(opts){
     compose.style.visibility='';
     var composeRect=compose.getBoundingClientRect?compose.getBoundingClientRect():null;
     var composeHeight=Math.ceil((composeRect&&composeRect.height)||compose.offsetHeight||64);
-    document.documentElement.style.setProperty('--ck-chat-compose-height',composeHeight+'px');
+    // Only the new-message hint uses this height. Updating an inherited root
+    // variable makes every historical message recalculate its styles on wrap.
+    var hint=document.getElementById('chat-new-message-tip');
+    if(hint&&hint.style.getPropertyValue('--ck-chat-compose-height')!==composeHeight+'px')hint.style.setProperty('--ck-chat-compose-height',composeHeight+'px');
   }
   var btn=document.getElementById('chat-send-btn');
   if(!btn)return;
@@ -9563,6 +9585,7 @@ function chatRenderMessages(opts){
       rowMap[idx]=row;
     });
     for(var oldIndex in rowMap){if(Number(oldIndex)<visible.start||Number(oldIndex)>=visible.end){rowMap[oldIndex].remove();delete rowMap[oldIndex]}}
+    var pendingRows=[];
     for(var i=visible.start;i<visible.end;i++){
       var m=chatMessages[i];
       var row=rowMap[String(i)];
@@ -9570,13 +9593,15 @@ function chatRenderMessages(opts){
         if(row)row.remove();
         continue;
       }
-      var key=chatMessageRenderKey(m,i);
       if(!row){
-        chatInsertRenderedMessageRow(box,chatRenderMessageRow(m,i),i);
+        pendingRows.push(chatRenderMessageRow(m,i));
         continue;
       }
+      if(pendingRows.length){row.insertAdjacentHTML('beforebegin',pendingRows.join(''));pendingRows=[];}
+      var key=chatMessageRenderKey(m,i);
       if(row.getAttribute('data-chat-key')!==key||row.getAttribute('data-chat-index')!==String(i))row.outerHTML=chatRenderMessageRow(m,i);
     }
+    if(pendingRows.length)box.insertAdjacentHTML('beforeend',pendingRows.join(''));
   }
   chatHistorySentinels(box);
   chatRenderReplyDraft();

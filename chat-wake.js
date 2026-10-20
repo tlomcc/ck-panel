@@ -64,13 +64,16 @@ async function chatWakeRequest(changes,sessionId,requestConfig){
     chatWakeState[sid]=data;
     var session=chatSessions.find(function(x){return x.id===sid});
     if(session){
+      var previousEnabled=session.wakeEnabled,previousRead=session.cacheLastReadAt,previousUntil=session.systemPromptCacheUntil;
       session.wakeEnabled=data.enabled===true;session.wakeSyncAt=Date.now();
       var u=data.usage||{};
       if(data.last_success_at&&(Number(u.cache_read_input_tokens)>0||Number(u.cache_creation_input_tokens)>0)){
         session.cacheLastReadAt=Math.max(Number(session.cacheLastReadAt)||0,data.last_success_at*1000);
         session.systemPromptCacheUntil=Math.max(Number(session.systemPromptCacheUntil)||0,data.last_success_at*1000+(data.mode==='1h'?3600000:300000));
       }
-      chatScheduleSessionSave(sid);
+      // Freshness remains live in memory. An unchanged status poll must not
+      // clone and rewrite the conversation just to persist another timestamp.
+      if(previousEnabled!==session.wakeEnabled||previousRead!==session.cacheLastReadAt||previousUntil!==session.systemPromptCacheUntil)chatScheduleSessionSave(sid);
     }
     chatWakeRender();return data;
   }finally{clearTimeout(timer)}

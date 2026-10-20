@@ -26,6 +26,18 @@ test('countdown follows the server schedule, including expiry and disabled state
   assert.equal(c.chatWakeCountdown({...state,...change},1000000),'--:--');
  }
 });
+test('unchanged polls refresh safety freshness without rewriting history; new cache activity is saved',async()=>{
+ const {c,calls}=setup(),saved=[];c.chatScheduleSessionSave=id=>saved.push(id);
+ const state={ok:true,enabled:true,mode:'1h',last_success_at:100,usage:{cache_read_input_tokens:1000}};
+ async function respond(value){const pending=c.chatWakeRefresh();calls[calls.length-1].resolve(json(value));await pending;}
+ await respond(state);assert.deepEqual(saved,['a']);
+ c.chatSessions[0].wakeSyncAt=1;
+ await respond(state);assert.deepEqual(saved,['a']);assert(c.chatSessions[0].wakeSyncAt>1);
+ assert.equal(c.chatSessions[0].cacheLastReadAt,100000);assert.equal(c.chatSessions[0].systemPromptCacheUntil,3700000);
+ await respond({...state,last_success_at:200});assert.deepEqual(saved,['a','a']);
+ await respond({...state,last_success_at:200,enabled:false});assert.deepEqual(saved,['a','a','a']);
+ assert.equal(c.chatSessions[0].wakeEnabled,false);
+});
 test('saving is independent of a slow GET and rejects its late value or error',async()=>{
  for(const fails of [false,true]){
   const {c,calls}=setup();const read=c.chatWakeRefresh();c.chatWakeRefresh();assert.equal(calls.length,1);

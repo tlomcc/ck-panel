@@ -1,7 +1,7 @@
 /* CK's single-choice controls keep their native form value and change handlers. */
 (function(){
   'use strict';
-  var controls=new Map(),queued=false;
+  var controls=new Map(),queued=false,discover=true;
   function label(select){
     if(select.matches('.prov-model-select,.assign-model-select'))return '选择模型';
     var owner=select.labels&&select.labels[0];
@@ -15,10 +15,14 @@
       var option=select.options[select.selectedIndex];
       var text=option?option.textContent:'请选择';
       if(button.firstChild.textContent!==text)button.firstChild.textContent=text;
-      button.disabled=select.matches(':disabled');
-      button.hidden=select.hidden||select.getAttribute('aria-hidden')==='true';
-      button.setAttribute('aria-label',label(select)+'：'+text);
+      var disabled=select.matches(':disabled'),hidden=select.hidden||select.getAttribute('aria-hidden')==='true';
+      if(button.disabled!==disabled)button.disabled=disabled;
+      if(button.hidden!==hidden)button.hidden=hidden;
+      var accessibleLabel=label(select)+'：'+text;
+      if(button.getAttribute('aria-label')!==accessibleLabel)button.setAttribute('aria-label',accessibleLabel);
     });
+    if(!discover)return;
+    discover=false;
     document.querySelectorAll('select:not([multiple]):not([data-ck-select]):not([data-ck-native])').forEach(function(select){
       if(select.size>1)return;
       var button=document.createElement('button');
@@ -59,12 +63,22 @@
   document.addEventListener('change',schedule);
   document.addEventListener('reset',function(){setTimeout(sync,0)});
   new MutationObserver(function(records){
-    if(records.some(function(record){return !record.target.closest?.('.ck-select-button')&&
-      (record.target.tagName==='SELECT'||record.target.tagName==='OPTION'||record.type==='childList'||record.target.tagName==='FIELDSET')}))schedule();
+    var affected=false;
+    records.forEach(function(record){
+      var target=record.target.nodeType===1?record.target:record.target.parentElement;
+      if(!target||target.closest('.ck-select-button'))return;
+      if(target.matches('fieldset')||target.closest('select,label'))affected=true;
+      if(record.type==='childList'){
+        Array.from(record.addedNodes).concat(Array.from(record.removedNodes)).forEach(function(node){
+          if(node.nodeType===1&&(node.matches('select,label')||node.querySelector('select,label'))){discover=true;affected=true;}
+        });
+      }
+    });
+    if(affected)schedule();
   }).observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['disabled','hidden','selected','value','label']});
   // Script assignments to .value do not emit DOM mutations. Refresh visible labels
   // after each user action; changing a select programmatically never emits change.
   document.addEventListener('click',schedule);
-  window.ckSyncSelects=sync;
+  window.ckSyncSelects=function(){discover=true;sync()};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync);else sync();
 })();

@@ -197,7 +197,9 @@ body.chat-active .chat-debug-open{
 body.chat-active .chat-runtime{display:none!important}
 
 body.chat-active .chat-messages{
-  flex:1 1 auto!important;
+  /* Size the scroll viewport from available space, not the full chat history. */
+  flex:1 1 0!important;
+  contain:layout style;
   width:100%!important;
   min-width:0!important;
   min-height:0!important;
