@@ -45,32 +45,10 @@
  await chatMaybeRollDigestAtDayBoundary();check((await stats()).runs===before.runs+2,'completed run restarted');
  check(document.documentElement.scrollWidth<=innerWidth+1,'horizontal overflow');
  const chatBeforeRecords=JSON.stringify({messages:chatMessages,transport:session.transportMessages});
- await originalFetch('/fixture-seed-records',{method:'POST',body:'{}'});
- await ckRecordsRefresh();await ckRecordsModelMode(true);
- check(ckRecordsData.current_model===true,'records manual mode not saved');
- field('ck-records-manual-model').value='claude-sonnet-4-6';field('ck-records-manual-model').dispatchEvent(new Event('input',{bubbles:true}));
- check(await ckRecordsRun(),'records click not accepted');
- await ckRecordsRefresh();
- check(ckRecordsData.model_run.state==='succeeded','records not completed');check(ckRecordsData.model_run.route.model==='claude-sonnet-4-6','records exact model lost');
- check(chatLoadConfig().recordsManualModel==='claude-sonnet-4-6','record model not saved');
- check(JSON.stringify({messages:chatMessages,transport:session.transportMessages})===chatBeforeRecords,'records leaked work into chat');
- const priorPosts=(await stats()).organizer_posts.length;
- for(const kind of ['fact','events']){
-  storedPanelKey=()=> 'fixture';panelDataFetch=(url,opts)=>originalFetch(typeof url==='function'?url('fixture'):url,opts);
-  await ckManualOrganizerRefresh(kind);
-  check((await stats()).organizer_posts.length===priorPosts+(kind==='fact'?0:3),'status triggered organizer');
-  field('manual-'+kind+'-mode').checked=true;await ckManualOrganizerAction(kind,'model_mode');
-  field('manual-'+kind+'-model').value='claude-sonnet-5-5';
-  if(kind==='fact')field('manual-fact-day').value='2026-10-19';
-  check(await ckManualOrganizerAction(kind,'run_model'),'manual organizer not accepted');
-  const accepted=(await stats()).organizer_posts.at(-1);
-  check(accepted.model==='claude-sonnet-5-5','organizer exact model lost');
-  if(kind==='fact')check(accepted.day==='2026-10-19','fact day lost');
-  check(field('manual-'+kind+'-run').disabled,'duplicate start enabled');
-  check(await ckManualOrganizerAction(kind,'cancel_model'),'stop not accepted');
-  check(field('manual-'+kind+'-stop').disabled,'stop did not settle');
- }
- check(JSON.stringify({messages:chatMessages,transport:session.transportMessages})===chatBeforeRecords,'organizers changed chat');
+ check(!field('ck-records-current-model')&&!field('ck-records-manual-model'),'retired records mode remains');
+ check(typeof ckRecordsModelMode==='undefined'&&typeof ckManualOrganizerAction==='undefined','retired actions remain');
+ for(const kind of ['fact','events'])check(!field('manual-'+kind+'-mode'),'retired organizer remains');
+ check(JSON.stringify({messages:chatMessages,transport:session.transportMessages})===chatBeforeRecords,'chat changed');
  navTo('records');
- return {dailySavedWithoutTrim:true,recordsDoNotChangeChat:true,manualTrimRounds:3,noAutomaticCalls:true,cleans,queuePosts:posts};
+ return {dailySavedWithoutTrim:true,retiredOrganizersAbsent:true,manualTrimRounds:3,noAutomaticCalls:true,cleans,queuePosts:posts};
 })()

@@ -30,6 +30,8 @@ const server=http.createServer(async(req,res)=>{
   states.a=initial();states.b={...initial(),todos:'- 乙的待办',profile:'- 乙的信息'};posts=[];delay=0;fail=false;
   const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>!!ckRecordsData);
+  assert.equal(await page.locator('#ck-records-current-model,#ck-records-manual-model,#ck-records-cancel-model').count(),0);
+  assert.equal(await page.evaluate(()=>typeof ckRecordsModelMode),'undefined');
   assert((await page.locator('#ck-records-state').textContent()).includes('2026-10-18 至 2026-10-21 · 780 条 · 1 批'));
   const box=page.locator('#ck-records-todos'),profile=page.locator('#ck-records-profile'),save=page.locator('#ck-records-save');
   assert.equal(await page.locator('#ck-records-feedback').count(),0);assert(await box.isEditable());assert(await profile.isEditable());

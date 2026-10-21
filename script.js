@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v350-codex-replies-only';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v351-subscription-summary-only';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -3472,6 +3472,7 @@ function chatLoadConfig(){
     cfg.dailyDigestDetailDays=Math.min(3,cfg.dailyDigestRetentionDays);
     cfg.dailyDigestRollupDays=cfg.dailyDigestRetentionDays-cfg.dailyDigestDetailDays;
   }
+  ['recordsManualModel','factManualModel','eventManualModel'].forEach(function(k){delete cfg[k]});
   cfg.panelKey=storedPanelKey();
   try{
     var savedCacheStrategy=localStorage.getItem(CHAT_CACHE_STRATEGY_KEY);
@@ -3551,6 +3552,7 @@ function chatLoadConfig(){
 function chatSaveConfigObject(cfg){
   chatDisplayToggleInvalidate();
   cfg=cfg&&typeof cfg==='object'?Object.assign({},cfg):{};
+  ['recordsManualModel','factManualModel','eventManualModel'].forEach(function(k){delete cfg[k]});
   cfg.gatewayUrl=GRAPH_API_BASE;
   cfg.mcpUrl=API_BASE;
   cfg.panelKey=chatSyncPanelKeyToApiStorage(cfg.panelKey);
@@ -4612,9 +4614,6 @@ function chatReadForm(){
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
     digestCurrentModel:saved.digestCurrentModel===true,
     digestManualModel:saved.digestManualModel,
-    recordsManualModel:saved.recordsManualModel,
-    factManualModel:saved.factManualModel,
-    eventManualModel:saved.eventManualModel,
     dailyDigestRetentionDays:chatDigestOptions(saved).n,
     dailyDigestDetailDays:chatDigestOptions(saved).x,
     dailyDigestRollupDays:chatDigestOptions(saved).y,

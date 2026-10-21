@@ -1,7 +1,7 @@
 {
-  "version": "chat-v350-codex-replies-only",
+  "version": "chat-v351-subscription-summary-only",
   "notes": [
-    "Codex 只回传给你的文字回复、提问和必要状态提示；代码补丁、命令和工具输出不再发送。",
-    "任务记录可展开查看 VPS 日记，旧窗口同样使用精简回传。"
+    "Claude 订阅整理仅保留截断总结；Fact、事件和每日记录使用各自 API。",
+    "移除旧订阅整理入口与转发，保留已有记录、草稿和固定出口保护。"
   ]
 }

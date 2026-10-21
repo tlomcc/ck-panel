@@ -206,7 +206,6 @@ async function ckRunDigestAction(id,action){
   };
   window.ckSelectStatusTab=function(tab){
     ckStatusTab=['topics','digest','events','records'].includes(tab)?tab:'fact';if(typeof ckOrganizingEnter==='function')ckOrganizingEnter();++seq;if(controller)controller.abort();clearTimeout(timer);
-    if((ckStatusTab==='fact'||ckStatusTab==='events')&&typeof ckManualOrganizerRefresh==='function')ckManualOrganizerRefresh(ckStatusTab);
     ['fact','topics','digest','events','records'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
     el('status-sub').textContent=ckStatusTab==='events'?'事件整理、Git 备份与预加载':ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'后台准备 · 缓存过期后同步';
     if(ckStatusTab==='records'){stopDailyStatusRealtime();el('status-sub').textContent='每日记录 · 事实核验、精炼与更新';ckRecordsRefresh();return;}

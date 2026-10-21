@@ -292,11 +292,11 @@ function chatNightlySettingsPriority(cfg){
 }
 
 function chatManualModelValue(cfg,kind){
-  var key=kind==='records'?'recordsManualModel':'digestManualModel';
+  var key='digestManualModel';
   return typeof cfg[key]==='string'?cfg[key]:(window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription'?'sonnet':'');
 }
 function chatSaveManualModel(kind,value){
-  var cfg=chatLoadConfig(),key=kind==='records'?'recordsManualModel':'digestManualModel';
+  var cfg=chatLoadConfig(),key='digestManualModel';
   cfg[key]=String(value||'').trim();chatSaveConfigObject(cfg);
 }
 function chatManualModelRoute(cfg,kind){
