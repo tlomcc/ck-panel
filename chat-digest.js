@@ -5,13 +5,21 @@ var chatDigestEditors={};
 var chatDigestSettingsDirty=false;
 var chatDigestMaintenanceBusy=false;
 var CHAT_DIGEST_BATCH_CHARS=60000;
-function chatDigestBatchChars(cfg){
+function chatDigestSubscriptionSummary(cfg){
   cfg=cfg||chatLoadConfig();
+  if(cfg.digestCurrentModel!==true)return false;
   var execution=cfg.executionBackend||cfg.execution_backend||cfg.backend;
   if(cfg.digestCurrentModel===true&&typeof chatManualModelRoute==='function'){
     try{execution=chatManualModelRoute(cfg,'digest').selected.execution}catch(ignore){}
   }
-  return cfg.digestCurrentModel===true&&execution==='claude_code_subscription'?120000:CHAT_DIGEST_BATCH_CHARS;
+  return execution==='claude_code_subscription';
+}
+function chatDigestBatchChars(cfg){
+  return chatDigestSubscriptionSummary(cfg)?120000:CHAT_DIGEST_BATCH_CHARS;
+}
+function chatDigestLengthHint(cfg){
+  return chatDigestSubscriptionSummary(cfg)?'订阅：x 建议每天2500字，y 建议每天1500字；篇幅由模型判断，完整保存。当天不设字数预算。':
+    'x 每天最多2500字，y 每天最多1500字，都不凑字；当天不设字数预算。';
 }
 var chatActiveDigestJob=null;
 function chatDigestSafeError(error,cfg){
@@ -258,7 +266,7 @@ function chatRenderDailyDigest(cfg){
   var hint=document.getElementById('chat-daily-digest-hint');
   if(hint)hint.textContent=cfg.dailyDigestEnabled===false?'已关闭：保留已有总结，不生成也不注入。':'注入顺序：'+range.y+' 天大总结 → '+range.x+' 天逐日摘要 → 当日新总结；当前实际注入 '+Array.from(chatDailyDigestPack(cfg,session)).length+' 字。'+(typeof chatDigestPackReady==='function'&&!chatDigestPackReady(cfg,session)?'新范围的摘要尚未就绪，保持已启用的总结，不用长底稿替代。':'');
   var detail=document.getElementById('chat-digest-detail-hint');
-  if(detail)detail.textContent='x 每天最多2500字，y 每天最多1500字，都不凑字；当天不设字数预算。滚动范围：'+chatDigestShiftDay(range.today,-range.n)+' 至 '+chatDigestShiftDay(range.today,-1)+'。每天一条，表头固定为【YYYY-MM-DD】；跨日内容归入结束日期。';
+  if(detail)detail.textContent=chatDigestLengthHint(cfg)+'滚动范围：'+chatDigestShiftDay(range.today,-range.n)+' 至 '+chatDigestShiftDay(range.today,-1)+'。每天一条，表头固定为【YYYY-MM-DD】；跨日内容归入结束日期。';
   var roll=document.getElementById('chat-digest-rollup-hint'),fresh=chatDigestRollupFresh(cfg,session),rollSource=chatDigestRollupSource(cfg,session);
   var rollSaved=chatNormalizeDigestRollup(session.digestRollup);
   if(roll)roll.textContent=!range.y?'y=0，不注入大总结。':('合并范围：'+range.start+' 至 '+range.end+'。'+(!rollSource.entries.length?'范围内暂无摘要，无需压缩。':fresh?

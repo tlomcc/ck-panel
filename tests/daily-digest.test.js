@@ -27,6 +27,31 @@ function setup(){
   };
 }
 
+test('subscription word counts are advisory while API hints keep their limits',()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;x.cfg.executionBackend='claude_code_subscription';
+  assert.match(x.ctx.chatDigestLengthHint(x.cfg),/篇幅由模型判断，完整保存/);
+  assert.match(x.ctx.chatDigestLengthHint(x.cfg),/建议每天2500字/);
+  assert.equal(x.ctx.chatDigestBatchChars(x.cfg),120000);
+  x.cfg.executionBackend='direct_api';
+  assert.match(x.ctx.chatDigestLengthHint(x.cfg),/最多2500字/);
+  x.cfg.executionBackend='claude_code_subscription';x.cfg.digestCurrentModel=false;
+  assert.match(x.ctx.chatDigestLengthHint(x.cfg),/最多2500字/);
+});
+
+test('long reviewed subscription X and Y results retain their tails through normalization and injection',()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;x.cfg.executionBackend='claude_code_subscription';
+  const raw='详细原始记录'.repeat(2000),longX='近期摘要'.repeat(1200)+'近期结尾保留。',longY='较早摘要'.repeat(800)+'较早结尾保留。';
+  x.session.dailyDigests=[Object.assign(x.entry('2026-09-29',raw),{detail:{source:x.ctx.chatDigestStamp(raw),text:longX}})];
+  const oldRaw='较早详细记录';x.session.dailyDigests.push(x.entry('2026-09-28',oldRaw));
+  x.session.digestRollup={start:'2026-09-27',end:'2026-09-28',text:longY,source:x.ctx.chatDigestRollupSource(x.cfg,x.session).stamp};
+  x.session.dailyDigests=x.ctx.chatDailyDigestNormalize(x.session.dailyDigests);
+  x.session.digestRollup=x.ctx.chatNormalizeDigestRollup(x.session.digestRollup);
+  assert.equal(x.session.dailyDigests.find(e=>e.dayKey==='2026-09-29').detail.text,longX);
+  assert.equal(x.session.digestRollup.text,longY);
+  const pack=x.ctx.chatDailyDigestBuildPack(x.cfg,x.session);
+  assert.ok(pack.includes(longX));assert.ok(pack.includes(longY));
+});
+
 test('summary logs separate generation, checkpoints, reuse and final saved summaries',async()=>{
   const x=setup(),events=[];x.ctx.chatDebug=(event,data)=>events.push({event,data:plain(data)});
   x.cfg.dailyDigestRollupDays=0;

@@ -1,7 +1,7 @@
 {
-  "version": "chat-v351-subscription-summary-only",
+  "version": "chat-v352-subscription-summary-length",
   "notes": [
-    "Claude 订阅整理仅保留截断总结；Fact、事件和每日记录使用各自 API。",
-    "移除旧订阅整理入口与转发，保留已有记录、草稿和固定出口保护。"
+    "Claude 订阅总结的字数改为建议，篇幅由模型判断，完整保存生成与校对结果。",
+    "订阅总结不因超字数拒收或要求重写；保留已有进度、手动运行与固定出口保护。"
   ]
 }

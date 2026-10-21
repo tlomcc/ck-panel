@@ -63,6 +63,21 @@ test('expanding x waits for compact summaries instead of freezing a 24k source f
   assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/压缩后摘要/);
   assert.ok(!x.ctx.chatDailyDigestPack(x.cfg,x.session).includes(raw));
 });
+
+test('reviewed subscription summaries above X and Y suggestions activate and upload intact',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;x.cfg.executionBackend='claude_code_subscription';
+  x.cfg.dailyDigestDetailDays=1;x.cfg.dailyDigestRollupDays=2;
+  const raw='详细来源'.repeat(2000),longX='近期摘要'.repeat(1200)+'近期尾部保留。',longY='较早摘要'.repeat(800)+'较早尾部保留。';
+  x.session.dailyDigests=[{dayKey:'2026-10-03',text:raw,detail:{source:x.ctx.chatDigestStamp(raw),text:longX}},
+    {dayKey:'2026-10-02',text:'较早来源'}];
+  x.session.digestRollup={start:'2026-10-01',end:'2026-10-02',text:longY,source:x.ctx.chatDigestRollupSource(x.cfg,x.session).stamp};
+  assert.equal(x.ctx.chatDigestPackReady(x.cfg,x.session),true);
+  assert.equal(x.ctx.chatDigestResetPack(x.cfg,x.session),true);
+  const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);
+  assert.ok(pack.includes(longX));assert.ok(pack.includes(longY));
+  await x.sync();const base=x.calls[0].body.base;
+  assert.equal(base.entries[0].text,'较早来源');assert.equal(base.entries[1].detail.text,longX);assert.equal(base.rollup.text,longY);
+});
 test('Shanghai preparation runs all day starting at midnight',()=>{
   const x=setup();
   for(const [time,expected] of [['00:00:00',true],['03:59:59',true],['07:00:00',true],['23:59:59',true]])assert.equal(x.ctx.chatNightlyWindow(Date.parse('2026-10-04T'+time+'+08:00')).inWindow,expected);
