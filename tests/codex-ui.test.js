@@ -12,7 +12,7 @@ const server = http.createServer((req, res) => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const browser = await chromium.launch({args:['--no-sandbox','--disable-dev-shm-usage']});
   try {
-    for (const width of [390, 1280]) {
+    for (const width of [320, 390, 1280]) {
       const context = await browser.newContext({viewport:{width,height:900}, serviceWorkers:'block'});
       await context.addInitScript(() => { localStorage.setItem('ck_codex_access','test'); localStorage.setItem('ck_codex_endpoint','https://codex.test/codex'); });
       const page = await context.newPage();
@@ -24,6 +24,10 @@ const server = http.createServer((req, res) => {
         {id:'file',kind:'fileChange',text:'PRIVATE_DIFF',data:{changes:[{path:'PRIVATE_PATH'}]},created:3},
         {id:'diff',kind:'diff',text:'PRIVATE_PATCH',data:{},created:4},
         {id:'tool',kind:'mcpToolCall',text:'RAW_TOOL_PAYLOAD',data:{},created:5},
+        {id:'thought',kind:'reasoning',text:'INTERNAL_REASONING',data:{},created:5},
+        {id:'plan',kind:'plan',text:'INTERNAL_PLAN',data:{},created:5},
+        {id:'race',kind:'anyRace',text:'INTERNAL_REQUESTS',data:{},created:5},
+        {id:'diary',kind:'diary',text:'本次日记：已完成修改并验证。',data:{date:'2026-10-21'},created:5},
         {id:'q',kind,seq,text:'',data:{id:'q1',method:'item/tool/requestUserInput',params:{questions:[{id:'q',question:'请选择执行范围',options:[{label:'仅本次'}]}]}},created:6}
       ];
       await page.route('https://codex.test/codex/**', async route => {
@@ -38,9 +42,13 @@ const server = http.createServer((req, res) => {
       await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');
       await page.locator('.cx-item-agentMessage').waitFor();
       assert.equal(await page.locator('.cx-item-agentMessage .cx-text').textContent(),'完整文字内容。'.repeat(1500));
-      for(const text of ['PRIVATE_COMMAND','PRIVATE_PATH','PRIVATE_DIFF','PRIVATE_PATCH','RAW_TOOL_PAYLOAD','RAW_OUTPUT'])assert(!(await page.locator('#cx-feed').innerText()).includes(text));
-      assert.equal(await page.locator('.cx-detail summary').first().textContent(),'执行命令');
+      for(const text of ['PRIVATE_COMMAND','PRIVATE_PATH','PRIVATE_DIFF','PRIVATE_PATCH','RAW_TOOL_PAYLOAD','RAW_OUTPUT','INTERNAL_REASONING','INTERNAL_PLAN','INTERNAL_REQUESTS'])assert(!(await page.locator('#cx-feed').textContent()).includes(text));
+      assert.equal(await page.locator('.cx-detail summary').first().textContent(),'VPS 日记 · 2026-10-21');
       assert.equal(await page.locator('.cx-detail[open]').count(),0);
+      assert.equal(await page.locator('.cx-item-commandExecution,.cx-item-fileChange,.cx-item-diff,.cx-item-reasoning,.cx-item-plan,.cx-any-folder').count(),0);
+      await page.locator('.cx-item-diary summary').click();
+      assert((await page.locator('#cx-feed').innerText()).includes('本次日记：已完成修改并验证。'));
+      await page.locator('#cx-window-title').click();
       if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();
       await page.waitForTimeout(300);
       assert.equal(await page.locator('.cx-detail[open]').count(),0);
@@ -76,7 +84,7 @@ const server = http.createServer((req, res) => {
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       assert.equal(await page.evaluate(()=>localStorage.getItem('ck_codex_access')),null);
       assert.equal(await page.evaluate(()=>CKCodexStorage.load()),'test');
-      console.log('Codex UI '+width+': text, folding, questions, selectors, model search, Escape PASS');
+      console.log('Codex UI '+width+': complete replies, code/tool filtering, diary, questions, selectors, model search, Escape PASS');
       await context.close();
     }
   } finally { await browser.close(); server.close(); }

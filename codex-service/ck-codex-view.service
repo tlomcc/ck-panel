@@ -1,0 +1,22 @@
+[Unit]
+Description=CK Codex replies and diary view
+After=network.target ck-codex.service
+
+[Service]
+Type=simple
+User=ckcodex
+Group=ckcodex
+ExecStart=/usr/bin/python3 -B /opt/ck-codex/service/reply_proxy.py
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+MemoryMax=192M
+CPUWeight=30
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

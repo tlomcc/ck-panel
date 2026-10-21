@@ -5,7 +5,7 @@
   var refreshController = null, windowCache = new Map(), statusTimer = 0, statusController = null, statusPending = null, confirmedAt = new Map(), windowListSignature = '', viewportFrame = 0, pageScroll = 0;
   var endpoint = localStorage.getItem('ck_codex_endpoint') || 'https://tlomcc.cc.cd:18443/codex';
   var access = '', accessReady;
-  var draftOwner = '', schedules = [];
+  var draftOwner = '', schedules = [], diaryCursor = '';
   var userJump = null;
   function loadAccess(){if(!accessReady)accessReady=CKCodexStorage.load().then(function(value){access=value;}).catch(function(){message('无法读取加密连接密钥，请重新填写。',true);});return accessReady;}
   var labels = {idle:'等待任务',opening:'正在创建',queued:'排队中',starting:'正在启动',running:'正常运行',waiting:'等待你回复',completed:'已完成',interrupted:'已停止',failed:'运行异常',closed:'已关闭'};
@@ -373,28 +373,19 @@
     catch(_){feedback(b,'复制失败','error');message('复制失败，请选中文字手动复制',true);}
   }
   function card(item){
-    if(item.kind==='anyRace'){
-      var group=node('article','cx-item cx-any-folder');group.dataset.itemId=item.id;
-      var folder=node('details'),summary=node('summary'),d=item.data||{},winner=d.winner;
-      summary.textContent='any 请求文件夹 · '+(winner?'窗口 '+winner+' 胜出':(d.count||0)+' 个窗口')+' · '+(d.retry?'第 '+d.retry+' 次重试':'首次请求');folder.append(summary);
-      if(winner)folder.append(node('p','cx-muted','已保留胜出窗口，其余 '+(d.removed_count==null?Math.max(0,(d.count||1)-1):d.removed_count)+' 个请求窗口已自动关闭并删除。'));
-      (d.windows||[]).filter(function(w){return !winner||w.number===winner;}).forEach(function(w){var child=node('details','cx-any-window'),head=node('summary');child.dataset.state=w.state;head.textContent='窗口 '+w.number+' · '+({requesting:'正在请求',winner:'已胜出',cancelled:'已断开',failed:'请求失败'}[w.state]||w.state);child.append(head,node('p','cx-muted',w.detail||(w.state==='winner'?'此窗口的回复与后续执行显示在下方任务记录。':w.state==='cancelled'?'连接已断开，不会执行任务。':'与本次用户消息使用相同内容和上下文。')));folder.append(child);});
-      group.append(folder);return group;
-    }
     if(['request','resolved'].includes(item.kind)&&item.data.method)return questionCard(item);
-    var titles={userMessage:'你的任务',agentMessage:item.data.phase==='final_answer'?'完成回复':'Codex',reasoning:'思考摘要',commandExecution:'执行命令',fileChange:'修改文件',diff:'本轮改动',plan:'执行计划',warning:'运行提示',error:'运行出错',resolved:'已处理',contextCompaction:'已整理上下文'};
+    var titles={userMessage:'你的任务',agentMessage:item.data.phase==='final_answer'?'完成回复':'Codex',warning:'运行提示',error:'运行出错',resolved:'已处理',diary:'VPS 日记'};
     var el=node('article','cx-item cx-item-'+item.kind);el.dataset.itemId=item.id;
-    if(!['userMessage','agentMessage','plan','reasoning','warning','error','contextCompaction'].includes(item.kind)){
+    if(item.kind==='diary'){
       var details=node('details','cx-detail'), summary=node('summary');
-      summary.textContent=titles[item.kind]||'执行命令';
-      var content=[item.data.command,item.text].filter(Boolean).join('\n\n');
-      details.append(summary,copyButton(content,'复制'+summary.textContent),node('pre','',content||'正在执行…'));el.append(details);
+      summary.textContent='VPS 日记 · '+(item.data.date||'');
+      details.append(summary,copyButton(item.text,'复制日记'),node('div','cx-text',item.text));el.append(details);
     }else{
       var head=node('header','cx-item-head');head.append(node('strong','',titles[item.kind]),node('time','',stamp(item.created)));
       if(item.text)head.append(copyButton(item.text));
       el.append(head);
       if(item.kind==='agentMessage'&&item.text)appendAssistantText(el,item.text);
-      else el.append(node('div','cx-text',item.text|| (item.kind==='contextCompaction'?'Codex 已压缩当前上下文，继续任务。':'正在处理…')));
+      else el.append(node('div','cx-text',item.text||'正在处理…'));
     }
     return el;
   }
@@ -490,6 +481,9 @@
     if(reset){feed.replaceChildren();userJump=null;anchor=null;}
     var existing=new Map(Array.from(feed.children).map(function(el){return [el.dataset.itemId,el];}));
     changed.forEach(function(item){
+      if(!['userMessage','agentMessage','request','resolved','warning','error','diary'].includes(item.kind)){
+        items.delete(item.id);var hidden=existing.get(item.id);if(hidden)hidden.remove();return;
+      }
       var previous=items.get(item.id);if(item.kind==='resolved'&&!item.data.method&&previous&&previous.data.method)item=Object.assign({},item,{data:previous.data});
       items.set(item.id,item);
       if(item.kind==='resolved'&&!item.data.method)return;
@@ -536,12 +530,12 @@
   function rememberWindow(){
     if(!selected||!cursor)return;
     var feed=$('feed');windowCache.delete(selected);
-    windowCache.set(selected,{cursor:cursor,items:items,nodes:Array.from(feed.childNodes),pending:Array.from($('pending').childNodes),signature:$('pending').dataset.signature,questionIndex:questionIndex,scroll:feed.scrollTop,userJump:activeUserMessage()?userJump:null,schedules:schedules});
+    windowCache.set(selected,{cursor:cursor,diaryCursor:diaryCursor,items:items,nodes:Array.from(feed.childNodes),pending:Array.from($('pending').childNodes),signature:$('pending').dataset.signature,questionIndex:questionIndex,scroll:feed.scrollTop,userJump:activeUserMessage()?userJump:null,schedules:schedules});
     // Keep the most recent windows in this page only; never persist task output.
     while(windowCache.size>8)windowCache.delete(windowCache.keys().next().value);
   }
   function restoreWindow(id){
-    var cached=windowCache.get(id),feed=$('feed');selected=id;cursor=cached?cached.cursor:0;items=cached?cached.items:new Map();userJump=cached?cached.userJump:null;
+    var cached=windowCache.get(id),feed=$('feed');selected=id;cursor=cached?cached.cursor:0;diaryCursor=cached?cached.diaryCursor||'':'';items=cached?cached.items:new Map();userJump=cached?cached.userJump:null;
     feed.replaceChildren();$('pending').replaceChildren();delete $('pending').dataset.signature;
     if(cached){cached.nodes.forEach(function(n){feed.append(n);});cached.pending.forEach(function(n){$('pending').append(n);});if(cached.signature)$('pending').dataset.signature=cached.signature;feed.scrollTop=cached.scroll;}
     else if(id){var loadingNote=node('div','cx-empty');loadingNote.append(node('p','','正在读取窗口记录…'));feed.append(loadingNote);}
@@ -590,8 +584,8 @@
     var controller=new AbortController();refreshController=controller;var token=generation,id=selected;
     function valid(){return token===generation&&refreshController===controller&&!controller.signal.aborted;}
     async function readWindow(wid){
-      var snapshot=await request('/threads/'+wid+'?after='+cursor,null,controller.signal);if(!valid()||wid!==selected)return;
-      var reset=cursor===0;renderFeed(snapshot.items,reset);cursor=snapshot.cursor;confirmedAt.set(wid,Date.now());windows=windows.map(function(w){return w.id===wid?newerWindow(w,snapshot.window):w;});
+      var snapshot=await request('/threads/'+wid+'?after='+cursor+'&diary_cursor='+encodeURIComponent(diaryCursor),null,controller.signal);if(!valid()||wid!==selected)return;
+      var reset=cursor===0;renderFeed(snapshot.items,reset);cursor=snapshot.cursor;diaryCursor=snapshot.diary_cursor||'';confirmedAt.set(wid,Date.now());windows=windows.map(function(w){return w.id===wid?newerWindow(w,snapshot.window):w;});
       markCompletionSeen(snapshot.window);
       var next=snapshot.schedules||[];if(JSON.stringify(schedules)!==JSON.stringify(next)){schedules=next;renderSchedules();}renderToolbar();renderWindows();renderQuestionNotice();
       $('connection').textContent='已连接';$('connection').dataset.state='ok';
