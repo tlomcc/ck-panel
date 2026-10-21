@@ -67,7 +67,7 @@ function chatNightlyBase(session){
   if(preparing&&preparing.scope===chatNightlyScope(cfg)&&preparing.config===chatDigestConfigStamp(cfg)&&!session.digestManualPending)return preparing.base;
   return {entries:chatDailyDigestNormalize(session.dailyDigests),rollup:chatNormalizeDigestRollup(session.digestRollup),omitted:chatDigestOmittedCoverage(session.digestOmittedCovered)};
 }
-function chatNightlyConfig(cfg){return Object.assign(chatDigestOptions(cfg),{enabled:cfg.dailyDigestEnabled!==false});}
+function chatNightlyConfig(cfg){var out=Object.assign(chatDigestOptions(cfg),{enabled:cfg.dailyDigestEnabled!==false});if(cfg.digestCurrentModel===true)out.current_model=true;return out;}
 function chatNightlyBaseStamp(cfg,session){return chatDigestStamp([chatNightlyBase(session),chatNightlyConfig(cfg)]);}
 function chatNightlyScope(cfg){return chatDigestStamp([cfg.gatewayUrl,cfg.panelKey]);}
 function chatNightlyEndpoint(cfg){return chatDailyDigestEndpoint(cfg).replace(/\/prepare$/,'/queue')+'?policy=cache-safe-v2&key='+encodeURIComponent(cfg.panelKey||'');}
@@ -77,10 +77,10 @@ function chatDigestAutoPolicy(cfg,session,rows,afterReply){
   var total=CKChatHistory.transportTurnGroups(session.transportMessages||[]).length||local;
   var last=rows.reduce(function(n,m){return Math.max(n,Number(m.ts)||0)},0),ref=chatCacheActivityReference(session,last);
   var count=total+(afterReply?1:0);
-  return {enabled:!!(trim.enabled||trim.roundLimitEnabled&&count>=trim.roundLimit),keep:trim.keep,minimum:trim.minimum,total:count,ttl_seconds:chatDigestCacheTtl(cfg)/1000,cache_at:ref.timestamp/1000,observed_at:Date.now()/1000};
+  return {enabled:cfg.digestCurrentModel!==true&&!!(trim.enabled||trim.roundLimitEnabled&&count>=trim.roundLimit),keep:trim.keep,minimum:trim.minimum,total:count,ttl_seconds:chatDigestCacheTtl(cfg)/1000,cache_at:ref.timestamp/1000,observed_at:Date.now()/1000};
 }
 function chatDigestQueueForReply(cfg,session){
-  if(cfg.dailyDigestEnabled===false||session.digestManualTrim)return null;
+  if(cfg.dailyDigestEnabled===false||cfg.digestCurrentModel===true||session.digestManualTrim)return null;
   var rows=(session===chatCurrentSession()?chatMessages:session.messages||[]).filter(function(m){return !m.inFlight&&m.role!=='pending_user'});
   var auto=chatDigestAutoPolicy(cfg,session,rows,true),keep=Math.max(0,auto.keep-1);
   var local=CKChatHistory.trimLocalTurns(rows,keep),transport=CKChatHistory.trimTransportTurns(session.transportMessages||[],keep);
@@ -126,6 +126,13 @@ function chatDigestSyncView(session,cfg,remote){
     if(cfg.dailyDigestEnabled===false){view.status='总结已关闭';view.note='开启总结后会自动准备。';}
     else if(ready){view.status='待同步';view.tone='live';view.note='总结已准备好，尚未截断。等 1h 缓存过期后的下一次发送同步，也可立刻同步。';}
   }
+  if(cfg.digestCurrentModel===true){
+    var run=state.model_run||{},local=session.digestModelRun;
+    if(!record&&!preparing){view.status='仅手动';view.note='点击立即截断或手动更新总结后，使用所选整理模型。';}
+    if(run.state==='blocked'){view.status='等待手动重试';view.tone='attention';view.note=state.last_error||'本次总结未完成；原文与成功批次已保留。';}
+    else if(local&&run.id===local.id&&(run.state==='queued'||run.state==='running')){view.status='手动总结进行中';view.note='使用 '+local.label+' 整理和校对；原文保留。';}
+    else if(ready&&!preparing){view.note='结果已准备，可立刻同步；不会因缓存到期自动截断。';}
+  }
   return view;
 }
 function chatDigestManualStatus(session,cfg){
@@ -134,7 +141,7 @@ function chatDigestManualStatus(session,cfg){
 function chatRenderNightlyStatus(session){
   session=session||chatCurrentSession();if(!session||session!==chatCurrentSession())return;
   var cfg=chatLoadConfig(),view=chatDigestSyncView(session,cfg),replyActive=chatDigestReplyActive(session);
-  ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var node=document.getElementById(id);if(node)node.hidden=!session.digestManualTrim});
+  ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var node=document.getElementById(id);if(node)node.hidden=!(session.digestManualTrim||session.digestModelRun)});
   ['chat-digest-sync-now','chat-trim-sync-now'].forEach(function(id){
     var button=document.getElementById(id);if(!button)return;
     button.hidden=false;button.disabled=!!(replyActive||chatTrimBusy||chatTrimTransaction||!view.ready);
@@ -155,25 +162,37 @@ function chatSyncNightlyDigest(cfg,options){
   if(session.digestManualCompleted&&session.digestManualCompleted.cleanupState==='pending'&&typeof chatApplyWindowCleanup==='function')return chatApplyWindowCleanup(session,cfg,null).catch(function(){chatScheduleNightlySync(3000);return false});
   if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
-  if(!options.readOnly)chatDigestRefreshManualSources(session,cfg);
+  if(!options.readOnly&&cfg.digestCurrentModel!==true)chatDigestRefreshManualSources(session,cfg);
   var scope=chatNightlyScope(cfg),configStamp=chatDigestConfigStamp(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
-  if(chatNightlySyncs.has(syncKey))return chatNightlySyncs.get(syncKey);
+  if(chatNightlySyncs.has(syncKey)){
+    if(options.modelRun||options.cancelModelRun)return chatNightlySyncs.get(syncKey).then(function(){return chatSyncNightlyDigest(cfg,options)});
+    return chatNightlySyncs.get(syncKey);
+  }
   var staged=chatDigestStage(session,cfg);
   var remote=staged|| (session.digestRemote&&session.digestRemote.scope===scope?session.digestRemote:{});
   var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
   var auto=chatDigestAutoPolicy(cfg,session,rows,false);
   var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim,auto.enabled,auto.keep,auto.minimum,auto.total,auto.cache_at,auto.ttl_seconds]);
   var previous=chatNightlySynced[syncKey]||{},now=Date.now(),unchanged=previous.signature===signature;
-  if(!options.force&&!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(session.digestManualTrim||session.digestSettingsRequest?2000:60000)))return Promise.resolve(true);
+  if(!options.force&&!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(chatDigestNeedsPolling(session,cfg)?2000:60000)))return Promise.resolve(true);
   // A timed-out upload may already be saved. Read its result before sending
   // the whole source again; a read never acknowledges an uncertain upload.
   var recovering=!options.readOnly&&previous.readBack,body=null;
-  if(!unchanged&&!options.readOnly&&!recovering){
+  if((!unchanged||options.modelRun||options.cancelModelRun)&&!options.readOnly&&!recovering){
     var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
     chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
     body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
     body.auto=auto;
+    if(options.modelRun){
+      body.model_run=options.modelRun;
+      if(options.modelRun.purpose==='daily'){
+        var dailyGroups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
+        chatDigestMessageGroups(rows.filter(function(m){return !m.inFlight&&m.role!=='pending_user'})).forEach(function(g){dailyGroups.set(g.key,g)});
+        body.groups=Array.from(dailyGroups.values()).map(function(g){return Object.assign({},g,{candidate:false})});
+      }
+    }
+    if(options.cancelModelRun)body.cancel_model_run=true;
   }
   // The send path has its own 2.5s wait budget. Keep this background download
   // alive afterwards so a slower phone can still receive the saved snapshot.
@@ -220,10 +239,10 @@ function chatSyncNightlyDigest(cfg,options){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(1500);
       }
       if(body&&body.settings_override&&matchingConfig&&JSON.stringify(chatNightlyConfig(chatLoadConfig()))===JSON.stringify(body.config))delete session.digestSettingsPending;
-      session.digestSchedule={scope:scope,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
+      session.digestSchedule={scope:scope,model_run:data.model_run,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
       chatSaveSessions({sessionIds:[session.id]});
       if(session===chatCurrentSession()&&!chatSending&&data.auto&&data.auto.due)setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
-      if(session.digestManualTrim||session.digestSettingsRequest)chatScheduleNightlySync(2000);
+      if(chatDigestNeedsPolling(session,cfg))chatScheduleNightlySync(2000);
       chatRenderNightlyStatus(session);
       if(session===chatCurrentSession())chatRenderTrimState(cfg);
       if(session===chatCurrentSession()&&!chatSending){chatRenderDailyDigest(chatLoadConfig());chatRenderNightlyStatus(session);}
@@ -267,6 +286,61 @@ function chatNightlySettingsPriority(cfg){
     session.digestSettingsPending=scope;
     session.digestSettingsRequest=cfg.dailyDigestEnabled===false?null:{id:String(Date.now()),at:Date.now(),scope:scope,config:chatDigestConfigStamp(cfg),x:chatDigestOptions(cfg).x,y:chatDigestOptions(cfg).y};
     delete session.digestStaged;delete chatNightlySynced[scope+':'+session.id];
+    if(cfg.digestCurrentModel===true){delete session.digestManualTrim;delete session.digestModelRun;}
   });
   chatSaveSessions();chatScheduleNightlySync(0);
+}
+
+function chatManualModelValue(cfg,kind){
+  var key=kind==='records'?'recordsManualModel':'digestManualModel';
+  return typeof cfg[key]==='string'?cfg[key]:(window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription'?'sonnet':'');
+}
+function chatSaveManualModel(kind,value){
+  var cfg=chatLoadConfig(),key=kind==='records'?'recordsManualModel':'digestManualModel';
+  cfg[key]=String(value||'').trim();chatSaveConfigObject(cfg);
+}
+function chatManualModelRoute(cfg,kind){
+  var route=chatWindowApiRouteConfig(cfg);
+  if(!route.ok)throw new Error(route.reason||'当前聊天线路尚未就绪');
+  var execution=window.CKBackendRoute&&CKBackendRoute.current.execution||'direct_api';
+  var model=chatManualModelValue(cfg,kind).trim()||route.model;
+  if(!/^[^\s\x00-\x1f]{1,160}$/.test(model))throw new Error('请填写完整模型名，不能包含空格');
+  if(execution==='claude_code_subscription'&&!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('订阅请填官方完整模型 ID（claude- 开头），或 sonnet、opus、haiku');
+  var selected={execution:execution,model:model};
+  if(execution!=='claude_code_subscription')selected.provider_id=route.provider&&route.provider.id||'';
+  return {selected:selected,label:(route.providerName||'当前聊天线路')+' / '+model};
+}
+var chatCurrentModelStarting=false;
+async function chatStartCurrentModelDigest(purpose){
+  if(chatCurrentModelStarting)return false;
+  var cfg=chatLoadConfig(),session=chatCurrentSession();
+  if(cfg.digestCurrentModel!==true||cfg.dailyDigestEnabled===false)return false;
+  if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后手动启动总结');return false;}
+  var running=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
+  if(running&&['queued','running'].includes(running.state)){toast('本次手动总结正在进行；可取消后重新选择范围');return false;}
+  var route;try{route=chatManualModelRoute(cfg,'digest')}catch(error){toast(error.message);return false;}
+  var selected=route.selected;
+  chatCurrentModelStarting=true;
+  try{
+    // First acknowledge pending settings/baseline; no model is started by sync.
+    if(!await chatSyncNightlyDigest(cfg,{session:session,force:true}))return false;
+    if(session!==chatCurrentSession()||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig()))return false;
+    if(chatNightlySynced[chatNightlyScope(cfg)+':'+session.id]&&chatNightlySynced[chatNightlyScope(cfg)+':'+session.id].readBack){toast('先同步确认上次请求，再手动启动');return false;}
+    if(purpose==='daily')delete session.digestManualTrim;
+    if(purpose==='trim'&&!await chatRequestManualDigestTrim({currentModel:true}))return false;
+    var run={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:purpose,route:selected};
+    session.digestModelRun={id:run.id,purpose:purpose,label:route.label};
+    chatSaveSessions();
+    var ok=await chatSyncNightlyDigest(cfg,{session:session,force:true,modelRun:run});
+    chatRenderNightlyStatus(session);
+    if(ok){toast('已手动启动，使用 '+session.digestModelRun.label+'；完成后同步总结');chatScheduleNightlySync(2000);}
+    else toast('启动状态尚未确认，请先同步查看；不会自动重新发起总结');
+    return ok;
+  }finally{chatCurrentModelStarting=false;}
+}
+
+function chatDigestNeedsPolling(session,cfg){
+  if(cfg.digestCurrentModel!==true)return !!(session.digestManualTrim||session.digestSettingsRequest);
+  var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
+  return !!(local&&remote&&local.id===remote.id&&['queued','running','succeeded'].includes(remote.state));
 }

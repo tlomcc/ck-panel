@@ -417,3 +417,9 @@ test('stale wake status preserves a ready prefix without making normal sends wai
  assert.equal(JSON.stringify(x.session.messages),before);assert.equal(x.requests.length,0);
  x.session.wakeSyncAt=x.ctx.Date.now();assert.equal((await x.run()).trimmed,true);
 });
+
+test('current-model mode preserves even prepared history at idle and send boundaries',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;prepare(x);
+ assert.equal((await x.run()).trimmed,false);assert.equal((await x.run(null,{idleCheck:true})).trimmed,false);
+ assert.equal(x.session.messages.length,10);assert.equal(x.ctx.chatDigestQueueForReply(x.cfg,x.session),null);
+});

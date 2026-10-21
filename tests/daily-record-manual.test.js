@@ -19,7 +19,7 @@ const server=http.createServer(async(req,res)=>{
   const body=JSON.stringify(state);if(delay)await new Promise(r=>setTimeout(r,delay));res.setHeader('Content-Type','application/json');return res.end(body);
  }
  if(url.pathname==='/'){
-  res.setHeader('Content-Type','text/html');return res.end('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'+css+'<style>.panel-tab{display:block}body{margin:0}</style><body>'+section+'<script>var currentPanelTab="records",ckStatusTab="records",fixtureKey="a";function chatLoadConfig(){return {panelKey:fixtureKey}}function chatEndpoint(){return location.origin+"/chat"}</script><script src="daily-records.js"></script><script>ckRecordsRefresh()</script></body></html>');
+  res.setHeader('Content-Type','text/html');return res.end('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'+css+'<style>.panel-tab{display:block}body{margin:0}</style><body>'+section+'<script>var currentPanelTab="records",ckStatusTab="records",fixtureKey="a";function chatLoadConfig(){return {panelKey:fixtureKey}}function chatManualModelValue(){return "sonnet"}function chatEndpoint(){return location.origin+"/chat"}</script><script src="daily-records.js"></script><script>ckRecordsRefresh()</script></body></html>');
  }
  const file=path.resolve(root,url.pathname.slice(1));if(!file.startsWith(root+'/')||!fs.existsSync(file)){res.writeHead(404);return res.end()}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':'text/css');res.end(fs.readFileSync(file));

@@ -207,7 +207,7 @@ function chatDigestRecordTrimDecision(session,plan,reason){
   chatDigestLog('trim_result',Object.assign({ok:false,skipped:true,session_id:session.id,trigger:plan.trigger},session.digestTrimDecision));
   chatSaveSessions();chatRenderNightlyStatus(session);
 }
-async function chatDigestSyncNow(){
+async function chatDigestSyncNow(options){
   var session=chatCurrentSession(),cfg=chatLoadConfig();
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast(session.digestManualTrim&&session.digestManualTrim.immediate!==false?'当前回复结束后自动完成截断':'请等当前回复结束后同步');return false;}
   var pendingSync=chatDigestPendingSync(session,cfg);
@@ -216,7 +216,7 @@ async function chatDigestSyncNow(){
     chatRenderNightlyStatus(session);if(synced)toast('同步完成，本次截断 '+pendingSync.rounds+' 轮');return synced;
   }
   if(!chatDigestImmediateReady(session,cfg)){toast('当前范围尚未准备好，后台会继续处理；无需等待模型');chatScheduleNightlySync(0);return false;}
-  var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync',commitPrepared:true});
+  var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync',commitPrepared:true,skipTrim:!!(options&&options.summaryOnly)});
   if(!result.cacheBoundary){chatRenderNightlyStatus(session);return false;}
   chatSaveSessions();chatRenderDailyDigest(cfg);chatRenderMessages();chatScheduleNightlySync();
   if(result.gatewaySynced===false){toast('本机已保存，网关尚未同步；可重试同步，或在下次发送时自动同步');return true;}
@@ -238,6 +238,7 @@ function chatDigestImmediateReady(session,cfg){
 }
 function chatDigestCancelManualTrim(){
   var session=chatCurrentSession();delete session.digestManualTrim;
+  if(chatLoadConfig().digestCurrentModel===true){delete session.digestModelRun;chatSyncNightlyDigest(chatLoadConfig(),{force:true,cancelModelRun:true});}
   chatSaveSessions();chatRenderNightlyStatus(session);chatScheduleNightlySync();
   chatRenderTrimState(chatLoadConfig());
   toast('已取消待执行截断，原对话保留');
@@ -297,12 +298,13 @@ function chatDigestPreparationProgress(session,cfg){
 async function chatRequestManualDigestTrim(options){
   chatInit();
   var cfg=chatSaveConfig(true),session=chatCurrentSession();
+  if(cfg.digestCurrentModel===true&&!(options&&options.currentModel))return chatStartCurrentModelDigest('trim');
   var previous=session.digestManualTrim;
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(!plan.trimmed){toast('当前轮数未超过保留数量，无需截断');return false;}
   var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
   if(!chatDigestPlanSources(session,plan).length){toast('没有可准备的历史内容');return false;}
-  if(previous&&previous.scope===chatDigestActiveScope(cfg)&&previous.keep===plan.keep&&JSON.stringify(previous.keys)===JSON.stringify(groups.map(function(g){return g.key}))){
+  if(cfg.digestCurrentModel!==true&&previous&&previous.scope===chatDigestActiveScope(cfg)&&previous.keep===plan.keep&&JSON.stringify(previous.keys)===JSON.stringify(groups.map(function(g){return g.key}))){
     previous.immediate=!(options&&options.immediate===false);chatSaveSessions({sessionIds:[session.id]});
     if(previous.immediate&&!chatDigestReplyActive(session)&&chatDigestImmediateReady(session,cfg))return chatDigestSyncNow();
     chatRenderNightlyStatus(session);toast('正在整理本次截断，总结齐全后自动完成');chatScheduleNightlySync(0);return true;
@@ -312,6 +314,7 @@ async function chatRequestManualDigestTrim(options){
     immediate:!(options&&options.immediate===false),requestedAt:Math.max(Date.now(),Number(previous&&previous.requestedAt||0)+1)};
   chatSaveSessions();chatRenderNightlyStatus(session);chatRenderTrimState(cfg);
   delete chatNightlySynced[chatNightlyScope(cfg)+':'+session.id];
+  if(options&&options.currentModel)return true;
   if(session.digestManualTrim.immediate&&!chatDigestReplyActive(session)&&chatDigestImmediateReady(session,cfg))return chatDigestSyncNow();
   chatSyncNightlyDigest(cfg,{session:session}).then(function(){return chatDigestFinishManualTrim(cfg,session)}).catch(function(){});
   chatScheduleNightlySync(2000);
@@ -326,8 +329,18 @@ function chatDigestReplyActive(session){
 }
 async function chatDigestFinishManualTrim(cfg,session){
   chatRenderNightlyStatus(session);
+  if(cfg.digestCurrentModel===true){
+    var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
+    if(!local||!remote||local.id!==remote.id||remote.state!=='succeeded')return false;
+    if(local.purpose==='daily'){
+      if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction)return false;
+      var done=await chatDigestSyncNow({summaryOnly:true});
+      if(done){delete session.digestModelRun;chatSaveSessions();}return done;
+    }
+  }
   var req=session.digestManualTrim;
   if(session!==chatCurrentSession()||!req||req.immediate===false||req.scope!==chatDigestActiveScope(cfg)||
       chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||!chatDigestImmediateReady(session,cfg))return false;
-  return chatDigestSyncNow();
+  var done=await chatDigestSyncNow();
+  if(done&&cfg.digestCurrentModel===true){delete session.digestModelRun;chatSaveSessions();}return done;
 }

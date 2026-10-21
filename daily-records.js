@@ -62,7 +62,7 @@ function ckRecordsFailure(f){
   return lines.join('\n');
 }
 function ckRecordsRender(){
-  var data=ckRecordsData||{},names={waiting:'等待每日检查',not_configured:'等待配置模型',learning:'旧版评价复核',reading:'读取待处理聊天',summarizing:'提炼记录',validating:'核对格式与原文证据',checking:'检查事实与精炼程度',batch_saved:'已保存本批进度',updated:'记录已更新',unchanged:'已检查，无需更新',retry:'等待自动重试',needs_attention:'本轮未通过，保留上一版',paused:'已暂停',queued:'等待开始'};
+  var data=ckRecordsData||{},names={manual_only:'当前聊天模型 · 仅手动',waiting:'等待每日检查',not_configured:'等待配置模型',learning:'旧版评价复核',reading:'读取待处理聊天',summarizing:'提炼记录',validating:'核对格式与原文证据',checking:'检查事实与精炼程度',batch_saved:'已保存本批进度',updated:'记录已更新',unchanged:'已检查，无需更新',retry:'等待自动重试',needs_attention:'本轮未通过，保留上一版',paused:'已暂停',queued:'等待开始'};
   var message=(names[data.status]||'正在读取记录')+(data.last_day?' · 已完成至 '+data.last_day:'')+(data.batch&&['summarizing','validating','checking','batch_saved','retry','needs_attention'].includes(data.status)?' · 第 '+data.batch+' / '+data.batches+' 批':'');
   var lines=[message,'最近检查成功：'+ckRecordsTime(data.last_checked_at),'最近内容更新：'+ckRecordsTime(data.last_updated_at)];
   var latest=(data.history||[])[0];
@@ -81,7 +81,12 @@ function ckRecordsRender(){
     var history=data.failure_history||[];
     if(history.length){var fold=document.createElement('details'),title=document.createElement('summary');fold.open=!!opened;title.textContent='最近失败记录 · '+history.length+' 条';fold.append(title);history.forEach(function(f){var row=document.createElement('p');row.textContent=ckRecordsFailure(f);fold.append(row)});el.append(fold);}
   });
-  var toggle=document.getElementById('ck-records-toggle');if(toggle){toggle.textContent=data.enabled===false?'恢复每日更新':'暂停每日更新';toggle.disabled=ckRecordsBusy;}
+  var mode=document.getElementById('ck-records-current-model');if(mode){mode.checked=data.current_model===true;mode.disabled=ckRecordsBusy;}
+  var modelField=document.getElementById('ck-records-manual-model');
+  if(modelField&&document.activeElement!==modelField)modelField.value=chatManualModelValue(chatLoadConfig(),'records');
+  var run=document.getElementById('ck-records-run');if(run)run.textContent=data.current_model?'用所选模型手动更新':'重新检查待处理记录';
+  var cancel=document.getElementById('ck-records-cancel-model');if(cancel){cancel.hidden=!(data.model_run&&['queued','running'].includes(data.model_run.state));cancel.disabled=ckRecordsBusy;}
+  var toggle=document.getElementById('ck-records-toggle');if(toggle){toggle.hidden=data.current_model===true;toggle.textContent=data.enabled===false?'恢复每日更新':'暂停每日更新';toggle.disabled=ckRecordsBusy;}
   document.querySelectorAll('[data-records-action]').forEach(function(b){b.disabled=ckRecordsBusy});
   ckRecordsEditorRender();
 }
@@ -112,3 +117,14 @@ async function ckRecordsRefresh(action,payload){
   finally{clearTimeout(timer);ckRecordsBusy=false;ckRecordsRender();clearTimeout(ckRecordsTimer);if(currentPanelTab==='records'||currentPanelTab==='status'&&ckStatusTab==='records')ckRecordsTimer=setTimeout(function(){ckRecordsRefresh()},10000);}
 }
 function ckRecordsToggle(){return ckRecordsRefresh(ckRecordsData&&ckRecordsData.enabled===false?'resume':'pause')}
+
+function ckRecordsModelMode(enabled){return ckRecordsRefresh('model_mode',{enabled:enabled})}
+async function ckRecordsRun(){
+  if(!ckRecordsData||!ckRecordsData.current_model)return ckRecordsRefresh('retry');
+  var cfg=chatLoadConfig(),session=chatCurrentSession();
+  if(chatDigestReplyActive(session)){toast('请等当前回复结束后手动更新记录');return false;}
+  var run=ckRecordsData.model_run;
+  if(run&&['queued','running'].includes(run.state)){toast('本次记录整理正在进行');return false;}
+  var route;try{route=chatManualModelRoute(cfg,'records')}catch(error){toast(error.message);return false;}
+  return ckRecordsRefresh('run_model',{model_run:{id:'records-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),route:route.selected}});
+}

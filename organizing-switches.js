@@ -26,10 +26,11 @@
     box.hidden=!names[section];if(box.hidden)return;
     node('ck-organizing-title').textContent=names[section];
     var button=node('ck-organizing-toggle'),valid=state&&state.section===section&&state.identity===identity(section);
-    button.disabled=busy||!valid;button.setAttribute('aria-label',names[section]);
+    var manual=valid&&!!(state.data.manual_model||state.data.control&&state.data.control.manual_model||state.data.current_model);
+    button.disabled=busy||!valid||manual;button.setAttribute('aria-label',names[section]);
     button.setAttribute('aria-checked',String(!!(valid&&state.enabled)));
     node('ck-organizing-label').textContent=busy?'正在保存…':valid?(state.enabled?'已开启':'已关闭'):'读取中…';
-    node('ck-organizing-note').textContent=message||(valid?(state.enabled?'按已有进度自动调用模型整理。':'已暂停调用模型；成果和进度保留，下次开启继续整理。'):'正在读取已保存的开关状态…');
+    node('ck-organizing-note').textContent=message||(manual?'当前仅手动运行；自动整理暂停。':null)||(valid?(state.enabled?'按已有进度自动调用模型整理。':'已暂停调用模型；成果和进度保留，下次开启继续整理。'):'正在读取已保存的开关状态…');
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(function(){if(currentPanelTab==='status'&&!document.hidden)refresh();else schedule()},15000)}
   async function refresh(){

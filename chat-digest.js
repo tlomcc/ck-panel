@@ -240,6 +240,10 @@ function chatRenderDailyDigest(cfg){
   });
   chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestPack(cfg,session));
   chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
+  chatSetFieldChecked('chat-digest-current-model',cfg.digestCurrentModel===true);
+  var modelField=document.getElementById('chat-digest-manual-model');
+  if(modelField&&document.activeElement!==modelField)modelField.value=chatManualModelValue(cfg,'digest');
+  (document.querySelectorAll?document.querySelectorAll('[data-digest-refresh]'):[]).forEach(function(el){el.textContent=cfg.digestCurrentModel===true?'手动更新总结':'同步夜间任务'});
   if(!chatDigestSettingsDirty){
     chatSetFieldValue('chat-daily-digest-retention-days',range.n);chatSetFieldValue('chat-digest-detail-days',range.x);chatSetFieldValue('chat-digest-rollup-days',range.y);
   }
@@ -276,10 +280,12 @@ function chatSaveDailyDigestSetting(auto){
   });
   if(values){cfg.dailyDigestRetentionDays=values.n;cfg.dailyDigestDetailDays=values.x;cfg.dailyDigestRollupDays=values.y;chatDigestSettingsDirty=false;}
   cfg.dailyDigestEnabled=chatFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
+  cfg.digestCurrentModel=chatFieldChecked('chat-digest-current-model',cfg.digestCurrentModel===true);
   chatSaveConfigObject(cfg);chatRenderDailyDigest(cfg);chatDailyDigestSetStatus('总结设置已保存','ok');
-  if(!auto)toast('已保存 X='+values.x+'、Y='+values.y+'，后台开始准备');
+  if(!auto)toast('已保存 X='+values.x+'、Y='+values.y+(cfg.digestCurrentModel?'，等待手动更新':'，后台开始准备'));
   if(cfg.dailyDigestEnabled!==false){chatDailyDigestSetStatus('已保存：后台准备摘要，完整就绪后在缓存边界或立刻同步时启用。','ok');}
   else chatDailyDigestSetStatus('设置已保存：总结已关闭，不生成也不注入。','ok');
+  if(cfg.digestCurrentModel)chatDailyDigestSetStatus('已保存：当前聊天模型仅手动运行，自动截断与跨日生成已暂停。','ok');
   if(beforeConfig!==chatDigestConfigStamp(cfg))chatNightlySettingsPriority(cfg);
   else chatScheduleNightlySync(0);
   return cfg;
@@ -352,12 +358,13 @@ function chatDigestMessageGroups(list){
     return {key:chatDigestStamp(messages),day:chatDailyDigestDayKey(end),start:stamps.length?Math.min.apply(null,stamps):end,end:end,messages:messages};
   });
 }
-function chatDigestConfigStamp(cfg){return JSON.stringify([cfg.panelKey,cfg.dailyDigestEnabled!==false,chatDigestOptions(cfg)]);}
+function chatDigestConfigStamp(cfg){return JSON.stringify([cfg.panelKey,cfg.dailyDigestEnabled!==false,chatDigestOptions(cfg),cfg.digestCurrentModel===true]);}
 function chatDigestPreparedStillValid(session,prepared,cfg){
   return !!(session&&prepared&&prepared.source===JSON.stringify(session.dailyDigests||[])&&prepared.omittedBefore===JSON.stringify(session.digestOmittedCovered||[])&&prepared.rollupBefore===JSON.stringify(session.digestRollup||null)&&prepared.config===chatDigestConfigStamp(cfg||chatLoadConfig()));
 }
 async function chatDigestRequestApi(cfg,job,body){
   if(job.cancelled)throw new Error('总结已取消');
+  if(cfg.digestCurrentModel===true)throw new Error('当前聊天模型总结请使用手动启动入口');
   var controller=new AbortController(),timedOut=false;
   job.controller=controller;
   var rejectAbort;
@@ -494,6 +501,7 @@ function chatRefreshRollingDigest(cfg,options){
 async function chatMaybeRollDigestAtDayBoundary(){
   if(chatDigestMaintenanceBusy||chatTrimBusy||chatTrimTransaction||!chatSessionsReady)return;
   var cfg=chatLoadConfig();
+  if(cfg.digestCurrentModel===true&&chatSending){chatScheduleNightlySync(3000);return;}
   chatDigestMaintenanceBusy=true;
   if(typeof chatFlushDigestDeletes==='function')chatFlushDigestDeletes(cfg);
   try{
@@ -502,9 +510,10 @@ async function chatMaybeRollDigestAtDayBoundary(){
       await chatRefreshRollingDigest(cfg,{session:session});
       if(typeof chatDigestFinishManualTrim==='function')await chatDigestFinishManualTrim(cfg,session);
     }
-  }finally{chatDigestMaintenanceBusy=false;if(chatSessions.some(function(s){return s.digestManualTrim}))chatScheduleNightlySync(2000);}
+  }finally{chatDigestMaintenanceBusy=false;if(chatSessions.some(function(s){return chatDigestNeedsPolling(s,cfg)}))chatScheduleNightlySync(2000);}
 }
 async function chatRefreshDigestNow(kind){
   if(chatLoadConfig().dailyDigestEnabled===false){toast('请先启用截断总结');return false;}
+  if(chatLoadConfig().digestCurrentModel===true)return chatStartCurrentModelDigest('daily');
   return chatSyncNightlyDigest(chatLoadConfig(),{notify:true});
 }

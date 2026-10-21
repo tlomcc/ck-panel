@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v347-read-recovery';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v348-manual-organizers';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2534,6 +2534,7 @@ function chatDefaultConfig(){
     memoryPreview:'',
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
+    digestCurrentModel:false,
     dailyDigestRetentionDays:7,
     dailyDigestDetailDays:3,
     dailyDigestRollupDays:4,
@@ -4343,6 +4344,7 @@ function chatNormalizeSession(s){
     digestPreparingBase:s.digestPreparingBase||null,
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
+    digestModelRun:s.digestModelRun||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestLastSync:s.digestLastSync||null,
     digestSettingsRequest:s.digestSettingsRequest||null,
@@ -4608,6 +4610,11 @@ function chatReadForm(){
     memoryPreview:chatFieldValue('chat-memory-pack',saved.memoryPreview||'')||'',
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
+    digestCurrentModel:saved.digestCurrentModel===true,
+    digestManualModel:saved.digestManualModel,
+    recordsManualModel:saved.recordsManualModel,
+    factManualModel:saved.factManualModel,
+    eventManualModel:saved.eventManualModel,
     dailyDigestRetentionDays:chatDigestOptions(saved).n,
     dailyDigestDetailDays:chatDigestOptions(saved).x,
     dailyDigestRollupDays:chatDigestOptions(saved).y,
@@ -6598,6 +6605,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestPreparingBase:s.digestPreparingBase||null,
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
+    digestModelRun:s.digestModelRun||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestLastSync:s.digestLastSync||null,
     digestSettingsRequest:s.digestSettingsRequest||null,
@@ -7184,7 +7192,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   );
   var retryBlocked=!manual&&Number(session&&session.trimRetryAfter||0)>Date.now();
   var thresholdMet=Math.max(0,historyRounds-trim.keep)>=trim.minimum;
-  var boundary=!retryBlocked&&(manual||thresholdMet&&(pendingBoundary||roundLimitBoundary||cacheAgeBoundary));
+  var boundary=!retryBlocked&&(manual||cfg.digestCurrentModel!==true&&thresholdMet&&(pendingBoundary||roundLimitBoundary||cacheAgeBoundary));
   var trigger=manual
     ?String(opts.trigger||'manual')
     :(pendingBoundary?'pending_rebuild':(roundLimitBoundary?'round_limit':'cache_1h'));
@@ -7362,13 +7370,13 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   }
   chatDigestFreezePack(cfg,activationSession);
   var manualRequest=activationSession.digestManualTrim;
-  var manualSend=manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
+  var manualSend=(cfg.digestCurrentModel!==true||opts&&opts.commitPrepared)&&manualRequest&&manualRequest.scope===chatDigestActiveScope(cfg)&&submittedPending&&(submittedPending.length||opts&&opts.commitPrepared)&&!(opts&&opts.idleCheck)&&!submittedPending.some(function(m){return m.regenerateRequest});
   var plan=manualSend?chatDigestManualPlan(activationSession,cfg,manualRequest,submittedPending):chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts);
   // A slow wake-state read must not delay chat or expire a still-warm prefix.
   if(!manualSend&&wakeStateStale){
     return Object.assign({},plan,{boundary:false,cacheBoundary:false,trimmed:false,dropped:0,after:plan.before,forceCacheRebuild:false});
   }
-  var stageBoundary=!!(chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||((submittedPending&&submittedPending.length)||(opts&&opts.idleCheck))&&chatDigestCacheExpired(activationSession)));
+  var stageBoundary=!!((cfg.digestCurrentModel!==true||opts&&opts.commitPrepared)&&chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||((submittedPending&&submittedPending.length)||(opts&&opts.idleCheck))&&chatDigestCacheExpired(activationSession)));
   function summaryOnlyPlan(source){return Object.assign({},source,{boundary:true,cacheBoundary:true,trimmed:false,dropped:0,after:source.before,historyAfter:source.before,localAfter:source.localBefore,transportAfter:source.transportBefore,transportDropped:0,localDropped:0,droppedMessages:[],droppedTransportMessages:[],trigger:'digest_sync',forceCacheRebuild:true});}
   if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
     if(stageBoundary&&chatDigestSettingsReady(activationSession,cfg)){plan=summaryOnlyPlan(plan);manualSend=false;}
