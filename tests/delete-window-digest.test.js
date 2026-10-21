@@ -57,11 +57,11 @@ test('all dates, pending archives, long messages and stripped thinking; no cutof
   const x=setup();x.source.messages=[...x.turn('ancient',Date.parse('2020-01-01')), ...x.turn('long')];
   x.source.messages[2].text='文'.repeat(31000);x.source.messages[3].text='<thinking>秘密</thinking>最终答复';x.ctx.chatMessages=x.source.messages;
   x.source.digestPending=x.ctx.chatDigestMessageGroups(x.turn('archived',Date.parse('2019-01-01')));
-  await x.run();assert(x.calls.length>=3);assert(x.calls.every(c=>c.day_key==='2026-10-14'));
+  await x.run();assert.equal(x.calls.length,1);assert(x.calls.every(c=>c.day_key==='2026-10-14'));
   const texts=x.calls.flatMap(c=>c.messages.map(m=>m.text));assert.equal(texts.join('').split('文').length-1,31000);assert(texts.includes('问题 ancient'));assert(texts.includes('问题 archived'));assert(!texts.join('').includes('秘密'));
 });
 test('partial batch failure keeps source and resumes completed checkpoints exactly once',async()=>{
-  const x=setup();x.source.messages[0].text='长'.repeat(18000);let n=0;
+  const x=setup();x.source.messages[0].text='长'.repeat(40000);x.source.messages[1].text='续'.repeat(40000);let n=0;
   x.reply(async b=>({ok:++n!==2,json:async()=>n===2?{ok:false,error:'fixture failure'}:{ok:true,prepared:true,text:'批次 '+n}}));
   await x.run();assert(x.ctx.chatSessions.includes(x.source));assert.equal(x.target.dailyDigests[0].text,'主窗口已有总结');assert.equal(x.source.digestWork.results.length,1);
   x.reply(null);await x.run();assert(!x.ctx.chatSessions.includes(x.source));assert.equal(x.calls.length,3);assert.equal((x.target.dailyDigests[0].text.match(/批次 1/g)||[]).length,1);

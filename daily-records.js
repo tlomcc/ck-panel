@@ -65,6 +65,8 @@ function ckRecordsRender(){
   var data=ckRecordsData||{},names={manual_only:'当前聊天模型 · 仅手动',waiting:'等待每日检查',not_configured:'等待配置模型',learning:'旧版评价复核',reading:'读取待处理聊天',summarizing:'提炼记录',validating:'核对格式与原文证据',checking:'检查事实与精炼程度',batch_saved:'已保存本批进度',updated:'记录已更新',unchanged:'已检查，无需更新',retry:'等待自动重试',needs_attention:'本轮未通过，保留上一版',paused:'已暂停',queued:'等待开始'};
   var message=(names[data.status]||'正在读取记录')+(data.last_day?' · 已完成至 '+data.last_day:'')+(data.batch&&['summarizing','validating','checking','batch_saved','retry','needs_attention'].includes(data.status)?' · 第 '+data.batch+' / '+data.batches+' 批':'');
   var lines=[message,'最近检查成功：'+ckRecordsTime(data.last_checked_at),'最近内容更新：'+ckRecordsTime(data.last_updated_at)];
+  var range=data.source_range;
+  if(range&&range.rows)lines.push('本次来源：'+range.start+(range.end!==range.start?' 至 '+range.end:'')+' · '+range.rows+' 条 · '+range.batches+' 批'+(range.reused_batches?' · 复用已完成 '+range.reused_batches+' 批':''));
   var latest=(data.history||[])[0];
   if(latest&&latest.method==='manual')lines.push('最近人工核对：'+(latest.start_day?latest.start_day+' 至 ':'')+latest.day+(latest.partial?'（当天资料截至 '+ckRecordsTime(latest.source_cutoff)+'）':''));
   if(data.last_attempt_at)lines.push('最近尝试：'+ckRecordsTime(data.last_attempt_at));

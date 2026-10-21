@@ -4,7 +4,15 @@ var chatDailyDigestLastError='';
 var chatDigestEditors={};
 var chatDigestSettingsDirty=false;
 var chatDigestMaintenanceBusy=false;
-var CHAT_DIGEST_BATCH_CHARS=12000;
+var CHAT_DIGEST_BATCH_CHARS=60000;
+function chatDigestBatchChars(cfg){
+  cfg=cfg||chatLoadConfig();
+  var execution=cfg.executionBackend||cfg.execution_backend||cfg.backend;
+  if(cfg.digestCurrentModel===true&&typeof chatManualModelRoute==='function'){
+    try{execution=chatManualModelRoute(cfg,'digest').selected.execution}catch(ignore){}
+  }
+  return cfg.digestCurrentModel===true&&execution==='claude_code_subscription'?120000:CHAT_DIGEST_BATCH_CHARS;
+}
 var chatActiveDigestJob=null;
 function chatDigestSafeError(error,cfg){
   var text=String(error&&error.message||error||'');
@@ -59,7 +67,7 @@ function chatDigestTierText(entry,tier){
 }
 function chatDigestDetailsFresh(cfg,session){
   var today=chatDailyDigestDayKey(Date.now()),range=chatDigestRange(cfg,today);
-  return chatDailyDigestEntries(session,today,cfg).filter(function(row){return row.dayKey>=range.start&&row.dayKey<today}).every(function(row){return row.detail&&row.detail.source===chatDigestStamp(row.text)});
+  return chatDailyDigestEntries(session,today,cfg).filter(function(row){return row.dayKey>=range.detailStart&&row.dayKey<today}).every(function(row){return row.detail&&row.detail.source===chatDigestStamp(row.text)});
 }
 
 function chatDailyDigestRetentionDays(value){
@@ -399,26 +407,57 @@ async function chatDigestRequestApi(cfg,job,body){
   }
   finally{clearTimeout(timer);clearInterval(progress);controller.signal.removeEventListener('abort',rejectAbort);if(job.controller===controller)job.controller=null;}
 }
-function chatDigestMessageChunks(groups){
+function chatDigestMessageChunks(groups,limit){
+  limit=limit||chatDigestBatchChars();
   var chunks=[],current=[],chars=0;
   groups.forEach(function(group){group.messages.forEach(function(message){
-    for(var offset=0;offset<message.text.length;offset+=CHAT_DIGEST_BATCH_CHARS-128){
-      var part=Object.assign({},message,{text:message.text.slice(offset,offset+CHAT_DIGEST_BATCH_CHARS-128),digestOffset:offset});
-      if(chars+part.text.length+64>CHAT_DIGEST_BATCH_CHARS&&current.length){chunks.push(current);current=[];chars=0;}
+    for(var offset=0;offset<message.text.length;){
+      var end=Math.min(message.text.length,offset+limit-128);
+      if(limit!==12000&&end<message.text.length&&/[\uD800-\uDBFF]/.test(message.text[end-1])&&/[\uDC00-\uDFFF]/.test(message.text[end]))end--;
+      var part=Object.assign({},message,{text:message.text.slice(offset,end),digestOffset:(Number(message.digestOffset)||0)+offset});
+      if(chars+part.text.length+64>limit&&current.length){chunks.push(current);current=[];chars=0;}
       current.push(part);chars+=part.text.length+64;
+      offset=end;
     }
   });});if(current.length)chunks.push(current);return chunks;
+}
+function chatDigestMessagePlan(groups,cfg,job,day,extra){
+  var session=chatDailyDigestFindSession(job.sessionId),work=chatDigestNormalizeWork(session&&session.digestWork);
+  var limit=chatDigestBatchChars(cfg),legacy=chatDigestMessageChunks(groups,12000),parts=[],pending=[];
+  if(!work||work.context!==chatDigestWorkContext(cfg,session))return chatDigestMessageChunks(groups,limit);
+  var known=legacy.map(function(messages){
+    var body=Object.assign({mode:'daily_part',messages:messages,day_key:day},extra||{});
+    return work.results.some(function(r){return r.key===chatDigestStamp(body)});
+  });
+  if(!known.some(Boolean))return chatDigestMessageChunks(groups,limit);
+  legacy.forEach(function(messages,index){
+    if(known[index]){
+      if(pending.length){parts.push.apply(parts,chatDigestMessageChunks([{messages:pending}],limit));pending=[]}
+      parts.push(messages);
+    }else pending.push.apply(pending,messages);
+  });
+  if(pending.length)parts.push.apply(parts,chatDigestMessageChunks([{messages:pending}],limit));
+  return parts;
 }
 async function chatDigestCompactDay(cfg,job,entry,tier){
   var field=tier==='x'?'detail':'brief',stamp=chatDigestStamp(entry.text),saved=entry[field];
   if(saved&&saved.source===stamp&&!(tier==='y'&&job.forceRollup))return saved.text;
-  var source=tier==='y'?chatDigestTierText(entry,'detail'):entry.text,text='';
-  var count=Math.ceil(source.length/CHAT_DIGEST_BATCH_CHARS);
-  for(var offset=0;offset<source.length;offset+=CHAT_DIGEST_BATCH_CHARS){
+  var source=tier==='y'?chatDigestTierText(entry,'detail'):entry.text,text='',limit=chatDigestBatchChars(cfg);
+  var work=chatDigestNormalizeWork(chatDailyDigestFindSession(job.sessionId).digestWork),chunks=[],offset=0,previous='';
+  if(work&&work.context===chatDigestWorkContext(cfg,chatDailyDigestFindSession(job.sessionId))){
+    while(offset<source.length){
+      var part=source.slice(offset,offset+12000),body={mode:'compact_day',tier:tier,day_key:entry.dayKey,text:part,previous_summary:previous};
+      var known=work.results.find(function(r){return r.key===chatDigestStamp(body)});if(!known)break;
+      chunks.push(part);previous=known.text;offset+=part.length;
+    }
+  }
+  for(;offset<source.length;offset+=limit)chunks.push(source.slice(offset,offset+limit));
+  var count=chunks.length;
+  for(var index=0;index<count;index++){
     job.stage=tier==='x'?'detail':'rollup';job.range=entry.dayKey;job.batchMessages=null;
-    job.batchIndex=Math.floor(offset/CHAT_DIGEST_BATCH_CHARS)+1;job.batchCount=count;
-    chatDailyDigestSetStatus('正在整理 '+entry.dayKey+' 的 '+tier+' 摘要（'+(Math.floor(offset/CHAT_DIGEST_BATCH_CHARS)+1)+'/'+count+'）；已完成批次会保留…');
-    var data=await chatDigestCheckpointApi(cfg,job,{mode:'compact_day',tier:tier,day_key:entry.dayKey,text:source.slice(offset,offset+CHAT_DIGEST_BATCH_CHARS),previous_summary:text});
+    job.batchIndex=index+1;job.batchCount=count;
+    chatDailyDigestSetStatus('正在整理 '+entry.dayKey+' 的 '+tier+' 摘要（'+(index+1)+'/'+count+'）；已完成批次会保留…');
+    var data=await chatDigestCheckpointApi(cfg,job,{mode:'compact_day',tier:tier,day_key:entry.dayKey,text:chunks[index],previous_summary:text});
     text=String(data.text).trim();
   }
   entry[field]={source:stamp,text:text};return text;
@@ -447,7 +486,7 @@ async function chatDailyDigestRequest(cfg,job){
   chatSetActiveDigestJob(job);
   try{
     for(var day of Object.keys(days).sort()){
-      var batches=chatDigestMessageChunks(days[day]),entry=entries.find(function(row){return row.dayKey===day}),previousRounds=entry?entry.rounds||0:0;
+      var batches=chatDigestMessagePlan(days[day],cfg,job,day),entry=entries.find(function(row){return row.dayKey===day}),previousRounds=entry?entry.rounds||0:0;
       for(var index=0;index<batches.length;index++){
         job.stage='daily';job.range=day;job.batchMessages=batches[index].length;
         job.batchIndex=index+1;job.batchCount=batches.length;
@@ -464,7 +503,7 @@ async function chatDailyDigestRequest(cfg,job){
       entry.covered=Array.from(new Set((entry.covered||[]).concat(days[day].map(function(g){return g.key}))));
       entries=entries.filter(function(row){return row.dayKey!==day});entries.push(entry);entries=chatDailyDigestNormalize(entries);
     }
-    for(var entry of entries.filter(function(row){return row.dayKey>=range.start&&row.dayKey<range.today})){
+    for(var entry of entries.filter(function(row){return row.dayKey>=range.detailStart&&row.dayKey<range.today})){
       await chatDigestCompactDay(cfg,job,entry,'x');
     }
     var rollup=await chatDigestPrepareRollup(cfg,job,session,entries);

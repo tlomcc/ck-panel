@@ -56,7 +56,7 @@ async function chatDeleteDigestHandoff(source){
     }
     var sourceStamp=chatDeleteDigestSourceStamp(source),targetStamp=chatNightlyBaseStamp(cfg,target);
     var context=chatDigestWorkContext(cfg,source),scope=chatNightlyScope(cfg);
-    var day=chatDailyDigestDayKey(Date.now()),batches=chatDigestMessageChunks(groups),parts=[];
+    var day=chatDailyDigestDayKey(Date.now()),batches=chatDigestMessagePlan(groups,cfg,job,day,{tz_offset_minutes:480}),parts=[];
     for(var i=0;i<batches.length;i++){
       job.batchIndex=i+1;job.batchCount=batches.length;job.stage='daily';job.range=day;
       var progress='正在总结「'+source.title+'」并汇入「小克」（'+(i+1)+'/'+batches.length+'）…';

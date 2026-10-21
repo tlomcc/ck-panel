@@ -81,9 +81,9 @@ test('old automatic rollups are recompressed once; hand edited rollups stay inta
     const source=x.ctx.chatDigestRollupSource(x.cfg,x.session);
     x.session.digestRollup={start:source.range.start,end:source.range.end,text:'旧版大总结',source:source.legacyStamp,edited};
     x.commit(await x.run([]));
-    assert.equal(x.calls.length,edited?1:2);
+    assert.equal(x.calls.length,edited?0:1);
     x.commit(await x.run([]));
-    assert.equal(x.calls.length,edited?1:2);
+    assert.equal(x.calls.length,edited?0:1);
   }
 });
 test('n excludes today; x and y select adjacent natural-day windows with exact headers',()=>{
@@ -161,7 +161,7 @@ test('large original messages are split without dropping any text',async()=>{
   const raw=x.turn('2026-09-30','long');raw[0].text='长'.repeat(140000);
   assert.ok(await x.run(raw));assert.ok(x.calls.length>=3);
   assert.equal(x.calls.flatMap(c=>c.messages).filter(m=>m.role==='user').map(m=>m.text).join(''),raw[0].text);
-  for(const c of x.calls)assert.ok(c.messages.reduce((n,m)=>n+m.text.length+64,0)<=50000);
+  for(const c of x.calls)assert.ok(c.messages.reduce((n,m)=>n+m.text.length+64,0)<=60000);
 });
 test('strict date parsing rejects wrong format, duplicate days and dates outside the rolling window',()=>{
   const x=setup(),parse=s=>x.ctx.chatDigestParseDays(s,'2026-09-27','2026-09-29');
@@ -185,13 +185,41 @@ test('clearing a saved summary does not recreate the same covered turns on the n
 
 test('completed batches survive failure and reload, while changed source batches are regenerated',async()=>{
   const x=setup();x.cfg.dailyDigestRollupDays=0;
-  const raw=x.turn('2026-09-30','resume');raw[0].text='甲'.repeat(10000);raw[1].text='乙'.repeat(10000);
+  const raw=x.turn('2026-09-30','resume');raw[0].text='甲'.repeat(40000);raw[1].text='乙'.repeat(40000);
   let failed=false;x.reply(body=>{if(body.messages[0].role==='assistant'&&!failed){failed=true;return {ok:false,error:'timeout'}}return {prepared:true,text:body.messages[0].role+'完成'}});
   assert.equal(await x.run(raw),null);assert.equal(x.calls.length,2);assert.equal(x.session.dailyDigests.length,0);
   const y=setup();y.cfg.dailyDigestRollupDays=0;y.session.digestWork=plain(x.session.digestWork);
   const prepared=await y.run(raw);assert.ok(prepared);assert.equal(y.calls.length,1,'successful first batch survived reload');
   assert.equal(y.calls[0].messages[0].role,'assistant');assert.match(prepared.entries[0].text,/user完成/);
-  raw[0].text='丙'.repeat(10000);const before=y.calls.length;assert.ok(await y.run(raw));assert.equal(y.calls.length,before+1,'only changed input invalidates its batch');
+  raw[0].text='丙'.repeat(40000);const before=y.calls.length;assert.ok(await y.run(raw));assert.equal(y.calls.length,before+1,'only changed input invalidates its batch');
+});
+
+test('legacy small successful batches are reused while only unfinished messages are repacked',async()=>{
+  const x=setup();x.cfg.dailyDigestRollupDays=0;
+  const raw=x.turn('2026-09-30','legacy');raw[0].text='甲'.repeat(20000);raw[1].text='乙'.repeat(100);
+  const groups=x.ctx.chatDigestMessageGroups(raw),old=x.ctx.chatDigestMessageChunks(groups,12000);
+  const body={mode:'daily_part',messages:old[0],day_key:'2026-09-30'};
+  x.session.digestWork={version:2,context:x.ctx.chatDigestWorkContext(x.cfg,x.session),results:[{key:x.ctx.chatDigestStamp(body),text:'旧批已审核'}]};
+  const result=await x.run(raw);assert.ok(result);assert.equal(x.calls.length,1);
+  assert.equal(x.calls[0].messages.filter(m=>m.role==='user').map(m=>m.text).join(''),raw[0].text.slice(old[0][0].text.length));
+  assert.equal((result.entries[0].text.match(/旧批已审核/g)||[]).length,1);
+});
+
+test('batch packing keeps Unicode characters intact and uses the subscription allowance',()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;x.ctx.chatManualModelRoute=()=>({selected:{execution:'claude_code_subscription'}});
+  assert.equal(x.ctx.chatDigestBatchChars(x.cfg),120000);
+  const text='首'+ '😀'.repeat(70000)+'尾',groups=[{messages:[{role:'user',text}]}];
+  const parts=x.ctx.chatDigestMessageChunks(groups,120000).flat();
+  assert.equal(parts.map(m=>m.text).join(''),text);
+  assert(parts.every(m=>!/[\uD800-\uDBFF]$/.test(m.text)&&! /^[\uDC00-\uDFFF]/.test(m.text)));
+});
+
+test('legacy compact prefix is reused after batches become larger',async()=>{
+  const x=setup(),entry=x.entry('2026-09-29','甲'.repeat(30000));
+  const body={mode:'compact_day',tier:'x',day_key:entry.dayKey,text:entry.text.slice(0,12000),previous_summary:''};
+  x.session.digestWork={version:2,context:x.ctx.chatDigestWorkContext(x.cfg,x.session),results:[{key:x.ctx.chatDigestStamp(body),text:'已成功前批'}]};
+  await x.ctx.chatDigestCompactDay(x.cfg,{sessionId:'s'},entry,'x');
+  assert.equal(x.calls.length,1);assert.equal(x.calls[0].previous_summary,'已成功前批');assert.equal(x.calls[0].text,entry.text.slice(12000));
 });
 
 test('checkpoint namespace excludes edited summaries, changed keys and changed endpoints',async()=>{

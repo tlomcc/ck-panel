@@ -4,7 +4,7 @@ const root=path.resolve(__dirname,'..'),out=process.env.CK_RECORD_TEST_OUT||path
 const section=fs.readFileSync(path.join(root,'index.html'),'utf8').match(/<section class="panel-tab" id="tab-records">[\s\S]*?(?=<section class="panel-tab mw-page)/)[0];
 const css=fs.readFileSync(path.join(root,'index.html'),'utf8').match(/<link rel="stylesheet"[^>]*>/g).join('');
 const states={};let delay=0,fail=false,posts=[];
-const initial=()=>({ok:true,enabled:true,status:'updated',todos:'- 小明计划2026.10.18归还图书。',profile:'- 小明喜欢游泳。',revision:1,manual_editable:true});
+const initial=()=>({ok:true,enabled:true,status:'updated',todos:'- 小明计划2026.10.18归还图书。',profile:'- 小明喜欢游泳。',revision:1,manual_editable:true,source_range:{start:'2026-10-18',end:'2026-10-21',rows:780,batches:1,reused_batches:0}});
 const canonical=s=>s.split(/\r?\n/).map(l=>l.trim().replace(/^- /,'').trim()).filter(Boolean).map(l=>'- '+l).join('\n');
 const server=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://local');
@@ -30,6 +30,7 @@ const server=http.createServer(async(req,res)=>{
   states.a=initial();states.b={...initial(),todos:'- 乙的待办',profile:'- 乙的信息'};posts=[];delay=0;fail=false;
   const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>!!ckRecordsData);
+  assert((await page.locator('#ck-records-state').textContent()).includes('2026-10-18 至 2026-10-21 · 780 条 · 1 批'));
   const box=page.locator('#ck-records-todos'),profile=page.locator('#ck-records-profile'),save=page.locator('#ck-records-save');
   assert.equal(await page.locator('#ck-records-feedback').count(),0);assert(await box.isEditable());assert(await profile.isEditable());
   await box.fill('我的新待办');await page.evaluate(()=>ckRecordsRefresh());assert.equal(await box.inputValue(),'我的新待办');
