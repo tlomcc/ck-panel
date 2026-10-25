@@ -4,7 +4,7 @@
  const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
@@ -23,12 +23,12 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
    const groups=body.groups.filter(g=>body.candidate_keys.includes(g.key));
    if(queueReady&&groups.length&&!preparedTrims)preparedTrims=[{keys:groups.map(g=>g.key),text:'已完整整理本次选中的旧对话。',startTs:groups[0].start,endTs:groups.at(-1).end}];
-   return {ok:true,status:nightlyError?'retry':queueReady?'succeeded':'queued',last_error:nightlyError?'总结供应商返回 HTTP 524':'',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:2,source_stamp:body.base_stamp,config:body.config,base:body.base,
+   return {ok:true,status:modelState|| (nightlyError?'retry':queueReady?'succeeded':'queued'),model_run:modelRun?{id:modelRun,state:modelState}:undefined,last_error:nightlyError?'总结供应商返回 HTTP 524':'',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:2,source_stamp:body.base_stamp,config:body.config,base:body.base,
      result:queueReady?{day:chatDailyDigestDayKey(Date.now())}:null,
      trims:preparedTrims||[]}};
  }
@@ -93,6 +93,30 @@
    field('chat-digest-cancel-manual').click();releaseQueue();await until(()=>!chatNightlySyncs.size,'cancelled queue did not settle');await pause(60);
    check(!session.digestManualTrim&&chatMessages.length===10&&cleanCalls.length===0,'a late result executed a cancelled manual trim');
    results.push({cancelBeforeReady:true,lateResultPreservedHistory:true});
+
+   setup('blocked');cfg.digestCurrentModel=true;chatSaveConfigObject(cfg);chatWriteForm(cfg);cfg=chatLoadConfig();
+   modelRun='original-manual-run';modelState='blocked';queueReady=false;
+   check(await chatRequestManualDigestTrim({currentModel:true}),'failed-run manual range missing');
+   session.digestModelRun={id:modelRun,purpose:'trim',label:'合成订阅模型'};
+   await chatSyncNightlyDigest(cfg,{force:true});
+   const failedUpload=queueBody,failedSyncKey=chatNightlyScope(cfg)+':'+session.id;
+   check(!failedUpload.model_run,'fixture unexpectedly started another model');
+   const later=[{role:'user',text:'截断请求以后的新问题',turnId:'later',ts:Date.now()},{role:'assistant',text:'截断请求以后的新回答',turnId:'later',ts:Date.now()+1}];
+   chatMessages.push(...later);session.transportMessages.push(...later.map(m=>({role:m.role,content:m.text})));session.updated=Date.now()+2;session.title+=' 本机新增';
+   chatNightlySynced[failedSyncKey].at=Date.now()-30001;
+   await chatMaybeRollDigestAtDayBoundary();
+   check(queueBody===failedUpload&&cleanCalls.length===0,'blocked polling uploaded sources or cut history');
+   check(chatDigestNeedsPolling(session,cfg),'failed run stopped looking for saved results');
+   modelState='succeeded';queueReady=true;chatNightlySynced[failedSyncKey].readAt=Date.now()-30001;
+   await chatMaybeRollDigestAtDayBoundary();
+   await until(()=>session.digestLastSync?.status==='synced','saved failed-run result did not finish its original cut');
+   check(queueBody===failedUpload&&queueCalls===3,'saved-result recovery uploaded history again');
+   check(cleanCalls.length===1&&posts.length===0,'saved-result recovery submitted another model call or cut twice');
+   check(session.digestLastSync.rounds===3&&CKChatHistory.localTurnGroups(chatMessages).length===3,'saved result cut the wrong range');
+   check(later.every(m=>chatMessages.some(row=>row.text===m.text))&&session.transportMessages.some(m=>m.content===later[1].text),'newer completed round lost');
+   check(!session.digestModelRun&&field('chat-input').value==='未发送的输入草稿','completed request or input draft changed');
+   results.push({blockedSavedRecovery:true,originalRunOnly:true,newerRoundPreserved:true,noModelRequest:true});
+   await until(()=>!chatDigestMaintenanceBusy,'failed-run recovery maintenance did not settle');
 
    setup('lost-upload');loseUploadResponse=true;field('chat-digest-prepare').click();
    await until(()=>chatNightlyStatus[session.id]?.local_error,'lost upload did not expose a recoverable error');

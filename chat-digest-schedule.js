@@ -1,5 +1,5 @@
 /* Durable source outbox and nightly results. Never awaited by chat generation. */
-var chatNightlySyncs=new Map(),chatNightlyTimer=0,chatNightlyStatus={},chatNightlySynced={};
+var chatNightlySyncs=new Map(),chatNightlyTimer=0,chatNightlyTimerAt=0,chatNightlyStatus={},chatNightlySynced={};
 var chatDigestDeleteSyncs=new Map();
 function chatDigestDeletionRecords(){
   try{var rows=JSON.parse(localStorage.getItem('ck_digest_deleted_v1')||'[]');return Array.isArray(rows)?rows.filter(function(r){return r&&typeof r.id==='string'&&typeof r.scope==='string'}):[]}catch(e){return []}
@@ -153,8 +153,10 @@ function chatRenderNightlyStatus(session){
   ['chat-digest-schedule-status','chat-trim-next'].forEach(function(id){var node=document.getElementById(id);if(node)node.textContent=text});
 }
 function chatScheduleNightlySync(delay){
-  if(chatNightlyTimer){if(delay!==0)return;clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
-  chatNightlyTimer=setTimeout(function(){chatNightlyTimer=0;chatMaybeRollDigestAtDayBoundary()},delay===undefined?800:delay);
+  delay=delay===undefined?800:Math.max(0,Number(delay)||0);var next=Date.now()+delay;
+  if(chatNightlyTimer){if(delay!==0&&chatNightlyTimerAt<=next)return;clearTimeout(chatNightlyTimer);}
+  chatNightlyTimerAt=next;
+  chatNightlyTimer=setTimeout(function(){chatNightlyTimer=0;chatNightlyTimerAt=0;chatMaybeRollDigestAtDayBoundary()},delay);
 }
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
@@ -175,7 +177,8 @@ function chatSyncNightlyDigest(cfg,options){
   var auto=chatDigestAutoPolicy(cfg,session,rows,false);
   var signature=JSON.stringify([baseStamp,session.updated||0,rows.length,rows.length&&rows[rows.length-1].ts,session.title,(session.digestPending||[]).length,session.digestManualPending,session.digestSettingsPending,session.digestManualTrim,auto.enabled,auto.keep,auto.minimum,auto.total,auto.cache_at,auto.ttl_seconds]);
   var previous=chatNightlySynced[syncKey]||{},now=Date.now(),unchanged=previous.signature===signature;
-  if(!options.force&&!options.notify&&(previous.retryAt>now||unchanged&&now-previous.at<(chatDigestNeedsPolling(session,cfg)?2000:60000)))return Promise.resolve(true);
+  var lastRead=options.readOnly?Math.max(previous.readAt||0,previous.at||0):previous.at;
+  if(!options.force&&!options.notify&&(previous.retryAt>now||(unchanged||options.readOnly)&&now-lastRead<(chatDigestPollingDelay(session,cfg)||60000)))return Promise.resolve(true);
   // A timed-out upload may already be saved. Read its result before sending
   // the whole source again; a read never acknowledges an uncertain upload.
   var recovering=!options.readOnly&&previous.readBack,body=null;
@@ -212,6 +215,7 @@ function chatSyncNightlyDigest(cfg,options){
       }
       if(typeof chatApplyWindowCleanup==='function'&&await chatApplyWindowCleanup(session,cfg,data.snapshot))return true;
       if(!options.readOnly)chatNightlySynced[syncKey]={signature:recovering?undefined:signature,at:Date.now()};
+      else chatNightlySynced[syncKey]=Object.assign({},previous,{readAt:Date.now(),retryAt:0});
       chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
       var accepted=new Set(data.accepted_keys||[]),pending=chatNightlyPending(session).filter(function(g){return !accepted.has(g.key)});
       try{if(pending.length)localStorage.setItem(chatNightlyOutboxKey(session),JSON.stringify(pending));else localStorage.removeItem(chatNightlyOutboxKey(session))}catch(e){}
@@ -242,7 +246,7 @@ function chatSyncNightlyDigest(cfg,options){
       session.digestSchedule={scope:scope,model_run:data.model_run,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
       chatSaveSessions({sessionIds:[session.id]});
       if(session===chatCurrentSession()&&!chatSending&&data.auto&&data.auto.due)setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
-      if(chatDigestNeedsPolling(session,cfg))chatScheduleNightlySync(2000);
+      var pollDelay=chatDigestNextPollingDelay(cfg);if(pollDelay)chatScheduleNightlySync(pollDelay);
       chatRenderNightlyStatus(session);
       if(session===chatCurrentSession())chatRenderTrimState(cfg);
       if(session===chatCurrentSession()&&!chatSending){chatRenderDailyDigest(chatLoadConfig());chatRenderNightlyStatus(session);}
@@ -250,7 +254,8 @@ function chatSyncNightlyDigest(cfg,options){
       return !data.conflict||!!knownAdvance||data.settings_accepted===true;
     }catch(error){
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;
-      if(!options.readOnly)chatNightlySynced[syncKey]=Object.assign({},previous,{retryAt:Date.now()+30000,readBack:!!(body||recovering)});
+      chatNightlySynced[syncKey]=Object.assign({},previous,{retryAt:Date.now()+30000});
+      if(!options.readOnly)chatNightlySynced[syncKey].readBack=!!(body||recovering);
       var message=timedOut?(body?'上传总结资料超时，稍后先取回服务器结果；原文已保留。':'取回总结超时，已保存的总结仍在服务器，稍后继续取回。'):
         syncPhase==='apply'?'总结已取回，页面处理失败：'+chatDigestSafeError(error,cfg):
         httpStatus>=400?'总结同步接口返回 HTTP '+httpStatus+'，原文与已完成总结已保留。':
@@ -340,7 +345,24 @@ async function chatStartCurrentModelDigest(purpose){
 }
 
 function chatDigestNeedsPolling(session,cfg){
-  if(cfg.digestCurrentModel!==true)return !!(session.digestManualTrim||session.digestSettingsRequest);
+  return !!chatDigestPollingDelay(session,cfg);
+}
+function chatDigestPollingDelay(session,cfg){
+  if(cfg.digestCurrentModel!==true)return session.digestManualTrim||session.digestSettingsRequest?2000:0;
   var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
-  return !!(local&&remote&&local.id===remote.id&&['queued','running','succeeded'].includes(remote.state));
+  if(!local||!remote||local.id!==remote.id)return 0;
+  // A failed run may later receive a verified result. Only read its status;
+  // polling must never start another model run or alter its selected sources.
+  if(remote.state==='blocked')return 30000;
+  return ['queued','running','succeeded'].includes(remote.state)?2000:0;
+}
+function chatDigestNextPollingDelay(cfg){
+  var next=0,now=Date.now(),scope=chatNightlyScope(cfg);
+  chatSessions.forEach(function(session){
+    var delay=chatDigestPollingDelay(session,cfg);if(!delay)return;
+    var previous=chatNightlySynced[scope+':'+session.id]||{};
+    delay=Math.max(delay,(previous.retryAt||0)-now);
+    if(!next||delay<next)next=delay;
+  });
+  return next;
 }

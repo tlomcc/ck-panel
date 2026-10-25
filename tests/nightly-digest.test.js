@@ -145,6 +145,67 @@ test('unchanged sources use a low frequency GET instead of repeated history uplo
   const x=setup();await x.sync();await x.sync();assert.equal(x.calls.length,1);
   x.advance(61000);await x.sync();assert.equal(x.calls.length,2);assert.equal(x.calls[1].body,null);assert.match(x.calls[1].url,/session_id=nightly-one/);
 });
+test('blocked manual runs keep reading saved results at 30 seconds without uploading newer sources',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;
+  await x.sync();const original=x.calls[0].body;
+  x.session.digestModelRun={id:'recover-me',purpose:'trim'};
+  x.session.digestManualTrim={scope:x.ctx.chatNightlyScope(x.cfg),requestedAt:1,immediate:false,keys:original.groups.map(g=>g.key)};
+  x.session.digestSchedule={model_run:{id:'recover-me',state:'blocked'}};
+  x.ctx.chatNightlyStatus[x.session.id]=x.session.digestSchedule;
+  const fresh=x.ctx.chatDigestMessageGroups([{role:'user',text:'请求以后新增的原文',ts:x.ctx.Date.now(),turnId:'fresh'}])[0];
+  x.session.digestPending=[fresh];x.session.title='尚未上传的本机标题';
+  let reads=0,finished=false;
+  x.ctx.fetch=async(url,init)=>{
+    reads++;assert.equal(init.method,undefined);assert.equal(init.body,undefined);
+    const saved=finished?result(x,original):{ok:true,status:'blocked'};
+    delete saved.accepted_keys;saved.model_run={id:'recover-me',state:finished?'succeeded':'blocked'};
+    return {ok:true,json:async()=>({ok:true,sessions:[saved]})};
+  };
+  x.advance(30000);await x.ctx.chatMaybeRollDigestAtDayBoundary();
+  assert.equal(reads,1);assert(x.ctx.chatDigestNeedsPolling(x.session,x.cfg));
+  assert.equal(x.timers.get(x.ctx.chatNightlyTimer).delay,30000);
+  x.advance(29999);await x.ctx.chatMaybeRollDigestAtDayBoundary();assert.equal(reads,1);
+  finished=true;x.advance(1);await x.ctx.chatMaybeRollDigestAtDayBoundary();assert.equal(reads,2);
+  assert.equal(x.session.digestStaged.revision,2);assert.equal(x.session.dailyDigests.length,0);
+  assert.equal(x.session.digestPending[0].key,fresh.key);assert(x.session.digestManualTrim);
+  let uploaded;x.ctx.fetch=async(url,init)=>{uploaded=JSON.parse(init.body);return x.response(uploaded)};
+  await x.sync();assert(uploaded,'status polling acknowledged unsent local changes');
+  assert.equal(uploaded.model_run,undefined);assert.equal(uploaded.title,'尚未上传的本机标题');
+});
+test('blocked polling backs off after an offline read and preserves the known upload identity',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;await x.sync();
+  const syncKey=x.ctx.chatNightlyScope(x.cfg)+':'+x.session.id,signature=x.ctx.chatNightlySynced[syncKey].signature;
+  x.session.digestModelRun={id:'offline-run',purpose:'trim'};
+  x.session.digestSchedule={model_run:{id:'offline-run',state:'blocked'}};
+  x.ctx.chatNightlyStatus[x.session.id]=x.session.digestSchedule;
+  let reads=0;x.ctx.fetch=async(url,init)=>{reads++;assert.equal(init.body,undefined);throw Error('offline')};
+  x.advance(30000);await x.ctx.chatMaybeRollDigestAtDayBoundary();
+  await x.ctx.chatMaybeRollDigestAtDayBoundary();assert.equal(reads,1);
+  assert.equal(x.ctx.chatNightlySynced[syncKey].signature,signature);
+  assert.equal(x.ctx.chatNightlySynced[syncKey].readBack,undefined);
+  x.advance(30000);await x.ctx.chatMaybeRollDigestAtDayBoundary();assert.equal(reads,2);
+});
+test('slow failed-run polling does not delay another running manual request',()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;
+  x.session.digestModelRun={id:'blocked',purpose:'trim'};x.session.digestSchedule={model_run:{id:'blocked',state:'blocked'}};
+  x.ctx.chatScheduleNightlySync(x.ctx.chatDigestNextPollingDelay(x.cfg));
+  assert.equal(x.timers.get(x.ctx.chatNightlyTimer).delay,30000);
+  const other={...copy(x.session),id:'running-window',digestModelRun:{id:'running',purpose:'daily'},digestSchedule:{model_run:{id:'running',state:'running'}}};
+  x.ctx.chatSessions.push(other);x.ctx.chatScheduleNightlySync(x.ctx.chatDigestNextPollingDelay(x.cfg));
+  assert.equal(x.timers.get(x.ctx.chatNightlyTimer).delay,2000);
+  x.ctx.chatNightlySynced[x.ctx.chatNightlyScope(x.cfg)+':'+other.id]={retryAt:x.ctx.Date.now()+30000};
+  assert.equal(x.ctx.chatDigestNextPollingDelay(x.cfg),30000);
+});
+test('cancelled or different manual runs cannot resume a failed request',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;x.session.digestModelRun={id:'original',purpose:'daily'};
+  let applied=0;x.ctx.chatDigestSyncNow=async()=>{applied++;return true};
+  for(const remote of [{id:'different',state:'succeeded'},{id:'original',state:'cancelled'},{id:'original',state:'blocked'}]){
+    x.session.digestSchedule={model_run:remote};
+    assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+    assert.equal(x.ctx.chatDigestNeedsPolling(x.session,x.cfg),remote.state==='blocked');
+  }
+  assert.equal(applied,0);
+});
 test('network failures retain the outbox and back off before retrying',async()=>{
   const x=setup();x.ctx.chatArchiveDigestSources(x.session,x.session.messages);let count=0;
   x.ctx.fetch=async()=>{count++;throw Error('offline')};await x.sync();await x.sync();assert.equal(count,1);assert.equal(x.session.digestPending.length,1);

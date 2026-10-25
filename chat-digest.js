@@ -554,10 +554,10 @@ async function chatMaybeRollDigestAtDayBoundary(){
   try{
     for(var session of chatSessions.slice()){
       if(chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}
-      await chatRefreshRollingDigest(cfg,{session:session});
+      await chatRefreshRollingDigest(cfg,{session:session,readOnly:cfg.digestCurrentModel===true&&chatDigestPollingDelay(session,cfg)===30000});
       if(typeof chatDigestFinishManualTrim==='function')await chatDigestFinishManualTrim(cfg,session);
     }
-  }finally{chatDigestMaintenanceBusy=false;if(chatSessions.some(function(s){return chatDigestNeedsPolling(s,cfg)}))chatScheduleNightlySync(2000);}
+  }finally{chatDigestMaintenanceBusy=false;var pollDelay=chatDigestNextPollingDelay(cfg);if(pollDelay)chatScheduleNightlySync(pollDelay);}
 }
 async function chatRefreshDigestNow(kind){
   if(chatLoadConfig().dailyDigestEnabled===false){toast('请先启用截断总结');return false;}

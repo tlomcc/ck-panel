@@ -13,7 +13,7 @@ function setup(){
     CKChatHistory:history,CHAT_DAILY_DIGEST_TIMEOUT_MS:1000,CHAT_NEW_SESSION_DIGEST_SOURCE_TITLE:'小克',
     chatSessions:[session],chatSessionsReady:true,chatMessages:session.messages,
     chatLoadConfig:()=>cfg,chatCurrentSession:()=>session,chatSaveSessions:()=>{},chatDebug:()=>{},toast:()=>{},
-    chatDigestNeedsPolling:()=>false,chatSetFieldValue:(id,value)=>{if(nodes[id])nodes[id].value=String(value)},chatSetFieldChecked:()=>{},chatFieldChecked:()=>true,
+    chatDigestPollingDelay:()=>0,chatDigestNextPollingDelay:()=>0,chatSetFieldValue:(id,value)=>{if(nodes[id])nodes[id].value=String(value)},chatSetFieldChecked:()=>{},chatFieldChecked:()=>true,
     chatSplitThinkingText:text=>({text:text.replace(/<thinking>[\s\S]*?<\/thinking>/g,'')}),
     document:{getElementById:id=>nodes[id]||null},
     fetch:async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>reply?reply(body):{ok:true,prepared:true,merge_with_previous:!!body.previous?.length,text:body.mode==='compact_day'?body.tier+'摘要：'+body.text.slice(0,500):'新日记'+body.day_key}}}
