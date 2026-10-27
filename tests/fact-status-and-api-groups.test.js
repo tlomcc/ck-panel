@@ -90,7 +90,7 @@ function dailyStatusContext(){
   assert(html.includes('gen-aaa → gen-bbb')&&html.includes('ffee11'),'generation / commit 缺失');
   ['小档案','关系','档案整理','ds-tile','ds-grid','ds-stat','ds-meta-row','42','17']
     .forEach(dead=>assert(!html.includes(dead),'每日状态仍残留小档案内容：'+dead));
-  assert.strictEqual(dom.byId['status-sub'].textContent,'更新于 2026-08-22 14:00');
+  assert.strictEqual(dom.byId['status-sub'].textContent,'状态读取于 2026-08-22 14:00');
 })();
 
 (function dailyStatusSurfacesStaleAndDisabled(){
@@ -99,11 +99,56 @@ function dailyStatusContext(){
     fact_daily:{status:'blocked',target_date:'2026-08-18',last_success_date:'2026-08-15',
       enabled:false,last_error:'HTTP 429',last_error_code:'rate_limited',next_retry_at:'2026-08-22 15:00'}});
   const html=dom.byId['daily-status-body'].innerHTML;
-  assert(html.includes('Fact 已 7 天没有成功提取'),'陈旧告警文案/天数不对');
+  assert(html.includes('每日自动提取已 7 天没有成功'),'陈旧告警文案/天数不对');
   assert(html.includes('每日 Fact 任务当前是关闭状态'),'enabled=false 没提示');
   assert(html.includes('id="daily-fact-retry"')&&html.includes('补跑 2026-08-18'),'blocked 应该给补跑按钮');
   assert(html.includes('最近错误（rate_limited）')&&html.includes('下次重试 2026-08-22 15:00'),'错误块信息不全');
   assert(!html.includes('小档案'),'陈旧告警仍写着小档案');
+})();
+
+(function libraryPublicationDoesNotChangeDailyJobs(){
+  const {context,dom}=dailyStatusContext();
+  const data={today:'2026-10-27',now:'2026-10-27 11:00',status_cache:{stale:true},
+    fact_daily:{enabled:false,status:'not_created',target_date:'2026-10-26',last_success_date:'2026-10-14'},
+    fact_library:{ready:true,updated_at:'2026-10-23T13:45:18+08:00',facts_total:7008,active:5831,
+      manual_review:{reviewed_at:'2026-10-23',fact_count:74}}};
+  const before=JSON.stringify(data);
+  context.renderDailyStatus(data);
+  const html=dom.byId['daily-status-body'].innerHTML;
+  assert(html.includes('2026-10-23 13:45:18'),'实际库更新时间未显示');
+  assert(html.includes('7008 条 · 有效 5831 条')&&html.includes('74 条 Fact 已入库'),'已发布资料数量未显示');
+  assert(html.includes('Fact 库已 4 天没有更新')&&!html.includes('13 天没有成功'),'库日期不能使用旧自动提取日期');
+  assert(html.includes('最近自动提取成功')&&html.includes('2026-10-14'),'旧自动任务状态应保留');
+  assert(html.includes('每日 Fact 任务当前是关闭状态'),'人工发布不能表示自动任务已开启');
+  assert.strictEqual(dom.byId['status-sub'].textContent,'状态读取于 2026-10-27 11:00（每日任务缓存）');
+  assert.strictEqual(JSON.stringify(data),before,'读取状态不能修改资料和任务');
+})();
+
+(function unloadedLibraryDoesNotClaimPublication(){
+  const {context,dom}=dailyStatusContext();
+  context.renderDailyStatus({today:'2026-10-27',
+    fact_daily:{enabled:false,status:'not_created',last_success_date:'2026-10-14'},
+    fact_library:{ready:false,status:'preload_pending'}});
+  const html=dom.byId['daily-status-body'].innerHTML;
+  assert(html.includes('等待载入')&&html.includes('暂时无法确认库的更新时间'),'尚未载入应显示未知');
+  assert(!html.includes('0 条 · 有效 0 条')&&!html.includes('实际库更新'),'尚未载入不能表示空库或新发布');
+})();
+
+(function libraryRefreshEscapesMetadataAndKeepsFailures(){
+  const {context,dom}=dailyStatusContext();
+  const data={today:'2026-10-27',
+    fact_daily:{enabled:false,status:'blocked',last_success_date:'2026-10-14',last_error:'HTTP 429'},
+    fact_library:{ready:true,updated_at:'2026-10-27T11:00:00+08:00',facts_total:7010,active:5833,
+      manual_review:{reviewed_at:'<img src=x onerror=alert(1)>',fact_count:2}}};
+  context.renderDailyStatus(data);
+  let html=dom.byId['daily-status-body'].innerHTML;
+  assert(!html.includes('<img')&&html.includes('&lt;img'),'库元信息应转义');
+  assert(!html.includes('天没有更新'),'新发布不能沿用旧自动任务告警');
+  data.fact_library.facts_total=7011;
+  context.renderDailyStatus(data);
+  html=dom.byId['daily-status-body'].innerHTML;
+  assert(html.includes('7011 条')&&!html.includes('7010 条'),'刷新应显示新库数据');
+  assert(html.includes('HTTP 429'),'刷新不能隐藏每日任务失败');
 })();
 
 (function retryOnlyForRecoverableStates(){

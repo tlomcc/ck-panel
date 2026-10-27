@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v353-digest-saved-recovery';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v354-fact-library-status';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1390,13 +1390,26 @@ function renderDailyStatus(d){
   var f=d.fact_daily||{};
   var expanded={};
   if(body.querySelectorAll)body.querySelectorAll('[data-daily-detail][open]').forEach(function(el){expanded[el.getAttribute('data-daily-detail')]=true});
-  if(sub)sub.textContent='更新于 '+(d.now||'-');
+  if(sub)sub.textContent='状态读取于 '+(d.now||'-')+(d.status_cache&&d.status_cache.stale?'（每日任务缓存）':'');
   var todayTs=Date.parse(String(d.today||'')+'T00:00:00+08:00');
-  var successTs=Date.parse(String(f.last_success_date||'')+'T00:00:00+08:00');
-  var staleDays=isFinite(todayTs)&&isFinite(successTs)?Math.floor((todayTs-successTs)/86400000):0;
-  var html=staleDays>2?'<div class="ds-stale-alert"><b>Fact 已 '+staleDays+' 天没有成功提取</b><span>最近成功：'+esc(f.last_success_date||'-')+'。可一次补跑全部失败日期，已完成的部分会保留。</span></div>':'';
-  if(f.enabled===false)html+='<div class="ds-stale-alert"><b>每日 Fact 任务当前是关闭状态</b><span>网关侧没有启用自动提取，下面显示的是最后一次留下的记录。</span></div>';
-  html+='<div class="ds-overview"><div><span>本次处理日期</span><b>'+esc(f.target_date||d.yesterday||'-')+'</b></div><div><span>最近成功</span><b>'+esc(f.last_success_date||'尚无记录')+'</b></div></div>';
+  var library=d.fact_library||{},libraryReady=library.ready===true;
+  var updated=String(library.updated_at||'');
+  var updateDate=updated.slice(0,10);
+  var updateTs=Date.parse(String(libraryReady?updateDate:(f.last_success_date||''))+'T00:00:00+08:00');
+  var staleDays=isFinite(todayTs)&&isFinite(updateTs)?Math.floor((todayTs-updateTs)/86400000):0;
+  var html='';
+  if(libraryReady){
+    html+='<section class="ds-library-status"><div class="ds-fact-head"><div><span>Fact 库</span><b>已发布</b></div></div>';
+    html+='<div class="ds-overview"><div><span>实际库更新</span><b>'+esc(updated.replace('T',' ').replace(/\+08:00$/, ''))+'</b></div><div><span>库内事实</span><b>'+dsNum(library.facts_total)+' 条 · 有效 '+dsNum(library.active)+' 条</b></div></div>';
+    var manual=library.manual_review||{};
+    if(Number(manual.fact_count)>0)html+='<p>最近人工整理：'+esc(manual.reviewed_at||'-')+'，'+dsNum(manual.fact_count)+' 条 Fact 已入库。</p>';
+    html+='</section>';
+  }else if(d.fact_library){
+    html+='<section class="ds-library-status"><div class="ds-fact-head"><div><span>Fact 库</span><b>等待载入</b></div></div><p>已发布资料尚未载入，暂时无法确认库的更新时间。</p></section>';
+  }
+  if(staleDays>2)html+='<div class="ds-stale-alert"><b>'+(libraryReady?'Fact 库已 '+staleDays+' 天没有更新':'每日自动提取已 '+staleDays+' 天没有成功')+'</b><span>'+(libraryReady?'实际库更新：'+esc(updateDate):'最近自动提取成功：'+esc(f.last_success_date||'-'))+'。下方保留每日任务的未完成记录。</span></div>';
+  if(f.enabled===false)html+='<div class="ds-stale-alert"><b>每日 Fact 任务当前是关闭状态</b><span>自动提取已暂停；Fact 库仍可由人工整理更新，下方保留每日任务记录。</span></div>';
+  html+='<div class="ds-overview"><div><span>自动提取处理日期</span><b>'+esc(f.target_date||d.yesterday||'-')+'</b></div><div><span>最近自动提取成功</span><b>'+esc(f.last_success_date||'尚无记录')+'</b></div></div>';
   var queue=f.retry_queue||{},failed=f.failed_dates||[],pending=queue.pending_dates||[];
   html+='<section class="ds-retry-queue"><div><b>补跑未完成的日期</b><p>按日期先后继续，只处理未完成部分。关闭页面后仍会继续。</p></div>';
   if(queue.status==='running')html+='<span role="status">正在补跑 '+esc(queue.active_date||pending[0]||'')+' · 剩余 '+pending.length+' 天</span>';

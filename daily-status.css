@@ -8,6 +8,11 @@
 #tab-status .tab-head h2{font-family:"Microsoft YaHei","Segoe UI",sans-serif;letter-spacing:.02em;color:var(--ds-ink)!important}
 #tab-status #status-sub{font-size:12px;color:var(--ds-muted)}
 #daily-status-body{display:flex;flex-direction:column;gap:16px;min-width:0;color:var(--ds-ink)}
+#daily-status-body .ds-library-status{display:grid;gap:12px;padding:16px;border:1px solid var(--ds-line);border-left:4px solid var(--ds-green);border-radius:10px;background:var(--ds-surface)}
+#daily-status-body .ds-library-status .ds-fact-head b{color:var(--ds-green);background:var(--ds-paper)}
+#daily-status-body .ds-library-status p{margin:0;color:var(--ds-muted);font-size:12px;line-height:1.7}
+#daily-status-body .ds-library-status .ds-overview>div{min-width:0}
+#daily-status-body .ds-library-status .ds-overview b,#daily-status-body .ds-library-status p{overflow-wrap:anywhere}
 #daily-status-body .ds-overview{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 #daily-status-body .ds-overview>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border:1px solid var(--ds-line);border-radius:10px;background:var(--ds-surface)}
 #daily-status-body .ds-overview span{font-size:12px;color:var(--ds-muted)}
