@@ -197,6 +197,11 @@ body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-title-center
 @media(max-width:760px){
   body.chat-active .chat-titlebar:has(.chat-quick-fact-control){padding:0 7px!important;gap:8px!important}
 }
+@media(max-width:360px){
+  body.chat-active .chat-titlebar:has(#chat-wake-shortcut:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])) .chat-icon-btn{width:30px!important;min-width:30px!important}
+  body.chat-active .chat-titlebar:has(#chat-wake-shortcut:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])) .chat-left-actions{grid-template-columns:repeat(2,30px)!important}
+  body.chat-active .chat-titlebar:has(#chat-wake-shortcut:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])) .chat-title-center{padding:2px 0!important}
+}
 body.chat-active .chat-head-actions .chat-quick-actions-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;opacity:1!important;transform:none!important;color:#84948b!important;background:transparent!important;box-shadow:none!important}
 body.chat-active .chat-head-actions .chat-quick-actions-toggle[hidden]{display:none!important}
 body.chat-active .chat-head-actions .chat-quick-actions-toggle svg{fill:none;stroke:currentColor;stroke-width:1.6!important;stroke-linecap:round;stroke-linejoin:round;transform:none!important}
