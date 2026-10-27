@@ -30,7 +30,7 @@ const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect();const s=ge
   return {top:+r.top.toFixed(1),right:+r.right.toFixed(1),bottom:+r.bottom.toFixed(1),
     left:+r.left.toFixed(1),h:+r.height.toFixed(1),w:+r.width.toFixed(1),display:s.display};};
 const actions=document.querySelector('.chat-head-actions');
-const buttons=actions?[...actions.querySelectorAll('button')].filter(button=>!button.hidden):[];
+const buttons=actions?[...actions.querySelectorAll('button')].filter(button=>button.getClientRects().length&&!button.hidden):[];
 const out={
   viewport:{w:window.innerWidth,h:window.innerHeight},
   progress:rect(document.getElementById('chat-head-progress')),
@@ -93,12 +93,12 @@ function overlaps(a, b) {
   check(tag + ' 不能冲出视口左边', p.left >= 0, { left: p.left });
   check(tag + ' 不能冲出视口右边', p.right <= data.viewport.w, { right: p.right, viewport: data.viewport.w });
 
-  check(tag + ' 右上角必须是三颗按钮', data.buttons.length === 3, data.buttons.length);
+  check(tag + ' 右上角包含召回选择箭头共四颗按钮', data.buttons.length === 4, data.buttons.length);
   data.buttons.forEach(function (b, i) {
     check(tag + ' 不能盖住第 ' + (i + 1) + ' 颗图标按钮', !overlaps(p, b), { progress: p, button: b });
   });
-  if (data.buttons.length === 3) {
-    check(tag + ' 三颗按钮必须还在同一行（没被挤成两行）',
+  if (data.buttons.length === 4) {
+    check(tag + ' 四颗按钮必须还在同一行（没被挤成两行）',
       data.buttons.every(function (button) { return Math.abs(button.top - data.buttons[0].top) < 2; }),
       data.buttons.map(function (b) { return b.top; }));
   }

@@ -21,23 +21,34 @@ assert(/id="chat-recall-recent-rounds"[^>]+value="10"/.test(html),'recent recall
 assert(/recallRecentRounds:10/.test(script),'recent recall window default must be 10');
 assert(/recall_recent_rounds:chatNormalizeRecallRecentRounds\(cfg\.recallRecentRounds\)/.test(script),'recent recall window must be sent to gateway');
 assert(/Math\.max\(0,Math\.min\(100,number\)\)/.test(script),'recent recall window must be clamped to 0-100');
-assert(/id="chat-quick-fact-toggle"[^>]*onclick="chatQuickToggleFactMode\(\)"/.test(html),'chat header must have a Fact B quick toggle');
+assert(/id="chat-quick-fact-toggle"[^>]*onclick="chatQuickToggleFactMode\(\)"/.test(html),'chat header must have an immediate recall toggle');
+assert(/id="chat-quick-fact-menu-toggle"[^>]*onclick="chatToggleQuickFactMenu\(event\)"/.test(html),'B/C selection needs its own visible button');
 assert(!/chat-quick-recall-toggle|chatQuickToggleRecall/.test(html+script),'the duplicate text recall toggle must be gone');
 assert(/function chatRenderQuickRecallControls\(cfg\)/.test(script),'quick recall controls need a shared renderer');
 assert(/chatRenderQuickRecallControls\(cfg\)/.test(script.slice(script.indexOf('function chatRenderRecallState('),script.indexOf('function chatRenderNcContextState('))),
   'recall state refresh must update header quick controls');
 assert(/function chatQuickToggleFactMode\(\)/.test(script)&&/chatSaveRecallSetting\(true\)/.test(script),'quick toggle must save');
 const vm=require('node:vm');
+const quickMode=script.slice(script.indexOf('function chatQuickFactMode('),script.indexOf('function chatRenderQuickRecallControls('));
 const toggle=script.slice(script.indexOf('function chatQuickToggleFactMode(){'),script.indexOf('function chatRenderRecallState('));
 for(const mode of ['a','b','c'])for(const enabled of [true,false]){
   let chosen,saved;const input={checked:enabled};
   const sandbox={chatLoadConfig:()=>({factRecallMode:mode,recall:enabled}),chatNormalizeFactRecallMode:v=>v,
-    document:{getElementById:()=>input},chatSetFactRecallModeField:v=>chosen=v,chatSaveRecallSetting:v=>saved=v};
-  vm.runInNewContext(toggle+';chatQuickToggleFactMode()',sandbox);
-  assert(chosen==='b','Quick toggle must always select B');
-  assert(input.checked===!(enabled&&mode==='b')&&saved,'Quick toggle must save correct on/off state');
+    document:{getElementById:()=>input},chatSetFactRecallModeField:v=>chosen=v,chatSaveRecallSetting:v=>saved=v,
+    chatCloseQuickFactMenu:()=>{}};
+  vm.runInNewContext(quickMode+toggle+';chatQuickToggleFactMode()',sandbox);
+  assert(chosen===(mode==='c'?'c':'b'),'Quick toggle must retain the selected B/C mode');
+  assert(input.checked===!(enabled&&mode!=='a')&&saved,'Quick toggle must save correct on/off state');
 }
-assert(script.includes("+' Fact '+quickLabel+' 召回'"),'Quick toggle label must identify current mode');
+const choose=script.slice(script.indexOf('function chatChooseQuickFactMode('),script.indexOf("document.addEventListener('pointerdown'",script.indexOf('function chatChooseQuickFactMode(')));
+for(const mode of ['b','c'])for(const enabled of [true,false]){
+  let chosen,saved,closed;const input={checked:enabled};
+  const sandbox={document:{getElementById:()=>input},chatSetFactRecallModeField:v=>chosen=v,
+    chatSaveRecallSetting:()=>{saved={mode:chosen,recall:input.checked};return saved},chatCloseQuickFactMenu:()=>closed=true};
+  vm.runInNewContext(choose,sandbox);sandbox.chatChooseQuickFactMode(mode);
+  assert(saved.mode===mode&&saved.recall&&closed,'Selecting B/C should enable that mode, save, and close the menu');
+}
+assert(script.includes("+'召回 '+quickLabel"),'Quick toggle label must identify current mode');
 assert(/name="chat-fact-recall-mode" value="c"/.test(html),'C option missing');
 assert(/\.chat-quick-fact-toggle/.test(fs.readFileSync(path.join(root,'chat-ui.css'),'utf8')),'quick controls need compact chat header styling');
 assert(/chat-quick-fact-toggle/.test(html)&&!/fact-quick-cloud/.test(html),'quick control uses the compact recall icon');

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v355-active-memory';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v356-recall-shortcut';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2879,29 +2879,101 @@ function chatStoreSessionRecall(sessionId,recall,userTs,turnId){
   chatScheduleSessionSave(sessionId);
   if(sessionId===chatActiveSessionId)chatRenderSessionRecall();
 }
+function chatQuickFactMode(cfg){
+  return chatNormalizeFactRecallMode((cfg||{}).factRecallMode)==='c'?'c':'b';
+}
 function chatRenderQuickRecallControls(cfg){
   cfg=cfg||chatLoadConfig()||{};
   var recall=cfg.recall!==false;
   var factMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   var factButton=document.getElementById('chat-quick-fact-toggle');
-  var factOn=recall&&factMode==='b';
-  var quickLabel='B';
+  var quickMode=chatQuickFactMode(cfg);
+  var factOn=recall&&factMode===quickMode;
+  var quickLabel=quickMode.toUpperCase();
   if(factButton){
     factButton.classList.toggle('is-on',factOn);
     factButton.classList.toggle('is-off',!factOn);
     factButton.disabled=false;
+    factButton.setAttribute('data-fact-mode',quickMode);
     factButton.setAttribute('aria-pressed',factOn?'true':'false');
-    factButton.setAttribute('aria-label',(factOn?'关闭':'开启')+' Fact '+quickLabel+' 召回');
-    factButton.title=(factOn?'关闭':'开启')+' Fact '+quickLabel+' 召回';
+    factButton.setAttribute('aria-label',(factOn?'关闭':'开启')+'召回 '+quickLabel);
+    factButton.title=(factOn?'关闭':'开启')+'召回 '+quickLabel;
+  }
+  var letter=document.getElementById('chat-quick-fact-letter');
+  if(letter)letter.textContent=quickLabel;
+  document.querySelectorAll('#chat-quick-fact-menu [data-fact-mode]').forEach(function(option){
+    option.setAttribute('aria-checked',option.getAttribute('data-fact-mode')===quickMode?'true':'false');
+  });
+}
+function chatToggleQuickFactMenu(event){
+  var menu=document.getElementById('chat-quick-fact-menu');
+  if(menu&&!menu.hidden){
+    if(event){event.preventDefault();event.stopPropagation()}
+    chatCloseQuickFactMenu(true);
+  }else{chatOpenQuickFactMenu(event)}
+}
+function chatOpenQuickFactMenu(event){
+  if(event){event.preventDefault();event.stopPropagation()}
+  var menu=document.getElementById('chat-quick-fact-menu');
+  var button=document.getElementById('chat-quick-fact-menu-toggle');
+  if(!menu||!button)return;
+  chatRenderQuickRecallControls();
+  menu.hidden=false;
+  button.setAttribute('aria-expanded','true');
+  var selected=menu.querySelector('[aria-checked="true"]');
+  if(selected)selected.focus({preventScroll:true});
+}
+function chatCloseQuickFactMenu(restoreFocus){
+  var menu=document.getElementById('chat-quick-fact-menu');
+  var button=document.getElementById('chat-quick-fact-menu-toggle');
+  if(!menu||menu.hidden)return;
+  menu.hidden=true;
+  if(button){
+    button.setAttribute('aria-expanded','false');
+    if(restoreFocus)button.focus({preventScroll:true});
   }
 }
+function chatQuickFactKeydown(event){
+  var menu=document.getElementById('chat-quick-fact-menu');
+  if(!menu)return;
+  if(event.key==='Escape'){
+    chatCloseQuickFactMenu(true);
+  }else if(['ArrowDown','ArrowUp','Home','End'].indexOf(event.key)>=0){
+    if(menu.hidden){chatOpenQuickFactMenu(event);return}
+    var options=Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
+    var current=options.indexOf(document.activeElement);
+    var next=event.key==='Home'?0:event.key==='End'?options.length-1:
+      (current+(event.key==='ArrowUp'?-1:1)+options.length)%options.length;
+    if(options[next])options[next].focus({preventScroll:true});
+  }else{return}
+  event.preventDefault();
+  event.stopPropagation();
+}
+function chatChooseQuickFactMode(value,event){
+  if(event){event.preventDefault();event.stopPropagation()}
+  if(value!=='b'&&value!=='c')return;
+  var recallInput=document.getElementById('chat-recall-enabled');
+  if(recallInput)recallInput.checked=true;
+  chatSetFactRecallModeField(value);
+  var saved=chatSaveRecallSetting(true);
+  chatCloseQuickFactMenu(true);
+  return saved;
+}
+document.addEventListener('pointerdown',function(event){
+  if(event.target&&event.target.closest&&!event.target.closest('.chat-quick-fact-control'))chatCloseQuickFactMenu(false);
+});
+document.addEventListener('focusin',function(event){
+  if(event.target&&event.target.closest&&!event.target.closest('.chat-quick-fact-control'))chatCloseQuickFactMenu(false);
+});
 function chatQuickToggleFactMode(){
+  chatCloseQuickFactMenu(false);
   var cfg=chatLoadConfig()||{};
   var mode=chatNormalizeFactRecallMode(cfg.factRecallMode);
-  var factOn=cfg.recall!==false&&mode==='b';
+  var quickMode=chatQuickFactMode(cfg);
+  var factOn=cfg.recall!==false&&mode===quickMode;
   var recallInput=document.getElementById('chat-recall-enabled');
   if(recallInput)recallInput.checked=!factOn;
-  chatSetFactRecallModeField('b');
+  chatSetFactRecallModeField(quickMode);
   return chatSaveRecallSetting(true);
 }
 function chatRenderRecallState(statusText,statusKind){

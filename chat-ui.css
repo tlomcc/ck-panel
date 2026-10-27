@@ -15,18 +15,48 @@ body.chat-active .chat-turn-heading .chat-thinking{min-width:0;flex:1;max-width:
 .chat-action-levels button[aria-checked="true"]{background:var(--ck-ui-mist);border-color:var(--ck-ui-jade);color:var(--ck-ui-jade)}
 .chat-action-levels svg{width:28px;height:24px;stroke:currentColor;stroke-width:3.5;stroke-linecap:round;fill:none}
 #chat-action-mode-hint{width:100%;font-size:12px;color:#71847d}
-/* Inherit the header's 36px / 34px hit boxes and SVG sizes. */
-body.chat-active .chat-head-actions .chat-quick-fact-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;opacity:1!important;transform:none!important;transition:background .16s ease,color .16s ease!important}
-body.chat-active .chat-head-actions .chat-quick-fact-toggle svg{stroke-width:1.6!important;transform:none!important}
+/* One immediate toggle, with a separate mode selector beside it. */
+.chat-quick-fact-control{position:relative;display:flex;align-items:center;align-self:center;border:1px solid var(--ck-ui-line);border-radius:8px;--quick-fact-ink:#357b70;--quick-fact-tint:#e3efe9}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;border-radius:7px 0 0 7px!important;opacity:1!important;transform:none!important;transition:background .16s ease,color .16s ease!important;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+body.chat-active .chat-quick-fact-menu-toggle{display:grid;place-items:center;width:24px;min-width:24px;height:36px;padding:0;border:0;border-left:1px solid var(--ck-ui-line);border-radius:0 7px 7px 0;background:transparent;color:#718c80;cursor:pointer;touch-action:manipulation}
+body.chat-active .chat-quick-fact-menu-toggle svg{width:14px!important;height:14px!important;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+body.chat-active .chat-quick-fact-menu-toggle[aria-expanded="true"]{background:var(--quick-fact-tint);color:var(--quick-fact-ink)}
+body.chat-active .chat-quick-fact-menu-toggle:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+body.dark.chat-active .chat-quick-fact-control,body.dark.chat-active .chat-quick-fact-menu-toggle{border-color:#3d5248}
+body.dark.chat-active .chat-quick-fact-menu-toggle{color:#a2b9ad}
+@media(max-width:760px){body.chat-active .chat-quick-fact-menu-toggle{height:34px}}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle svg{width:26px!important;height:26px!important;stroke-width:1.5!important;transform:none!important}
+body.chat-active .chat-quick-fact-toggle .chat-recall-letter{fill:currentColor!important;stroke:none!important;font:700 14px "Trebuchet MS",system-ui,sans-serif}
 body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]{background:#e3efe9!important;color:var(--ck-ui-jade)!important}
 body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .chat-recall-bookmark{fill:#c3ded1}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"]{background:#e2edf8!important;color:#28659a!important}
+body.chat-active .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"] .chat-recall-bookmark{fill:#c4dcf0}
 body.dark.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]{background:#304a3f!important;color:#a2ceba!important}
 body.dark.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .chat-recall-bookmark{fill:#426453}
+body.dark.chat-active .chat-head-actions .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"]{background:#283f54!important;color:#a6cff0!important}
+body.dark.chat-active .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"] .chat-recall-bookmark{fill:#365875}
 /* Pointer focus and sticky touch hover must never resemble an enabled toggle. */
 body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"],
-body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"]:is(:hover,:focus,:active){background:transparent!important;color:#84948b!important;box-shadow:none!important;filter:none!important;transform:none!important;transition:none!important;outline:none!important;-webkit-tap-highlight-color:transparent}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"]:is(:hover,:focus,:active){background:transparent!important;color:var(--quick-fact-muted,#718c80)!important;box-shadow:none!important;filter:none!important;transform:none!important;transition:none!important;outline:none!important;-webkit-tap-highlight-color:transparent}
+body.chat-active .chat-quick-fact-toggle[data-fact-mode="c"]{--quick-fact-muted:#6a87a1}
+body.dark.chat-active .chat-quick-fact-toggle{--quick-fact-muted:#a2b9ad}
+body.dark.chat-active .chat-quick-fact-toggle[data-fact-mode="c"]{--quick-fact-muted:#9fb8cf}
 body.chat-active .chat-quick-fact-toggle[aria-pressed="false"] .chat-recall-bookmark{fill:none!important}
-body.chat-active .chat-head-actions .chat-quick-fact-toggle:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
+body.chat-active #chat-quick-fact-toggle:focus-visible{outline:2px solid currentColor!important;outline-offset:3px!important}
+.chat-quick-fact-menu{position:absolute;z-index:30;top:calc(100% + 9px);right:0;width:166px;padding:6px;border:1px solid var(--ck-ui-line);border-radius:12px;background:#fff;box-shadow:0 8px 24px #25494324}
+.chat-quick-fact-menu[hidden]{display:none!important}
+body.chat-active .chat-quick-fact-menu button{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:7px 10px;border:0;border-radius:7px;background:transparent;color:#38534a;font:500 13px/1.4 "Microsoft YaHei UI",system-ui,sans-serif;text-align:left;white-space:nowrap;cursor:pointer;touch-action:manipulation}
+.chat-quick-fact-menu button[data-fact-mode="c"]{--quick-fact-ink:#28659a;--quick-fact-tint:#e2edf8}
+body.chat-active .chat-quick-fact-menu button:is(:hover,:focus-visible){background:var(--quick-fact-tint);outline:none}
+body.chat-active .chat-quick-fact-menu button[aria-checked="true"]{color:var(--quick-fact-ink);font-weight:600}
+.chat-quick-fact-mark{display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:6px;background:var(--quick-fact-tint);color:var(--quick-fact-ink);font:700 15px/1 "Trebuchet MS",system-ui,sans-serif}
+.chat-quick-fact-menu button[data-fact-mode="c"] .chat-quick-fact-mark{border-radius:50%}
+.chat-quick-fact-check{width:16px;height:16px;margin-left:auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;visibility:hidden}
+.chat-quick-fact-menu [aria-checked="true"] .chat-quick-fact-check{visibility:visible}
+body.dark .chat-quick-fact-menu{background:#26332f;border-color:#3d5248}
+body.dark .chat-quick-fact-control{--quick-fact-ink:#a2ceba;--quick-fact-tint:#304a3f}
+body.dark.chat-active .chat-quick-fact-menu button{color:#d4e1d9}
+body.dark .chat-quick-fact-menu button[data-fact-mode="c"]{--quick-fact-ink:#a6cff0;--quick-fact-tint:#283f54}
 body.chat-active .chat-msg-usage .chat-usage-read{color:#267eaa!important;font-weight:600!important}
 body.chat-active .chat-msg-usage .chat-usage-create{color:#9a752f!important}
 body.dark.chat-active .chat-msg-usage .chat-usage-read{color:#7fc2e2!important}
@@ -159,14 +189,13 @@ body.dark.chat-active #chat-search input{color:#d4e5cf!important}
 body.dark #chat-search .chat-search-navigation button,body.dark #chat-search .chat-search-result:hover{background:#354a35;color:#bdd7b4!important}
 body.dark #chat-search mark{background:#526b43;color:#f0f8e8}
 @media(max-width:600px){body.chat-active #chat-search{padding:11px 12px!important;max-height:38vh}#chat-search .chat-search-heading>span{font-size:9px}}
-/* Medium message actions: a header toggle beside Fact B. */
-body.chat-active .chat-head-actions{grid-template-columns:none!important;grid-auto-flow:column!important;grid-auto-columns:36px!important}
-body.chat-active .chat-titlebar:has(#chat-quick-actions-toggle:not([hidden])){display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;padding:0 16px!important;gap:10px!important}
-body.chat-active .chat-titlebar:has(#chat-quick-actions-toggle:not([hidden])) :is(.chat-left-actions,.chat-head-actions){position:static!important}
-body.chat-active .chat-titlebar:has(#chat-quick-actions-toggle:not([hidden])) .chat-title-center{position:static!important;transform:none!important;max-width:100%!important;width:100%;padding:2px 4px!important;justify-self:center}
+/* Keep the title between the navigation and the variable-width shortcuts. */
+body.chat-active .chat-head-actions{grid-template-columns:none!important;grid-auto-flow:column!important;grid-auto-columns:max-content!important}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control){display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;padding:0 16px!important;gap:10px!important}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control) :is(.chat-left-actions,.chat-head-actions){position:static!important}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-title-center{position:static!important;transform:none!important;max-width:100%!important;width:100%;padding:2px 4px!important;justify-self:center}
 @media(max-width:760px){
-  body.chat-active .chat-head-actions{grid-auto-columns:34px!important}
-  body.chat-active .chat-titlebar:has(#chat-quick-actions-toggle:not([hidden])){padding:0 7px!important;gap:8px!important}
+  body.chat-active .chat-titlebar:has(.chat-quick-fact-control){padding:0 7px!important;gap:8px!important}
 }
 body.chat-active .chat-head-actions .chat-quick-actions-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;opacity:1!important;transform:none!important;color:#84948b!important;background:transparent!important;box-shadow:none!important}
 body.chat-active .chat-head-actions .chat-quick-actions-toggle[hidden]{display:none!important}

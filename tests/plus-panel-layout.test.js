@@ -64,11 +64,11 @@ assert(!allCss.includes('chat-side-tabs'),'dead .chat-side-tabs styles must be g
 assert(!source.includes('chat-side-tabs'),'dead .chat-side-tabs query must be gone');
 assert(/id="chat-side-model"/.test(html)&&/id="chat-side-debug"/.test(html),'side panels themselves must stay');
 
-// ── 聊天标题栏的 Fact B 快捷键 ───────────────────────────────────────
-assert((html.match(/id="chat-quick-fact-toggle"/g)||[]).length===1,'Fact B shortcut must render exactly once');
+// ── 聊天标题栏的 Fact B/C 快捷键 ─────────────────────────────────────
+assert((html.match(/id="chat-quick-fact-toggle"/g)||[]).length===1,'Fact B/C shortcut must render exactly once');
 const chatHead=html.slice(html.indexOf('<div class="chat-head-actions">'),html.indexOf('</div>',html.indexOf('<div class="chat-head-actions">'))+6);
-assert(chatHead.indexOf('chat-search-toggle')<chatHead.indexOf('chat-quick-fact-toggle')&&!chatHead.includes('chat-theme-toggle'),'Search and Fact B occupy the header; theme lives in debug');
-assert(/chat-quick-fact-toggle[^>]*>\s*<svg/.test(chatHead),'Fact B shortcut should use an icon without visible text');
+assert(chatHead.indexOf('chat-search-toggle')<chatHead.indexOf('chat-quick-fact-toggle')&&!chatHead.includes('chat-theme-toggle'),'Search and Fact B/C occupy the header; theme lives in debug');
+assert(/chat-quick-fact-toggle[^>]*>\s*<svg/.test(chatHead)&&/chat-quick-fact-letter/.test(chatHead),'Fact shortcut needs a compact icon with a visible mode letter');
 
 // ── 供应商接口类型 ─────────────────────────────────────────────────
 assert(/function providerNormalizeApiType\(/.test(source),'provider API type normalizer must exist');
