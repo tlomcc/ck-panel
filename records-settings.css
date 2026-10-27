@@ -24,3 +24,5 @@ body.chat-active .chat-settings .chat-wake-duration{display:flex!important;align
 .ck-records-edit-state,.ck-records-saved p{white-space:pre-wrap}.ck-records-saved summary{cursor:pointer}.ck-records-saved h4{margin:14px 0 4px}.ck-records-saved p{margin:0 0 12px}.ck-records-box textarea:focus-visible{outline:2px solid var(--ck-accent);outline-offset:-3px}
 
 .manual-organizer>.chat-switch{display:flex;align-items:center;gap:8px}.manual-organizer>.chat-switch input{width:auto;margin:0;flex:0 0 auto}
+.ck-records-box>.ck-records-intro{margin:16px 18px}
+.ck-active-memory-box header{flex-wrap:wrap}
