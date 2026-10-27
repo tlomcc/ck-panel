@@ -205,17 +205,17 @@ async function ckRunDigestAction(id,action){
     finally{clearTimeout(timeout);if(seq===mySeq){controller=null;schedule();}}
   };
   window.ckSelectStatusTab=function(tab){
-    ckStatusTab=['topics','digest','events','records'].includes(tab)?tab:'fact';if(typeof ckOrganizingEnter==='function')ckOrganizingEnter();++seq;if(controller)controller.abort();clearTimeout(timer);
-    ['fact','topics','digest','events','records'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
+    if(tab==='records'){navTo('records');return;}
+    ckStatusTab=['topics','digest','events'].includes(tab)?tab:'fact';if(typeof ckOrganizingEnter==='function')ckOrganizingEnter();++seq;if(controller)controller.abort();clearTimeout(timer);
+    ['fact','topics','digest','events'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
     el('status-sub').textContent=ckStatusTab==='events'?'事件整理、Git 备份与预加载':ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'后台准备 · 缓存过期后同步';
-    if(ckStatusTab==='records'){stopDailyStatusRealtime();el('status-sub').textContent='每日记录 · 事实核验、精炼与更新';ckRecordsRefresh();return;}
     if(ckStatusTab==='fact'){loadDailyStatus(false);startDailyStatusRealtime();}else{stopDailyStatusRealtime();build(ckStatusTab);ckRefreshMaintenance(false);}
   };
   window.ckStatusEnter=function(){ckSelectStatusTab(ckStatusTab)};
   window.ckRefreshStatus=function(){if(typeof ckOrganizingEnter==='function')ckOrganizingEnter();if(ckStatusTab==='fact')loadDailyStatus(true);else ckRefreshMaintenance(true)};
   el('ck-status-tabs').addEventListener('keydown',function(e){
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
-    var tabs=['fact','topics','digest','events','records'],index=tabs.indexOf(ckStatusTab);index=e.key==='Home'?0:e.key==='End'?tabs.length-1:(index+(e.key==='ArrowLeft'?tabs.length-1:1))%tabs.length;
+    var tabs=['fact','topics','digest','events'],index=tabs.indexOf(ckStatusTab);index=e.key==='Home'?0:e.key==='End'?tabs.length-1:(index+(e.key==='ArrowLeft'?tabs.length-1:1))%tabs.length;
     ckSelectStatusTab(tabs[index]);el('ck-status-tab-'+tabs[index]).focus();
   });
   el('ck-topic-controls').addEventListener('toggle',function(){if(this.open&&typeof memoryWorkbenchEnter==='function')memoryWorkbenchEnter('topics')});

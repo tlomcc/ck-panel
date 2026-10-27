@@ -11312,7 +11312,6 @@ function switchPanelTab(tab,opts) {
   if(subTabs)subTabs.style.display=(tab==='apiconfig')?'grid':'none';
   var panel=document.getElementById('tab-'+tab);
   if(panel)panel.classList.add('active');
-  if(tab==='records'&&typeof ckRecordsRefresh==='function')ckRecordsRefresh();
   if(tab==='records'&&typeof ckActiveMemoryRefresh==='function')ckActiveMemoryRefresh();
   if(tab==='apiconfig'){
     renderApiConfig();
@@ -11477,6 +11476,7 @@ function cleanModelList(list,selected){
 }
 
 function switchApiTab(k){
+  if(k==='records'){navTo('records');return;}
   // 离开轮询页时丢弃未保存的草稿，避免下次进来看到上次没保存的排序，
   // 误以为已经生效。
   if(currentApiTab==='polling'&&k!=='polling')apiPollingDraftReset();
@@ -11545,7 +11545,6 @@ var API_TABS=[
     {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
   ]},
   {key:'topics',label:'主题与事件 API',info:'主题选材、事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'主题选材与事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
-  {key:'records',label:'每日记录 API',info:'每天从前一天聊天更新待办与基本信息；整理后由检查模型核验，两框各不超过5000字。',groups:[{key:'daily_records',label:'每日记录 · 整理',info:'只提取明确、重要、持续的事实和待办，更新过时内容、移除已完成事项。'},{key:'daily_records_audit',label:'每日记录 · 检查',info:'独立检查事实依据、重要性、精炼程度、最新状态与字数；不合格退回重新提炼。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}
@@ -12382,6 +12381,7 @@ function renameProviderCategory(button){
   });
 }
 function renderApiConfig(){
+  if(currentApiTab==='records')currentApiTab='providers';
   var body=document.getElementById('api-config-body');
   if(!body)return;
   document.querySelectorAll('.sub-tab').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-subtab')===currentApiTab)});

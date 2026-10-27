@@ -56,7 +56,7 @@ async function ckActiveMemoryRefresh(action,payload){
     if(ckActiveMemoryScope(chatLoadConfig())!==scope)return false;ckActiveMemoryData=data;
     if(action==='save'){
       var draft=ckActiveMemoryDrafts.get(scope);if(draft){if(draft.text===payload.content)draft.text=data.content;draft.saved=data.content;draft.revision=data.revision}
-      ckActiveMemoryMessage='已保存，下次聊天直接带入最新记忆。';
+      ckActiveMemoryMessage='已保存，下次聊天直接带入最新记忆，只追加在历史末尾。';
     }else if(action)ckActiveMemoryMessage=data.enabled?'小克可以继续自主更新记忆。':'已暂停自主更新，保存的记忆仍在每轮带入。';
     else ckActiveMemoryMessage='';
     return true;
@@ -66,4 +66,9 @@ async function ckActiveMemoryRefresh(action,payload){
     if(ckActiveMemoryScope(chatLoadConfig())!==scope){ckActiveMemoryRefresh();}
     else if(currentPanelTab==='records')ckActiveMemoryTimer=setTimeout(function(){if(currentPanelTab==='records')ckActiveMemoryRefresh()},30000);
   }
+}
+function ckLegacyRecordsOpen(){
+  var archive=document.getElementById('ck-legacy-records');
+  if(archive&&archive.open&&typeof ckRecordsRefresh==='function')ckRecordsRefresh();
+  else if(typeof ckRecordsTimer!=='undefined')clearTimeout(ckRecordsTimer);
 }

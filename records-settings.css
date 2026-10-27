@@ -26,3 +26,4 @@ body.chat-active .chat-settings .chat-wake-duration{display:flex!important;align
 .manual-organizer>.chat-switch{display:flex;align-items:center;gap:8px}.manual-organizer>.chat-switch input{width:auto;margin:0;flex:0 0 auto}
 .ck-records-box>.ck-records-intro{margin:16px 18px}
 .ck-active-memory-box header{flex-wrap:wrap}
+.ck-legacy-records{margin-top:32px;padding-top:18px;border-top:1px solid var(--ck-line)}

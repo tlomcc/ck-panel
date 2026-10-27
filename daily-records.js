@@ -111,7 +111,7 @@ async function ckRecordsRefresh(action,payload){
     if(action==='save')ckRecordsSaveMessage='保存未完成：'+(error.message||'连接失败')+'。框中内容已保留。';
     else ckRecordsConnectionError='状态连接暂未完成；上次读取的结果仍保留，稍后重新读取。';
   }}
-  finally{clearTimeout(timer);ckRecordsBusy=false;ckRecordsRender();clearTimeout(ckRecordsTimer);if(currentPanelTab==='records'||currentPanelTab==='status'&&ckStatusTab==='records')ckRecordsTimer=setTimeout(function(){ckRecordsRefresh()},10000);}
+  finally{clearTimeout(timer);ckRecordsBusy=false;ckRecordsRender();clearTimeout(ckRecordsTimer);if(currentPanelTab==='records'&&document.getElementById('ck-legacy-records')&&document.getElementById('ck-legacy-records').open)ckRecordsTimer=setTimeout(function(){ckRecordsRefresh()},10000);}
 }
 function ckRecordsToggle(){return ckRecordsRefresh(ckRecordsData&&ckRecordsData.enabled===false?'resume':'pause')}
 
