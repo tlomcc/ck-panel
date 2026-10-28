@@ -193,27 +193,31 @@ body.dark.chat-active #chat-search input{color:#d4e5cf!important}
 body.dark #chat-search .chat-search-navigation button,body.dark #chat-search .chat-search-result:hover{background:#354a35;color:#bdd7b4!important}
 body.dark #chat-search mark{background:#526b43;color:#f0f8e8}
 @media(max-width:600px){body.chat-active #chat-search{padding:11px 12px!important;max-height:38vh}#chat-search .chat-search-heading>span{font-size:9px}}
-/* Keep the title between the navigation and the variable-width shortcuts. */
-body.chat-active .chat-head-actions{grid-template-columns:none!important;grid-auto-flow:column!important;grid-auto-columns:max-content!important}
-body.chat-active .chat-titlebar:has(.chat-quick-fact-control){display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;padding:0 16px!important;gap:10px!important}
-body.chat-active .chat-titlebar:has(.chat-quick-fact-control) :is(.chat-left-actions,.chat-head-actions){position:static!important}
-body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-title-center{position:static!important;transform:none!important;max-width:100%!important;width:100%;padding:2px 4px!important;justify-self:center}
+/* Equal side columns keep the name at the center of the whole chat header. */
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control){--chat-title-max:calc(100vw - 376px);display:grid!important;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;padding:0 16px!important;gap:10px!important}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control) :is(.chat-left-actions,.chat-head-actions){position:static!important;width:auto!important;grid-template-columns:none!important;grid-auto-flow:column!important;grid-auto-columns:max-content!important;min-width:0}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-left-actions{justify-self:start}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-head-actions{justify-self:end}
+body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-title-center{position:static!important;transform:none!important;max-width:min(320px,var(--chat-title-max))!important;width:max-content;min-width:0;padding:2px 4px!important;justify-self:center}
 @media(max-width:760px){
-  body.chat-active .chat-titlebar:has(.chat-quick-fact-control){padding:0 7px!important;gap:8px!important}
+  body.chat-active .chat-titlebar:has(.chat-quick-fact-control){--chat-title-max:calc(100vw - 290px);padding:0 7px!important;gap:4px!important}
+  body.chat-active .chat-titlebar:has(.chat-quick-fact-control) :is(.chat-left-actions,.chat-head-actions){gap:4px!important}
+  body.chat-active .chat-titlebar:has(#chat-search-toggle:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])){--chat-title-max:calc(100vw - 318px)}
 }
 @media(max-width:360px){
-  body.chat-active .chat-titlebar:has(#chat-wake-shortcut:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])) .chat-icon-btn{width:30px!important;min-width:30px!important}
-  body.chat-active .chat-titlebar:has(#chat-wake-shortcut:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])) .chat-left-actions{grid-template-columns:repeat(2,30px)!important}
-  body.chat-active .chat-titlebar:has(#chat-wake-shortcut:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])) .chat-title-center{padding:2px 0!important}
+  body.chat-active .chat-titlebar:has(.chat-quick-fact-control){--chat-title-max:calc(100vw - 258px)}
+  body.chat-active .chat-titlebar:has(.chat-quick-fact-control) .chat-icon-btn{width:30px!important;min-width:30px!important}
+  body.chat-active .chat-titlebar:has(.chat-quick-fact-control) :is(.chat-left-actions,.chat-head-actions){gap:2px!important}
+  body.chat-active .chat-titlebar:has(#chat-search-toggle:not([hidden])):has(#chat-quick-actions-toggle:not([hidden])){--chat-title-max:calc(100vw - 274px)}
 }
-body.chat-active .chat-head-actions .chat-quick-actions-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;opacity:1!important;transform:none!important;color:#84948b!important;background:transparent!important;box-shadow:none!important}
-body.chat-active .chat-head-actions .chat-quick-actions-toggle[hidden]{display:none!important}
-body.chat-active .chat-head-actions .chat-quick-actions-toggle svg{fill:none;stroke:currentColor;stroke-width:1.6!important;stroke-linecap:round;stroke-linejoin:round;transform:none!important}
-body.chat-active .chat-head-actions .chat-quick-actions-toggle[aria-pressed="true"]{background:#e3efe9!important;color:var(--ck-ui-jade)!important}
+body.chat-active .chat-titlebar .chat-quick-actions-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;opacity:1!important;transform:none!important;color:#84948b!important;background:transparent!important;box-shadow:none!important}
+body.chat-active .chat-titlebar .chat-quick-actions-toggle[hidden]{display:none!important}
+body.chat-active .chat-titlebar .chat-quick-actions-toggle svg{fill:none;stroke:currentColor;stroke-width:1.6!important;stroke-linecap:round;stroke-linejoin:round;transform:none!important}
+body.chat-active .chat-titlebar .chat-quick-actions-toggle[aria-pressed="true"]{background:#e3efe9!important;color:var(--ck-ui-jade)!important}
 body.chat-active .chat-quick-actions-toggle[aria-pressed="true"] .chat-action-page{fill:#c3ded1}
-body.dark.chat-active .chat-head-actions .chat-quick-actions-toggle[aria-pressed="true"]{background:#304a3f!important;color:#a2ceba!important}
+body.dark.chat-active .chat-titlebar .chat-quick-actions-toggle[aria-pressed="true"]{background:#304a3f!important;color:#a2ceba!important}
 body.dark.chat-active .chat-quick-actions-toggle[aria-pressed="true"] .chat-action-page{fill:#426453}
-body.chat-active .chat-head-actions .chat-quick-actions-toggle:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
+body.chat-active .chat-titlebar .chat-quick-actions-toggle:focus-visible{outline:2px solid #83ab8b!important;outline-offset:3px!important}
 /* Streaming reasoning stays compact; numeric timing does not shift its label. */
 body.chat-active .chat-thinking-label{font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
 body.chat-active .chat-thinking-head{flex-wrap:nowrap!important;white-space:nowrap!important}
