@@ -25,7 +25,7 @@ from ag_retry import AgRetry, CONTINUE_TASK, is_ag
 from any_retry import AnyRetry, is_any
 from any_race import RaceProxy
 
-VERSION = '1.5.0'
+VERSION = '1.5.1'
 # ANY native request/stream retries stay disabled; the switch owns continuation.
 ANY_PROFILE_ID = '75c76315-eb66-4fa0-ab6d-f0d2b9ef344e'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
@@ -657,7 +657,7 @@ class Manager:
             self.store.db.execute("UPDATE tasks SET status='queued',turn_id='' WHERE request_id=?", (run.request_id,))
             self.store.db.commit()
             self.store.update(wid, status='queued', turn_id='',
-                              error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 过载，等待自动重试')
+                              error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 请求中断，等待自动重试')
             self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', run.text)
             return True
 
@@ -796,7 +796,7 @@ class Manager:
                 active = (window['status'] in ('starting', 'running', 'waiting')
                           and (not p.get('turnId') or p['turnId'] == window['turn_id']))
                 if active and run and run.accepts(p) and (not isinstance(run, AnyRetry) or run.available()):
-                    self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 过载，等待自动重试')
+                    self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 请求中断，等待自动重试')
                     self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', text,
                                     {'willRetry':bool(p.get('willRetry'))})
                 else:

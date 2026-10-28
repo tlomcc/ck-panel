@@ -17,10 +17,19 @@ def is_any(profile):
 
 def retryable(error):
     text = (error if isinstance(error, str) else json.dumps(error, ensure_ascii=False)).lower()
-    if any(word in text for word in ('unauthorized', 'invalid api key', 'insufficient_quota',
+    if any(word in text for word in ('unauthorized', 'invalid api key', 'invalid_api_key', 'insufficient_quota',
                                      'insufficient balance', 'billing', 'model_refusal',
                                      'context_length_exceeded', 'permission denied')):
         return False
+    if any(word in text for word in ('cancelled', 'canceled', 'user interrupted',
+                                     'ck_any_upstream_idle_timeout', 'ck_any_upstream_connection_error')):
+        return False
+    # Resume only after the native turn has failed; the existing switch and cap
+    # still own continuation. Cancellation and ambiguous timeouts stay excluded.
+    if any(word in text for word in ('stream closed before response.completed',
+                                     'ck_any_upstream_stream_incomplete',
+                                     'ck_any_upstream_http_incomplete')):
+        return True
     return bool(re.search(r'\b(?:429|500|502|503|504)\b', text) or any(word in text for word in (
         'high demand', 'overloaded', 'overload', 'server busy', 'rate limit', 'rate_limit',
         'too many requests', 'temporarily unavailable', 'temporary error',

@@ -11,6 +11,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
+from any_transport import StreamObservation, write_diagnostic
 
 LIMIT = 2 * 1024 * 1024
 
@@ -223,6 +224,20 @@ class RaceProxy:
                     self.send_error(404)
                     return
                 batch = None
+                observation = StreamObservation()
+                outcome, exception_type = 'setup_failure', ''
+                code, diagnostic_emitted, headers_sent = None, False, False
+
+                def forward(data):
+                    try:
+                        observation.feed(data)
+                    except Exception:
+                        observation.limited = True
+                        observation.buffer.clear()
+                    self.wfile.write(data)
+                    self.wfile.flush()
+                    observation.sent(data)
+
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
                     if not 0 < size <= 32 * 1024 * 1024:
@@ -252,24 +267,66 @@ class RaceProxy:
                         return
                     result = batch.run()
                     if result is None:
+                        outcome = 'cancelled'
                         return
                     code, content_type, prefix, response = result
                     self.send_response(code)
                     self.send_header('Content-Type', content_type)
                     self.send_header('Cache-Control', 'no-store')
                     self.end_headers()
-                    self.wfile.write(prefix)
-                    self.wfile.flush()
+                    headers_sent = True
+                    is_stream = code == 200 and 'text/event-stream' in content_type.lower()
+                    forward(prefix)
+                    failure = ''
                     if response:
                         while not batch.cancelled:
-                            chunk = response.read1(65536)
+                            try:
+                                chunk = response.read1(65536)
+                            except (OSError, http.client.HTTPException) as exc:
+                                exception_type = type(exc).__name__
+                                if isinstance(exc, TimeoutError):
+                                    failure = 'ck_any_upstream_idle_timeout'
+                                elif isinstance(exc, http.client.IncompleteRead):
+                                    failure = 'ck_any_upstream_http_incomplete'
+                                else:
+                                    failure = 'ck_any_upstream_connection_error'
+                                break
                             if not chunk:
                                 break
-                            self.wfile.write(chunk)
-                            self.wfile.flush()
-                except (OSError, ValueError, http.client.HTTPException):
-                    pass
+                            forward(chunk)
+                    if batch.cancelled:
+                        outcome = 'cancelled'
+                    elif is_stream and observation.terminal == 'error' and observation.upstream_error:
+                        self.wfile.write(observation.failure_event(observation.upstream_error))
+                        self.wfile.flush()
+                        diagnostic_emitted = True
+                        outcome = 'upstream_failed'
+                    elif observation.terminal:
+                        outcome = 'complete' if observation.terminal == 'response.completed' else 'upstream_failed'
+                    elif is_stream and response and not observation.limited:
+                        outcome = failure or 'ck_any_upstream_stream_incomplete'
+                        # A failure event explains the source. Never manufacture a
+                        # successful completion or substitute another model stream.
+                        self.wfile.write(observation.error_event(outcome))
+                        self.wfile.flush()
+                        diagnostic_emitted = True
+                    else:
+                        outcome = failure or ('unobserved_stream_end' if is_stream else 'http_response')
+                except (OSError, ValueError, http.client.HTTPException) as exc:
+                    exception_type = type(exc).__name__
+                    outcome = ('cancelled' if batch and batch.cancelled else
+                               'downstream_closed' if headers_sent else 'setup_failure')
                 finally:
+                    root = getattr(proxy.manager, 'root', None)
+                    if root:
+                        try:
+                            write_diagnostic(root, observation.summary() | {
+                                'window_id': wid, 'endpoint': suffix, 'http_status': code,
+                                'parallel_count': count, 'result': outcome,
+                                'exception_type': exception_type,
+                                'diagnostic_emitted': diagnostic_emitted})
+                        except Exception:
+                            pass  # Logging failure cannot break a model stream.
                     if batch:
                         batch.cancel()
                     with proxy.lock:
