@@ -25,7 +25,7 @@ from ag_retry import AgRetry, CONTINUE_TASK, is_ag
 from any_retry import AnyRetry, is_any
 from any_race import RaceProxy
 
-VERSION = '1.5.1'
+VERSION = '1.5.2'
 # ANY native request/stream retries stay disabled; the switch owns continuation.
 ANY_PROFILE_ID = '75c76315-eb66-4fa0-ab6d-f0d2b9ef344e'
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
@@ -278,6 +278,7 @@ class Manager:
         self.engines = {}
         self.race_proxy = None
         self.any_retry_counts = {}
+        self.any_retry_state = {}
         self.automatic_retries = {}  # In-memory runs; never replayed after restart.
         self.config_path = root / 'config.json'
         self.key_store = KeyStore(root)
@@ -332,6 +333,7 @@ class Manager:
                 'key_storage': 'encrypted', 'efforts': list(EFFORTS), 'scheduling': True, 'any_retry_switch': True,
                 'any_retry_profile': ANY_PROFILE_ID, 'any_auto_retry': self.retry_mode() != 'off',
                 'any_retry_controls': True, 'any_retry_mode': self.retry_mode(),
+                'any_rate_limit_continuation': True,
                 'any_retry_limit': self.config.get('any_retry_limit', 3),
                 'any_parallel_enabled': self.config.get('any_parallel_enabled') is True,
                 'any_parallel_count': self.config.get('any_parallel_count', 2), 'any_parallel_max': 8}
@@ -342,6 +344,7 @@ class Manager:
     def new_any_retry(self, key):
         run = AnyRetry(key, self.config.get('any_retry_limit', 3) if self.retry_mode() == 'limited' else None)
         run.count = self.any_retry_counts.get(key, 0)
+        run.bounded_count, run.has_progress = self.any_retry_state.get(key, (run.count, False))
         return run
 
     def set_any_retry(self, body):
@@ -613,6 +616,7 @@ class Manager:
             self.automatic_retries.pop(wid, None)
             for row in self.store.db.execute("SELECT request_id FROM tasks WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (wid,)):
                 self.any_retry_counts.pop(row['request_id'], None)
+                self.any_retry_state.pop(row['request_id'], None)
             self.store.db.execute("UPDATE tasks SET status=? WHERE window_id=? AND status IN ('queued','starting','running','waiting')", (status, wid))
             self.store.db.commit()
             self.store.update(wid, status=status, error=self.redact(error), turn_id='')
@@ -624,15 +628,32 @@ class Manager:
             pass
 
     def progress(self, wid, turn_id=None):
-        """Clear only the current runtime alert after actual execution resumes."""
+        """Track this task's actual progress, including while retries are off."""
         with self.store.lock:
             window = self.store.one(wid)
-            if not window['error'] or window['status'] not in ('running', 'waiting'):
+            if window['status'] not in ('running', 'waiting'):
                 return
             if turn_id and turn_id != window['turn_id']:
                 return
+            run = self.automatic_retries.get(wid)
+            if isinstance(run, AnyRetry):
+                run.has_progress = True
+                self.any_retry_state[run.request_id] = (run.bounded_count, True)
+            else:
+                # Track valid current-turn events, not stored items: late events
+                # may still be displayed but must never unlock unlimited retries.
+                task = self.store.db.execute("""SELECT t.request_id FROM tasks t
+                    JOIN windows w ON w.id=t.window_id
+                    LEFT JOIN schedules s ON s.request_id=t.request_id
+                    WHERE t.window_id=? AND t.status IN ('starting','running','waiting')
+                    AND COALESCE(s.profile,w.profile)=? LIMIT 1""", (wid, ANY_PROFILE_ID)).fetchone()
+                if task:
+                    key = task['request_id']
+                    bounded, _ = self.any_retry_state.get(key, (self.any_retry_counts.get(key, 0), False))
+                    self.any_retry_state[key] = (bounded, True)
             # A retry being queued/started, usage update, or user input is not recovery.
-            self.store.update(wid, error='')
+            if window['error']:
+                self.store.update(wid, error='')
 
     def log_problem(self, wid, text):
         with self.store.lock:
@@ -645,7 +666,7 @@ class Manager:
             run = self.automatic_retries.get(wid)
             if not run or turn.get('status') != 'failed' or not run.accepts(turn.get('error') or {}):
                 return False
-            if isinstance(run, AnyRetry) and not run.available():
+            if isinstance(run, AnyRetry) and not run.available(turn.get('error') or {}):
                 self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', run.text+' · 已达上限')
                 return False
             if run.pending:
@@ -680,6 +701,7 @@ class Manager:
                             run.starting()
                             if isinstance(run, AnyRetry):
                                 self.any_retry_counts[run.request_id] = run.count
+                                self.any_retry_state[run.request_id] = (run.bounded_count, run.has_progress)
                             if run.count:
                                 task['text'] = CONTINUE_TASK
                                 self.store.item(task['window_id'], 'auto-retry:'+run.request_id, 'warning', run.text)
@@ -795,7 +817,7 @@ class Manager:
                 window = self.store.one(wid)
                 active = (window['status'] in ('starting', 'running', 'waiting')
                           and (not p.get('turnId') or p['turnId'] == window['turn_id']))
-                if active and run and run.accepts(p) and (not isinstance(run, AnyRetry) or run.available()):
+                if active and run and run.accepts(p) and (not isinstance(run, AnyRetry) or run.available(p)):
                     self.store.update(wid, error='AG 限流，等待自动继续' if isinstance(run, AgRetry) else 'any 请求中断，等待自动重试')
                     self.store.item(wid, 'auto-retry:'+run.request_id, 'warning', text,
                                     {'willRetry':bool(p.get('willRetry'))})
@@ -821,6 +843,7 @@ class Manager:
                     self.automatic_retries.pop(wid, None)
                     for row in self.store.db.execute('SELECT request_id FROM tasks WHERE window_id=?', (wid,)):
                         self.any_retry_counts.pop(row['request_id'], None)
+                        self.any_retry_state.pop(row['request_id'], None)
                 engine = self.engines.get(wid)
                 if engine:
                     engine.stopping = True

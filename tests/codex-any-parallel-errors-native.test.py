@@ -31,8 +31,13 @@ def exercise():
 
         def observe_failure(batch, index, code, content_type, raw, label):
             kinds = [json.loads(line[5:]).get('type') for line in raw.splitlines() if line.startswith(b'data:')]
-            with lock:
-                failures.append(kinds)
+            # Losing connections can report cleanup after a winner has been
+            # selected. Production ignores those callbacks; so must this probe.
+            with batch.cv:
+                accepted = batch.allowed(index)
+            if accepted:
+                with lock:
+                    failures.append(kinds)
             return original_failure(batch, index, code, content_type, raw, label)
 
         any_race.Batch.failure = observe_failure

@@ -759,13 +759,13 @@
         try{
           var payload={mode:mode};if(mode==='limited')payload.limit=Number(limit.value);
           config=await request('/profiles/any-retry',payload);
-          retryState.textContent=mode==='off'?'已关闭；待重试已取消。':mode==='unlimited'?'已开启无限重试。':'已设置：首次失败后，最多再试 '+config.any_retry_limit+' 次。';
+          retryState.textContent=mode==='off'?'已关闭；待重试已取消。':config.any_rate_limit_continuation?(mode==='unlimited'?'高负载不限次数重试':'高负载最多再试 '+config.any_retry_limit+' 次')+'；执行中限流不限次数继续。':mode==='unlimited'?'已开启无限重试。':'已设置：首次失败后，最多再试 '+config.any_retry_limit+' 次。';
         }catch(error){retryState.textContent=error.message;}
         finally{retrySaving=false;syncRetry();}
       }
       modes.forEach(function(pair){var b=button(pair[1],function(){saveRetry(pair[0]);});b.dataset.mode=pair[0];retryButtons.push(b);retryActions.append(b);});
-      function syncRetry(){var mode=config.any_retry_mode||(config.any_auto_retry?'unlimited':'off');retryButtons.forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mode===mode));b.disabled=retrySaving||!config.any_retry_controls;});limit.disabled=retrySaving||!config.any_retry_controls;retryHeading.textContent='自动重试 · '+({off:'已关闭',unlimited:'无限次',limited:'最多 '+config.any_retry_limit+' 次'}[mode]);}
-      syncRetry();retryState.textContent=config.any_retry_controls?'首次请求不计入重试次数；过载失败随机等待 1～10 秒继续。成功或停止后结束。':'后端更新中，请稍后刷新。';
+      function syncRetry(){var mode=config.any_retry_mode||(config.any_auto_retry?'unlimited':'off'),scope=config.any_rate_limit_continuation?'高负载':'';retryButtons.forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mode===mode));b.disabled=retrySaving||!config.any_retry_controls;});limit.disabled=retrySaving||!config.any_retry_controls;retryHeading.textContent='自动重试 · '+({off:'已关闭',unlimited:scope+'无限次',limited:scope+'最多 '+config.any_retry_limit+' 次'}[mode]);}
+      syncRetry();retryState.textContent=config.any_retry_controls?(config.any_rate_limit_continuation?'高负载、断流按所选次数重试，首次请求不计数；执行中限流不限次数继续。两类均随机等待 1～10 秒，成功、关闭重试或停止后结束。':'首次请求不计入重试次数；过载失败随机等待 1～10 秒继续。成功或停止后结束。'):'后端更新中，请稍后刷新。';
       var parallelHeading=node('strong','','多开请求窗口'),parallelState=node('p','cx-muted');parallelState.setAttribute('role','status');
       var parallelCount=node('input');parallelCount.type='number';parallelCount.required=true;parallelCount.min='2';parallelCount.max=config.any_parallel_max||8;parallelCount.step='1';parallelCount.value=config.any_parallel_count||2;parallelCount.setAttribute('aria-label','多开窗口数');
       var parallelLabel=node('label','cx-any-number','同时请求');parallelLabel.append(parallelCount,document.createTextNode('个窗口（2～'+(config.any_parallel_max||8)+'）'));

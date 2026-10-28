@@ -25,8 +25,16 @@ class NativeStream(unittest.TestCase):
     def test_standalone_auth_error_is_reported_without_retry(self):
         self.exercise(True, 'invalid_api_key')
 
-    def exercise(self, retry, upstream_error=None):
-        should_continue = retry and upstream_error != 'invalid_api_key'
+    def test_rate_limits_exceed_cap_and_preserve_completed_tool(self):
+        self.exercise(True, 'rate_limit_exceeded', failures=3, expected_retries=3)
+
+    def test_high_demand_after_tool_stops_at_configured_cap(self):
+        self.exercise(True, 'overloaded_error', failures=3, expected_retries=1)
+
+    def exercise(self, retry, upstream_error=None, failures=1, expected_retries=None):
+        if expected_retries is None:
+            expected_retries = 1 if retry and upstream_error != 'invalid_api_key' else 0
+        should_complete = expected_retries >= failures
         with tempfile.TemporaryDirectory(prefix='ck-any-eof-native-') as directory:
             root = Path(directory)
             workspace = root / 'workspace'
@@ -68,7 +76,7 @@ class NativeStream(unittest.TestCase):
                             emit({'type': 'response.function_call_arguments.delta', 'item_id': item['id'],
                                   'output_index': 0, 'delta': args})
                         else:
-                            text = 'partial fixture answer' if number == 2 else 'fixture recovered'
+                            text = 'partial fixture answer' if number <= failures + 1 else 'fixture recovered'
                             item = {'id': 'msg-fixture-' + str(number), 'type': 'message', 'role': 'assistant',
                                     'status': 'completed', 'content': [
                                         {'type': 'output_text', 'text': text, 'annotations': []}]}
@@ -76,7 +84,7 @@ class NativeStream(unittest.TestCase):
                                   'item': dict(item, content=[])})
                             emit({'type': 'response.output_text.delta', 'item_id': item['id'],
                                   'output_index': 0, 'content_index': 0, 'delta': text})
-                            if number == 2:
+                            if number <= failures + 1:
                                 if upstream_error:
                                     emit({'type': 'error', 'code': upstream_error,
                                           'message': 'fixture ' + upstream_error})
@@ -115,22 +123,26 @@ class NativeStream(unittest.TestCase):
                     time.sleep(.05)
                 self.assertEqual(errors, [])
                 snapshot = manager.store.snapshot(window['id'])
-                self.assertEqual(status, 'completed' if should_continue else 'failed',
+                self.assertEqual(status, 'completed' if should_complete else 'failed',
                                  [(item['kind'], item['text'][:200]) for item in snapshot['items']
                                   if item['kind'] in ('warning', 'error')])
                 self.assertEqual(marker.read_text(), 'once')
-                self.assertEqual(len(requests), 3 if should_continue else 2)
+                self.assertEqual(len(requests), 2 + expected_retries)
                 self.assertEqual(snapshot['window']['thread_id'], window['thread_id'])
                 self.assertEqual(manager.store.db.execute('SELECT count(*) FROM tasks').fetchone()[0], 1)
                 self.assertEqual(sum(item['kind'] == 'commandExecution' for item in snapshot['items']), 1)
-                if not should_continue:
+                if not should_complete:
                     self.assertIn(upstream_error or 'ck_any_upstream_stream_incomplete', str(snapshot['items']))
-                if should_continue:
+                if expected_retries:
                     self.assertIn(service.CONTINUE_TASK, json.dumps(requests[-1], ensure_ascii=False))
+                    self.assertTrue(any(item.get('type') == 'function_call_output'
+                                        and item.get('call_id') == 'call-fixture'
+                                        for item in requests[-1].get('input', [])))
                 log = (root / 'any-transport.jsonl').read_text()
                 records = [json.loads(line) for line in log.splitlines()]
                 expected = 'upstream_failed' if upstream_error else 'ck_any_upstream_stream_incomplete'
-                self.assertEqual(sum(record['result'] == expected for record in records), 1)
+                self.assertEqual(sum(record['result'] == expected for record in records),
+                                 min(failures, expected_retries + 1))
                 self.assertNotIn('fixture-only', log)
                 self.assertNotIn('partial fixture answer', log)
             finally:

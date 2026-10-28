@@ -31,10 +31,22 @@ def retryable(error):
                                      'ck_any_upstream_http_incomplete')):
         return True
     return bool(re.search(r'\b(?:429|500|502|503|504)\b', text) or any(word in text for word in (
-        'high demand', 'overloaded', 'overload', 'server busy', 'rate limit', 'rate_limit',
+        'high demand', 'overloaded', 'overload', 'server busy', 'rate limit', 'rate_limit', 'rate-limit',
         'too many requests', 'temporarily unavailable', 'temporary error',
         'internalservererror', 'internal server error', 'service unavailable',
-        '负载', '过载', '繁忙', '请求过多')))
+        '负载', '过载', '繁忙', '请求过多', '限流', '限速')))
+
+
+def rate_limited(error):
+    """A busy/overloaded response is not a rate limit just because it uses 429."""
+    if not retryable(error):
+        return False
+    text = (error if isinstance(error, str) else json.dumps(error, ensure_ascii=False)).lower()
+    if any(word in text for word in ('high demand', 'overload', 'server busy', '负载', '过载', '繁忙')):
+        return False
+    if re.search(r'\brate[ _-]?limit|too many requests|请求过多|限流|限速', text):
+        return True
+    return bool(re.search(r'\b429\b', text))
 
 
 class AnyRetry:
@@ -42,16 +54,21 @@ class AnyRetry:
         self.request_id = request_id
         self.limit = limit
         self.count = 0
+        self.bounded_count = 0
+        self.has_progress = False
+        self.continuation = False
         self.due = 0
         self.pending = False
 
     def accepts(self, error):
         return retryable(error)
 
-    def available(self):
-        return self.limit is None or self.count < self.limit
+    def available(self, error=None):
+        continuation = self.continuation if error is None else self.has_progress and rate_limited(error)
+        return continuation or self.limit is None or self.bounded_count < self.limit
 
     def schedule(self, error=None):
+        self.continuation = self.has_progress and rate_limited(error)
         self.pending = True
         self.due = time.monotonic() + random.SystemRandom().randint(1, 10)
 
@@ -61,9 +78,15 @@ class AnyRetry:
     def starting(self):
         if self.pending:
             self.count += 1
+            if not self.continuation:
+                self.bounded_count += 1
             self.pending = False
 
     @property
     def text(self):
-        return (f'已重试 {self.count} 次' if self.limit is None
-                else f'已重试 {self.count} / {self.limit} 次')
+        text = (f'已重试 {self.bounded_count} 次' if self.limit is None
+                else f'已重试 {self.bounded_count} / {self.limit} 次')
+        continued = self.count - self.bounded_count
+        if continued or self.continuation:
+            text += f' · 执行中限流已继续 {continued} 次（不限次数）'
+        return text
