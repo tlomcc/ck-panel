@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v360-claude-tasks';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v361-image-memory-readonly';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4287,10 +4287,56 @@ function chatReadFileAsDataUrl(file){
 function chatLoadImageFromDataUrl(dataUrl){
   return new Promise(function(resolve,reject){
     var img=new Image();
-    img.onload=function(){resolve(img)};
+    img.onload=function(){if(img.naturalWidth&&img.naturalHeight)resolve(img);else reject(new Error('图片没有可读取的画面'))};
     img.onerror=function(){reject(new Error('图片解码失败'))};
     img.src=dataUrl;
   });
+}
+function chatIsImageFile(file){
+  if(!file)return false;
+  var type=String(file.type||'').toLowerCase();
+  return !type||type==='application/octet-stream'||/^image\//.test(type);
+}
+function chatReadImageMime(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(){
+      var b=new Uint8Array(reader.result||new ArrayBuffer(0)),s=String.fromCharCode.apply(null,b);
+      if(b[0]===255&&b[1]===216&&b[2]===255)return resolve('image/jpeg');
+      if(s.slice(0,8)==='\x89PNG\r\n\x1a\n')return resolve('image/png');
+      if(/^GIF8[79]a/.test(s))return resolve('image/gif');
+      if(s.slice(0,4)==='RIFF'&&s.slice(8,12)==='WEBP')return resolve('image/webp');
+      if(s.slice(0,2)==='BM')return resolve('image/bmp');
+      if(s.slice(0,4)==='II*\x00'||s.slice(0,4)==='MM\x00*')return resolve('image/tiff');
+      if(s.slice(4,8)==='ftyp'){
+        if(/avif|avis/.test(s.slice(8)))return resolve('image/avif');
+        if(/heic|heix|hevc|hevx|heim|heis|mif1|msf1/.test(s.slice(8)))return resolve('image/heic');
+      }
+      var type=String(file.type||'').toLowerCase();
+      resolve(/^image\//.test(type)?type:'');
+    };
+    reader.onerror=function(){reject(new Error('读取图片失败，请重新从相册选择'))};
+    reader.onabort=function(){reject(new Error('图片读取已取消'))};
+    reader.readAsArrayBuffer(file.slice(0,64));
+  });
+}
+async function chatLoadImageFile(file,mime){
+  var blob=mime&&mime!==file.type?new Blob([file],{type:mime}):file;
+  var objectUrl='';
+  // Decode the file directly first, without another full-size base64 copy.
+  if(typeof URL!=='undefined'&&typeof URL.createObjectURL==='function'){
+    try{
+      objectUrl=URL.createObjectURL(blob);
+      return await chatLoadImageFromDataUrl(objectUrl);
+    }catch(e){}
+    finally{if(objectUrl)URL.revokeObjectURL(objectUrl)}
+  }
+  if(typeof createImageBitmap==='function'){
+    try{return await createImageBitmap(blob,{imageOrientation:'from-image'})}catch(e){}
+  }
+  try{return await chatLoadImageFromDataUrl(await chatReadFileAsDataUrl(blob))}catch(e){}
+  if(/hei[cf]/i.test(mime)||/\.hei[cf]$/i.test(String(file.name||'')))throw new Error('当前浏览器无法读取这张 HEIC/HEIF 照片，请在相册中导出为 JPEG 后再选择');
+  throw new Error('这张图片无法读取，请重新从相册选择；若仍失败，请保存为 JPEG 或 PNG 后再发送');
 }
 function chatCanvasEncodeLoadedImage(img,maxDim,quality){
   var w=Math.max(1,Number(img.naturalWidth||img.width||0)||1);
@@ -4302,51 +4348,58 @@ function chatCanvasEncodeLoadedImage(img,maxDim,quality){
   canvas.width=tw;
   canvas.height=th;
   var ctx=canvas.getContext('2d');
+  if(!ctx)throw new Error('图片处理内存不足，请关闭其他页面后重试');
   ctx.fillStyle='#fff';
   ctx.fillRect(0,0,tw,th);
   ctx.drawImage(img,0,0,tw,th);
   return {dataUrl:canvas.toDataURL('image/jpeg',quality),width:tw,height:th};
 }
 async function chatEncodeImageFile(file){
-  if(!file||!/^image\//i.test(String(file.type||'')))throw new Error('只能选择图片');
+  if(!chatIsImageFile(file))throw new Error('只能选择图片');
   if(Number(file.size||0)>CHAT_IMAGE_MAX_SOURCE_BYTES)throw new Error('图片太大');
-  var source=await chatReadFileAsDataUrl(file);
-  var mime=chatNormalizeImageMime(file.type,source);
+  if(!Number(file.size||0))throw new Error('图片内容为空，请重新从相册选择');
+  var mime=await chatReadImageMime(file);
   if(!mime)throw new Error('不支持的图片格式');
-  if(mime==='image/gif'){
-    if(source.length>CHAT_IMAGE_MAX_DATA_URL_CHARS)throw new Error('GIF 太大');
-    return chatNormalizeImageAttachment({id:chatImageId(),name:file.name,mime:mime,dataUrl:source,size:file.size});
+  var img=await chatLoadImageFile(file,mime);
+  try{
+    if(mime==='image/gif'){
+      var source=await chatReadFileAsDataUrl(new Blob([file],{type:mime}));
+      if(source.length>CHAT_IMAGE_MAX_DATA_URL_CHARS)throw new Error('GIF 太大');
+      return chatNormalizeImageAttachment({id:chatImageId(),name:file.name,mime:mime,dataUrl:source,size:file.size,width:img.naturalWidth||img.width,height:img.naturalHeight||img.height});
+    }
+    var maxDim=CHAT_IMAGE_MAX_DIMENSION;
+    var quality=CHAT_IMAGE_JPEG_QUALITY;
+    var encoded=null;
+    for(var attempt=0;attempt<4;attempt++){
+      encoded=chatCanvasEncodeLoadedImage(img,maxDim,quality);
+      if(encoded.dataUrl.length<=CHAT_IMAGE_MAX_DATA_URL_CHARS)break;
+      maxDim=Math.max(960,Math.round(maxDim*.76));
+      quality=Math.max(.72,quality-.06);
+    }
+    if(!encoded||!/^data:image\/jpeg;base64,/.test(encoded.dataUrl)||encoded.dataUrl.length>CHAT_IMAGE_MAX_DATA_URL_CHARS)throw new Error('图片压缩失败，请重新选择或缩小图片后再发送');
+    return chatNormalizeImageAttachment({
+      id:chatImageId(),
+      name:file.name,
+      mime:'image/jpeg',
+      dataUrl:encoded.dataUrl,
+      width:encoded.width,
+      height:encoded.height,
+      size:file.size
+    });
+  }finally{
+    if(typeof img.close==='function')img.close();
+    else img.src='';
   }
-  var img=await chatLoadImageFromDataUrl(source);
-  var maxDim=CHAT_IMAGE_MAX_DIMENSION;
-  var quality=CHAT_IMAGE_JPEG_QUALITY;
-  var encoded=null;
-  for(var attempt=0;attempt<4;attempt++){
-    encoded=chatCanvasEncodeLoadedImage(img,maxDim,quality);
-    if(encoded.dataUrl.length<=CHAT_IMAGE_MAX_DATA_URL_CHARS)break;
-    maxDim=Math.max(960,Math.round(maxDim*.76));
-    quality=Math.max(.72,quality-.06);
-  }
-  if(!encoded||encoded.dataUrl.length>CHAT_IMAGE_MAX_DATA_URL_CHARS)throw new Error('图片压缩后仍然太大');
-  return chatNormalizeImageAttachment({
-    id:chatImageId(),
-    name:file.name,
-    mime:'image/jpeg',
-    dataUrl:encoded.dataUrl,
-    width:encoded.width,
-    height:encoded.height,
-    size:file.size
-  });
 }
 function chatPickImages(){
-  if(chatSending)return;
+  if(chatSending||chatImageEncodingCount>0)return;
   var input=document.getElementById('chat-image-input');
   if(!input)return;
   chatTogglePlus(false);
   input.click();
 }
 function chatTakePhoto(){
-  if(chatSending)return;
+  if(chatSending||chatImageEncodingCount>0)return;
   var input=document.getElementById('chat-camera-input');
   if(!input)return;
   chatTogglePlus(false);
@@ -4355,7 +4408,7 @@ function chatTakePhoto(){
 async function chatOnImageFilesSelected(e){
   var input=e&&e.target;
   var files=Array.prototype.slice.call((input&&input.files)||[]);
-  if(input)input.value='';
+  var selectedFirst=files[0];
   if(!files.length)return;
   var editing=chatEditingIndex>=0;
   var editContext=editing?chatEditingIndex:-1;
@@ -4363,11 +4416,13 @@ async function chatOnImageFilesSelected(e){
   var targetImages=editing?chatEditingImages:chatDraftImages;
   var room=CHAT_IMAGE_MAX_COUNT-chatNormalizeImageList(targetImages).length;
   if(room<=0){
+    if(input)input.value='';
     toast('最多选择 '+CHAT_IMAGE_MAX_COUNT+' 张图片');
     return;
   }
-  files=files.filter(function(file){return file&&/^image\//i.test(String(file.type||''))}).slice(0,room);
+  files=files.filter(chatIsImageFile).slice(0,room);
   if(!files.length){
+    if(input)input.value='';
     toast('只能选择图片');
     return;
   }
@@ -4393,6 +4448,8 @@ async function chatOnImageFilesSelected(e){
       toast((files[i]&&files[i].name?files[i].name+'：':'')+((err&&err.message)||'图片处理失败'));
     }
   }
+  // Keep picked files attached until decoding ends; do not clear a newer selection.
+  if(input&&input.files&&input.files[0]===selectedFirst)input.value='';
   chatImageEncodingCount=Math.max(0,chatImageEncodingCount-1);
   if(chatEditingIndex>=0)chatRenderEditImages();
   else chatRenderDraftImages();

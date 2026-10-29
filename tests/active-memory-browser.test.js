@@ -11,11 +11,14 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
  try{for(const width of [320,390,1280]){
   const page=await browser.newPage({viewport:{width,height:850},serviceWorkers:'block'}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   let saved={ok:true,revision:1,content:'我记得我们约定把重要的事情留在自己的记忆里。',enabled:true,writable:true,stale:false,updated_at:1793070000},posts=0;
-  await page.route('**/ck/active-memory*',async route=>{const request=route.request();if(request.method()==='POST'){posts++;const p=request.postDataJSON();if(p.revision!==saved.revision)return route.fulfill({status:409,json:{ok:false,error:'版本已更新'}});saved={...saved,revision:saved.revision+1,content:p.content===undefined?saved.content:p.content,enabled:p.action==='pause'?false:p.action==='resume'?true:saved.enabled};}await route.fulfill({json:saved})});
+  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  await page.route('**/ck/active-memory*',async route=>{const request=route.request();if(request.method()==='POST'){posts++;const p=request.postDataJSON();assert.deepEqual(Object.keys(p).sort(),['action','revision']);assert(['pause','resume'].includes(p.action));if(p.revision!==saved.revision)return route.fulfill({status:409,json:{ok:false,error:'版本已更新'}});saved={...saved,revision:saved.revision+1,enabled:p.action==='resume'};}await route.fulfill({json:saved})});
   let archiveReads=0;await page.route('**/ck/daily-records*',async route=>{assert.equal(route.request().method(),'GET');archiveReads++;await route.fulfill({json:{ok:true,enabled:false,revision:1,status:'paused',todos:'- 旧待办保留',profile:'- 旧信息保留'}})});
   await page.goto('http://127.0.0.1:'+server.address().port+'/');await page.waitForFunction(()=>ckActiveMemoryData&&ckActiveMemoryData.revision===1);
   assert(await page.locator('#ck-active-memory-content').isEnabled());assert.equal(await page.locator('#ck-active-memory-content').inputValue(),saved.content);
-  assert.equal(await page.locator('textarea').count(),1,'only active memory should remain editable');
+  assert.equal(await page.locator('#ck-active-memory-content').getAttribute('readonly'),'');
+  assert.equal(await page.locator('textarea:not([readonly])').count(),0,'memory has no editable field');
+  assert.equal(await page.locator('#ck-active-memory-save,#ck-active-memory-merge,#ck-active-memory-load').count(),0);
   assert.equal(await page.locator('#tab-records h2').textContent(),'主动记忆');
   assert.equal(await page.locator('#ck-legacy-records').getAttribute('open'),null,'legacy records stay folded');
   assert.equal(archiveReads,0,'folded history must not start legacy polling');
@@ -27,13 +30,14 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
     await page.screenshot({path:path.join(out,'overflow-'+width+'.png'),fullPage:true});
     throw Error('horizontal overflow at '+width);
   }
-  await page.locator('#ck-active-memory-content').fill('我记得新的重要约定。');await page.locator('#ck-active-memory-save').click();await page.waitForFunction(()=>ckActiveMemoryData.revision===2);
-  assert.equal(posts,1);assert.equal(saved.content,'我记得新的重要约定。');
-  await page.locator('#ck-active-memory-content').fill('尚未保存的编辑');saved={...saved,revision:3,content:'小克已保存另一条重要记忆。'};await page.evaluate(()=>ckActiveMemoryRefresh());
-  assert.equal(await page.locator('#ck-active-memory-content').inputValue(),'尚未保存的编辑');assert(await page.locator('#ck-active-memory-save').isDisabled());assert(await page.locator('#ck-active-memory-merge').isVisible());
-  await page.locator('#ck-active-memory-merge').click();assert.equal(await page.locator('#ck-active-memory-content').inputValue(),'尚未保存的编辑');
+  await page.locator('#ck-active-memory-content').focus();await page.keyboard.type('手动改写不应生效');
+  assert.equal(await page.locator('#ck-active-memory-content').inputValue(),saved.content);
+  assert.equal(await page.evaluate(()=>ckActiveMemorySave()),false);assert.equal(posts,0);
+  saved={...saved,revision:2,content:'小克已保存另一条重要记忆。'};await page.evaluate(()=>ckActiveMemoryRefresh());
+  assert.equal(await page.locator('#ck-active-memory-content').inputValue(),saved.content);
   await page.locator('#ck-active-memory-toggle').click();await page.waitForFunction(()=>ckActiveMemoryData.enabled===false);assert.equal(saved.content,'小克已保存另一条重要记忆。');
-  await page.screenshot({path:path.join(out,'active-memory-'+width+'.png'),fullPage:true});assert.deepEqual(errors,[]);results.push({width,save:true,conflict_draft_preserved:true,pause_keeps_memory:true,no_overflow:true,page_errors:0});await page.close();
+  await page.locator('#ck-active-memory-toggle').click();await page.waitForFunction(()=>ckActiveMemoryData.enabled===true);assert.equal(saved.content,'小克已保存另一条重要记忆。');assert.equal(posts,2);
+  await page.screenshot({path:path.join(out,'active-memory-'+width+'.png'),fullPage:true});assert.deepEqual(errors,[]);results.push({width,read_only:true,manual_save_blocked:true,model_updates_visible:true,pause_resume_keep_memory:true,no_overflow:true,page_errors:0});await page.close();
  }}finally{await browser.close();server.close()}
  fs.writeFileSync(path.join(out,'browser-verification.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results));
 })().catch(error=>{console.error(error);server.close();process.exitCode=1});

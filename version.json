@@ -1,7 +1,7 @@
 {
-  "version": "chat-v360-claude-tasks",
+  "version": "chat-v361-image-memory-readonly",
   "notes": [
-    "任务中心增加国内 Claude Code 入口，可与美国 Codex 切换。",
-    "共用供应商地址和密钥，Claude 模型独立保存；原版客户端通过美国代理调用第三方 API。"
+    "修复图片选择时的读取兼容问题，支持识别缺失或错误的图片格式标记。",
+    "主动记忆正文仅由小克更新，面板保留查看及暂停、恢复自主更新。"
   ]
 }
