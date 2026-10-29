@@ -1,0 +1,25 @@
+[Unit]
+Description=Read-only shared provider catalog sync to domestic Claude Code tasks
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ckcodex
+Group=ckcodex
+ExecStart=/usr/bin/python3 -B /opt/ck-claude-provider-sync/claude_provider_sync.py watch
+WorkingDirectory=/home/ckcodex
+UMask=0077
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/ck-claude-provider-sync
+CPUWeight=5
+MemoryMax=96M
+TasksMax=16
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

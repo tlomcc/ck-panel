@@ -11,7 +11,7 @@
   function sync(){
     queued=false;
     controls.forEach(function(button,select){
-      if(!select.isConnected){button.remove();controls.delete(select);return}
+      if(!select.isConnected){button.releaseSelect();button.remove();controls.delete(select);return}
       var option=select.options[select.selectedIndex];
       var text=option?option.textContent:'请选择';
       if(button.firstChild.textContent!==text)button.firstChild.textContent=text;
@@ -34,8 +34,13 @@
       select.insertAdjacentElement('afterend',button);controls.set(select,button);
       button.addEventListener('click',function(){open(select,button)});
       button.addEventListener('keydown',function(e){if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();open(select,button)}});
-      select.addEventListener('focus',function(){button.focus()});
-      select.addEventListener('invalid',function(e){e.preventDefault();button.focus()});
+      function focusButton(){button.focus()}
+      function invalidButton(e){e.preventDefault();button.focus()}
+      select.addEventListener('focus',focusButton);
+      select.addEventListener('invalid',invalidButton);
+      // Task engines retain disconnected forms and restore them later. Remove
+      // the marker as well as the proxy so the restored select is rediscovered.
+      button.releaseSelect=function(){delete select.dataset.ckSelect;select.removeEventListener('focus',focusButton);select.removeEventListener('invalid',invalidButton)};
       schedule();
     });
   }

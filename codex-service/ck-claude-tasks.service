@@ -1,0 +1,26 @@
+[Unit]
+Description=Domestic CK Claude Code API tasks
+After=network-online.target ck-api-proxy.service
+Wants=network-online.target ck-api-proxy.service
+
+[Service]
+User=ckcodex
+Group=ckcodex
+WorkingDirectory=/home/ckcodex/workspace
+Environment=CK_CODEX_WORKSPACE=/home/ckcodex/workspace
+Environment=CK_CLAUDE_STATE=/var/lib/ck-claude-tasks
+ExecStart=/opt/ck-claude-tasks/venv/bin/python -B /opt/ck-claude-tasks/claude_service.py
+UMask=0077
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=25
+CPUWeight=25
+MemoryHigh=1G
+MemoryMax=1536M
+TasksMax=256
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

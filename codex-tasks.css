@@ -118,3 +118,7 @@ body.dark .cx-task-notices .cx-task-notice[data-tone=error],html.dark .cx-task-n
 #cx-root .cx-any-window[data-state="winner"]{border-color:#16a34a}
 #cx-root .cx-any-window[data-state="failed"]{border-color:#dc2626}
 #cx-root .cx-any-window p{margin:4px 0;white-space:pre-wrap}
+
+/* One engine selector shares the existing header; task content keeps the space. */
+.cx-head .cx-engine{min-width:62px;padding-inline:8px;color:var(--ck-text);background:var(--ck-surface)}
+@media(max-width:640px){.cx-head .cx-engine{min-width:48px;min-height:44px;padding-inline:6px;font-size:12px}.cx-head{gap:6px}.cx-sidebar-brand{font-size:15px}}

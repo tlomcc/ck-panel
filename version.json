@@ -1,7 +1,7 @@
 {
-  "version": "chat-v359-any-retry-policy",
+  "version": "chat-v360-claude-tasks",
   "notes": [
-    "any高负载按设置次数重试，执行中限流随机等待后不限次数接续。",
-    "两类计数独立；关闭重试或停止任务后结束，保留原会话与已有结果。"
+    "任务中心增加国内 Claude Code 入口，可与美国 Codex 切换。",
+    "共用供应商地址和密钥，Claude 模型独立保存；原版客户端通过美国代理调用第三方 API。"
   ]
 }
