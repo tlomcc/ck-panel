@@ -18,7 +18,7 @@ from claude_api_config import EFFORTS, PROXY, api_base, claude_model
 from claude_engine import ClaudeEngine
 from claude_provider_sync import atomic_json
 
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 
 
 class NoRedirect(HTTPRedirectHandler):

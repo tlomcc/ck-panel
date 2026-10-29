@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest.mock import patch
@@ -206,6 +207,81 @@ class Configuration(unittest.TestCase):
             engine.loop = None
         with patch.dict(sys.modules, {'claude_agent_sdk': types.SimpleNamespace(PermissionResultAllow=allow, PermissionResultDeny=deny)}):
             asyncio.run(check())
+
+    def feedback_engine(self):
+        window = self.create()
+        engine = ClaudeEngine(self.manager, window['id'], self.manager.profile())
+        engine.turn_id, engine.executing = 'feedback-turn', True
+        engine.started_at = time.monotonic() - 20
+        self.manager.engines[window['id']] = engine
+        self.manager.store.update(window['id'], status='running', turn_id=engine.turn_id)
+        return window['id'], engine
+
+    def test_native_retry_is_visible_before_terminal_failure_and_does_not_mark_task_failed(self):
+        wid, engine = self.feedback_engine()
+        for attempt in (1, 2):
+            engine.consume(type('SystemMessage', (), {'subtype': 'api_retry', 'data': {
+                'attempt': attempt, 'max_retries': 10, 'retry_delay_ms': 30000,
+                'error_status': 429, 'error': 'rate_limit'}})())
+        snapshot = self.manager.store.snapshot(wid)
+        status = [i for i in snapshot['items'] if i['id'].startswith('cc-status:')]
+        self.assertEqual(len(status), 1)
+        self.assertIn('HTTP 429', status[0]['text'])
+        self.assertIn('第 2 / 10 次', status[0]['text'])
+        self.assertIn('停止任务', status[0]['text'])
+        self.assertEqual(status[0]['data']['state'], 'retrying')
+        self.assertEqual(snapshot['window']['status'], 'running')
+        self.assertEqual(snapshot['window']['error'], '')
+
+    def test_waiting_heartbeat_survives_silent_native_startup_and_stops_on_cancel(self):
+        wid, engine = self.feedback_engine()
+        engine.FEEDBACK_INTERVAL = .01
+        engine.feedback('starting', '任务已收到，正在启动。')
+        before = self.manager.store.one(wid)['seq']
+        async def check():
+            task = asyncio.create_task(engine.feedback_loop())
+            await asyncio.sleep(.035)
+            self.assertGreater(self.manager.store.one(wid)['seq'], before)
+            engine.stopping = True
+            await asyncio.wait_for(task, 1)
+        asyncio.run(check())
+        item = self.manager.store.snapshot(wid)['items'][-1]
+        self.assertIn('本次任务已用时', item['text'])
+        stopped = self.manager.store.one(wid)['seq']
+        engine.feedback('requesting', '迟到的状态不得重新打开任务')
+        self.assertEqual(self.manager.store.one(wid)['seq'], stopped)
+
+    def test_status_from_previous_turn_cannot_replace_newer_task_state(self):
+        wid, engine = self.feedback_engine()
+        engine.feedback('starting', '原任务')
+        self.manager.store.update(wid, turn_id='newer-turn')
+        before = self.manager.store.one(wid)['seq']
+        engine.retry_feedback({'attempt': 1, 'error_status': 429})
+        engine.feedback('failed', '旧任务迟到的结果', terminal=True)
+        self.assertEqual(self.manager.store.one(wid)['seq'], before)
+
+    def test_native_api_error_is_a_diagnostic_and_never_a_successful_assistant_reply(self):
+        wid, engine = self.feedback_engine()
+        secret = self.manager.profile()['api_key']
+        block = type('TextBlock', (), {'text': 'API Error: 429 fixture ' + secret})()
+        engine.consume(type('AssistantMessage', (), {'content': [block], 'error': 'rate_limit'})())
+        snapshot = self.manager.store.snapshot(wid)
+        self.assertFalse(any(i['kind'] == 'agentMessage' for i in snapshot['items']))
+        self.assertIn('HTTP 429', snapshot['items'][-1]['text'])
+        self.assertNotIn(secret, json.dumps(snapshot))
+
+    def test_runtime_exception_finishes_with_visible_redacted_error(self):
+        wid, engine = self.feedback_engine()
+        secret = self.manager.profile()['api_key']
+        async def failed(_):
+            raise RuntimeError('native startup failed: ' + secret)
+        engine.conversation = failed
+        engine.run('fixture input')
+        snapshot = self.manager.store.snapshot(wid)
+        self.assertEqual(snapshot['window']['status'], 'failed')
+        self.assertTrue(any(i['kind'] == 'error' and 'native startup failed' in i['text'] for i in snapshot['items']))
+        self.assertTrue(any(i['data'].get('state') == 'failed' for i in snapshot['items']))
+        self.assertNotIn(secret, json.dumps(snapshot))
 
 
 if __name__ == '__main__': unittest.main()

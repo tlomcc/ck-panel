@@ -12,10 +12,12 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, os.environ.get('CK_TASK_SOURCE', str(Path(__file__).parents[1] / 'codex-service')))
 import service
+import claude_engine
 from claude_service import ClaudeManager
 from key_store import KeyStore
 
@@ -35,6 +37,9 @@ class Provider(BaseHTTPRequestHandler):
     calls = []
     beta_headers = []
     first_steer = threading.Event()
+    feedback_ready = threading.Event()
+    feedback_release = threading.Event()
+    feedback_attempts = {}
     cwd = None
 
     def log_message(self, *_): pass
@@ -57,6 +62,18 @@ class Provider(BaseHTTPRequestHandler):
         packed = json.dumps(messages, ensure_ascii=False)
         last = messages[-1].get('content', '') if messages else ''
         last_text = last if isinstance(last, str) else '\n'.join(b.get('text', '') for b in last if b.get('type') == 'text')
+        for marker in ('RECOVER_FEEDBACK', 'FAIL_FEEDBACK'):
+            if marker not in last_text:
+                continue
+            attempts = self.feedback_attempts[marker] = self.feedback_attempts.get(marker, 0) + 1
+            if marker == 'FAIL_FEEDBACK' or attempts <= 2:
+                raw = json.dumps({'type': 'error', 'error': {'type': 'rate_limit_error', 'message': 'fixture upstream unavailable'}}).encode()
+                self.send_response(429); self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(raw))); self.send_header('retry-after', '1')
+                self.end_headers(); self.wfile.write(raw)
+                return
+            self.feedback_ready.set()
+            assert self.feedback_release.wait(15), 'Release the mock response after observing retry status'
         tool_results = [b for b in last if isinstance(b, dict) and b.get('type') == 'tool_result'] if isinstance(last, list) else []
         blocks = [{'type': 'text', 'text': 'FIXTURE_OK'}]
         stop = 'end_turn'
@@ -140,7 +157,7 @@ with tempfile.TemporaryDirectory(prefix='cc-native-') as temp:
         items = manager.store.snapshot(wid)['items']
         assert any(i['kind'] == 'agentMessage' and marker in i['text'] and i['data'].get('phase') == 'final_answer' for i in items), items
     checks = []
-    selected = set(os.environ.get('CK_NATIVE_CASES', 'lifecycle,steer,question,stop,models,context').split(','))
+    selected = set(os.environ.get('CK_NATIVE_CASES', 'lifecycle,steer,question,stop,models,context,feedback').split(','))
     try:
         if 'lifecycle' in selected:
             wid = create(); native = manager.store.one(wid)['thread_id']
@@ -191,6 +208,43 @@ with tempfile.TemporaryDirectory(prefix='cc-native-') as temp:
             assert Provider.calls[-1]['model'] == 'claude-opus-5-5', Provider.calls[-1]['model']
             assert 'context-1m-' in Provider.beta_headers[-1], Provider.beta_headers[-1]
             checks.append('native [1m] option reaches the provider as the million-context header')
+        if 'feedback' in selected:
+            def status_item(wid):
+                return next((i for i in manager.store.snapshot(wid)['items'] if i['id'].startswith('cc-status:')), None)
+            with patch.object(claude_engine.ClaudeEngine, 'FEEDBACK_INTERVAL', .1):
+                recovered = create(); sent_at = time.monotonic(); send(recovered, 'RECOVER_FEEDBACK')
+                accepted = wait(lambda: status_item(recovered), 'immediate received status')
+                assert time.monotonic() - sent_at < 5 and accepted['kind'] == 'warning'
+                checks.append('task acknowledgement is visible before the model responds')
+                first_retry = wait(lambda: (i if (i := status_item(recovered)) and i['data'].get('state') == 'retrying' else None), 'live native retry status')
+                assert first_retry['data']['http_status'] == 429 and 'HTTP 429' in first_retry['text']
+                assert manager.store.one(recovered)['status'] == 'running'
+                assert not manager.store.one(recovered)['error']
+                assert Provider.feedback_ready.wait(12)
+                prior = status_item(recovered)
+                wait(lambda: status_item(recovered)['seq'] > prior['seq'], 'heartbeat while provider response is silent')
+                assert '停止任务' in status_item(recovered)['text']
+                checks.append('429, native retry count and waiting heartbeat are visible before completion')
+                Provider.feedback_release.set()
+                complete(recovered, 'FIXTURE_OK')
+                assert status_item(recovered)['data']['state'] == 'completed'
+                assert Provider.feedback_attempts['RECOVER_FEEDBACK'] == 3
+                assert len([i for i in manager.store.snapshot(recovered)['items'] if i['id'].startswith('cc-status:')]) == 1
+                checks.append('native retry recovery completes the same task and settles the status card')
+            original_environment = claude_engine.api_environment
+            def limited_fixture_environment(*args, **kwargs):
+                assert kwargs.get('test'), 'Fixture-only retry limit'
+                return dict(original_environment(*args, **kwargs), CLAUDE_CODE_MAX_RETRIES='2')
+            with patch.object(claude_engine, 'api_environment', limited_fixture_environment):
+                failed = create(); send(failed, 'FAIL_FEEDBACK')
+                wait(lambda: (i if (i := status_item(failed)) and i['data'].get('state') == 'retrying' else None), 'retry shown before final error')
+                row = wait(lambda: finished(failed), 'terminal upstream error')
+                assert row['status'] == 'failed' and 'HTTP 429' in row['error']
+                records = manager.store.snapshot(failed)['items']
+                assert any(i['kind'] == 'error' and 'HTTP 429' in i['text'] for i in records)
+                assert not any(i['kind'] == 'agentMessage' for i in records)
+                assert status_item(failed)['data']['state'] == 'failed'
+                checks.append('exhausted native retries show a terminal error rather than an assistant success')
         print(json.dumps({'ok': True, 'checks': checks, 'mock_requests': len(Provider.calls),
                           'real_provider_requests': 0}, ensure_ascii=False))
     except Exception:

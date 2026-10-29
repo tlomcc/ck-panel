@@ -1,8 +1,10 @@
 """Adapt official Claude Code SDK sessions to the task center's event contract."""
 import asyncio
 import json
+import math
 import os
 from pathlib import Path
+import re
 import threading
 import time
 import uuid
@@ -10,6 +12,8 @@ import uuid
 from claude_api_config import api_environment
 
 class ClaudeEngine:
+    FEEDBACK_INTERVAL = 15
+
     def __init__(self, manager, wid, profile):
         self.manager, self.wid, self.profile = manager, wid, dict(profile)
         self.profile_fingerprint = json.dumps(profile, sort_keys=True)
@@ -25,6 +29,74 @@ class ClaudeEngine:
         self.session_id = manager.store.one(wid).get('thread_id') or str(uuid.uuid4())
         self.turn_id = self.message_id = ''
         self.last_text_id = None
+        self.feedback_state = ''
+        self.feedback_text = ''
+        self.feedback_data = {}
+        self.started_at = 0
+        self.retry_at = None
+        self.active_tools = set()
+
+    def feedback(self, state, text, *, terminal=False, refresh=False, **data):
+        """Persist one visible status card, including before the first model token."""
+        with self.lock:
+            if not self.turn_id or ((self.stopping or not self.executing) and not terminal):
+                return
+            if not refresh:
+                text = self.manager.redact(text)
+                if (state, text, data) == (self.feedback_state, self.feedback_text, self.feedback_data):
+                    return
+                self.feedback_state, self.feedback_text, self.feedback_data = state, text, data
+            elapsed = max(0, int(time.monotonic() - self.started_at)) if self.started_at else 0
+            visible = self.feedback_text
+            details = dict(self.feedback_data, state=self.feedback_state,
+                           turnId=self.turn_id, elapsed_seconds=elapsed)
+            if self.feedback_state == 'retrying' and self.retry_at is not None:
+                left = max(0, math.ceil(self.retry_at - time.monotonic()))
+                visible += ('\n约 ' + str(left) + ' 秒后重试。') if left else '\n正在等待重试结果。'
+                details['retry_in_seconds'] = left
+            if elapsed and not terminal:
+                visible += '\n本次任务已用时 ' + str(elapsed) + ' 秒。'
+            # A late heartbeat must never change a stopped, deleted or newer turn.
+            with self.manager.store.lock:
+                row = self.manager.store.db.execute(
+                    'SELECT turn_id,status FROM windows WHERE id=?', (self.wid,)).fetchone()
+                if not row or row['turn_id'] != self.turn_id or row['status'] not in ('starting', 'running', 'waiting'):
+                    return
+                self.manager.store.item(self.wid, 'cc-status:' + self.turn_id, 'warning', visible, details)
+
+    async def feedback_loop(self):
+        while True:
+            await asyncio.sleep(self.FEEDBACK_INTERVAL)
+            if self.stopping:
+                return
+            if self.feedback_state:
+                self.feedback(self.feedback_state, self.feedback_text, refresh=True)
+
+    def retry_feedback(self, data):
+        def number(*keys):
+            for key in keys:
+                value = data.get(key)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                    return max(0, int(value))
+            return None
+        status = number('error_status', 'status_code')
+        attempt = number('attempt', 'retryAttempt')
+        maximum = number('max_retries', 'maxRetries')
+        delay = number('retry_delay_ms', 'retryInMs')
+        self.retry_at = time.monotonic() + delay / 1000 if delay is not None else None
+        text = '供应商返回 HTTP ' + str(status) if status else '供应商请求暂时失败'
+        text += '，Claude Code 正在按原版策略重试。'
+        if attempt is not None:
+            text += '\n第 ' + str(attempt) + (' / ' + str(maximum) if maximum else '') + ' 次重试。'
+        text += '\n可以点击「停止任务」结束等待。'
+        self.feedback('retrying', text, http_status=status, attempt=attempt, max_retries=maximum)
+
+    def failure_text(self, text):
+        text = self.manager.redact(str(text))[:2000]
+        match = re.search(r'\b(?:401|403|408|429|500|502|503|504|529)\b', text)
+        if match:
+            return '供应商返回 HTTP ' + match.group() + '，本次任务未完成。\n' + text
+        return text or 'Claude Code 进程退出，本次任务未完成。'
 
     def emit(self, method, **params):
         if not self.stopping:
@@ -51,8 +123,13 @@ class ClaudeEngine:
                 self.executing = True
                 self.accepting = True
                 self.last_text_id = None
+                self.feedback_state, self.feedback_text, self.feedback_data = '', '', {}
+                self.started_at = time.monotonic()
+                self.retry_at = None
+                self.active_tools.clear()
                 text = '\n'.join(x['text'] for x in params['input'] if x.get('type') == 'text')
                 self.emit('turn/started', turn={'id': self.turn_id})
+                self.feedback('starting', '任务已收到，正在国内 VPS 启动 Claude Code。')
                 self.worker = threading.Thread(target=self.run, args=(text,), daemon=True)
                 self.worker.start()
                 return {'turn': {'id': self.turn_id}}
@@ -76,11 +153,18 @@ class ClaudeEngine:
             outcome = asyncio.run(self.conversation(text))
         except BaseException as exc:
             if not self.stopping:
-                error = self.manager.redact(str(exc))[:1600] or 'Claude Code 进程退出'
+                error = self.failure_text(exc)
                 outcome = {'id': self.turn_id, 'status': 'failed', 'error': {'message': error}}
         finally:
             self.loop = self.client = self.main_task = None
             with self.lock:
+                if self.stopping:
+                    self.feedback('interrupted', '任务已停止，已保留会话和执行记录。', terminal=True)
+                elif outcome:
+                    if outcome['status'] == 'failed':
+                        self.feedback('failed', '本次任务失败，具体报错见下方。', terminal=True)
+                    else:
+                        self.feedback('completed', 'Claude Code 已完成本次任务。', terminal=True)
                 self.executing = False
                 self.accepting = False
                 if outcome:
@@ -103,6 +187,7 @@ class ClaudeEngine:
         self.requests[rid] = event
         self.manager.store.item(self.wid, 'request:' + rid, 'request', '', event)
         self.manager.store.update(self.wid, status='waiting')
+        self.feedback('waiting_answer', 'Claude Code 正在等待你的回答，请在下方问题区域回复。')
         try:
             result = await future
             answers = {q['question']: '\n'.join(result['answers']['q' + str(i)]['answers'])
@@ -120,9 +205,20 @@ class ClaudeEngine:
             self.loop.call_soon_threadsafe(resolve)
 
     async def conversation(self, text):
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
         self.loop = asyncio.get_running_loop()
         self.main_task = asyncio.current_task()
+        heartbeat = asyncio.create_task(self.feedback_loop())
+        try:
+            return await self.native_conversation(text)
+        finally:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
+
+    async def native_conversation(self, text):
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
         native = self.home / 'native'
         native.mkdir(mode=0o700, exist_ok=True)
         # Claude persists the transcript before a tool runs. A task can be
@@ -147,6 +243,7 @@ class ClaudeEngine:
         async with ClaudeSDKClient(options=options) as client:
             self.client = client
             await client.query(text, session_id=self.session_id)
+            self.feedback('requesting', 'Claude Code 已启动，正在等待供应商返回。')
             async for message in client.receive_messages():
                 if self.stopping:
                     return
@@ -162,11 +259,12 @@ class ClaudeEngine:
                         if not pending or failed:
                             self.accepting = False
                     if pending and not failed:
+                        self.feedback('requesting', '正在同一会话中处理你的补充指令，等待供应商返回。')
                         await client.query('\n\n'.join(pending), session_id=self.session_id)
                         continue
                     if failed:
                         errors = getattr(message, 'errors', None) or [getattr(message, 'result', None) or message.subtype]
-                        error = self.manager.redact('\n'.join(str(x) for x in errors))
+                        error = self.failure_text('\n'.join(str(x) for x in errors))
                         outcome = {'id': self.turn_id, 'status': 'failed', 'error': {'message': error}}
                     else:
                         if self.last_text_id:
@@ -183,22 +281,41 @@ class ClaudeEngine:
 
     def consume(self, message):
         kind = type(message).__name__
+        if kind == 'SystemMessage':
+            data = getattr(message, 'data', {}) or {}
+            if message.subtype in ('api_retry', 'api_error'):
+                self.retry_feedback(data)
+            elif message.subtype == 'init':
+                self.feedback('requesting', 'Claude Code 已启动，正在等待供应商返回。')
+            elif message.subtype == 'status':
+                state = data.get('status')
+                if state == 'compacting':
+                    self.feedback('compacting', '正在整理会话上下文，完成后继续任务。')
+                elif state == 'requesting' and self.feedback_state != 'retrying':
+                    self.feedback('requesting', '正在等待供应商返回。')
+            return
         if kind == 'StreamEvent':
             event = message.event
             if event.get('type') == 'message_start':
                 self.message_id = event.get('message', {}).get('id') or uuid.uuid4().hex
+                self.feedback('responding', '已收到供应商响应，Claude Code 正在处理任务。')
             elif event.get('type') == 'content_block_delta':
                 delta = event.get('delta') or {}
                 if delta.get('type') == 'text_delta':
+                    self.feedback('responding', 'Claude Code 正在生成回复。')
                     iid = 'cc:' + self.turn_id + ':' + self.message_id
                     self.last_text_id = iid
                     self.emit('item/agentMessage/delta', itemId=iid, delta=delta.get('text', ''))
                 elif delta.get('type') == 'thinking_delta':
+                    self.feedback('thinking', 'Claude Code 正在思考，尚未生成可显示的回复。')
                     self.manager.progress(self.wid, self.turn_id)
             return  # Raw thinking and signatures are never stored in panel items.
         if kind == 'AssistantMessage':
             text = ''.join(getattr(block, 'text', '') for block in message.content
                            if type(block).__name__ == 'TextBlock')
+            if getattr(message, 'error', None):
+                self.feedback('provider_error', self.failure_text(text or message.error))
+                return
             if text:
                 iid = 'cc:' + self.turn_id + ':' + (self.message_id or uuid.uuid4().hex)
                 self.last_text_id = iid
@@ -219,6 +336,8 @@ class ClaudeEngine:
                     item = {'id': block.id, 'type': 'tool', 'status': 'running',
                             'name': block.name, 'input': inputs}
                 self.tools[block.id] = item
+                self.active_tools.add(block.id)
+                self.feedback('working', 'Claude Code 正在执行工具：' + self.manager.redact(block.name)[:80] + '。')
                 self.emit('item/started', item=item)
         elif kind == 'UserMessage':
             blocks = message.content if isinstance(message.content, list) else []
@@ -229,6 +348,7 @@ class ClaudeEngine:
                 item = dict(self.tools.get(value.get('tool_use_id'), {}))
                 if not item:
                     continue
+                self.active_tools.discard(value.get('tool_use_id'))
                 content = value.get('content', '')
                 output = content if isinstance(content, str) else '\n'.join(x.get('text', '') for x in (content or []) if isinstance(x, dict))
                 item.update(status='failed' if value.get('is_error') else 'completed')
@@ -237,6 +357,8 @@ class ClaudeEngine:
                 else:
                     item['output'] = output
                 self.emit('item/completed', item=item)
+                if not self.active_tools:
+                    self.feedback('requesting', '工具执行已结束，正在等待模型继续处理。')
 
     def close(self):
         self.stopping = True
