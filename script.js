@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v361-image-memory-readonly';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v362-subscription-errors';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5256,6 +5256,7 @@ function chatSetStatus(text){
   }else if(!chatSending&&chatStreamProgress&&['补收中','同步回复'].includes(chatStreamProgress.stage))chatStreamProgressStop();
   var el=document.getElementById('chat-status');
   if(!el)return;
+  if(/^(?:稍等重试|暂未回复|请检查订阅|等待订阅|订阅出口检查未通过|请先整理对话历史|请检查历史思考设置|请检查模型设置)/.test(String(text||''))){el.textContent=String(text);return}
   var waiting=/请求网关|正在请求|对方正在输入|等待回复|发送中/.test(String(text||''));
   el.innerHTML=waiting?'对方正在输入...':'<span class="chat-online-dot"></span>在线';
 }
@@ -6469,7 +6470,60 @@ async function chatRefreshGatewayDebug(topic){
     chatDebug('error',{error:'刷新网关调试失败：'+String((e&&e.message)||e)});
   }
 }
-function chatFriendlyError(err){
+function chatSubscriptionFailureInfo(err,cfg){
+  var msg=String((err&&(err.message||err.error))||err||'');
+  var code=String(err&&(err.chatSubscriptionCode||err.code)||'');
+  var entries={
+    subscription_temporary:['Claude 暂时繁忙，消息已保留。','暂未回复','retry'],
+    subscription_unknown:['这次回复暂未完成，消息已保留。可稍后重试。','暂未回复','retry'],
+    subscription_auth:['订阅登录需要检查，消息已保留。','请检查订阅登录','subscription'],
+    subscription_denied:['官方未接受这次请求，请检查订阅状态与模型权限。','请检查订阅权限','subscription'],
+    subscription_billing:['订阅方案或付款状态需要检查，消息已保留。','请检查订阅方案','subscription'],
+    subscription_limit:['订阅额度暂时受限，消息已保留。等额度恢复后再试。','等待订阅额度恢复','subscription'],
+    subscription_egress:['固定出口暂未通过检查，订阅请求已暂停。','订阅出口检查未通过','subscription'],
+    subscription_context:['对话超过上下文限制，请先整理历史。','请先整理对话历史','retry'],
+    subscription_signature:['历史思考签名未被接受，请检查历史原生思考设置。','请检查历史思考设置','retry'],
+    subscription_request:['本次请求的参数未被接受，请检查模型设置。','请检查模型设置','retry'],
+    subscription_busy:['订阅正在处理另一条消息，稍后可重试。','等待订阅空闲','retry']
+  };
+  if(!Object.prototype.hasOwnProperty.call(entries,code)){
+    var subscription=cfg&&cfg.chatApiSource==='claude_subscription'||err&&err.execution_backend==='claude_code_subscription'||
+      /api\.anthropic\.com\/v1\/messages/.test(msg)&&/Claude Code/.test(msg);
+    if(!subscription)return null;
+    if(/固定.*(?:IP|出口)|出口.*(?:检查|验证)|egress_blocked/i.test(msg))code='subscription_egress';
+    else if(/正在处理其他消息|正在处理另一条消息/.test(msg))code='subscription_busy';
+    else if(/(?:HTTP|status|API Error)\s*[:=]?\s*401\b|鉴权失败|登录.*(?:失效|过期|检查)|尚未登录|authentication|unauthorized/i.test(msg))code='subscription_auth';
+    else if(/(?:HTTP|status|API Error)\s*[:=]?\s*403\b|订阅拒绝|官方未接受/i.test(msg))code='subscription_denied';
+    else if(/(?:HTTP|status|API Error)\s*[:=]?\s*429\b|限流|额度不足|使用限制|额度.*(?:暂停|受限)|rate_limit/i.test(msg))code='subscription_limit';
+    else if(/上下文超限|上下文限制|context.{0,25}(?:long|limit)/i.test(msg))code='subscription_context';
+    else if(/历史思考签名|signature/i.test(msg))code='subscription_signature';
+    else if(/参数.*(?:拒绝|接受)|HTTP\s*400\b/i.test(msg))code='subscription_request';
+    // An old bridge's generic 502 is not the original upstream status.
+    else if(/Claude Code 返回了上游 API 错误|原生请求未完成|原生调用失败/.test(msg))code='subscription_unknown';
+    else if(/(?:HTTP|status|API Error)\s*[:=]?\s*(?:500|502|503|504|529)\b|暂时繁忙|overloaded_error/i.test(msg))code='subscription_temporary';
+    else code='subscription_unknown';
+  }
+  var entry=entries[code];
+  return {code:code,message:entry[0],status:entry[1],action:entry[2]};
+}
+function chatMarkSubscriptionFailure(messages,err,cfg){
+  var info=chatSubscriptionFailureInfo(err,cfg);
+  (messages||[]).forEach(function(message){
+    if(!message)return;
+    if(info)message.sendFailureCode=info.code;else delete message.sendFailureCode;
+  });
+  return info;
+}
+function chatSendFailureHtml(message,index){
+  var info=chatSubscriptionFailureInfo({chatSubscriptionCode:message.sendFailureCode});
+  if(!info)return '<button class="chat-user-retry" type="button" data-act="retry" data-i="'+index+'">发送失败 · 点击重试</button>';
+  return '<div class="chat-subscription-notice" role="status"><span>'+esc(info.message)+'</span>'+
+    '<button class="chat-user-retry" type="button" data-act="'+info.action+'" data-i="'+index+'">'+
+    (info.action==='subscription'?'查看订阅状态':'重试')+'</button></div>';
+}
+function chatFriendlyError(err,cfg){
+  var subscription=chatSubscriptionFailureInfo(err,cfg);
+  if(subscription)return subscription.message;
   var msg=String((err&&err.message)||err||'请求失败');
   if(/\b524\b|120-second Proxy Read Timeout/i.test(msg))return '模型上游等待超时（524，约120秒未完成响应）。已收到的内容会保留，可以稍后重试。';
   var parsed=null;
@@ -7185,6 +7239,7 @@ function chatFinalizeStoppedRequest(request){
     delete message.regenerateRequest;
     delete message.regenerateCutoff;
     delete message.sendFailed;
+    delete message.sendFailureCode;
     delete message.failedAt;
     delete message.inFlight;
     delete message.inFlightAt;
@@ -8048,7 +8103,7 @@ async function chatRecoverInterruptedTurns(opts){
           thinking:String(reply.assistant_thinking||''),renderCompletedTs:Date.now()});
       }
       chatClearInFlightMarks(matching.map(function(m){return chatMessages.indexOf(m)}));
-      matching.forEach(function(m){delete m.sendFailed;delete m.failedAt});
+      matching.forEach(function(m){delete m.sendFailed;delete m.sendFailureCode;delete m.failedAt});
       var queuedIds=session.replyDraft&&session.replyDraft.turn_id===turnId?session.replyDraft.queuedPendingIds:null;
       session.replyDraft=null;chatExpireNativeThinking(session);chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true});
       chatSetStatus('已补收完整回复');
@@ -8068,7 +8123,9 @@ async function chatRecoverInterruptedTurns(opts){
       chatMarkInterruptedAsFailed(matching);
       if(session.replyDraft)session.replyDraft.state='error';
       chatSaveLocalMessages();chatSetStatus('本次未完成，已保留收到的内容，可重试');
-      if(reply&&reply.error&&opts.silent!==true)toast(chatFriendlyError(new Error(reply.error)),5000);
+      var failure=chatMarkSubscriptionFailure(matching,reply||{},cfg);
+      if(failure){chatSaveLocalMessages();chatSetStatus(failure.status)}
+      else if(reply&&reply.error&&opts.silent!==true)toast(chatFriendlyError(new Error(reply.error)),5000);
     }
     chatRenderMessages({respectUserScroll:true});
     return {checked:true,recovered:0};
@@ -8137,6 +8194,8 @@ function chatPendingGestureReset(){
 }
 function chatPendingGestureStart(e){
   if(!e||!e.target||!e.target.closest)return;
+  // Row swipe/delete must not capture clicks intended for retry or status.
+  if(e.target.closest('button,a,input,textarea,select,[role="button"]'))return;
   var row=e.target.closest('.chat-msg-row.pending,.chat-msg-row.send-failed');
   if(!row)return;
   var index=parseInt(row.getAttribute('data-chat-index'),10);
@@ -9485,6 +9544,7 @@ document.addEventListener('click',function(e){
     if(a==='copy'&&chatMessages[i])chatCopyText(chatMessageCopyText(chatMessages[i]));
     if(a==='regen')chatRegenerateFromUser(i);
     if(a==='retry')chatRetryFailedUser(i);
+    if(a==='subscription'&&typeof ckOpenSubscription==='function')ckOpenSubscription();
     return;
   }
 });
@@ -10062,7 +10122,7 @@ function chatRenderMessageRow(m,i){
   if(role==='assistant'&&isGroupLast&&!assistantError&&!assistantStopped)toolButtons.push('<button class="chat-user-regen" data-act="regen" data-i="'+i+'" title="重新生成" aria-label="重新生成"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10a8 8 0 1 0-1.8 8M20 4v6h-6"/></svg></button>');
   var tools=toolButtons.length&&actionsOpen?'<div class="chat-msg-tools">'+toolButtons.join('')+'</div>':'';
   var userMeta=role==='user'?chatUserMessageMetaHtml(m,isGroupLast):'';
-  if(role==='user'&&m.sendFailed)userMeta+='<button class="chat-user-retry" type="button" data-act="retry" data-i="'+i+'">发送失败 · 点击重试</button>';
+  if(role==='user'&&m.sendFailed)userMeta+=chatSendFailureHtml(m,i);
   var time=role==='assistant'?chatMessageTimingHtml(m,role,isGroupLast):'';
   var usage=(role==='assistant'&&isGroupLast)?chatAssistantUsageHtml(m):'';
   var imageCount=chatMessageImages(m).length;
@@ -10076,7 +10136,7 @@ function chatRenderMessageRow(m,i){
   var animKey=chatMessageAnimKey(m);
   var fresh=chatFreshMessageKeys.has(animKey)?' chat-fresh':'';
   var staggered=chatStaggeredMessageKeys.has(animKey)?' chat-staggered':'';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+versionNav+tools+userMeta+time+usage+'</div>';
+  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(m&&m.sendFailed&&m.sendFailureCode?' subscription-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+versionNav+tools+userMeta+time+usage+'</div>';
 }
 // 三个显示开关（√ / 价格 / 召回记忆框）也进消息签名。渲染路径按它们决定要不要输出
 // 那几个节点，签名里不带的话：关掉时靠 body 上的类还能藏住，重新打开却因为"签名没变"
@@ -10090,7 +10150,7 @@ function chatMessageDisplayGateKey(){
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-   var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.thinking,m.sendFailed,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
+   var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.thinking,m.sendFailed,m.sendFailureCode,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;
@@ -10768,7 +10828,7 @@ async function chatSubmitPendingMessages(options){
   var requestTurnId=String((pending.find(function(message){return message&&message.turnId})||{}).turnId||'')||chatConversationTurnId();
   pending.forEach(function(message){if(message)message.turnId=requestTurnId});
   if(requestState)requestState.turnId=requestTurnId;
-  pending.forEach(function(m){delete m.sendFailed;delete m.failedAt;chatMarkMessageFresh(m)});
+  pending.forEach(function(m){delete m.sendFailed;delete m.sendFailureCode;delete m.failedAt;chatMarkMessageFresh(m)});
   pending.forEach(function(m){chatUpdateMessageRowOnly(chatMessages.indexOf(m))});
   chatSaveLocalMessagesDeferred();
   chatFollowMessagesBottom(chatShouldFollowMessages(),true,false);
@@ -11197,6 +11257,16 @@ async function chatSubmitPendingMessages(options){
             : String(data||'');
           if(!streamErrorText)streamErrorText=JSON.stringify(data||{});
           streamError=chatCreateRequestFailure(streamErrorText,chatContainsPlatformExitError(streamErrorText));
+          if(data&&typeof data==='object'){
+            streamError.chatSubscriptionCode=data.code;
+            streamError.execution_backend=data.execution_backend;
+          }
+          return;
+        }
+        if(ev==='subscription_retry'){
+          var retryIndex=Math.max(1,Math.min(2,Number(data&&data.retry_index)||1));
+          var retryStatus='稍等重试 '+retryIndex+'/2';
+          chatSetStatus(retryStatus);chatStreamProgressSet(retryStatus);
           return;
         }
         if(ev==='reply_complete'){
@@ -11380,8 +11450,9 @@ async function chatSubmitPendingMessages(options){
           delete chatMessages[idx].inFlightTurnId;
         }
       });
-      chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus('请求失败');
-      toast(chatFriendlyError(e),5000,{type:'error',closable:true,pauseOnHover:true});
+      var failure=chatMarkSubscriptionFailure(userMessageIndexes.map(function(idx){return chatMessages[idx]}),e,cfg);
+      chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus(failure?failure.status:'请求失败');
+      if(!failure)toast(chatFriendlyError(e),5000,{type:'error',closable:true,pauseOnHover:true});
     }
   }finally{
     stopStreamRender();
