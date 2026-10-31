@@ -1,6 +1,6 @@
-const fs=require('fs'),path=require('path'),http=require('http'),assert=require('node:assert/strict');
+const fs=require('fs'),path=require('path'),http=require('http'),os=require('os'),assert=require('node:assert/strict');
 const {spawn}=require('child_process');
-const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../0-工作间/trim-failures-20261003/browser');
+const root=path.resolve(__dirname,'..'),out=process.env.CK_BROWSER_OUTPUT||fs.mkdtempSync(path.join(os.tmpdir(),'ck-digest-debug-'));
 fs.mkdirSync(out,{recursive:true});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const server=http.createServer((req,res)=>{
@@ -15,7 +15,8 @@ const server=http.createServer((req,res)=>{
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const base='http://127.0.0.1:'+server.address().port,profile=path.join(out,'profile-'+Date.now());
- const browser=spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',['--headless=new','--disable-gpu','--no-sandbox','--hide-scrollbars','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore',windowsHide:true});
+ const chrome=process.env.CK_TEST_CHROME||(process.platform==='win32'?'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe':require('playwright').chromium.executablePath());
+ const browser=spawn(chrome,['--headless=new','--disable-gpu','--no-sandbox','--hide-scrollbars','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore',windowsHide:true});
  let socket;
  try{
   let port;

@@ -129,7 +129,14 @@ function chatDigestSyncView(session,cfg,remote){
   if(cfg.digestCurrentModel===true){
     var run=state.model_run||{},local=session.digestModelRun;
     if(!record&&!preparing){view.status='仅手动';view.note='点击立即截断或手动更新总结后，使用所选整理模型。';}
-    if(run.state==='blocked'){view.status='等待手动重试';view.tone='attention';view.note=state.last_error||'本次总结未完成；原文与成功批次已保留。';}
+    if(run.state==='blocked'){
+      var stopCode=state.last_error_code||'';
+      view.status=stopCode==='subscription_quota_low'||stopCode==='subscription_quota_blocked'?'等待额度恢复':
+        stopCode==='subscription_egress_blocked'?'固定出口保护中':
+        stopCode==='subscription_auth_unavailable'?'等待登录恢复':
+        stopCode.indexOf('subscription_quota_')===0?'等待额度核实':'等待手动处理';
+      view.tone='attention';view.note=state.last_error||'本次总结未完成；原文与成功批次已保留。';
+    }
     else if(local&&run.id===local.id&&(run.state==='queued'||run.state==='running')){view.status='手动总结进行中';view.note='使用 '+local.label+' 整理和校对；原文保留。';}
     else if(ready&&!preparing){view.note='结果已准备，可立刻同步；不会因缓存到期自动截断。';}
   }
@@ -243,7 +250,7 @@ function chatSyncNightlyDigest(cfg,options){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(1500);
       }
       if(body&&body.settings_override&&matchingConfig&&JSON.stringify(chatNightlyConfig(chatLoadConfig()))===JSON.stringify(body.config))delete session.digestSettingsPending;
-      session.digestSchedule={scope:scope,model_run:data.model_run,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
+      session.digestSchedule={scope:scope,model_run:data.model_run,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',last_error_code:data.last_error_code||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
       chatSaveSessions({sessionIds:[session.id]});
       if(session===chatCurrentSession()&&!chatSending&&data.auto&&data.auto.due)setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
       var pollDelay=chatDigestNextPollingDelay(cfg);if(pollDelay)chatScheduleNightlySync(pollDelay);

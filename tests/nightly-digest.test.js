@@ -82,6 +82,23 @@ test('Shanghai preparation runs all day starting at midnight',()=>{
   const x=setup();
   for(const [time,expected] of [['00:00:00',true],['03:59:59',true],['07:00:00',true],['23:59:59',true]])assert.equal(x.ctx.chatNightlyWindow(Date.parse('2026-10-04T'+time+'+08:00')).inWindow,expected);
 });
+test('manual guard stops show their precise reason and keep source messages',()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;const before=copy(x.session.messages);
+  for(const [code,title] of [['subscription_quota_low','等待额度恢复'],['subscription_quota_unconfirmed','等待额度核实'],
+    ['subscription_egress_blocked','固定出口保护中'],['subscription_auth_unavailable','等待登录恢复']]){
+    const view=x.ctx.chatDigestSyncView(x.session,x.cfg,{model_run:{state:'blocked'},last_error_code:code,last_error:'已暂停，原文保留'});
+    assert.equal(view.status,title);assert.equal(view.note,'已暂停，原文保留');
+  }
+  assert.deepEqual(copy(x.session.messages),before);assert.equal(x.calls.length,0);
+});
+test('saved guard reason survives a read-only state refresh without starting a model',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;
+  x.ctx.fetch=async(url,init={})=>{x.calls.push({url,init});return {ok:true,json:async()=>({ok:true,sessions:[{
+    status:'blocked',model_run:{id:'manual-guard',state:'blocked'},last_error_code:'subscription_quota_low',last_error:'额度不足，已暂停'}]})}};
+  await x.ctx.chatSyncNightlyDigest(x.cfg,{readOnly:true,force:true});
+  assert.equal(x.session.digestSchedule.last_error_code,'subscription_quota_low');
+  assert.equal(x.calls.length,1);assert.equal(x.calls[0].init.body,undefined);
+});
 test('trimming archives complete sources durably before any network work',()=>{
   const x=setup();assert.equal(x.ctx.chatArchiveDigestSources(x.session,x.session.messages),true);
   assert.equal(x.calls.length,0);assert.equal(x.session.messages.length,2);
