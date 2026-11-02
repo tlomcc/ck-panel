@@ -498,6 +498,13 @@ body.chat-active .chat-cache-tick path{
 body.chat-active .chat-md>*:first-child{margin-top:0!important}
 body.chat-active .chat-md>*:last-child{margin-bottom:0!important}
 body.chat-active .chat-md p{margin:0 0 6px!important}
+/* A single reply bubble still keeps the author's prose lines and blank paragraphs. */
+body.chat-active .chat-md>p+p{margin-top:1em!important}
+body.chat-active .chat-md>p .chat-prose-break{
+  display:block;
+  height:.6em;
+  line-height:0;
+}
 body.chat-active .chat-md ul,
 body.chat-active .chat-md ol{margin:5px 0!important;padding-left:18px!important}
 body.chat-active .chat-md li{margin:2px 0!important}

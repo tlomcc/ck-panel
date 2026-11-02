@@ -87,6 +87,18 @@ function testNoCssCounterHack(){
   assert.ok(/parseInt\(im\[1\],10\)/.test(render),'起始序号要从源文本第一项的数字取');
 }
 
+function testProseBreaksPreserveInlineFormatting(){
+  const html=md('**第一行\n第二行**\n`原样 <code>`\n\n下一段');
+  assert.ok(/<strong>第一行<span[^>]*><br><\/span>第二行<\/strong>/.test(html),
+    '原始换行必须保留，同时不能打断跨行加粗');
+  assert.ok(html.includes('<code>原样 &lt;code&gt;</code>'),
+    '行内代码应恢复为代码标签，不能遗留不可见的占位符');
+  assert.strictEqual((html.match(/<p>/g)||[]).length,2,'空行仍然分隔两个段落');
+  assert.ok(!/[\x00\x01]/.test(html),'行内代码占位符不能进入显示正文');
+  assert.strictEqual(md('```text\n第一行\n第二行\n```'),
+    context.chatCodeBlock('text','第一行\n第二行'),'代码块中的换行不得加正文间距');
+}
+
 testFirstNumberDecidesTheStart();
 testSplitRepliesKeepCountingUp();
 testWholeReplyModeUnchanged();
@@ -94,4 +106,5 @@ testUnorderedListIsUntouched();
 testInlineMarkupSurvives();
 testListStillEndsTheParagraph();
 testNoCssCounterHack();
+testProseBreaksPreserveInlineFormatting();
 console.log('markdown list tests: OK');

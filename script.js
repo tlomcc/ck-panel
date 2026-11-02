@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v367-auto-reply-150';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v368-reply-layout';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8554,7 +8554,7 @@ function chatMdInline(raw){
   t=t.replace(/(^|[^_\w])_([^_\n]+)_/g,'$1<em>$2</em>');
   t=t.replace(/~~([^~]+)~~/g,'<del>$1</del>');
   t=t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,function(m,txt,url){if(!/^(https?:|mailto:)/i.test(url))return m;return '<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+txt+'</a>'});
-  t=t.replace(new RegExp(A+'(\d+)'+B,'g'),function(m,n){return '<code>'+chatEsc(codes[+n])+'</code>'});
+  t=t.replace(new RegExp(A+'(\\d+)'+B,'g'),function(m,n){return '<code>'+chatEsc(codes[+n])+'</code>'});
   return t;
 }
 function chatCodeBlock(lang,code){
@@ -8602,7 +8602,9 @@ function chatRenderMarkdown(src){
     }
     if(/^\s*$/.test(line)){i++;continue}
     var p=[];while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^(#{1,6})\s/.test(lines[i])&&!/^```/.test(lines[i])&&!/^\s*>/.test(lines[i])&&!/^\s*([-*+]|\d+\.)\s+/.test(lines[i])){p.push(lines[i]);i++}
-    out.push('<p>'+chatMdInline(p.join('\n')).replace(/\n/g,'<br>')+'</p>');
+    // Keep source line breaks inside the same bubble, with room between prose units.
+    // Wrap the break after inline rendering so bold text and code keep their markup.
+    out.push('<p>'+chatMdInline(p.join('\n')).replace(/\n/g,'<span class="chat-prose-break"><br></span>')+'</p>');
   }
   return out.join('\n');
 }
