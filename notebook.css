@@ -319,6 +319,11 @@ body.chat-active .chat-settings :is(#chat-system,#chat-thinking-prompt){height:c
 .chat-prompt-sync-status{margin:10px 0 4px;padding:10px 12px;border-left:3px solid currentColor;border-radius:4px;font-size:12px;line-height:1.7;overflow-wrap:anywhere;color:var(--nb-muted,#767184)}
 .chat-prompt-sync-status[data-state="success"]{color:var(--chat5-accent,#39755e)}
 .chat-prompt-sync-status[data-state="error"]{color:#b64b5d}
+body.chat-active #chat-side-display #chat-prompt-sync-group{margin-bottom:16px!important}
+body.chat-active .chat-settings #chat-prompt-sync-all{min-height:44px!important;color:var(--nb-ink)!important}
+#chat-prompt-sync-all-status{white-space:pre-line}
+#chat-prompt-sync-all-status[data-state="success"]{color:var(--nb-sage-ink)}
+body.dark #chat-prompt-sync-all-status[data-state="error"]{color:color-mix(in srgb,var(--ck-danger) 60%,var(--nb-ink))}
 
 /* Shared finishing: keep the notebook, align its reading and control rhythm. */
 body:not(.chat-active) #page-memory{max-width:1200px!important;margin-inline:auto!important;padding-inline:24px!important;box-sizing:border-box}

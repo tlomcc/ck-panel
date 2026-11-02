@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v365-ui-polish';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v366-prompt-sync-both';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -3154,6 +3154,7 @@ function chatRenderPromptStandby(kind,cfg,message,state){
   }
   if(status.textContent!==message)status.textContent=message;
   status.dataset.state=state||'';
+  chatRenderPromptSyncAll(cfg);
 }
 function chatRenderSystemPromptStandby(cfg,message,kind){
   chatRenderPromptStandby('system',cfg,message,kind);
@@ -3203,6 +3204,71 @@ async function chatSyncPromptNow(kind){
   if(input.value!==text){toast('备选内容已变化，请重新确认同步');return false;}
   if(!chatStorePrompt(kind,text,true))return false;
   toast(fields.label+'已同步');return true;
+}
+function chatPromptSyncItems(cfg){
+  return ['system','thinking'].map(function(kind){
+    var fields=chatPromptFields(kind),input=document.getElementById(fields.input);
+    return {kind:kind,fields:fields,text:String(input?input.value:(cfg[fields.draft]||''))};
+  });
+}
+function chatRenderPromptSyncAll(cfg,message,state){
+  var status=document.getElementById('chat-prompt-sync-all-status');
+  if(!status)return;
+  cfg=cfg||chatLoadConfig();
+  if(!message){
+    var pending=false,filled=false;
+    message=chatPromptSyncItems(cfg).map(function(item){
+      var fields=item.fields;
+      if(!item.text.trim())return fields.label+'：备选为空，保留当前内容';
+      filled=true;
+      if(item.text===String(cfg[fields.key]||'')&&item.text===String(cfg[fields.draft]||''))return fields.label+'：已同步';
+      pending=true;return fields.label+'：待同步';
+    }).join('\n');
+    state=pending?'pending':filled?'success':'';
+  }
+  if(status.textContent!==message)status.textContent=message;
+  status.dataset.state=state||'';
+}
+function chatSyncAllPromptsNow(){
+  var cfg=chatLoadConfig(),items=chatPromptSyncItems(cfg);
+  var filled=items.filter(function(item){return item.text.trim()});
+  var changes=filled.filter(function(item){
+    var fields=item.fields;
+    return cfg[fields.key]!==item.text||cfg[fields.draft]!==item.text||(item.kind==='thinking'&&cfg.fakeThinkingPrompt!==item.text);
+  });
+  if(!changes.length){
+    filled.forEach(function(item){chatPromptDraftDirty[item.kind]=false;chatSetFieldValue(item.fields.main,item.text);chatRenderPromptStandby(item.kind,cfg)});
+    chatRenderPromptSyncAll(cfg);
+    toast(filled.length?'提示词已是最新状态':'备选框为空，请先填写备选内容');
+    return filled.length>0;
+  }
+  var stamp=Date.now();
+  changes.forEach(function(item){
+    var fields=item.fields;
+    cfg[fields.key]=item.text;cfg[fields.draft]=item.text;cfg[fields.stamp]=stamp;
+    if(item.kind==='thinking')cfg.fakeThinkingPrompt=item.text;
+  });
+  // 两份提示词写入同一条配置，回读成功后才更新生效框。
+  try{
+    chatSaveConfigObject(cfg);
+    var stored=JSON.parse(localStorage.getItem(CHAT_CONFIG_KEY)||'{}');
+    if(!stored||changes.some(function(item){
+      var fields=item.fields;
+      return stored[fields.key]!==item.text||stored[fields.draft]!==item.text||stored[fields.stamp]!==stamp||(item.kind==='thinking'&&stored.fakeThinkingPrompt!==item.text);
+    }))throw new Error('prompt_sync_not_saved');
+  }catch(e){
+    var message='同步未成功：本地存储不可用，备选内容已保留，请重试。';
+    changes.forEach(function(item){chatRenderPromptStandby(item.kind,null,message,'error')});
+    chatRenderPromptSyncAll(null,message,'error');toast('提示词同步未成功');return false;
+  }
+  filled.forEach(function(item){
+    chatPromptDraftDirty[item.kind]=false;
+    chatSetFieldValue(item.fields.main,item.text);
+    chatRenderPromptStandby(item.kind,cfg);
+  });
+  chatRenderPromptSyncAll(cfg);
+  toast(changes.map(function(item){return item.fields.label}).join('、')+'已同步，下一轮对话使用');
+  return true;
 }
 function chatMaybeSyncPrompt(kind,options){
   options=options||{};

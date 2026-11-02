@@ -4,7 +4,7 @@ function ckSettingsMount(){
   var root=document.getElementById('chat-side-display');if(!root||root.dataset.organized)return;
   root.dataset.organized='true';
   var pages=[['interface','界面'],['wake','唤醒'],['connection','API 连接'],['history','历史保留'],['time','时间'],['billing','计费'],['cleanup','清理'],['tools','工具']];
-  var headings={'界面设置':'interface','唤醒服务':'wake','计费显示':'billing','历史保留':'history','时间提醒':'time'};
+  var headings={'提示词同步':'interface','界面设置':'interface','唤醒服务':'wake','计费显示':'billing','历史保留':'history','时间提醒':'time'};
   var sections=Array.from(root.children).filter(function(n){return n.matches('section.chat-setting-group')});
   var nav=document.createElement('div');nav.className='ck-settings-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','设置分类');
   root.querySelector('header').after(nav);
