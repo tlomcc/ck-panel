@@ -39,6 +39,7 @@ const server=http.createServer((req,res)=>{
     await evaluate('window.__streamSource='+JSON.stringify(fs.readFileSync(path.join(root,'script.js'),'utf8')));
     const result=await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/live-stream.js'),'utf8'));
     console.log(width+' '+dark,JSON.stringify(result));
+    console.log('reply modes',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/reply-auto-mode.js'),'utf8'))));
     console.log('completion',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/stream-completion.js'),'utf8'))));
     console.log('first response',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/first-response.js'),'utf8'))));
     console.log('scroll',JSON.stringify(await evaluate(fs.readFileSync(path.join(__dirname,'fixtures/scroll-follow.js'),'utf8'))));

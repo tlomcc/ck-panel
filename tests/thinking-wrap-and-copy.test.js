@@ -33,13 +33,13 @@ function extractVar(name){
 
 const ctx={console};
 vm.createContext(ctx);
-['CHAT_THINKING_TAG_NAME','CHAT_THINKING_OPEN_SRC','CHAT_THINKING_CLOSE_SRC',
+['CHAT_AUTO_WHOLE_REPLY_CHARS','CHAT_THINKING_TAG_NAME','CHAT_THINKING_OPEN_SRC','CHAT_THINKING_CLOSE_SRC',
  'CHAT_THINKING_TAG_RE','CHAT_THINKING_OPEN_RE','CHAT_THINKING_CLOSE_RE',
  'CHAT_THINKING_CLOSE_SPLIT_RE','CHAT_THINKING_OPEN_TO_END_RE','CHAT_THINKING_TAG_CLEAN_RE']
   .forEach(name=>vm.runInContext(extractVar(name),ctx));
 ['chatLooksLikePartialThinkingTag','chatSplitThinkingText','chatMessageCopyText','chatMessageThinkingText',
  'chatSplitOutsideCodeBlocks','chatHasUnclosedCodeBlock','chatNaturalUnits','chatJoinNaturalUnits',
- 'chatSplitAssistantReplies']
+ 'chatShouldSplitAssistantReply','chatSplitAssistantReplies']
   .forEach(name=>vm.runInContext(extractFunction(name),ctx));
 
 const cut=(text,opts)=>ctx.chatSplitThinkingText(text,opts);

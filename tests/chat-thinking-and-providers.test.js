@@ -22,7 +22,6 @@ const row=functionSource('chatRenderMessageRow');
 const parts=functionSource('chatRenderAssistantParts');
 const thinkingMode=functionSource('chatNormalizeThinkingMode');
 const thinkingControls=functionSource('chatRenderThinkingControls');
-const renderStream=functionSource('chatRenderStreamingAssistantContent');
 const openState=functionSource('chatCaptureOpenAuxBlocks');
 const restoreState=functionSource('chatRestoreOpenAuxBlocks');
 const provider=functionSource('providerCardHtml');
@@ -47,8 +46,7 @@ assert(thinkingMode.includes("raw==='adaptive'")&&thinkingMode.includes("return 
 assert(thinkingControls.includes("mode==='adaptive'")&&thinkingControls.includes('自动决定'),'adaptive mode must explain that budget is automatic');
 assert(source.includes("if(thinkingMode==='native'||thinkingMode==='adaptive')"),'adaptive mode must send native thinking fields');
 assert(source.includes("if(thinkingMode==='native')body.thinking_budget_tokens"),'fixed budget must remain native-only');
-assert(renderStream.includes("splitEnabled===false?rawText:chatStreamingAssistantPreviewText(rawText)"),'whole reply mode must stream all received text');
-assert(source.includes('cfg.splitAssistantReplies!==false'),'stream renderer must receive the whole-reply setting');
+// 分段/自动/整段的正文与思考隔离由 reply-split 和真实浏览器流测试验证。
 assert(openState.includes("querySelector('.chat-thinking.open')")&&restoreState.includes("classList.toggle('open'"),'open thinking blocks must survive message rerenders');
 assert(css.includes('top:var(--ck-chat-vv-top,0px)!important'),'chat surface must follow visual viewport offset');
 assert(/chat-editing \.chat-compose-row > #chat-input\{[\s\S]*?min-height:36px!important/.test(css),'editing input must autosize instead of locking to two lines');

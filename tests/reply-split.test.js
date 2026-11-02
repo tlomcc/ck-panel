@@ -25,18 +25,20 @@ function extractVar(name){
 
 const context={console};
 vm.createContext(context);
+vm.runInContext(extractVar('CHAT_AUTO_WHOLE_REPLY_CHARS'),context);
 ['CHAT_THINKING_TAG_NAME','CHAT_THINKING_OPEN_SRC','CHAT_THINKING_CLOSE_SRC',
  'CHAT_THINKING_TAG_RE','CHAT_THINKING_OPEN_RE','CHAT_THINKING_CLOSE_RE',
  'CHAT_THINKING_CLOSE_SPLIT_RE','CHAT_THINKING_OPEN_TO_END_RE','CHAT_THINKING_TAG_CLEAN_RE']
   .forEach(name=>vm.runInContext(extractVar(name),context));
 ['chatSplitThinkingText','chatLooksLikePartialThinkingTag','chatSplitOutsideCodeBlocks',
  'chatHasUnclosedCodeBlock','chatNaturalUnits','chatJoinNaturalUnits',
+ 'chatNormalizeReplySplitMode','chatNextReplySplitMode','chatReplySplitModeLabel','chatShouldSplitAssistantReply',
  'chatSplitAssistantReplies','chatStreamingAssistantPreviewText']
   .forEach(name=>vm.runInContext(extractFunction(name),context));
 
 // vm 里造出来的数组原型和宿主不同，deepStrictEqual 会因为跨 realm 直接判不等，
 // 所以统一摊回宿主数组再断言。
-const split=(text,enabled)=>[...context.chatSplitAssistantReplies(text,enabled!==false)];
+const split=(text,mode)=>[...context.chatSplitAssistantReplies(text,mode)];
 
 // ---------------------------------------------------------------------------
 // 一个回车就是一条：条数只由小克的换行决定
@@ -152,6 +154,53 @@ function testWholeReplyStreamsImmediately(){
   assert.strictEqual(context.chatRenderStreamingAssistantContent('第一段\n第二段',[],'',false,false),'第一段\n第二段');
 }
 
+function testAutoThresholdExcludesPunctuation(){
+  const short='甲'.repeat(74)+'，。！？；：“”「」（）……—\n'+'乙'.repeat(75);
+  assert.strictEqual(split(short,'auto').length,2,'149字加标点和换行仍须分段');
+  assert.deepStrictEqual(split(short+'丙','auto'),[short+'丙'],'恰好150字须整段，保留全部标点和换行');
+  assert.deepStrictEqual(split(short+'丙丁','auto'),[short+'丙丁'],'超过150字须整段');
+  assert.strictEqual(split(short+'丙丁',true).length,2,'手动分段不受自动门槛影响');
+  assert.deepStrictEqual(split('甲\n乙',false),['甲\n乙'],'手动整段不受自动门槛影响');
+  const padded='甲\n'+'乙'.repeat(148)+' \t\n'+',.!?:;()[]{}<>/\\_`~@#$%^&*+-=|'.repeat(30);
+  assert.strictEqual(context.chatShouldSplitAssistantReply(padded,'auto'),true,'空白、ASCII标点和符号不计入字数');
+}
+
+function testAutoCountsTextCharactersOnly(){
+  const mixed='文'.repeat(49)+'\n'+'A'.repeat(50)+'7'.repeat(50);
+  assert.strictEqual(split(mixed,'auto').length,2,'字母与数字各按一字累计，共149字');
+  assert.deepStrictEqual(split(mixed+'界','auto'),[mixed+'界']);
+  const unicode='𠮷'.repeat(74)+'\n'+'好'.repeat(75);
+  assert.strictEqual(split(unicode,'auto').length,2,'补充平面汉字不能按两个UTF-16码元计数');
+  assert.deepStrictEqual(split(unicode+'好','auto'),[unicode+'好']);
+  const thinking='<think>'+'想'.repeat(500)+'</think>';
+  assert.strictEqual(split(thinking+mixed,'auto').length,2,'思考内容不计入正文门槛');
+  assert.deepStrictEqual(split(thinking+mixed+'界','auto'),[thinking+mixed+'界'],'合并保留完整思考和正文');
+}
+
+function testThreeModeCycleAndLegacy(){
+  assert.strictEqual(context.chatNormalizeReplySplitMode(true),true);
+  assert.strictEqual(context.chatNormalizeReplySplitMode(false),false);
+  assert.strictEqual(context.chatNormalizeReplySplitMode('auto'),'auto');
+  assert.strictEqual(context.chatNormalizeReplySplitMode(undefined),true,'旧存档无字段仍默认分段');
+  let mode=true;
+  const labels=[];
+  for(let i=0;i<4;i++){
+    labels.push(context.chatReplySplitModeLabel(mode));
+    mode=context.chatNextReplySplitMode(mode);
+  }
+  assert.deepStrictEqual(labels,['分段','自动','整段','分段']);
+}
+
+function testAutoStreamingPreview(){
+  context.chatRenderAssistantContent=(text)=>text;
+  vm.runInContext(extractFunction('chatRenderStreamingAssistantContent'),context);
+  const short='甲'.repeat(74)+'。\n'+'乙'.repeat(75)+'！';
+  const render=text=>context.chatRenderStreamingAssistantContent(text,[],'思'.repeat(500),true,'auto');
+  assert.strictEqual(render(short),'甲'.repeat(74)+'。');
+  assert.strictEqual(render(short+'丙'),short+'丙','第150个正文字到达后显示完整正文');
+  assert.strictEqual(render('<think>'+'想'.repeat(500)+'</think>'+short),'甲'.repeat(74)+'。');
+}
+
 testOneNewlineOneBubble();
 testDeterministic();
 testLengthDoesNotMatter();
@@ -160,5 +209,9 @@ testCodeBlocks();
 testToggleAndThinking();
 testStreamingPreview();
 testWholeReplyStreamsImmediately();
+testAutoThresholdExcludesPunctuation();
+testAutoCountsTextCharactersOnly();
+testThreeModeCycleAndLegacy();
+testAutoStreamingPreview();
 
-console.log('reply-split tests: OK');
+console.log('reply-split tests: 12 cases OK');

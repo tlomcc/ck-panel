@@ -34,10 +34,12 @@
  stats.composer={base,savedHeight};
  chatTogglePlus(true);let cfg=chatLoadConfig();cfg.splitAssistantReplies=true;chatSaveConfigObject(cfg);chatUpdateSplitReplyButton(cfg);
  const split=field('chat-split-replies-btn');const on=getComputedStyle(split.querySelector('svg')).color;
- split.focus();split.click();const off=getComputedStyle(split.querySelector('svg')).color;
- check(split.getAttribute('aria-pressed')==='false'&&split.querySelector('b').textContent==='整段','Split mode did not change immediately');
+ split.focus();split.click();
+ check(split.dataset.replyMode==='auto'&&split.querySelector('b').textContent==='自动','Auto mode did not change immediately');
+ split.click();const off=getComputedStyle(split.querySelector('svg')).color;
+ check(split.dataset.replyMode==='whole'&&split.querySelector('b').textContent==='整段','Whole mode did not change immediately');
  check(on!==off,'Off icon retained active color');stats.splitColors={on,off};
- split.click();check(split.getAttribute('aria-pressed')==='true','Split could not turn on again');
+ split.click();check(split.dataset.replyMode==='split'&&split.querySelector('b').textContent==='分段','Split could not turn on again');
  await notebookShow('display');chatToggleSearch(true);check(!field('chat-search').hidden,'Search could not open');
  field('chat-search-enabled').checked=false;chatSaveConfig(true);
  check(field('chat-search').hidden&&getComputedStyle(field('chat-search-toggle')).display==='none','Disabling search did not hide both icon and panel');

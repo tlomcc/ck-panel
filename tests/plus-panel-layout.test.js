@@ -24,7 +24,7 @@ assert(!/chat-plus-dots|chat-plus-dot"/.test(html),'plus pager dots must be gone
 assert(!/chat-plus-arrow/.test(html),'plus pager arrows must be gone');
 const trayButtons=(html.match(/<div class="chat-plus-grid"[\s\S]*?<\/div>/)||[''])[0];
 assert((trayButtons.match(/<button/g)||[]).length===12,'all 12 visible plus entries must live in one grid');
-['相册','拍摄','上传文件','设置','提示词','思考','世界书','Fact 召回','分条','缓存策略','截断与总结','调试'].forEach(function(label){
+['相册','拍摄','上传文件','设置','提示词','思考','世界书','Fact 召回','分段','缓存策略','截断与总结','调试'].forEach(function(label){
   assert(trayButtons.includes('<b>'+label+'</b>'),'plus tray lost entry '+label);
 });
 assert(!trayButtons.includes('<b>API 连接</b>')&&!trayButtons.includes('<b>清理</b>'),'merged settings must not retain duplicate tray entries');

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v366-prompt-sync-both';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v367-auto-reply-150';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1604,6 +1604,7 @@ var chatMessagesFollowPaused=false;
 var chatMessagesScrollEpoch=0;
 var CHAT_ASSISTANT_REVEAL_MIN_DELAY=800;
 var CHAT_ASSISTANT_REVEAL_MAX_DELAY=1200;
+var CHAT_AUTO_WHOLE_REPLY_CHARS=150;
 var CHAT_REQUEST_RETRY_DELAYS=[500,1200,2000];
 var CHAT_PLATFORM_EXIT_ERROR='Process exited unexpectedly before completing request';
 var chatInitialized=false;
@@ -3672,7 +3673,7 @@ function chatLoadConfig(){
   cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
   cfg.retainBackendSwitchHistory=cfg.retainBackendSwitchHistory!==false;
   cfg.fakeThinking=cfg.thinkingMode==='compat';
-  cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
+  cfg.splitAssistantReplies=chatNormalizeReplySplitMode(cfg.splitAssistantReplies);
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
@@ -3753,7 +3754,7 @@ function chatSaveConfigObject(cfg){
   cfg.retainCurrentTimeHistory=cfg.retainCurrentTimeHistory!==false;
   cfg.retainTimeGapHistory=cfg.retainTimeGapHistory!==false;
   cfg.retainBackendSwitchHistory=cfg.retainBackendSwitchHistory!==false;
-  cfg.splitAssistantReplies=cfg.splitAssistantReplies!==false;
+  cfg.splitAssistantReplies=chatNormalizeReplySplitMode(cfg.splitAssistantReplies);
   var trim=chatAutoTrimConfigFrom(cfg);
   cfg.autoTrimEnabled=trim.enabled;
   cfg.autoTrimKeepRounds=trim.keep;
@@ -4809,7 +4810,7 @@ function chatReadForm(){
     gatewayInternalRetryMax:Math.max(0,Math.min(5,Math.round(Number(chatFieldValue('chat-gateway-internal-retry-max',saved.gatewayInternalRetryMax===undefined?1:saved.gatewayInternalRetryMax))||0))),
     recallHistoryRetentionSeconds:cacheMeta.retentionSeconds,
     promptCacheTtl:cacheMeta.requestTtl!==undefined?cacheMeta.requestTtl:cacheMeta.ttl,
-    splitAssistantReplies:saved.splitAssistantReplies!==false,
+    splitAssistantReplies:chatNormalizeReplySplitMode(saved.splitAssistantReplies),
     autoTrimEnabled:trimCfg.enabled,
     autoTrimKeepRounds:trimCfg.keep,
     autoTrimMinimumRounds:trimCfg.minimum,
@@ -5239,24 +5240,48 @@ function chatOnMcpToggle(){
   chatUpdateRuntime(cfg);
   chatRenderDebugRecords();
 }
+function chatNormalizeReplySplitMode(value){
+  // 保留旧存档的 true（分段）/ false（整段），新增 auto，不改已有选择。
+  return value==='auto'?'auto':value!==false;
+}
+function chatNextReplySplitMode(value){
+  var mode=chatNormalizeReplySplitMode(value);
+  return mode===true?'auto':mode==='auto'?false:true;
+}
+function chatReplySplitModeLabel(value){
+  var mode=chatNormalizeReplySplitMode(value);
+  return mode==='auto'?'自动':mode?'分段':'整段';
+}
+function chatShouldSplitAssistantReply(text,mode){
+  if(mode!=='auto')return mode!==false;
+  // 只数正文中的汉字、各语言字母和数字；Unicode 字符按一个字计数。
+  // 标点、符号和空白不计；到门槛即停止，长回复无需在每帧扫描全文。
+  var count=0,letterOrNumber=/[\p{L}\p{N}]/u;
+  for(var character of String(text||'')){
+    if(letterOrNumber.test(character)&&++count>=CHAT_AUTO_WHOLE_REPLY_CHARS)return false;
+  }
+  return true;
+}
 function chatUpdateSplitReplyButton(cfg){
   var btn=document.getElementById('chat-split-replies-btn');
   if(!btn)return;
   cfg=cfg||chatLoadConfig();
-  var on=cfg.splitAssistantReplies!==false;
+  var mode=chatNormalizeReplySplitMode(cfg.splitAssistantReplies),on=mode!==false;
   btn.classList.toggle('chat-toggle-on',on);
   btn.classList.toggle('chat-toggle-off',!on);
-  btn.setAttribute('aria-pressed',on?'true':'false');
-  btn.title='分条回复：'+(on?'开':'关');
+  btn.removeAttribute('aria-pressed');
+  btn.setAttribute('data-reply-mode',mode==='auto'?'auto':on?'split':'whole');
+  btn.title='回复显示：'+chatReplySplitModeLabel(mode)+(mode==='auto'?'（满'+CHAT_AUTO_WHOLE_REPLY_CHARS+'字整段，不计标点和空白）':'')+'；点击切换为'+chatReplySplitModeLabel(chatNextReplySplitMode(mode));
+  btn.setAttribute('aria-label',btn.title);
   var label=btn.querySelector('b');
-  if(label)label.textContent=on?'分条':'整段';
+  if(label)label.textContent=chatReplySplitModeLabel(mode);
 }
 function chatToggleSplitReplies(){
   var cfg=chatMergeLiveToggleState(chatLoadConfig());
-  cfg.splitAssistantReplies=cfg.splitAssistantReplies===false;
+  cfg.splitAssistantReplies=chatNextReplySplitMode(cfg.splitAssistantReplies);
   chatSaveConfigObject(cfg);
   chatUpdateSplitReplyButton(cfg);
-  toast('小克回复：'+(cfg.splitAssistantReplies!==false?'分条':'一段式'));
+  toast('小克回复：'+chatReplySplitModeLabel(cfg.splitAssistantReplies)+(cfg.splitAssistantReplies==='auto'?'（满'+CHAT_AUTO_WHOLE_REPLY_CHARS+'字整段，不计标点和空白）':''));
 }
 function chatEndpoint(cfg){
   var base=(cfg.gatewayUrl||GRAPH_API_BASE).trim().replace(/\/+$/,'');
@@ -8192,7 +8217,7 @@ async function chatRecoverInterruptedTurns(opts){
       }
       if(!chatMessages.some(function(m){return m.role==='assistant'&&m.turnId===turnId})){
         await chatAppendAssistantReplies(String(reply.assistant_text||''),null,reply.tools||[],{
-          splitAssistantReplies:cfg.splitAssistantReplies!==false,alreadyShownCount:9999,
+          splitAssistantReplies:cfg.splitAssistantReplies,alreadyShownCount:9999,
           userSentTs:Number(matching[0]&&matching[0].ts)||0,usage:reply.usage||null,turnId:turnId,
           thinking:String(reply.assistant_thinking||''),renderCompletedTs:Date.now()});
       }
@@ -8804,7 +8829,8 @@ function chatStreamingAssistantPreviewText(rawText){
 }
 function chatRenderStreamingAssistantContent(rawText,tools,nativeThinking,showNativeThinking,splitEnabled){
   // 所有后端共享增量显示；整段模式也立即显示已收到的正文。
-  var preview=splitEnabled===false?rawText:chatStreamingAssistantPreviewText(rawText);
+  var text=chatSplitThinkingText(rawText,{suppressThinking:true,hideUnclosedThinking:true}).text;
+  var preview=chatShouldSplitAssistantReply(text,splitEnabled)?chatStreamingAssistantPreviewText(rawText):rawText;
   return chatRenderAssistantContent(preview,true,tools,undefined,nativeThinking,showNativeThinking);
 }
 function chatSplitOutsideCodeBlocks(text){
@@ -8881,7 +8907,7 @@ function chatSplitAssistantReplies(rawText,splitEnabled){
   var parsed=chatSplitThinkingText(rawText);
   var text=parsed.text.trim();
   if(!text)return parsed.thinking?[rawText]:[];
-  if(splitEnabled===false)return [rawText];
+  if(!chatShouldSplitAssistantReply(text,splitEnabled))return [rawText];
   // 代码块没闭合时整段发一条：这时候按行拆会把半截围栏切开，渲染必然错乱。
   if(chatHasUnclosedCodeBlock(text))return [rawText];
   var units=chatNaturalUnits(text);
@@ -9038,7 +9064,7 @@ async function chatFetchWithSilentRetry(url,requestInit,consumeResponse){
 }
 function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   opts=opts||{};
-  var parts=chatSplitAssistantReplies(rawText,!(opts.splitAssistantReplies===false));
+  var parts=chatSplitAssistantReplies(rawText,opts.splitAssistantReplies);
   var tools=chatCloneToolEvents(toolEvents);
   var nativeThinking=String(opts.thinking||'').trim();
   if(!parts.length&&(tools.length||nativeThinking))parts=[''];
@@ -11229,7 +11255,12 @@ async function chatSubmitPendingMessages(options){
     var visibleThinking=[cfg.nativeThinkingVisible===false?'':nativeThinkingText,parsed.thinking].filter(Boolean).join('\n\n');
     streamBodyTarget=String(parsed.text||'');
     var visibleBody=streamPacer.next(streamBodyTarget,Date.now(),streamForceText||streamReducedMotion);
-    var units=visibleBody?(cfg.splitAssistantReplies===false?[visibleBody]:chatNaturalUnits(visibleBody).map(function(unit){return unit.text})):[];
+    var splitReply=chatShouldSplitAssistantReply(visibleBody,cfg.splitAssistantReplies);
+    var units=visibleBody?(splitReply?chatNaturalUnits(visibleBody).map(function(unit){return unit.text}):[visibleBody]):[];
+    if(!splitReply&&units.length){
+      streamShownCount=1;
+      if(streamRevealTimer){clearTimeout(streamRevealTimer);streamRevealTimer=0;}
+    }
     var now=Date.now();
     if(units.length&&!streamShownCount){streamShownCount=1;streamNextRevealAt=now+150;}
     if(units.length>streamShownCount&&now>=streamNextRevealAt){streamShownCount++;streamNextRevealAt=now+150;}
@@ -11519,7 +11550,7 @@ async function chatSubmitPendingMessages(options){
     chatStreamProgressSet('整理回复');
     chatSetStatus('正在渲染回复...');
     markFirstReplyTs();
-    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies!==false,alreadyShownCount:streamShownCount,renderCompletedTs:streamFinalRenderedAt,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,thinkingDurationMs:thinkingSeen?thinkingTotalMs:undefined,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
+    await chatAppendAssistantReplies(assistantText||'',recallInfo,toolEvents,{splitAssistantReplies:cfg.splitAssistantReplies,alreadyShownCount:streamShownCount,renderCompletedTs:streamFinalRenderedAt,firstReplyTs:firstReplyTs,userSentTs:responseUserTs,latency:latencyTrace,usage:requestUsage,turnId:requestTurnId,replyVariants:carriedReplyVariants,thinking:nativeThinkingText,thinkingDurationMs:thinkingSeen?thinkingTotalMs:undefined,nativeThinkingVisible:cfg.nativeThinkingVisible!==false});
     // 旧版本已经挂到新回复那一组上了，用户消息上的临时字段可以清掉。
     carriedReplyOwners.forEach(function(m){delete m.replyVariantsCarry});
     chatClearInFlightMarks(userMessageIndexes);
