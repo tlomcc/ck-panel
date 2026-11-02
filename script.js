@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v363-manual-digest-quota';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v364-active-memory-status';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5223,9 +5223,22 @@ function chatStreamProgressSet(stage){
   var next=String(stage||'');
   if(!next)return;
   chatStreamProgress.updatedTs=Date.now();
-  if(next===chatStreamProgress.stage)return;
+  if(next===chatStreamProgress.stage){
+    if(next==='正在记忆')chatStreamProgressRender();
+    return;
+  }
   chatStreamProgress.stage=next;
   chatStreamProgressRender();
+}
+function chatStreamProgressTool(data){
+  if(!data||data.name!=='update_active_memory')return false;
+  var status=String(data.status||'');
+  if(data.is_error||status==='error')chatStreamProgressSet('记忆未保存');
+  else if(status==='generating')chatStreamProgressSet('正在记忆');
+  else if(status==='running')chatStreamProgressSet(data.input&&data.input.action==='keep'?'核对记忆':'保存记忆');
+  else if(status==='done')chatStreamProgressSet(data.saved===true?'记忆已保存':data.unchanged===true?'记忆未变':'记忆已处理');
+  else chatStreamProgressSet('正在记忆');
+  return true;
 }
 function chatStreamProgressStop(){
   chatStreamProgress=null;
@@ -5236,6 +5249,7 @@ function chatStreamProgressText(){
   if(!chatStreamProgress)return '';
   var seconds=Math.max(0,Math.round((Date.now()-chatStreamProgress.startTs)/1000));
   var idle=Math.max(0,Math.round((Date.now()-(chatStreamProgress.updatedTs||chatStreamProgress.startTs))/1000));
+  if(idle>=15&&chatStreamProgress.stage==='正在记忆')return '等待记忆继续 '+idle+'s';
   if(idle>=15&&['正在写','正在思考'].includes(chatStreamProgress.stage))return '等待上游继续 '+idle+'s';
   return chatStreamProgress.stage+' '+seconds+'s';
 }
@@ -11328,7 +11342,9 @@ async function chatSubmitPendingMessages(options){
           chatDebug(ev,data);
           if(ev==='tool'){
             finishThinking();
-            chatStreamProgressSet('工具'+(data&&data.name?('：'+data.name):''));
+            var memoryTool=chatStreamProgressTool(data);
+            if(!memoryTool)chatStreamProgressSet('工具'+(data&&data.name?('：'+data.name):''));
+            if(memoryTool&&data.status==='generating'){scheduleStreamRender();return;}
             markFirstReplyTs();
             toolEvents=chatUpsertToolEvent(toolEvents,data);
             scheduleStreamRender();
