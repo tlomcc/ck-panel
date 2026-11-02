@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v364-active-memory-status';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v365-ui-polish';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -196,7 +196,7 @@ function syncPanelVersionBadge(){
   var match=String(CK_PANEL_VERSION||'').match(/(?:^|-)v(\d+)(?:-|$)/i);
   var shortVersion=match?('v'+match[1]):String(CK_PANEL_VERSION||'');
   if(el){
-    el.textContent=CK_PANEL_VERSION;
+    el.textContent=shortVersion;
     el.setAttribute('data-short-version',shortVersion);
     el.title='当前版本 '+CK_PANEL_VERSION;
   }
@@ -854,6 +854,7 @@ function renderFactLibrary(data){
   factLibraryData=data||null;
   renderFactFacets(data||{});
   renderFactStats(data||{});
+  syncFactFilterDisclosure();
   renderFactCards();
   var more=document.getElementById('facts-more'),hint=document.getElementById('facts-more-hint');
   factLibraryHasMore=!!(data&&data.pagination&&data.pagination.has_more);
@@ -873,8 +874,21 @@ function clearFactSearch(){
   if(factLibrarySearchTimer)clearTimeout(factLibrarySearchTimer);
   loadFactLibrary(true,false);
 }
-function onFactFilterChange(){loadFactLibrary(true,false)}
-function onFactSortChange(value){factLibrarySort=String(value||'recent');loadFactLibrary(true,false)}
+function syncFactFilterDisclosure(){
+  var current=document.getElementById('facts-filter-current');if(!current)return;
+  var defaults={'facts-category':'','facts-person':'','facts-state':'all','facts-recalled':'','facts-sort':'recent'};
+  var count=Object.keys(defaults).filter(function(id){var el=document.getElementById(id);return el&&el.value!==defaults[id]}).length;
+  current.textContent=count?count+' 项已选':'全部条件';
+  current.dataset.active=String(count>0);
+}
+function initFactFilterDisclosure(){
+  var panel=document.getElementById('facts-filter-panel');if(!panel||panel.dataset.ready)return;
+  panel.dataset.ready='true';panel.open=!(window.matchMedia&&window.matchMedia('(max-width:600px)').matches);
+  syncFactFilterDisclosure();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initFactFilterDisclosure,{once:true});else initFactFilterDisclosure();
+function onFactFilterChange(){syncFactFilterDisclosure();loadFactLibrary(true,false)}
+function onFactSortChange(value){factLibrarySort=String(value||'recent');syncFactFilterDisclosure();loadFactLibrary(true,false)}
 /* ===== 独立 Fact 库 v2：动态分类、原文锚点与版本历史 ===== */
 function factStateLabel(state){
   return String(state||'active').toLowerCase()==='expired'?'过期':'有效';
@@ -1030,7 +1044,7 @@ function clearFactFilters(){
   ['facts-query','facts-category','facts-person','facts-recalled'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
   var state=document.getElementById('facts-state');if(state)state.value='all';
   var clear=document.getElementById('facts-query-clear');if(clear)clear.classList.remove('show');
-  var sort=document.getElementById('facts-sort');if(sort){sort.value='recent';factLibrarySort='recent'}loadFactLibrary(true,false);
+  var sort=document.getElementById('facts-sort');if(sort){sort.value='recent';factLibrarySort='recent'}syncFactFilterDisclosure();loadFactLibrary(true,false);
 }
 function renderFactSourceDetail(source){
   var url=factSourceUrl(source),label=factSourceLabel(source),positions=[];

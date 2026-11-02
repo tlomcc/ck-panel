@@ -41,7 +41,7 @@
   border-radius:999px;
   background:linear-gradient(90deg,transparent,var(--ck-line-strong),transparent);
 }
-.empty-state.small{padding:14px 6px;font-size:11px}
+.empty-state.small{padding:16px 8px;font-size:var(--ck-type-caption)}
 .empty-state.small::before{width:22px;margin-bottom:8px}
 
 /* ---- 通用输入控件 ----
@@ -95,17 +95,23 @@ body.dark select:not([hidden]):not([multiple]):not([size]){
 /* ---- 基础按钮 ---- */
 
 .btn{
-  padding:10px 20px;
+  min-height:var(--ck-control-height);
+  padding:9px 18px;
   border:none;
   border-radius:var(--ck-radius-sm);
-  font-size:12px;
+  font-size:var(--ck-type-control);
+  line-height:1.5;
   font-weight:600;
   font-family:inherit;
   cursor:pointer;
   transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease),color var(--ck-motion-fast) var(--ck-ease),box-shadow var(--ck-motion-fast) var(--ck-ease);
 }
 .btn:active{transform:none}
-.btn-sm{padding:8px 14px;font-size:11px}
+.btn-sm{min-height:36px;padding:7px 13px;font-size:var(--ck-type-control)}
+button:focus-visible,summary:focus-visible,a:focus-visible{
+  outline:2px solid var(--ck-accent-strong);
+  outline-offset:3px;
+}
 button:disabled,
 .btn:disabled{
   opacity:.62;
@@ -114,9 +120,9 @@ button:disabled,
 }
 
 .btn-blue{
-  border:1px solid var(--ck-accent);
-  background:var(--ck-accent);
-  color:#fff;
+  border:1px solid var(--ck-action-fill);
+  background:var(--ck-action-fill);
+  color:var(--ck-action-ink);
   box-shadow:none;
 }
 .btn-blue:hover{
@@ -160,8 +166,8 @@ button:disabled,
   background:var(--ck-surface);
   color:var(--ck-text);
   box-shadow:var(--ck-shadow-md);
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
   font-size:12px;
   line-height:1.45;
   text-align:center;
@@ -335,8 +341,8 @@ body.dark.chat-active .toast.toast-closable.toast-error .toast-close:hover{
   inset:0;
   padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));
   background:rgba(20,36,28,.44);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
   align-items:center;
   justify-content:center;
 }
@@ -397,10 +403,10 @@ body.dark .confirm-bg{background:rgba(0,0,0,.62)}
 }
 .modal label{
   display:block;
-  margin-bottom:5px;
+  margin-bottom:8px;
   color:var(--ck-muted);
-  font-size:11px;
-  font-weight:400;
+  font-size:var(--ck-type-control);
+  font-weight:500;
 }
 .modal input,
 .modal select,

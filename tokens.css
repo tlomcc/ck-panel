@@ -17,13 +17,15 @@
   --ck-text:#1b2721;
   --ck-text-soft:#435249;
   --ck-muted:#66756d;
-  --ck-faint:#87938c;
+  --ck-faint:#65756b;
 
   --ck-accent:#2f8f62;
   --ck-accent-strong:#23724d;
   --ck-accent-soft:#dcefe4;
   --ck-accent-wash:#edf7f1;
   --ck-accent-rgb:47,143,98;
+  --ck-action-fill:#287554;
+  --ck-action-ink:#ffffff;
   --ck-user-bubble:#d5eddd;
   --ck-user-bubble-border:#bcd9c7;
 
@@ -62,6 +64,12 @@
   --ck-font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
   --ck-font-display:"Songti SC","STSong","Noto Serif SC",Georgia,serif;
   --ck-font-data:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  --ck-type-caption:12px;
+  --ck-type-control:13px;
+  --ck-type-body:14px;
+  --ck-type-section:16px;
+  --ck-type-title:24px;
+  --ck-control-height:40px;
 
   --ck-ease:cubic-bezier(.2,.8,.2,1);
   --ck-motion-fast:140ms;
@@ -89,6 +97,8 @@ html.dark{
   --ck-accent-soft:#203d2c;
   --ck-accent-wash:#17271e;
   --ck-accent-rgb:97,197,142;
+  --ck-action-fill:#79d6a0;
+  --ck-action-ink:#183a28;
   --ck-user-bubble:#285f42;
   --ck-user-bubble-border:#367d56;
 

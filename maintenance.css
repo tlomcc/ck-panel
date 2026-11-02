@@ -8,26 +8,26 @@
 .ck-maintenance .mm-overview{border:1px solid var(--ck-line);background:var(--ck-surface);border-radius:16px;padding:24px}
 .ck-maintenance .mm-summary-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
 .ck-maintenance .mm-summary-line h3{margin:0;font:600 20px/1.5 var(--ck-font-display)}
-.ck-maintenance .mm-summary-line>small{margin-left:auto;color:var(--ck-muted);font-size:11px}
-.ck-maintenance .mm-state{display:inline-flex;align-items:center;white-space:nowrap;border:1px solid var(--ck-line);border-radius:6px;padding:2px 7px;font:11px/1.65 var(--ck-font-body);color:var(--ck-text-soft);background:var(--ck-surface-soft)}
+.ck-maintenance .mm-summary-line>small{margin-left:auto;color:var(--ck-muted);font-size:12px}
+.ck-maintenance .mm-state{display:inline-flex;align-items:center;white-space:nowrap;border:1px solid var(--ck-line);border-radius:6px;padding:2px 7px;font:12px/1.65 var(--ck-font-body);color:var(--ck-text-soft);background:var(--ck-surface-soft)}
 .ck-maintenance .mm-state.live{border-color:var(--ck-accent-soft);background:var(--ck-accent-wash);color:var(--ck-accent-strong)}
 .ck-maintenance .mm-state.attention{border-color:var(--ck-amber);color:var(--ck-amber);background:var(--ck-amber-wash)}
 .ck-maintenance .mm-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 .ck-maintenance .mm-stat{display:flex;flex-direction:column;gap:8px;border-left:2px solid var(--ck-line);padding-left:15px;min-width:0}
 .ck-maintenance .mm-stat>span{font-size:12px;color:var(--ck-muted)}
-.ck-maintenance .mm-stat>b{font:600 23px/1.4 var(--ck-font-data);color:var(--ck-text);overflow-wrap:anywhere}
-.ck-maintenance .mm-stat>small{font-size:11px;color:var(--ck-muted);line-height:1.7}
+.ck-maintenance .mm-stat>b{font:600 23px/1.4 var(--ck-font-body);font-variant-numeric:tabular-nums;color:var(--ck-text);overflow-wrap:anywhere}
+.ck-maintenance .mm-stat>small{font-size:12px;color:var(--ck-muted);line-height:1.7}
 .ck-maintenance .mm-progress{height:5px;background:var(--ck-line-soft);border-radius:5px;margin-top:22px;overflow:hidden}
 .ck-maintenance .mm-progress>span{display:block;background:var(--ck-accent);height:100%;border-radius:5px;transition:width .2s}
 .ck-maintenance .mm-current-note{font-size:13px;line-height:1.85;margin-top:16px;color:var(--ck-text-soft)}
 .ck-maintenance .mm-fields{margin:15px 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 22px}
 .ck-maintenance .mm-fields>div{min-width:0}
-.ck-maintenance .mm-fields dt{font-size:11px;color:var(--ck-muted);margin-bottom:5px}
+.ck-maintenance .mm-fields dt{font-size:12px;color:var(--ck-muted);margin-bottom:5px}
 .ck-maintenance .mm-fields dd{font-size:13px;line-height:1.8;margin:0;color:var(--ck-text);overflow-wrap:anywhere;white-space:pre-wrap}
 .ck-maintenance .mm-history{margin-top:30px}
 .ck-maintenance .mm-history-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .ck-maintenance .mm-history-heading h3{margin:0;font-size:17px}
-.ck-maintenance .mm-history-help{font-size:11px;color:var(--ck-muted)}
+.ck-maintenance .mm-history-help{font-size:12px;color:var(--ck-muted)}
 .ck-maintenance .mm-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .ck-maintenance .mm-filters button{border:1px solid var(--ck-line);border-radius:8px;padding:7px 12px;font:12px/1.5 var(--ck-font-body);background:var(--ck-surface);color:var(--ck-text-soft);cursor:pointer;min-height:36px}
 .ck-maintenance .mm-filters button[aria-pressed="true"]{background:var(--ck-accent-wash);border-color:var(--ck-accent);color:var(--ck-accent-strong)}
@@ -40,10 +40,10 @@
 .ck-maintenance .mm-record[open]>summary .mm-duration:after{transform:rotate(180deg)}
 .ck-maintenance .mm-record[open]>summary{background:var(--ck-accent-wash)}
 .ck-maintenance .mm-record>summary strong{font-size:12px;line-height:1.8;overflow-wrap:anywhere;font-weight:500}
-.ck-maintenance .mm-record time{font:11px/1.8 var(--ck-font-data);color:var(--ck-muted);white-space:normal}
-.ck-maintenance .mm-duration{font:11px/1.8 var(--ck-font-data);text-align:right;color:var(--ck-muted)}
+.ck-maintenance .mm-record time{font:12px/1.8 var(--ck-font-data);color:var(--ck-muted);white-space:normal}
+.ck-maintenance .mm-duration{font:12px/1.8 var(--ck-font-data);text-align:right;color:var(--ck-muted)}
 .ck-maintenance .mm-record-body{padding:4px 20px 20px;border-left:2px solid var(--ck-accent-soft);margin:4px 0 14px}
-.ck-maintenance pre{max-height:360px;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.8 var(--ck-font-data);background:var(--ck-surface-soft);color:var(--ck-text-soft);padding:12px;border-radius:8px;overflow:auto}
+.ck-maintenance pre{max-height:360px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 var(--ck-font-data);background:var(--ck-surface-soft);color:var(--ck-text-soft);padding:12px;border-radius:8px;overflow:auto}
 .ck-maintenance .mm-diff{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:14px 0}
 .ck-maintenance .mm-diff h4{font-size:12px;color:var(--ck-muted);margin:0 0 9px}
 .ck-maintenance .mm-diff p{font-size:13px;line-height:1.9;white-space:pre-wrap}
@@ -55,7 +55,7 @@
 .ck-maintenance .mm-session{padding:14px 0;margin:12px 0 0}
 .ck-maintenance .mm-session>summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .ck-maintenance .mm-session strong{flex:1;min-width:120px;font-size:13px;overflow-wrap:anywhere}
-.ck-maintenance .mm-session>summary>span:last-child{font-size:11px;color:var(--ck-muted)}
+.ck-maintenance .mm-session>summary>span:last-child{font-size:12px;color:var(--ck-muted)}
 .ck-maintenance-controls{margin-top:28px;border:1px solid var(--ck-line)!important;border-radius:14px;padding:18px!important;background:var(--ck-surface)}
 .ck-maintenance-controls>summary{font-size:14px!important;font-weight:600;color:var(--ck-text)}
 .ck-maintenance-controls .mr-organizer{border:0;margin:0;padding:18px 0 0}
@@ -102,7 +102,7 @@
 .ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card)>summary>span:nth-last-child(3){flex:1;min-width:0}
 .ck-maintenance .mm-change-card>summary>span:first-child{flex:1;min-width:0}
 .ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card) strong{display:block;font:600 14px/1.7 var(--ck-font-body);overflow-wrap:anywhere}
-.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card) small{display:block;color:var(--ck-muted);font:11px/1.8 var(--ck-font-body)}
+.ck-maintenance :is(.mm-run-card,.mm-change-card,.mm-call-card) small{display:block;color:var(--ck-muted);font:12px/1.8 var(--ck-font-body)}
 .ck-maintenance .mm-change-card>summary>span>span{font-size:12px;color:var(--ck-text-soft);display:block;margin-top:5px}
 .ck-maintenance .mm-run-mark{width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:grid;place-items:center;background:var(--ck-accent-wash);color:var(--ck-accent-strong);font:20px var(--ck-font-data)}
 .ck-maintenance .mm-chevron{color:var(--ck-muted);font-size:18px}.ck-maintenance details[open]>summary>.mm-chevron{transform:rotate(180deg)}
@@ -111,7 +111,7 @@
 .ck-maintenance .mm-step-list li{border-top:3px solid var(--ck-line);padding-top:9px;font:12px/1.8 var(--ck-font-body);color:var(--ck-muted)}
 .ck-maintenance .mm-step-list li.done{border-color:var(--ck-accent);color:var(--ck-text)}
 .ck-maintenance .mm-run-events p{display:grid;grid-template-columns:120px 100px minmax(0,1fr);gap:12px;margin:0;padding:9px 0;border-top:1px solid var(--ck-line-soft);font:12px/1.8 var(--ck-font-body)}
-.ck-maintenance .mm-run-events time{color:var(--ck-muted);font:11px/1.8 var(--ck-font-data)}
+.ck-maintenance .mm-run-events time{color:var(--ck-muted);font:12px/1.8 var(--ck-font-data)}
 .ck-maintenance .mm-run-events b{font-weight:500}.ck-maintenance .mm-run-events span{overflow-wrap:anywhere}
 .ck-maintenance .mm-call-result{flex:none;text-align:right}.ck-maintenance .mm-call-result small{margin-top:5px}
 .ck-maintenance .mm-diff>section{border:1px solid var(--ck-line);border-radius:9px;padding:15px;min-width:0}
