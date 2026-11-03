@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v368-reply-layout';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v369-digest-progress';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1404,7 +1404,7 @@ function renderDailyStatus(d){
   var f=d.fact_daily||{};
   var expanded={};
   if(body.querySelectorAll)body.querySelectorAll('[data-daily-detail][open]').forEach(function(el){expanded[el.getAttribute('data-daily-detail')]=true});
-  if(sub)sub.textContent='状态读取于 '+(d.now||'-')+(d.status_cache&&d.status_cache.stale?'（每日任务缓存）':'');
+  if(sub&&(typeof ckStatusTab==='undefined'||ckStatusTab==='fact'))sub.textContent='状态读取于 '+(d.now||'-')+(d.status_cache&&d.status_cache.stale?'（每日任务缓存）':'');
   var todayTs=Date.parse(String(d.today||'')+'T00:00:00+08:00');
   var library=d.fact_library||{},libraryReady=library.ready===true;
   var updated=String(library.updated_at||'');

@@ -13,7 +13,7 @@ async function ckRunDigestAction(id,action){
 }
 (function(){
   'use strict';
-  var timer=0,seq=0,controller=null,principal=null,state={events:{rows:[],cursor:null,filter:'all',data:null},topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:'all',data:null}};
+  var timer=0,ticker=0,seq=0,controller=null,principal=null,state={events:{rows:[],cursor:null,filter:'all',data:null},topics:{rows:[],cursor:null,filter:'runs',data:null},digest:{rows:[],cursor:null,filter:'all',data:null}};
   function el(id){return document.getElementById(id)}
   function escape(value){return esc(String(value==null?'—':value))}
   function attr(value){return escAttr(String(value==null?'':value))}
@@ -47,10 +47,35 @@ async function ckRunDigestAction(id,action){
     var current=chatCurrentSession(),locals=(typeof chatSessions!=='undefined'?chatSessions:[]).filter(function(s){return s===current||chatDigestHasContent(s)}),cfg=chatLoadConfig();
     function card(local){
       var remote=sessions.find(function(s){return s.session_id===String(local.id)}),v=chatDigestSyncView(local,cfg,remote);
-      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div><div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(!v.ready?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
+      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div>'+progressCard(local,remote,v)+'<div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(!v.ready?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
     }
     var others=locals.filter(function(s){return s!==current});
     return (current?card(current):'')+(others.length?'<details class="mm-current-details" data-session="other-results"><summary>其他对话 · '+others.length+' 个</summary>'+others.map(card).join('')+'</details>':'');
+  }
+  function progressView(local,remote,sync){
+    return CKDigestProgress.view(local,remote,sync,{receivedAt:state.digest.receivedAt,refreshFailed:state.digest.refreshFailed});
+  }
+  function progressCard(local,remote,sync){
+    var v=progressView(local,remote,sync);
+    return '<section class="mm-digest-progress" data-digest-progress="'+attr(local.id)+'" aria-label="截断执行进度">'+
+      '<div class="mm-progress-heading"><h4>截断进度</h4><span>'+escape(v.model)+'</span></div>'+
+      '<p class="mm-digest-phase" data-digest-field="stage" role="status" aria-live="polite">'+escape(v.stage)+'</p>'+
+      '<ol class="mm-digest-steps" aria-label="截断步骤">'+v.steps.map(function(text,i){return '<li'+(i===v.step?' aria-current="step"':'')+' class="'+(i<v.step?'done':i===v.step?'current':'')+'">'+escape(text)+'</li>'}).join('')+'</ol>'+
+      '<p class="mm-digest-batch">'+escape(v.batch||v.detail)+'</p>'+
+      (v.percent!==null?'<div class="mm-progress" role="progressbar" aria-label="已完成批次占当前计划比例" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(v.percent)+'" aria-valuetext="'+attr(v.batch)+'"><span style="width:'+v.percent+'%"></span></div>':'')+
+      '<dl class="mm-digest-timing"><div><dt data-digest-field="elapsedLabel">'+escape(v.elapsedLabel)+'</dt><dd data-digest-field="elapsed">'+escape(v.elapsed)+'</dd></div><div><dt>预计剩余</dt><dd data-digest-field="eta">'+escape(v.eta)+'</dd></div></dl>'+
+      '<p class="mm-digest-estimate" data-digest-field="etaNote">'+escape(v.etaNote||v.detail)+'</p></section>';
+  }
+  function tickProgress(){
+    if(ckStatusTab!=='digest'||currentPanelTab!=='status'||document.hidden){clearInterval(ticker);ticker=0;return;}
+    var data=state.digest.data;if(!data)return;
+    var cfg=chatLoadConfig();
+    root('digest').querySelectorAll('[data-digest-progress]').forEach(function(card){
+      var local=chatSessions.find(function(s){return String(s.id)===card.dataset.digestProgress});if(!local)return;
+      var remote=(data.sessions||[]).find(function(s){return s.session_id===String(local.id)});
+      var v=progressView(local,remote,chatDigestSyncView(local,cfg,remote));
+      card.querySelectorAll('[data-digest-field]').forEach(function(node){var key=node.dataset.digestField,text=v[key]||(key==='etaNote'?v.detail:'');if(node.textContent!==text)node.textContent=text;});
+    });
   }
   function renderOverview(section,data){
     var box=root(section).querySelector('.mm-overview');
@@ -149,10 +174,13 @@ async function ckRunDigestAction(id,action){
   function render(section){
     var s=state[section],r=root(section);if(!s.data)return;
     if(section==='events'){renderEvents(s.data);return;}
+    var focused=document.activeElement,actionFocus=section==='digest'&&r.contains(focused)&&focused.dataset.mmDigestAction?
+      {session:focused.dataset.mmSession,action:focused.dataset.mmDigestAction}:null;
     var open=new Set(Array.from(r.querySelectorAll('[data-record][open]')).map(function(n){return n.dataset.record}));
     var details=r.querySelector('.mm-current-details'),showDetails=details&&details.open;
     var sessionsOpen=new Set(Array.from(r.querySelectorAll('[data-session][open]')).map(function(n){return n.dataset.session}));
     renderOverview(section,s.data);r.querySelectorAll('[data-session]').forEach(function(n){n.open=sessionsOpen.has(n.dataset.session)});if(showDetails&&r.querySelector('.mm-current-details'))r.querySelector('.mm-current-details').open=true;
+    if(actionFocus){var replacement=Array.from(r.querySelectorAll('[data-mm-digest-action]')).find(function(n){return n.dataset.mmSession===actionFocus.session&&n.dataset.mmDigestAction===actionFocus.action});if(replacement&&!replacement.disabled)replacement.focus({preventScroll:true});}
     r.querySelector('.mm-message').textContent='已刷新 · '+clock(Date.now());
     r.querySelectorAll('[data-mm-filter]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.mmFilter===s.filter))});
     var intro=section==='topics'?{runs:['每一轮整理，看到完整过程','按整理任务合并步骤，展开一轮可查看处理过程与结果。'],changes:['具体改了什么','按主题查看名称、材料关联和摘要的前后变化。'],api:['每一次调用，结果与用量','同一次请求的开始和结束合并显示，展开查看耗时、用量与失败原因。']}[s.filter]:['后台准备记录','手动准备完成后随下一轮发送启用；自动任务仍等待缓存过期。'];
@@ -164,14 +192,14 @@ async function ckRunDigestAction(id,action){
       legacy.innerHTML='<details><summary>此前的自动处理与意见 · '+s.data.legacy_operations.length+' 条处理记录</summary><p class="mw-note">需要撤销或补充意见，可展开下方整理控制。</p>'+s.data.legacy_operations.map(function(op){return '<details><summary>'+escape(clock(op.at))+' · '+escape(op.title||op.kind||'主题处理')+'</summary><pre>'+escape(JSON.stringify(op,null,2))+'</pre></details>'}).join('')+'<details><summary>已保存的处理意见</summary><pre>'+escape(JSON.stringify(s.data.legacy_decisions||[],null,2))+'</pre></details></details>';
     }
   }
-  function schedule(){clearTimeout(timer);if(ckStatusTab==='fact')return;timer=setTimeout(function(){if(currentPanelTab==='status'&&!document.hidden)ckRefreshMaintenance(false);else schedule()},ckStatusTab==='digest'&&state.digest.data&&(state.digest.data.sessions||[]).some(function(s){return s.manual})?2000:15000);}
+  function schedule(){clearTimeout(timer);if(ckStatusTab==='fact')return;var fast=ckStatusTab==='digest'&&state.digest.data&&(state.digest.data.sessions||[]).some(function(s){return ['queued','running'].includes((s.model_run||{}).state||s.status)});timer=setTimeout(function(){if(currentPanelTab==='status'&&!document.hidden)ckRefreshMaintenance(false);else schedule()},fast?2000:15000);}
   window.ckRefreshMaintenance=async function(force,more){
     if(ckStatusTab==='fact'||currentPanelTab!=='status')return;
     if(ckStatusTab==='records')return ckRecordsRefresh();
-    var section=ckStatusTab,key=storedPanelKey(),mySeq=++seq;
+    var section=ckStatusTab,key=storedPanelKey(),backend=GRAPH_API_BASE,identity=key+'\n'+backend,mySeq=++seq;
     if(section==='digest'&&!chatSessionsReady){chatLoadSessions();await chatEnsureSessionsReady();if(mySeq!==seq||key!==storedPanelKey()||section!==ckStatusTab)return;}
-    if(principal!==key){
-      var changedPrincipal=principal!==null;principal=key;
+    if(principal!==identity){
+      var changedPrincipal=principal!==null;principal=identity;
       ['topics','digest','events'].forEach(function(name){state[name]={rows:[],cursor:null,filter:name==='topics'?'runs':'all',data:null};root(name).innerHTML='';});
       if(changedPrincipal&&el('ck-topic-controls').open&&typeof memoryWorkbenchEnter==='function')memoryWorkbenchEnter('topics');
       else if(changedPrincipal&&el('mw-organizer'))el('mw-organizer').innerHTML='';
@@ -185,14 +213,14 @@ async function ckRunDigestAction(id,action){
     try{
       var response=await panelDataFetch(function(auth){if(auth!==key)throw new Error('连接已变化');return GRAPH_API_BASE+path},{cache:'no-store',signal:signal},{label:'整理状态'});
       var data=await response.json();if(!response.ok||data.ok===false)throw new Error(data.error||'状态读取失败');
-      if(seq!==mySeq||key!==storedPanelKey()||section!==ckStatusTab)return;
+      if(seq!==mySeq||key!==storedPanelKey()||backend!==GRAPH_API_BASE||section!==ckStatusTab)return;
       if(section==='digest'){
         var cfg=chatLoadConfig(),visible=new Set(chatSessions.filter(function(session){return !chatDigestIsDeleted(session.id,cfg)&&chatDigestHasContent(session)}).map(function(session){return String(session.id)}));
         data.sessions=(data.sessions||[]).filter(function(session){return visible.has(String(session.session_id))});
         data.history=Object.assign({},data.history,{items:((data.history||{}).items||[]).filter(function(row){return visible.has(String(row.session_id))})});
         s.rows=s.rows.filter(function(row){return visible.has(String(row.session_id))});
       }
-      s.data=data;
+      s.data=data;s.receivedAt=Date.now();s.refreshFailed=false;
       var rows=data.history&&data.history.items||[];
       var overlap=rows.some(function(row){return s.rows.some(function(old){return old.id===row.id})});
       var reset=!more&&(force||!s.rows.length||!overlap),merged=new Map();
@@ -201,17 +229,19 @@ async function ckRunDigestAction(id,action){
       if(more||reset)s.cursor=data.history&&data.history.next_cursor;
       if(s.rows.length>500){s.rows=s.rows.slice(0,500);s.cursor=s.rows[s.rows.length-1].id;}
       render(section);
-    }catch(error){if(seq===mySeq)r.querySelector('.mm-message').textContent=(error.name==='AbortError'?'刷新超时':error.message)+'；上次读取的内容仍保留。';}
+      if(section==='digest'&&!ticker)ticker=setInterval(tickProgress,1000);
+    }catch(error){if(seq===mySeq){s.refreshFailed=true;r.querySelector('.mm-message').textContent=(error.name==='AbortError'?'刷新超时':error.message)+'；上次读取的内容仍保留。';if(section==='digest')tickProgress();}}
     finally{clearTimeout(timeout);if(seq===mySeq){controller=null;schedule();}}
   };
   window.ckSelectStatusTab=function(tab){
     if(tab==='records'){navTo('records');return;}
     ckStatusTab=['topics','digest','events'].includes(tab)?tab:'fact';if(typeof ckOrganizingEnter==='function')ckOrganizingEnter();++seq;if(controller)controller.abort();clearTimeout(timer);
     ['fact','topics','digest','events'].forEach(function(name){var active=name===ckStatusTab;el('ck-status-'+name).hidden=!active;var button=el('ck-status-tab-'+name);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
-    el('status-sub').textContent=ckStatusTab==='events'?'事件整理、Git 备份与预加载':ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'后台准备 · 缓存过期后同步';
+    el('status-sub').textContent=ckStatusTab==='events'?'事件整理、Git 备份与预加载':ckStatusTab==='fact'?'每日 Fact 提取 · 任务与进度':ckStatusTab==='topics'?'主题归类、摘要更新与每次更改':'截断进度 · 阶段、耗时与同步结果';
     if(ckStatusTab==='fact'){loadDailyStatus(false);startDailyStatusRealtime();}else{stopDailyStatusRealtime();build(ckStatusTab);ckRefreshMaintenance(false);}
   };
   window.ckStatusEnter=function(){ckSelectStatusTab(ckStatusTab)};
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&currentPanelTab==='status'&&ckStatusTab==='digest')ckRefreshMaintenance(false);else if(document.hidden){clearInterval(ticker);ticker=0;}});
   window.ckRefreshStatus=function(){if(typeof ckOrganizingEnter==='function')ckOrganizingEnter();if(ckStatusTab==='fact')loadDailyStatus(true);else ckRefreshMaintenance(true)};
   el('ck-status-tabs').addEventListener('keydown',function(e){
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
