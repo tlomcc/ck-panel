@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v371-subscription-cache-notice';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v372-token-usage';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -692,6 +692,7 @@ function startPanelDataApp(){
     startTab=localStorage.getItem('ckPanelAfterUpdateTab')||'chat';
     localStorage.removeItem('ckPanelAfterUpdateTab');
   }catch(e){}
+  if(location.hash==='#token-usage')startTab='token-usage';
   if(!document.getElementById('tab-'+startTab))startTab='chat';
   switchPanelTab(startTab);
   // 启动遮罩以前要等 MCP 记忆分类全部读完才收；那套隐藏页已经删掉了，
@@ -11639,6 +11640,8 @@ function switchPanelTab(tab,opts) {
     return;
   }
   currentPanelTab=tab;
+  if(tab==='token-usage'&&typeof ckTokenUsageEnter==='function')ckTokenUsageEnter();
+  else if(typeof ckTokenUsageLeave==='function')ckTokenUsageLeave();
   if(typeof memoryWorkbenchEnter==='function')memoryWorkbenchEnter(tab);
   document.body.classList.toggle('chat-active',tab==='chat');
   document.querySelectorAll('.panel-tab').forEach(function(el){el.classList.remove('active')});
@@ -11783,6 +11786,8 @@ function closeSidebar(){
 }
 function navTo(tab){
   closeSidebar();
+  if(tab==='token-usage')history.replaceState(null,'',location.pathname+location.search+'#token-usage');
+  else if(location.hash==='#token-usage')history.replaceState(null,'',location.pathname+location.search);
   switchPanelTab(tab);
 }
 
