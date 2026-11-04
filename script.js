@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v370-minimal-time-date';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v371-subscription-cache-notice';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -9920,7 +9920,7 @@ function chatRenderMessages(opts){
     for(var i=visible.start;i<visible.end;i++){
       var m=chatMessages[i];
       var row=rowMap[String(i)];
-      if(chatIsAssistantRevealPending(m)){
+      if(chatIsAssistantRevealPending(m)||(m&&m.role==='notice'&&m.kind==='cache-expired'&&!chatShouldShowCacheExpiryNotice())){
         if(row)row.remove();
         continue;
       }
@@ -10041,6 +10041,10 @@ function chatHasCacheNoticeAfter(ts){
     return m&&m.role==='notice'&&m.kind==='cache-expired'&&Number(m.afterTs||0)===Number(ts||0);
   });
 }
+function chatShouldShowCacheExpiryNotice(){
+  // 订阅只隐藏过期提示；实际缓存策略与历史记录保持原样。
+  return !(typeof CKBackendRoute==='object'&&typeof CKBackendRoute.isSubscription==='function'&&CKBackendRoute.isSubscription());
+}
 function chatCacheExpiryInfo(){
   // 用当前供应商维护的策略；轮询状态未返回前不猜，避免提示错误 TTL。
   var strategy=chatCacheNoticeStrategy(chatLoadConfig()||{});
@@ -10064,6 +10068,7 @@ function chatCacheExpiryInfo(){
   return {ttlMs:seconds*1000,text:text};
 }
 function chatEnsureCacheExpiryNotice(){
+  if(!chatShouldShowCacheExpiryNotice())return false;
   var lastTs=chatLastMessageTs();
   var info=chatCacheExpiryInfo();
   var session=chatCurrentSession();
@@ -10220,6 +10225,7 @@ function chatSwitchMessageVersion(i,dir){
 function chatRenderMessageRow(m,i){
   var rowAttrs=' data-chat-index="'+String(i)+'" data-chat-key="'+chatMessageRenderKey(m,i)+'"';
   if(m&&m.role==='notice'){
+    if(m.kind==='cache-expired'&&!chatShouldShowCacheExpiryNotice())return '';
     var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
     return '<div class="chat-msg-row notice"'+rowAttrs+'><div class="chat-cache-expired-tip persisted">'+esc(m.text||CHAT_CACHE_NOTICE_TEXT)+'</div>'+time+'</div>';
   }
