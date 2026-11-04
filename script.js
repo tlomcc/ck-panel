@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v369-digest-progress';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v370-minimal-time-date';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8087,7 +8087,7 @@ function chatWindowContextMessages(messages){
       text:String(m.text||''),
       ts:m.ts||0
     };
-    if(m.role==='user'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(m.minimalTime||'')))item.minimalTime=m.minimalTime;
+    if(m.role==='user'&&/^(?:[0-9]{4}-[0-9]{2}-[0-9]{2} )?(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(String(m.minimalTime||'')))item.minimalTime=m.minimalTime;
     var content=chatMessageContentParts(m);
     if(m.role==='assistant'&&String(m.thinking||'').trim()){
       content.unshift({type:'thinking',thinking:String(m.thinking||'')});
@@ -10993,7 +10993,7 @@ async function chatSubmitPendingMessages(options){
   if(digestSync){digestSync.turnId=requestTurnId;chatSaveSessions();}
   if(requestState&&requestState.stopped)return;
   var windowMessagesForRequest=chatWindowContextMessages();
-  var minimalClock=cfg.minimalTimeEnabled===true?new Date(submitTs+8*3600000).toISOString().slice(11,16):'';
+  var minimalClock=cfg.minimalTimeEnabled===true?new Date(submitTs+8*3600000).toISOString().slice(0,16).replace('T',' '):'';
   if(cfg.minimalTimeCleanEachRound===true){
     chatMessages.forEach(function(m){delete m.minimalTime});
     windowMessagesForRequest.forEach(function(m){delete m.minimalTime});

@@ -14,27 +14,27 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/app-icon-v4-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-v4.png">
-<link rel="stylesheet" href="tokens.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="style.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="polish.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="chat.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="wechat.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="visual-overrides.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="shell.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="components.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="daily-status.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="settings.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="chat-ui.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="server-status.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="subscription.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="codex-tasks.css?v=chat-v369-digest-progress">
-<script>window.CK_PANEL_VERSION='chat-v369-digest-progress';</script>
-<script>window.CK_PANEL_RELEASE_NOTES=["自动与整段显示保留小克原有换行、段落、标题和列表；一条气泡内也能清楚阅读。", "正文原始换行增加段落间距，空行保留更明显的间隔，代码块保持原样。", "分段、自动、整段三种模式和150字门槛不变，标点、符号、空白与思考不计入字数。"];</script>
-<link rel="stylesheet" href="notebook.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="memory-workbench.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="memory-library.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="maintenance.css?v=chat-v369-digest-progress">
-<link rel="stylesheet" href="records-settings.css?v=chat-v369-digest-progress">
+<link rel="stylesheet" href="tokens.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="style.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="polish.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="chat.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="wechat.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="visual-overrides.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="shell.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="components.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="daily-status.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="settings.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="chat-ui.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="server-status.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="subscription.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="codex-tasks.css?v=chat-v370-minimal-time-date">
+<script>window.CK_PANEL_VERSION='chat-v370-minimal-time-date';</script>
+<script>window.CK_PANEL_RELEASE_NOTES=["时间极简注入增加日期，按北京时间发送 YYYY-MM-DD HH:mm。", "兼容已有的时分记录，保留每轮清理与完整时间提醒的独立设置。"];</script>
+<link rel="stylesheet" href="notebook.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="memory-workbench.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="memory-library.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="maintenance.css?v=chat-v370-minimal-time-date">
+<link rel="stylesheet" href="records-settings.css?v=chat-v370-minimal-time-date">
 </head>
 <body class="chat-active">
 <div class="loading-bar-wrap" id="loading-wrap" role="status" aria-live="polite"><div class="startup-icon" aria-hidden="true"><img src="icons/app-icon-v4.svg" alt=""></div><div class="startup-name">CK</div><div class="startup-subtitle">小小日常，慢慢收藏</div><div class="loading-bar"><div class="loading-bar-inner" id="loading-inner"></div></div><div class="loading-text" id="loading-text">正在启动...</div></div>
@@ -43,7 +43,7 @@
 <div class="brand-lockup"><button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="菜单" title="菜单"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><button class="brand-mark" type="button" onclick="openCkBrand()" aria-label="关于 CK" title="关于 CK"><img src="icons/app-icon-v4.svg" alt=""></button><div><h1>CK</h1><p id="mem-date"></p></div></div>
 <div class="header-actions">
 <button class="install-app-btn" id="install-app-btn" type="button">安装</button>
-<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v368" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes" title="当前版本 chat-v369-digest-progress">v368</button>
+<button type="button" class="panel-version-badge" id="panel-version-badge" data-short-version="v370" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes" title="当前版本 chat-v370-minimal-time-date">v370</button>
 <button class="theme-toggle icon-btn" onclick="toggleTheme()" aria-label="切换深色模式" title="切换深色模式"><svg class="theme-ico theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="theme-ico theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
 </div>
 </header>
@@ -251,7 +251,7 @@
 </div>
 <button class="chat-settings-mask" type="button" onclick="chatToggleSettings(false)" aria-label="关闭聊天设置" tabindex="-1"></button>
 <aside class="chat-settings" id="chat-settings" aria-label="聊天设置" aria-hidden="true">
-<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v369-digest-progress" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v368</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
+<div class="chat-settings-head"><div class="chat-settings-title"><b id="chat-settings-title">聊天设置</b><button type="button" class="chat-debug-version" id="chat-debug-version" title="当前版本 chat-v370-minimal-time-date" data-version-notes onclick="chatToggleVersionNotes(event)" aria-expanded="false" aria-controls="panel-version-notes">v370</button></div><button class="chat-icon-btn theme-toggle chat-theme-toggle" id="chat-debug-theme-toggle" hidden type="button" onclick="toggleTheme()" aria-label="切换深色模式" title="切换明暗模式"><svg class="chat-theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"/></svg><svg class="chat-theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button><button class="chat-icon-btn" type="button" onclick="chatToggleSettings(false)" title="收起">×</button></div>
 <label class="chat-settings-nav"><span>功能</span><select id="chat-settings-nav" aria-label="切换功能" onchange="chatOpenSettingTab(this.value)"><optgroup label="对话内容"><option value="model">提示词</option><option value="thinking">思考</option><option value="worldbook">世界书</option></optgroup><optgroup label="记忆与时间"><option value="memory">Fact 召回</option><option value="digest">截断总结</option><option value="cache">缓存策略</option></optgroup><optgroup label="历史与连接"><option value="trim">截断</option></optgroup><optgroup label="显示与管理"><option value="display">设置</option><option value="tools">工具</option><option value="debug">调试</option></optgroup></select></label>
 <div class="chat-side-panel active" id="chat-side-model" data-notebook="lilac"><header class="ck-notebook-heading" data-scope="global"><span class="ck-notebook-stamp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13 5 5l7 4 7-4-1 8a7 7 0 1 1-12 0Z"/><path d="M9 15v1m6-1v1m-5 3q2 2 4 0"/></svg></span><div><h2>系统提示词</h2><p>给小克一张角色小卡片。</p></div><span class="chat-scope-badge">所有窗口</span></header>
 <section class="chat-setting-group" data-scope="global"><h3>对话角色</h3>
@@ -383,7 +383,7 @@
 <div class="chat-memory-card chat-recall-mode-card"><b>历史动态内容</b><details class="chat-setting-help"><summary>说明与用法</summary><p>只控制下一轮发给模型的历史尾部，不影响本轮生成。默认全部保留以兼容原有行为；关闭后会剔除对应旧内容，并把原生缓存锚点放在动态块之前的稳定用户文本上，尽量保住命中。</p></details><label class="chat-switch chat-recall-switch"><input id="chat-retain-native-thinking-history" type="checkbox" checked onchange="chatSaveConfig(true)"><span>保留历史原生思考块</span></label><p class="chat-field-hint">仅在 1h 缓存有效期内保留。缓存过期后，无论开关状态，旧思考块与签名都会清理。</p><label class="chat-switch chat-recall-switch"><input id="chat-retain-pseudo-thinking-history" type="checkbox" checked onchange="chatSaveConfig(true)"><span>保留历史伪思考块</span></label><label class="chat-switch chat-recall-switch"><input id="chat-retain-recall-history" type="checkbox" checked onchange="chatSaveConfig(true)"><span>保留历史召回内容</span></label><label class="chat-switch chat-recall-switch"><input id="chat-retain-current-time-history" type="checkbox" checked onchange="chatSaveConfig(true)"><span>保留历史当前时间</span></label><label class="chat-switch chat-recall-switch"><input id="chat-retain-time-gap-history" type="checkbox" checked onchange="chatSaveConfig(true)"><span>保留历史时间间隔提醒</span></label><label class="chat-switch chat-recall-switch"><input id="chat-retain-backend-switch-history" type="checkbox" checked onchange="chatSaveConfig(true)"><span>保留历史后端切换通知</span></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveConfig()">保存历史保留设置</button><span class="chat-cache-save-status">开关变化会立即保存。</span></div></div><details class="chat-setting-help"><summary>原生思考的兼容限制</summary><details class="chat-setting-help"><summary>详细说明</summary><p>原生 thinking 例外：上游可能要求旧 thinking/signature 完整回传。关闭“保留历史原生思考块”可以省输入 token，但这一段缓存可能重新创建；同一请求内的工具调用续轮仍会强制保留必需块。</p></details></details>
 </section>
 <section class="chat-setting-group" data-scope="global"><h3>时间提醒</h3>
-<div class="chat-memory-card"><b>时间极简注入</b><p>开启后在每轮用户消息下方附加北京时间，只发送时分，例如 13:21。</p><label class="chat-switch"><input id="chat-minimal-time-enabled" type="checkbox" onchange="chatSaveConfig(true)"><span>开启时间极简注入</span></label><label class="chat-switch"><input id="chat-minimal-time-clean-each-round" type="checkbox" onchange="chatSaveConfig(true)"><span>每轮清理旧的极简时间</span></label><p class="chat-field-hint">默认保留每轮注入的时间；开启清理后只保留本轮时间。与下方完整时间提醒分别控制。</p></div>
+<div class="chat-memory-card"><b>时间极简注入</b><p>开启后在每轮用户消息下方附加北京时间的日期与时分，例如 2026-11-04 13:21。</p><label class="chat-switch"><input id="chat-minimal-time-enabled" type="checkbox" onchange="chatSaveConfig(true)"><span>开启时间极简注入</span></label><label class="chat-switch"><input id="chat-minimal-time-clean-each-round" type="checkbox" onchange="chatSaveConfig(true)"><span>每轮清理旧的极简时间</span></label><p class="chat-field-hint">默认保留每轮注入的时间；开启清理后只保留本轮时间。与下方完整时间提醒分别控制。</p></div>
 <div class="chat-time-preview"><span>助手收到的时间提醒</span><b>此刻 · 北京时间</b><p>完整日期 / 星期 / 时段</p><div>间隔 ≥ 10 分钟：重点提示时间断层</div></div><div class="chat-memory-card chat-recall-mode-card"><b>时间注入频率</b><details class="chat-setting-help"><summary>说明与用法</summary><p>按设定轮数提醒当前北京时间。间隔达到 10 分钟时，另行强调当前时间、经过时长和跨日关系。</p></details><label class="chat-switch chat-recall-switch"><input id="chat-nc-context-injection" type="checkbox" checked onchange="chatSaveNcContextInjection(true)"><span>定期提醒当前时间</span></label><label class="chat-recall-recent"><span>每多少轮注入一次</span><input id="chat-time-injection-every-rounds" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" onchange="chatSaveNcContextInjection(true)"><small>1–1000 轮；第 n、2n、3n 轮注入，截断不重置计数</small></label><div class="chat-cache-mode-actions"><button class="chat-cache-save-btn" type="button" onclick="chatSaveNcContextInjection()">保存时间设置</button><span class="chat-cache-save-status" id="chat-nc-context-save-status">切换后会立即保存。</span></div></div><details class="chat-setting-help"><summary>提醒如何生效</summary><p>定期提醒开关只控制频率提醒；长间隔提醒独立生效，互不重置或抑制；上轮定期提醒后，下轮间隔满 10 分钟仍会提醒。助手需先校准“现在、昨天、明天”等表述，再接续对话。</p><p>时间随本轮消息附加在缓存断点之后；不会为了刷新时间改写系统提示词或已有历史。</p></details>
 </section>
 <details id="chat-tools-settings" class="chat-setting-help chat-tools-settings"><summary>工具与会话管理</summary>
@@ -423,31 +423,31 @@
 <button class="ck-backtop" id="ck-backtop" type="button" aria-label="回到页面顶部" title="回到顶部" onclick="ckBackToTop()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" onmouseenter="toastPauseAutoHide()" onmouseleave="toastResumeAutoHide()"><div class="toast-message" id="toast-message"></div><button class="toast-copy" type="button" aria-label="一键复制错误内容" title="复制全部错误内容" onclick="toastCopyMessage(this)" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">一键复制</button><button class="toast-close" type="button" aria-label="关闭错误提示" title="关闭" onclick="closeToast()" onfocus="toastPauseAutoHide()" onblur="toastResumeAutoHide()">×</button></div>
 <aside id="panel-version-notes" class="panel-version-notes" aria-label="本次更新" hidden></aside>
-<script src="chat-ui.js?v=chat-v369-digest-progress"></script>
-<script src="chat-history.js?v=chat-v369-digest-progress"></script>
-<script src="chat-recovery.js?v=chat-v369-digest-progress"></script>
-<script src="chat-wake.js?v=chat-v369-digest-progress"></script>
-<script src="chat-digest.js?v=chat-v369-digest-progress"></script>
-<script src="chat-digest-activation.js?v=chat-v369-digest-progress"></script>
-<script src="chat-window-cleanup.js?v=chat-v369-digest-progress"></script>
-<script src="chat-digest-schedule.js?v=chat-v369-digest-progress"></script>
-<script src="chat-delete-digest.js?v=chat-v369-digest-progress"></script>
-<script src="backend-route.js?v=chat-v369-digest-progress"></script>
-<script src="server-status.js?v=chat-v369-digest-progress"></script>
-<script src="subscription.js?v=chat-v369-digest-progress"></script>
-<script src="codex-storage.js?v=chat-v369-digest-progress"></script>
-<script src="codex-tasks.js?v=chat-v369-digest-progress"></script>
-<script src="script.js?v=chat-v369-digest-progress"></script>
-<script src="memory-review.js?v=chat-v369-digest-progress"></script>
-<script src="memory-workbench.js?v=chat-v369-digest-progress"></script>
-<script src="settings-tabs.js?v=chat-v369-digest-progress"></script>
-<script src="daily-records.js?v=chat-v369-digest-progress"></script>
-<script src="active-memory.js?v=chat-v369-digest-progress"></script>
-<script src="digest-progress.js?v=chat-v369-digest-progress"></script>
-<script src="maintenance.js?v=chat-v369-digest-progress"></script>
-<script src="organizing-switches.js?v=chat-v369-digest-progress"></script>
-<script src="script-extra.js?v=chat-v369-digest-progress"></script>
-<script src="pwa.js?v=chat-v369-digest-progress"></script>
-<script src="select-ui.js?v=chat-v369-digest-progress"></script>
+<script src="chat-ui.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-history.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-recovery.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-wake.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-digest.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-digest-activation.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-window-cleanup.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-digest-schedule.js?v=chat-v370-minimal-time-date"></script>
+<script src="chat-delete-digest.js?v=chat-v370-minimal-time-date"></script>
+<script src="backend-route.js?v=chat-v370-minimal-time-date"></script>
+<script src="server-status.js?v=chat-v370-minimal-time-date"></script>
+<script src="subscription.js?v=chat-v370-minimal-time-date"></script>
+<script src="codex-storage.js?v=chat-v370-minimal-time-date"></script>
+<script src="codex-tasks.js?v=chat-v370-minimal-time-date"></script>
+<script src="script.js?v=chat-v370-minimal-time-date"></script>
+<script src="memory-review.js?v=chat-v370-minimal-time-date"></script>
+<script src="memory-workbench.js?v=chat-v370-minimal-time-date"></script>
+<script src="settings-tabs.js?v=chat-v370-minimal-time-date"></script>
+<script src="daily-records.js?v=chat-v370-minimal-time-date"></script>
+<script src="active-memory.js?v=chat-v370-minimal-time-date"></script>
+<script src="digest-progress.js?v=chat-v370-minimal-time-date"></script>
+<script src="maintenance.js?v=chat-v370-minimal-time-date"></script>
+<script src="organizing-switches.js?v=chat-v370-minimal-time-date"></script>
+<script src="script-extra.js?v=chat-v370-minimal-time-date"></script>
+<script src="pwa.js?v=chat-v370-minimal-time-date"></script>
+<script src="select-ui.js?v=chat-v370-minimal-time-date"></script>
 </body>
 </html>
