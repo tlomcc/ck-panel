@@ -3,12 +3,13 @@
   var G=root.CKGomoku,visible=false,refreshTimer=0,updateTimer=0,selected='',selectedSession='',chatStamp='',drafts=Object.create(null),cells=[],submitBusy=false;
   function $(id){return document.getElementById(id)}
   function current(){return root.chatSessions&&root.chatSessions.find(function(s){return s.id===root.chatActiveSessionId})}
+  function linked(session){return root.CKGameWindow&&root.CKGameWindow.gameFor(session)||session}
   function rows(session){return session.id===root.chatActiveSessionId?root.chatMessages:session.messages||[]}
   function id(prefix){return prefix+'-'+(root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2))}
   function tell(message){if($('games-notice')){$('games-notice').textContent=message;$('games-notice').hidden=!message}}
   function save(session){root.chatSaveSessions({sessionIds:[session.id]})}
   function renderReturn(){
-    var button=$('chat-game-return'),session=current(),game,position;
+    var button=$('chat-game-return'),session=linked(current()),game,position;
     if(!button)return;
     try{game=G.restore(session&&session.gomoku);if(game)position=G.position(game.moves)}catch(e){}
     // An empty board is only prepared; the first confirmed stone starts play.
@@ -26,9 +27,10 @@
     $('games-fold').textContent=closed?'展开棋盘':'收起棋盘';
   }
   function openGame(sessionId){
-    var session=current();
-    if(!root.chatSessionsReady||!session||session.id!==sessionId){root.toast('聊天窗口已切换，请点击当前窗口的游戏入口。');return}
+    var session=linked(current());
+    if(!root.chatSessionsReady||!session||session.id!==sessionId&&(!root.CKGameWindow||root.CKGameWindow.parent(session)!==current())){root.toast('聊天窗口已切换，请点击当前窗口的游戏入口。');return}
     if(!session.gomoku){root.toast('当前窗口没有保存在此浏览器的棋局。');return}
+    if(session!==current()&&(!root.CKGameWindow||!root.CKGameWindow.select(session))){root.toast('等当前回复或处理完成后再切换窗口。');return}
     foldBoard(false);root.navTo('games');
     requestAnimationFrame(function(){
       if(root.currentPanelTab==='games'&&current()===session)$('games-turn').focus({preventScroll:true});
@@ -59,6 +61,7 @@
   }
   function messageView(message,session){
     session=session||current();if(!session||!message)return null;
+    var summary=root.CKGameWindow&&root.CKGameWindow.messageView(message);if(summary)return summary;
     if((message.role==='user'||message.role==='pending_user')&&automatic(message)){
       var meta=message.ckGame,notice=meta.event;
       if(!notice){
@@ -92,7 +95,8 @@
   function makePrompt(session,game,kind,exclude){
     var board=G.position(game.moves),mode='end',remindChatStyle=false,remindUndoRules=false;
     if(!game.closed&&!board.winner&&!board.draw){
-      var history=rows(session).filter(function(m){return m!==exclude}).map(function(m){return m&&m.role==='assistant'?Object.assign({},m,{text:speech(m)}):m});
+      var scoped=root.CKGameWindow?root.CKGameWindow.contextRows(session,rows(session)):rows(session);
+      var history=scoped.filter(function(m){return m!==exclude}).map(function(m){return m&&m.role==='assistant'?Object.assign({},m,{text:speech(m)}):m});
       var context=(session.transportMessages||[]).length?root.chatLimitArray(session.transportMessages,root.CHAT_MAX_TRANSPORT_MESSAGES):root.chatWindowContextMessages(history);
       var known=G.contextState(game,history,context);
       mode=!known.rules?'setup':kind==='move'&&known.ply===game.moves.length-1?'delta':'sync';
@@ -153,6 +157,7 @@
     var changed=[];
     (root.chatSessions||[]).forEach(function(session){if(reconcile(session))changed.push(session.id)});
     if(changed.length){root.chatSaveSessions({sessionIds:changed});if(changed.indexOf(root.chatActiveSessionId)>=0)root.chatRenderMessages({respectUserScroll:true})}
+    if(root.CKGameWindow)root.CKGameWindow.update();
     renderReturn();
     if(visible)render();
   }
@@ -166,6 +171,7 @@
   async function actionReady(){
     var sessionId=root.chatActiveSessionId,session=await ready();
     if(sessionId&&sessionId!==session.id)throw Error('聊天窗口已切换，内容保留，请重新操作。');
+    if(linked(session)!==session)throw Error('当前请求完成后再继续游戏，输入内容会保留。');
     return session;
   }
   function guard(allowQueue,ignoreMessage){
@@ -226,7 +232,14 @@
           guard(false);
         }
       }
-      session.gomoku=G.create(id('g'),Date.now());save(session);selected='';tell('');render();
+      var next=G.create(id('g'),Date.now());
+      if(root.CKGameWindow&&root.CKGameWindow.profile(session)&&old&&old.moves.length&&!old.closed&&!position.winner&&!position.draw){
+        old.closed=true;old.pending=null;old.error='';session.gomoku=old;session.gameWindow.nextGame=next;
+        save(session);selected='';tell('先把本局总结同步给主窗口，完成后自动开始新局。');root.CKGameWindow.update();render();return;
+      }
+      if(root.CKGameWindow)session=await root.CKGameWindow.begin(session,next);
+      else{session.gomoku=next;save(session)}
+      selected='';tell('');render();
     }catch(error){tell(error.message)}
   }
   async function play(){
@@ -289,7 +302,8 @@
       if(root.chatSending||root.chatRecoverInFlightBusy||root.chatTrimBusy)throw Error('等当前回复或处理完成后再切换窗口。');
       if(!(root.chatSessions||[]).some(function(s){return s.id===next}))throw Error('这个聊天窗口已经不存在。');
       drafts[session.id]=$('games-input').value;
-      root.chatSelectSession(next);selected='';chatStamp='';tell('');render();
+      var target=linked(root.chatSessions.find(function(s){return s.id===next}));
+      root.chatSelectSession(target.id);selected='';chatStamp='';tell('');render();
     }catch(error){tell(error.message);render()}
   }
   async function endGame(){
@@ -300,6 +314,7 @@
       if(!await root.ckConfirmDialog('结束这局五子棋，聊天可以继续，棋盘会保留。',{title:'结束本局',confirmText:'结束本局'}))return;
       if(session!==current()||session.gomoku!==original)throw Error('棋局有变化，请重新操作。');
       guard(false);var game=G.restore(original);game.closed=true;game.pending=null;game.error='';session.gomoku=game;selected='';tell('');
+      if(root.CKGameWindow&&root.CKGameWindow.profile(session)){save(session);root.CKGameWindow.update();render();return}
       var prepared=makePrompt(session,game,'end');submit(prepared.text,metadata(game,id('r'),'end',prepared,'本局已结束'));render();
     }catch(error){tell(error.message)}
   }
@@ -336,7 +351,7 @@
   }
   function selectPoint(name){
     try{
-      var session=current(),game=G.restore(session&&session.gomoku);if(!game)throw Error('点“开始对局”，你执黑先手。');
+      var session=linked(current()),game=G.restore(session&&session.gomoku);if(!game)throw Error('点“开始对局”，你执黑先手。');
       var position=G.position(game.moves),p=G.point(name);
       if(game.closed||position.winner||position.draw)throw Error('本局结束了，可以开新局。');
       if(position.turn!=='black')throw Error('轮到小克了，你可以先和它聊聊。');
@@ -345,12 +360,12 @@
     }catch(error){tell(error.message)}
   }
   function renderAction(game,position){
-    if(game===undefined){try{game=G.restore(current()&&current().gomoku)}catch(e){game=null}}
+    if(game===undefined){try{var session=linked(current());game=G.restore(session&&session.gomoku)}catch(e){game=null}}
     position=position||G.position(game?game.moves:[]);
     var text=$('games-input').value.trim(),canMove=!!game&&!game.closed&&!position.winner&&!position.draw&&position.turn==='black',button=$('games-play');
     var move=!!selected&&canMove;
     button.textContent=move?(text?'落子并发送':'落子 '+selected):text?(root.chatSending?'排队发送':'发送'):canMove?'选择落点':game&&!game.closed&&!position.winner&&!position.draw?'等待小克':'发送';
-    button.disabled=move?!!root.chatSending:!text;
+    button.disabled=linked(current())!==current()|| (move?!!root.chatSending:!text);
     button.setAttribute('aria-label',move?'落子 '+selected+(text?' 并发送消息':''):button.textContent);
     button.title=move?'落子 '+selected+(text?'，同时发送输入框中的话':''):text?'发送聊天消息':'先选落点，或输入想说的话';
   }
@@ -385,7 +400,7 @@
     if(!undoReason){try{guard(false)}catch(error){undoReason=error.message}}
     $('games-undo').disabled=!!undoReason||submitBusy;
     $('games-undo').title=undoReason||'撤回你上一手与小克随后一手，重新落子';
-    var message=game&&pendingMessage(current(),game),waiting=!!(message&&(message.inFlight||message.role==='pending_user'&&root.chatSending));
+    var message=game&&pendingMessage(linked(current()),game),waiting=!!(message&&(message.inFlight||message.role==='pending_user'&&root.chatSending));
     $('games-ask').hidden=!game||ended||position.turn!=='white'||waiting||!!root.chatSending;
     $('games-ask').textContent=message&&(message.sendFailed||message.role==='pending_user')?'重试这步':'请小克落子';
     var error=game&&game.error||'';
@@ -429,7 +444,7 @@
   function render(){
     renderReturn();
     if(!visible||!$('tab-games'))return;
-    var session=current();if(!session)return;
+    var session=linked(current());if(!session)return;
     if(selectedSession!==session.id){
       if(selectedSession)drafts[selectedSession]=$('games-input').value;
       selectedSession=session.id;selected='';chatStamp='';boardStamp='';$('games-input').value=drafts[session.id]||'';
@@ -437,12 +452,14 @@
     var stamp=JSON.stringify((root.chatSessions||[]).map(function(s){return [s.id,s.title]}));
     if(stamp!==sessionStamp){
       sessionStamp=stamp;var options=document.createDocumentFragment();
-      root.chatSessions.forEach(function(s){var option=document.createElement('option');option.value=s.id;option.textContent=s.title||'未命名对话';options.appendChild(option)});
+      root.chatSessions.filter(function(s){return !s.gameWindow}).forEach(function(s){var option=document.createElement('option');option.value=s.id;option.textContent=s.title||'未命名对话';options.appendChild(option)});
       $('games-session').replaceChildren(options);
     }
-    $('games-session').value=session.id;$('games-session').disabled=!!root.chatSending;
+    var main=root.CKGameWindow&&root.CKGameWindow.parent(session)||session;
+    $('games-session').value=main.id;$('games-session').disabled=!!root.chatSending;
     var game;try{game=G.restore(session.gomoku)}catch(error){tell(error.message+' 原记录已保留，可开新局。')}
     renderBoard(game);renderConversation(session);
+    if(root.CKGameWindow)root.CKGameWindow.render();
   }
   function startTimer(){
     clearInterval(refreshTimer);refreshTimer=0;
@@ -450,10 +467,23 @@
   }
   async function enter(){
     visible=true;document.body.classList.add('games-active');
-    try{await ready();if(!visible)return;makeBoard();update();startTimer()}catch(error){tell(error.message)}
+    try{await ready();if(!visible)return;var target=linked(current());if(target!==current()&&root.CKGameWindow&&!root.CKGameWindow.select(target))tell('等当前回复完成后再打开独立游戏窗口。');makeBoard();update();startTimer()}catch(error){tell(error.message)}
+  }
+  function returnToChat(){
+    var session=current(),main=root.CKGameWindow&&root.CKGameWindow.parent(session);
+    if(main&&main!==session){
+      drafts[session.id]=$('games-input').value;
+      if(!root.CKGameWindow.select(main)){tell('等当前回复或处理完成后再回主窗口。');return}
+    }
+    root.navTo('chat');
+  }
+  function openRecords(){
+    var session=linked(current());
+    if(session!==current()&&root.CKGameWindow&&!root.CKGameWindow.select(session)){tell('等当前回复完成后再查看游戏聊天。');return}
+    root.navTo('chat');
   }
   function leave(){
-    if(visible&&current())drafts[current().id]=$('games-input').value;
+    if(visible&&current())drafts[linked(current()).id]=$('games-input').value;
     visible=false;clearInterval(refreshTimer);refreshTimer=0;document.body.classList.remove('games-active');renderReturn();
   }
   function bind(){
@@ -462,7 +492,7 @@
     $('games-undo').addEventListener('click',undoMove);
     $('games-session').addEventListener('change',selectSession);
     $('games-form').addEventListener('submit',function(event){event.preventDefault();submitTurn()});
-    $('games-input').addEventListener('input',function(){if(current())drafts[current().id]=this.value;renderAction()});
+    $('games-input').addEventListener('input',function(){if(current())drafts[linked(current()).id]=this.value;renderAction()});
     $('games-input').addEventListener('keydown',function(event){if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();submitTurn()}});
     $('games-fold').addEventListener('click',function(){foldBoard(!$('games-board-area').hidden)});
     document.addEventListener('click',function(event){
@@ -474,6 +504,6 @@
     renderReturn();
     if(root.currentPanelTab==='games')enter();
   }
-  root.CKGames={onChatUpdate:onChatUpdate,enter:enter,leave:leave,preparePending:preparePending,messageView:messageView,replyText:replyText,eventElement:eventElement,renderReturn:renderReturn};
+  root.CKGames={onChatUpdate:onChatUpdate,enter:enter,leave:leave,returnToChat:returnToChat,openRecords:openRecords,preparePending:preparePending,messageView:messageView,replyText:replyText,eventElement:eventElement,renderReturn:renderReturn};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })(window);

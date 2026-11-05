@@ -102,3 +102,4 @@ body.dark .games-columns,body.dark .games-rows{color:var(--ck-text-soft)}
   .games-form{grid-template-columns:minmax(0,1fr) 104px}.games-form textarea{resize:none}
 }
 @media(prefers-reduced-motion:reduce){.games-page button:active{transform:none}}
+.games-window-info{font-size:14px;line-height:1.5;margin:0 0 8px;color:var(--ck-text)}

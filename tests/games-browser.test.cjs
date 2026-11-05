@@ -9,6 +9,9 @@ const server=http.createServer((req,res)=>{
   if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);return res.end()}
   let body=fs.readFileSync(file);
   if(name==='index.html')body=Buffer.from(body.toString().replace('</head>','<script src="/tests/fixtures/games-boot.js"></script></head>').replace(/<script src="pwa\.js[^>]+><\/script>/g,''));
+  // Reproduce legacy windows for these existing regression scenarios. The new
+  // independent-window lifecycle has its own game-window-browser.cjs suite.
+  if(name==='index.html')body=Buffer.from(body.toString().replace(/<script src="game-window\.js[^>]+><\/script>/g,''));
   res.setHeader('Content-Type',(mime[path.extname(file)]||'application/octet-stream')+'; charset=utf-8');
   res.setHeader('Content-Security-Policy',"connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; frame-src 'none'; worker-src 'none'");res.end(body);
 });

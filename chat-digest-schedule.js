@@ -80,6 +80,7 @@ function chatDigestAutoPolicy(cfg,session,rows,afterReply){
   return {enabled:cfg.digestCurrentModel!==true&&!!(trim.enabled||trim.roundLimitEnabled&&count>=trim.roundLimit),keep:trim.keep,minimum:trim.minimum,total:count,ttl_seconds:chatDigestCacheTtl(cfg)/1000,cache_at:ref.timestamp/1000,observed_at:Date.now()/1000};
 }
 function chatDigestQueueForReply(cfg,session){
+  if(session.gameWindow)return null;
   if(cfg.dailyDigestEnabled===false||cfg.digestCurrentModel===true||session.digestManualTrim)return null;
   var rows=(session===chatCurrentSession()?chatMessages:session.messages||[]).filter(function(m){return !m.inFlight&&m.role!=='pending_user'});
   var auto=chatDigestAutoPolicy(cfg,session,rows,true),keep=Math.max(0,auto.keep-1);
@@ -167,6 +168,7 @@ function chatScheduleNightlySync(delay){
 }
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
+  if(session&&session.gameWindow)return Promise.resolve(false);
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
   if(session.digestManualCompleted&&session.digestManualCompleted.cleanupState==='pending'&&typeof chatApplyWindowCleanup==='function')return chatApplyWindowCleanup(session,cfg,null).catch(function(){chatScheduleNightlySync(3000);return false});
   if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);

@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v379-gomoku-undo';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v380-gomoku-short-window';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4556,6 +4556,7 @@ function chatNormalizeSession(s){
     updated:updated,
     messages:Array.isArray(s.messages)?s.messages.slice():[],
     gomoku:s.gomoku&&typeof s.gomoku==='object'?JSON.parse(JSON.stringify(s.gomoku)):null,
+    gameWindow:s.gameWindow&&typeof s.gameWindow==='object'?JSON.parse(JSON.stringify(s.gameWindow)):null,
     transportMessages:Array.isArray(s.transportMessages)?s.transportMessages.slice():[],
     transportUpdated:Number(s.transportUpdated||0)||0,
     lastChatActivityAt:Number(s.lastChatActivityAt)||0,
@@ -6907,6 +6908,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       updated:s.updated,
       messages:chatLimitArray(s.messages,maxVisible),
       gomoku:s.gomoku,
+      gameWindow:s.gameWindow,
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
       transportUpdated:Number(s.transportUpdated||0)||0,
     lastChatActivityAt:Number(s.lastChatActivityAt)||0,
@@ -7682,6 +7684,7 @@ function chatShowTrimFailure(message,syncOnly){
   },100);
 }
 async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestState,opts){
+  if(chatCurrentSession().gameWindow)return {trimmed:false,boundary:false,dropped:0};
   // Both the idle timer and a new send share this barrier.
   while(chatTrimTransaction)await chatTrimTransaction;
   var activationSession=chatCurrentSession();
@@ -8029,6 +8032,7 @@ function chatSaveAutoCleanSetting(auto){
 }
 // 页面在线时的执行路径，挂在既有的 15 秒定时器和"回复落定"那一下上，不新开定时器。
 async function chatMaybeAutoClean(opts){
+  if(chatCurrentSession().gameWindow)return;
   if(chatWakeStatusStale(chatCurrentSession()))return;
   opts=opts||{};
   if(chatAutoCleanBusy||chatSending||chatIdleTrimBusy||chatTrimBusy)return;
@@ -8083,6 +8087,7 @@ async function chatMaybeAutoClean(opts){
   }
 }
 function chatWindowContextMessages(messages){
+  if(messages===undefined&&window.CKGameWindow)messages=window.CKGameWindow.contextRows(chatCurrentSession(),chatMessages);
   return (messages||chatMessages||[]).filter(function(m){
     if(!m||typeof m!=='object')return false;
     if(m.role!=='user'&&m.role!=='assistant')return false;
@@ -10902,6 +10907,8 @@ async function chatSubmitPendingMessages(options){
   var requestState=options.requestState||null;
   try{
   chatInit();
+  if(options.gameAutomation&&chatSending)return;
+  if(window.CKGameWindow)window.CKGameWindow.beforeSend(chatCurrentSession());
   chatFlushAssistantRevealQueue();
   if(chatSending&&!options.sendingStarted){
     if(chatSendButtonCanStop())chatStopMessage();
@@ -11021,11 +11028,14 @@ async function chatSubmitPendingMessages(options){
   chatMaybeSyncSystemPrompt({beforeRequest:true});
   var syncedPrompts=chatLoadConfig();
   cfg.system=syncedPrompts.system;cfg.thinkingPrompt=syncedPrompts.thinkingPrompt;cfg.fakeThinkingPrompt=syncedPrompts.fakeThinkingPrompt;
+  // Per-game settings are request-local; never save them over the main window's settings.
+  var gameWindow=window.CKGameWindow&&window.CKGameWindow.profile(chatCurrentSession());
+  if(gameWindow)cfg=window.CKGameWindow.config(cfg,chatCurrentSession());
   if(typeof chatScheduleNightlySync==='function')chatScheduleNightlySync();
   if(requestState&&requestState.stopped)return;
   var timeReminderContext=chatTimeReminderContext(chatCurrentSession(),chatMessages,pending);
-  var trimResult=await chatAwaitPreparation(chatApplyAutoTrimForPendingBatch(cfg,pending,requestState),requestState,'准备上下文');
-  var digestSync=chatDigestPendingSync(chatCurrentSession(),cfg);
+  var trimResult=gameWindow||options.gameAutomation?{trimmed:false}:await chatAwaitPreparation(chatApplyAutoTrimForPendingBatch(cfg,pending,requestState),requestState,'准备上下文');
+  var digestSync=gameWindow?null:chatDigestPendingSync(chatCurrentSession(),cfg);
   if(digestSync){digestSync.turnId=requestTurnId;chatSaveSessions();}
   if(requestState&&requestState.stopped)return;
   if(window.CKGames&&pending.some(function(m){return m&&m.ckGame})){
@@ -11215,6 +11225,7 @@ async function chatSubmitPendingMessages(options){
   // 这份可见历史整份发过去——发出去的永远等于屏幕上显示的。
   if(!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   if(typeof chatDigestQueueForReply==='function')body.digest_queue=chatDigestQueueForReply(cfg,currentSession);
+  if(gameWindow)body=window.CKGameWindow.body(body,currentSession);
   body=chatLockGatewayBody(body);
   var requestBodyText=JSON.stringify(body);
   var assistantText='',nativeThinkingText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
