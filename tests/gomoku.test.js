@@ -80,6 +80,18 @@ test('only the full game sequence present in outgoing history permits a delta',(
   assert.deepEqual(G.contextState(t.value,t.messages,t.context.slice(2)),{rules:false,ply:0});
   assert.deepEqual(G.contextState(t.value,t.messages,[]),{rules:false,ply:0});
 });
+test('speech sent with a move preserves delta context when history has separate user records',()=>{
+  const t=transcript();t.messages[0].ckGame.requestId='r-first';t.messages[2].ckGame.requestId='r-next';
+  const spoken=(turnId,requestId,text)=>({role:'user',text,turnId,ckGameSpeech:{gameId:t.value.id,requestId}});
+  t.messages.splice(1,0,spoken('first','r-first','先聊一句。'));
+  t.messages.splice(4,0,spoken('next','r-next','接着聊一句。'));
+  const context=t.messages.map(m=>({role:m.role,text:m.text}));
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:4});
+  t.messages[1].ckGameSpeech.requestId='r-another';
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:1});
+  t.messages[1].ckGameSpeech.requestId='r-first';t.messages[1].turnId='unrelated';
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:1});
+});
 test('failed, unsent or edited messages cannot establish remembered game state',()=>{
   const t=transcript();t.messages[0].sendFailed=true;assert.equal(G.contextState(t.value,t.messages,t.context).rules,false);
   delete t.messages[0].sendFailed;t.messages[0].role='pending_user';assert.equal(G.contextState(t.value,t.messages,t.context).rules,false);

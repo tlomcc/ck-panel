@@ -111,8 +111,16 @@
       if(known>=game.moves.length||known%2===0||!m.turnId)return;
       var replies=(messages||[]).filter(function(r){return r&&r.role==='assistant'&&r.turnId===m.turnId&&!r.stopped});
       try{if(parseReply(replies.map(function(r){return r.text||''}).join('\n'))!==game.moves[known])return}catch(e){return}
+      var spoken=(messages||[]).filter(function(r){
+        return r&&r.role==='user'&&!r.sendFailed&&!r.inFlight&&r.turnId===m.turnId&&r.ckGameSpeech&&
+          r.ckGameSpeech.gameId===game.id&&r.ckGameSpeech.requestId===m.ckGame.requestId;
+      }).map(function(r){return String(r.text||'')});
       for(var j=cursor;j<actual.length;j++){
-        if(actual[j].role==='user'&&actual[j].text.trim())break;
+        if(actual[j].role==='user'&&actual[j].text.trim()){
+          // Window history can keep the same submission in separate display rows.
+          var speechIndex=spoken.indexOf(actual[j].text);if(speechIndex<0)break;
+          spoken.splice(speechIndex,1);continue;
+        }
         if(actual[j].role!=='assistant')continue;
         try{if(parseReply(actual[j].text)===game.moves[known]){known++;cursor=j+1;break}}catch(e){}
       }

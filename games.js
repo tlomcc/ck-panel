@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  var G=root.CKGomoku,visible=false,refreshTimer=0,updateTimer=0,selected='',selectedSession='',chatStamp='',drafts=Object.create(null),cells=[],sayBusy=false;
+  var G=root.CKGomoku,visible=false,refreshTimer=0,updateTimer=0,selected='',selectedSession='',chatStamp='',drafts=Object.create(null),cells=[],submitBusy=false;
   function $(id){return document.getElementById(id)}
   function current(){return root.chatSessions&&root.chatSessions.find(function(s){return s.id===root.chatActiveSessionId})}
   function rows(session){return session.id===root.chatActiveSessionId?root.chatMessages:session.messages||[]}
@@ -134,23 +134,36 @@
       throw Error('小克还在回复，可以先说话，等它说完再落子。');
     }
     if(root.chatRecoverInFlightBusy||root.chatInterruptedInFlightMessages().length)throw Error('上一条回复正在补收，棋盘会保留。');
-    var outstanding=root.chatMessages.filter(function(m){return m&&m!==ignoreMessage&&(m.role==='pending_user'||m.role==='user'&&m.sendFailed)});
+    var ignored=ignoreMessage?submissionMessages(ignoreMessage):[];
+    var outstanding=root.chatMessages.filter(function(m){return m&&ignored.indexOf(m)<0&&(m.role==='pending_user'||m.role==='user'&&m.sendFailed)});
     if(outstanding.length)throw Error('还有待发或失败消息，请到完整聊天里处理后继续。');
   }
+  function submissionMessages(message){
+    var game=message.ckGame;
+    return root.chatMessages.filter(function(m){
+      return m===message||game&&m&&m.ckGameSpeech&&m.ckGameSpeech.gameId===game.gameId&&m.ckGameSpeech.requestId===game.requestId&&
+        (m.role==='pending_user'||m.role==='user'&&m.sendFailed);
+    });
+  }
   function requestExisting(message){
-    root.chatEnsurePendingMessageId(message);
+    var batch=submissionMessages(message);
+    batch.forEach(root.chatEnsurePendingMessageId);
     root.chatSaveLocalMessages();
-    Promise.resolve(root.chatSubmitPendingMessages({inputSnapshot:true,extraText:'',draftImages:[],draftFiles:[],pendingIds:[message.pendingId]})).catch(function(){tell('消息未完成，请在完整聊天里查看。')}).finally(onChatUpdate);
+    Promise.resolve(root.chatSubmitPendingMessages({inputSnapshot:true,extraText:'',draftImages:[],draftFiles:[],pendingIds:batch.map(function(m){return m.pendingId})})).catch(function(){tell('消息未完成，请在完整聊天里查看。')}).finally(onChatUpdate);
     onChatUpdate();
   }
-  function submit(text,metadata){
+  function submit(text,metadata,spoken){
     var message={role:'pending_user',text:text,images:[],ts:Date.now(),pendingId:root.chatPendingMessageId()};
     if(metadata)message.ckGame=metadata;
-    root.chatMessages.push(message);root.chatMarkMessageFresh(message);
+    var batch=[message];
+    // Separate display records share one submission, including an explicit retry.
+    if(spoken)batch.push({role:'pending_user',text:spoken,images:[],ts:message.ts,pendingId:root.chatPendingMessageId(),
+      ckGameSpeech:{gameId:metadata.gameId,requestId:metadata.requestId}});
+    batch.forEach(function(m){root.chatMessages.push(m);root.chatMarkMessageFresh(m)});
     root.chatSaveLocalMessages();root.chatRenderMessages({respectUserScroll:true});
     if(root.chatSending){
       var request=root.chatActiveRequest;
-      request.queuedPendingIds=Array.from(new Set((request.queuedPendingIds||[]).concat([message.pendingId])));
+      request.queuedPendingIds=Array.from(new Set((request.queuedPendingIds||[]).concat(batch.map(function(m){return m.pendingId}))));
       if(request.checkpointReply)request.checkpointReply();
       tell('已排队，小克说完这条就接着回复你。');
     }else requestExisting(message);
@@ -173,17 +186,23 @@
     }catch(error){tell(error.message)}
   }
   async function play(){
+    if(submitBusy)return;
+    var input=$('games-input'),snapshot=input&&input.value,text=snapshot&&snapshot.trim(),coordinate=selected;
+    submitBusy=true;
     try{
       var session=await actionReady();guard(false);update();
-      if(!selected)throw Error('先在棋盘上选一个位置。');
-      var game=G.play(session.gomoku,selected,'black'),position=G.position(game.moves),requestId=id('r');
-      var prepared=makePrompt(session,game,'move'),prompt=prepared.text,caption='你落子 '+selected;
+      if(!coordinate)throw Error('先在棋盘上选一个位置。');
+      if(selected!==coordinate)throw Error('落点已变化，请重新落子。');
+      var game=G.play(session.gomoku,coordinate,'black'),position=G.position(game.moves),requestId=id('r');
+      var prepared=makePrompt(session,game,'move'),prompt=prepared.text,caption='你落子 '+coordinate;
       if(position.winner)caption+=' · 你赢了';
       if(position.draw)caption+=' · 和棋';
       if(!position.winner&&!position.draw)game.pending={id:requestId,ply:position.ply,prompt:prompt,checkedTurn:''};
       session.gomoku=game;selected='';tell('');
-      submit(prompt,metadata(game,requestId,'move',prepared,caption));render();
-    }catch(error){tell(error.message)}
+      submit(prompt,metadata(game,requestId,'move',prepared,caption),text);
+      if(text){if(input.value===snapshot)input.value='';drafts[session.id]=input.value}
+      render();
+    }catch(error){tell(error.message)}finally{submitBusy=false}
   }
   async function askMove(){
     try{
@@ -199,12 +218,12 @@
     }catch(error){tell(error.message)}
   }
   async function say(){
-    var input=$('games-input'),snapshot=input&&input.value,text=snapshot&&snapshot.trim();if(!text||sayBusy)return;
-    sayBusy=true;
+    var input=$('games-input'),snapshot=input&&input.value,text=snapshot&&snapshot.trim();if(!text||submitBusy)return;
+    submitBusy=true;
     try{
       var session=await actionReady();guard(true);tell('');
       submit(text);if(input.value===snapshot)input.value='';drafts[session.id]=input.value;render();
-    }catch(error){tell(error.message)}finally{sayBusy=false}
+    }catch(error){tell(error.message)}finally{submitBusy=false}
   }
   async function selectSession(){
     try{
