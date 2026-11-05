@@ -12,6 +12,74 @@
     if(message&&message.role==='assistant'&&typeof root.chatSplitThinkingText==='function')text=root.chatSplitThinkingText(text,{hideUnclosedThinking:true}).text||'';
     return text;
   }
+  function automatic(message){
+    return !!(message&&message.ckGame&&(message.ckGame.autoText!==undefined?message.text===message.ckGame.autoText:G.promptMoves(message.text)||/本局已经结束|我先结束这局/.test(message.text||'')));
+  }
+  function sourceFor(turnId,session){
+    return turnId&&rows(session||current()).find(function(m){return m&&m.role==='user'&&m.turnId===turnId&&automatic(m)});
+  }
+  function replyText(text,turnId,streaming,message){
+    return message&&message.gameReply||current()&&sourceFor(turnId)?G.stripMove(text,streaming):text;
+  }
+  function messageView(message,session){
+    session=session||current();if(!session||!message)return null;
+    if((message.role==='user'||message.role==='pending_user')&&automatic(message)){
+      var meta=message.ckGame,notice=meta.event;
+      if(!notice){
+        var snapshot=G.promptMoves(message.text);
+        notice=/^请/.test(meta.caption||'')?'请小克重新落子':/^这局先/.test(meta.caption||'')?'本局已结束':snapshot&&snapshot.length?'你落子 '+snapshot[snapshot.length-1]:'棋局更新';
+      }
+      return {text:'',notice:notice,automatic:true};
+    }
+    if(message.role!=='assistant')return null;
+    var source=sourceFor(message.turnId,session),saved=message.gameReply;
+    if(!source&&!saved)return null;
+    var view={text:G.stripMove(speech(message)),notice:saved&&saved.notice||''};
+    if(message.failed||message.error||/^\s*(?:请求失败|请求错误|上游模型暂时不可用)/.test(message.text||''))return {text:'',notice:'落子请求未完成'};
+    // Old saved games keep their raw messages; derive their display without editing history.
+    if(!saved&&source&&!source.inFlight&&!source.sendFailed){
+      var replies=rows(session).filter(function(m){return m&&m.role==='assistant'&&m.turnId===message.turnId&&!m.stopped});
+      if(replies[replies.length-1]===message){
+        var moves=G.promptMoves(source.text);
+        try{
+          var point=G.parseReply(replies.map(speech).join('\n'));
+          if(moves){
+            G.accept({version:1,id:source.ckGame.gameId,moves:moves},'【落子：'+point+'】');
+            var active=session.gomoku;
+            if(!active||active.id!==source.ckGame.gameId||active.moves[moves.length]===point)view.notice='小克落子 '+point;
+          }
+        }catch(e){}
+      }
+    }
+    return view;
+  }
+  function makePrompt(session,game,kind,exclude){
+    var board=G.position(game.moves),mode='end';
+    if(!game.closed&&!board.winner&&!board.draw){
+      var history=rows(session).filter(function(m){return m!==exclude}).map(function(m){return m&&m.role==='assistant'?Object.assign({},m,{text:speech(m)}):m});
+      var context=(session.transportMessages||[]).length?root.chatLimitArray(session.transportMessages,root.CHAT_MAX_TRANSPORT_MESSAGES):root.chatWindowContextMessages(history);
+      var known=G.contextState(game,history,context);
+      mode=!known.rules?'setup':kind!=='correct'&&known.ply===game.moves.length-1?'delta':'sync';
+    }
+    return {text:G.movePrompt(game,{mode:mode,correct:kind==='correct'}),mode:mode};
+  }
+  function metadata(game,requestId,kind,prepared,event){
+    return {gameId:game.id,requestId:requestId,kind:kind,mode:prepared.mode,ply:game.moves.length,
+      coordinate:game.moves[game.moves.length-1]||'',autoText:prepared.text,event:event};
+  }
+  function preparePending(session,pending){
+    (pending||[]).forEach(function(message){
+      if(!automatic(message)||!session.gomoku||message.ckGame.gameId!==session.gomoku.id)return;
+      var game=G.restore(session.gomoku),meta=message.ckGame;
+      if(meta.ply!==undefined&&meta.ply!==game.moves.length)return;
+      if(game.pending&&(game.pending.id!==meta.requestId||game.pending.prompt!==message.text))return;
+      var kind=meta.kind||(/刚才没有收到/.test(message.text)?'correct':'move');
+      var prepared=makePrompt(session,game,kind,message),event=messageView(message,session).notice;
+      message.text=prepared.text;message.ckGame=metadata(game,meta.requestId,kind,prepared,event);
+      if(game.pending)game.pending.prompt=prepared.text;
+      session.gomoku=game;
+    });
+  }
   function pendingMessage(session,game){
     if(!game||!game.pending)return null;
     var matches=rows(session).filter(function(m){return m&&m.ckGame&&m.ckGame.gameId===game.id&&m.ckGame.requestId===game.pending.id});
@@ -31,6 +99,8 @@
       if(message.text!==pending.prompt)throw Error('这步消息已被编辑，请按当前棋盘重新请小克落子。');
       game=G.accept(game,replies.map(speech).join('\n'));
     }catch(error){game.error=error.message;game.pending.checkedTurn=String(message.turnId)}
+    replies.forEach(function(reply,i){reply.gameReply={gameId:game.id,requestId:pending.id,
+      notice:i===replies.length-1?(game.error?'小克未落子：'+game.error:'小克落子 '+game.moves[game.moves.length-1]):''}});
     session.gomoku=game;
     return true;
   }
@@ -39,7 +109,7 @@
     if(!root.chatSessionsReady)return;
     var changed=[];
     (root.chatSessions||[]).forEach(function(session){if(reconcile(session))changed.push(session.id)});
-    if(changed.length)root.chatSaveSessions({sessionIds:changed});
+    if(changed.length){root.chatSaveSessions({sessionIds:changed});if(changed.indexOf(root.chatActiveSessionId)>=0)root.chatRenderMessages({respectUserScroll:true})}
     if(visible)render();
   }
   function onChatUpdate(){if(!updateTimer)updateTimer=setTimeout(update,0)}
@@ -107,12 +177,12 @@
       var session=await actionReady();guard(false);update();
       if(!selected)throw Error('先在棋盘上选一个位置。');
       var game=G.play(session.gomoku,selected,'black'),position=G.position(game.moves),requestId=id('r');
-      var prompt=G.movePrompt(game),caption='我落黑棋 '+selected+'。';
-      if(position.winner)caption+=' 我连成五子了。';
-      if(position.draw)caption+=' 棋盘下满了，和棋。';
+      var prepared=makePrompt(session,game,'move'),prompt=prepared.text,caption='你落子 '+selected;
+      if(position.winner)caption+=' · 你赢了';
+      if(position.draw)caption+=' · 和棋';
       if(!position.winner&&!position.draw)game.pending={id:requestId,ply:position.ply,prompt:prompt,checkedTurn:''};
       session.gomoku=game;selected='';tell('');
-      submit(prompt,{gameId:game.id,requestId:requestId,caption:caption});render();
+      submit(prompt,metadata(game,requestId,'move',prepared,caption));render();
     }catch(error){tell(error.message)}
   }
   async function askMove(){
@@ -123,9 +193,9 @@
       }
       guard(false);var position=G.position(game.moves);
       if(game.closed||position.winner||position.draw||position.turn!=='white')throw Error('现在不需要小克落子。');
-      var requestId=id('r'),prompt=G.movePrompt(game,'correct');
+      var requestId=id('r'),prepared=makePrompt(session,game,'correct'),prompt=prepared.text;
       game.pending={id:requestId,ply:position.ply,prompt:prompt,checkedTurn:''};game.error='';session.gomoku=game;tell('');
-      submit(prompt,{gameId:game.id,requestId:requestId,caption:'请按当前棋盘落一颗白棋。'});render();
+      submit(prompt,metadata(game,requestId,'correct',prepared,'请小克重新落子'));render();
     }catch(error){tell(error.message)}
   }
   async function say(){
@@ -153,7 +223,7 @@
       if(!await root.ckConfirmDialog('结束这局五子棋，聊天可以继续，棋盘会保留。',{title:'结束本局',confirmText:'结束本局'}))return;
       if(session!==current()||session.gomoku!==original)throw Error('棋局有变化，请重新操作。');
       guard(false);var game=G.restore(original);game.closed=true;game.pending=null;game.error='';session.gomoku=game;selected='';tell('');
-      submit(G.movePrompt(game),{gameId:game.id,requestId:id('r'),caption:'这局先到这里，我们继续聊。'});render();
+      var prepared=makePrompt(session,game,'end');submit(prepared.text,metadata(game,id('r'),'end',prepared,'本局已结束'));render();
     }catch(error){tell(error.message)}
   }
   function makeBoard(){
@@ -237,7 +307,7 @@
   function renderConversation(session){
     var all=rows(session).filter(function(m){return m&&['user','assistant','pending_user'].indexOf(m.role)>=0}),recent=all.slice(-30),draft=session.replyDraft;
     var live=draft&&String(draft.assistant_text||draft.text||'');
-    var stamp=JSON.stringify([recent.map(function(m){return [m.role,m.text,m.ts,m.turnId,m.sendFailed,m.inFlight,m.ckGame&&m.ckGame.caption]}),live,draft&&draft.state,root.chatSending]);
+    var stamp=JSON.stringify([recent.map(function(m){return [m.role,m.text,m.ts,m.turnId,m.sendFailed,m.inFlight,m.ckGame,m.gameReply]}),live,draft&&draft.state,root.chatSending]);
     $('games-conversation-scope').textContent=all.length>30?'最近 30 条，完整记录在聊天里':'与当前窗口共用聊天记录';
     if(chatStamp===stamp)return;
     chatStamp=stamp;
@@ -247,12 +317,19 @@
       var heading=document.createElement('span');heading.className='games-speaker';heading.textContent=who+(pending?' · '+pending:'');
       var body=document.createElement('p');body.textContent=text;item.append(heading,body);fragment.appendChild(item);
     }
+    function event(text){
+      var item=document.createElement('div');item.className='ck-game-event';
+      var label=document.createElement('span');label.className='ck-game-event-label';label.textContent='系统提示';
+      var body=document.createElement('span');body.textContent=text;item.append(label,body);fragment.appendChild(item);
+    }
     recent.forEach(function(m){
-      var text=m.ckGame&&m.ckGame.caption||speech(m)||((m.images||[]).length?'[图片]':'');
+      var view=messageView(m,session),text=view?view.text:speech(m)||((m.images||[]).length?'[图片]':'');
       if(text)append(m.role==='assistant'?'小克':'你',text,m.sendFailed?'未发送成功':m.role==='pending_user'?'待发送':m.inFlight?'已发送':'');
+      if(view&&view.notice)event(view.notice+(m.sendFailed?' · 请求未完成':''));
     });
-    if(live)append('小克',speech({role:'assistant',text:live}),draft.state==='error'?'收到的部分回复':'正在回复');
-    else if(root.chatSending)append('小克','正在回复，可以继续发消息。','');
+    var liveSpeech=live&&replyText(speech({role:'assistant',text:live}),draft.turn_id,true);
+    if(liveSpeech)append('小克',liveSpeech,draft.state==='error'?'收到的部分回复':'正在回复');
+    else if(root.chatSending)event('小克正在思考，可以继续发消息。');
     if(!recent.length&&!live&&!root.chatSending){var empty=document.createElement('p');empty.className='games-chat-empty';empty.textContent='下一子，也可以先说句话。';fragment.appendChild(empty)}
     log.replaceChildren(fragment);
     if(follow)log.scrollTop=log.scrollHeight;
@@ -298,6 +375,6 @@
     document.addEventListener('visibilitychange',function(){startTimer();if(visible&&!document.hidden)onChatUpdate()});
     if(root.currentPanelTab==='games')enter();
   }
-  root.CKGames={onChatUpdate:onChatUpdate,enter:enter,leave:leave};
+  root.CKGames={onChatUpdate:onChatUpdate,enter:enter,leave:leave,preparePending:preparePending,messageView:messageView,replyText:replyText};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })(window);

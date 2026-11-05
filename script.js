@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v373-gomoku-games';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v374-gomoku-events';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -8670,6 +8670,8 @@ function chatSplitThinkingText(src,opts){
 // 复制这一条就只给这一条：思考链是独立的块，不能跟着正文一起被复制走。
 function chatMessageCopyText(m){
   if(!m)return '';
+  var gameView=window.CKGames&&window.CKGames.messageView(m);
+  if(gameView)return gameView.text||gameView.notice||'';
   var raw=String(m.text||'');
   if(!raw)return '';
   var parsed=chatSplitThinkingText(raw);
@@ -8810,6 +8812,8 @@ function chatPatchStreamMarkup(element,html){
 }
 function chatRenderAssistantParts(rawText,streaming,tools,messageIndex,nativeThinking,showNativeThinking,thinkingTiming){
   var split=chatSplitThinkingText(rawText,{suppressThinking:streaming===true,hideUnclosedThinking:streaming===true});
+  var gameMessage=typeof messageIndex==='number'&&chatMessages[messageIndex];
+  if(gameMessage&&window.CKGames)split.text=window.CKGames.replyText(split.text,gameMessage.turnId,streaming,gameMessage);
   var toolTrace=chatRenderToolTrace(tools);
   var tagged=split.text?chatRenderTaggedFileMessage(split.text,'assistant',{messageIndex:messageIndex}):null;
   var body=split.text?(tagged!==null?tagged:'<div class="chat-md">'+chatRenderMarkdown(split.text||'')+'</div>'):'';
@@ -10229,8 +10233,13 @@ function chatSwitchMessageVersion(i,dir){
   chatSaveLocalMessages();
   chatRenderMessages({respectUserScroll:true});
 }
+function chatGameEventHtml(text){return text?'<div class="ck-game-event"><span class="ck-game-event-label">系统提示</span><span>'+esc(text)+'</span></div>':'';}
 function chatRenderMessageRow(m,i){
   var rowAttrs=' data-chat-index="'+String(i)+'" data-chat-key="'+chatMessageRenderKey(m,i)+'"';
+  var gameView=window.CKGames&&window.CKGames.messageView(m);
+  if(gameView&&gameView.automatic){
+    return '<div class="chat-msg-row notice'+(m.role==='pending_user'?' pending':'')+'"'+rowAttrs+'>'+chatGameEventHtml(gameView.notice)+(m.sendFailed?chatSendFailureHtml(m,i):'')+'</div>';
+  }
   if(m&&m.role==='notice'){
     if(m.kind==='cache-expired'&&!chatShouldShowCacheExpiryNotice())return '';
     var time='<div class="chat-msg-time">'+esc(chatFullTimeLabel(m.ts))+'</div>';
@@ -10264,6 +10273,7 @@ function chatRenderMessageRow(m,i){
   var fileCount=chatMessageFileCount(m&&m.text);
   var bubbleState=(imageCount?' has-images':'')+(fileCount?' has-files':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
+  if(gameView&&!gameView.text.trim()&&!(m.tools||[]).length){bubble='';tools='';}
   var versionNav=pending?'':chatVersionNavHtml(m,i,role);
   // 助手这边翻的是"整轮回复的版本"（重新生成攒出来的），挂在这一组的最后一条上，
   // 和重新生成按钮同一行位置，避免用户在中间某个气泡下面找翻页。
@@ -10271,7 +10281,7 @@ function chatRenderMessageRow(m,i){
   var animKey=chatMessageAnimKey(m);
   var fresh=chatFreshMessageKeys.has(animKey)?' chat-fresh':'';
   var staggered=chatStaggeredMessageKeys.has(animKey)?' chat-staggered':'';
-  return '<div class="chat-msg-row '+role+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(m&&m.sendFailed&&m.sendFailureCode?' subscription-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+versionNav+tools+userMeta+time+usage+'</div>';
+  return '<div class="chat-msg-row '+(gameView&&!bubble?'notice':role)+(pending?' pending':'')+(m&&m.sendFailed?' send-failed':'')+(m&&m.sendFailed&&m.sendFailureCode?' subscription-failed':'')+(assistantError?' state-error':'')+(assistantStopped?' state-stopped':'')+fresh+staggered+'"'+rowAttrs+'>'+(role==='assistant'?recall+thinking:'')+bubble+chatGameEventHtml(gameView&&gameView.notice)+versionNav+tools+userMeta+time+usage+'</div>';
 }
 // 三个显示开关（√ / 价格 / 召回记忆框）也进消息签名。渲染路径按它们决定要不要输出
 // 那几个节点，签名里不带的话：关掉时靠 body 上的类还能藏住，重新打开却因为"签名没变"
@@ -10285,7 +10295,7 @@ function chatMessageDisplayGateKey(){
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-   var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.thinking,m.sendFailed,m.sendFailureCode,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role].join('|');
+   var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.thinking,m.sendFailed,m.sendFailureCode,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role,m.ckGame&&m.ckGame.event,m.gameReply&&m.gameReply.notice].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;
@@ -11005,6 +11015,10 @@ async function chatSubmitPendingMessages(options){
   var digestSync=chatDigestPendingSync(chatCurrentSession(),cfg);
   if(digestSync){digestSync.turnId=requestTurnId;chatSaveSessions();}
   if(requestState&&requestState.stopped)return;
+  if(window.CKGames&&pending.some(function(m){return m&&m.ckGame})){
+    window.CKGames.preparePending(chatCurrentSession(),pending);
+    text=pending.map(function(m){return String(m.text||'').trim()}).filter(Boolean).join('\n\n');
+  }
   var windowMessagesForRequest=chatWindowContextMessages();
   var minimalClock=cfg.minimalTimeEnabled===true?new Date(submitTs+8*3600000).toISOString().slice(0,16).replace('T',' '):'';
   if(cfg.minimalTimeCleanEachRound===true){
@@ -11269,6 +11283,7 @@ async function chatSubmitPendingMessages(options){
     chatRenderCurrentThinking({sessionId:cfg.sessionId,turnId:requestTurnId,text:allThinking});
     var visibleThinking=[cfg.nativeThinkingVisible===false?'':nativeThinkingText,parsed.thinking].filter(Boolean).join('\n\n');
     streamBodyTarget=String(parsed.text||'');
+    if(window.CKGames)streamBodyTarget=window.CKGames.replyText(streamBodyTarget,requestTurnId,true);
     var visibleBody=streamPacer.next(streamBodyTarget,Date.now(),streamForceText||streamReducedMotion);
     var splitReply=chatShouldSplitAssistantReply(visibleBody,cfg.splitAssistantReplies);
     var units=visibleBody?(splitReply?chatNaturalUnits(visibleBody).map(function(unit){return unit.text}):[visibleBody]):[];

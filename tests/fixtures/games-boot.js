@@ -21,7 +21,7 @@ if(!localStorage.getItem('__gomoku_fixture_initialized')){
 function fixtureJson(data,status){return new Response(JSON.stringify(data),{status:status||200,headers:{'Content-Type':'application/json'}})}
 function fixtureSse(body,options){
   var plan=__fixturePlans.shift()||{},reply=plan.reply||'我记得那杯茉莉花茶，我们一边下棋一边聊。\n【落子：I9】';
-  var previous=body.transport_messages||[],transport=previous.concat([{role:'user',content:[{type:'text',text:body.text}]},{role:'assistant',content:[{type:'text',text:reply}]}]);
+  var previous=body.transport_messages||(body.window_messages||[]).map(function(m){return {role:m.role,content:m.content||[{type:'text',text:m.text||''}]}}),transport=previous.concat([{role:'user',content:[{type:'text',text:body.text}]},{role:'assistant',content:[{type:'text',text:reply}]}]);
   var usage={cache_hit:true,cache_read_input_tokens:8000,cache_creation_input_tokens:120,input_tokens:120,output_tokens:55,model:'sonnet',execution_backend:'claude_code_subscription'};
   var receipt={ok:true,found:true,turn_matched:true,turn_id:body.turn_id,state:'done',pending:false,created_at:Date.now()/1000,assistant_text:reply,assistant_thinking:'',tools:[],usage:usage,transport_messages:transport};
   var encoder=new TextEncoder(),timers=[],closed=false;

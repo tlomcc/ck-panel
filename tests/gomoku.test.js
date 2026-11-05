@@ -55,3 +55,49 @@ test('move and result messages include the board and permit ordinary conversatio
   const prompt=G.movePrompt(game(['H8','I9','G8']));assert.match(prompt,/当前黑棋：H8、G8/);assert.match(prompt,/当前白棋：I9/);assert.match(prompt,/第 4 手/);assert.match(prompt,/普通消息只聊天/);
   const closed=G.movePrompt({...game(['H8','I9']),closed:true});assert.match(closed,/继续聊天/);assert.doesNotMatch(closed,/现在轮到你落白棋/);
 });
+test('regular updates contain only the new black move and the request for white',()=>{
+  const text=G.movePrompt(game(['H6','H8','I6']),{mode:'delta'});
+  assert.equal(text,'第 3 手：黑棋 I6。请落白棋。');assert.ok(text.length<35);
+  assert.doesNotMatch(text,/规则|H6|H8|当前黑棋|【落子/);
+});
+test('a board correction resends position without repeating known rules',()=>{
+  const text=G.movePrompt(game(['H6','H8','I6']),{mode:'sync',correct:true});
+  assert.match(text,/当前黑棋：H6、I6/);assert.match(text,/当前白棋：H8/);assert.match(text,/未生效/);
+  assert.doesNotMatch(text,/规则|15×15|代码块/);
+});
+function transcript(){
+  const value=game(['H8','I9','G8','J9','F8']);
+  const first={role:'user',text:G.movePrompt(game(['H8'])),turnId:'first',ckGame:{gameId:value.id}};
+  const nextText=G.movePrompt(game(['H8','I9','G8']),{mode:'delta'});
+  const next={role:'user',text:nextText,turnId:'next',ckGame:{gameId:value.id,ply:3,coordinate:'G8',mode:'delta',autoText:nextText}};
+  const messages=[first,{role:'assistant',text:'喝茶也可以。\n【落子：I9】',turnId:'first'},next,{role:'assistant',text:'【落子：J9】',turnId:'next'}];
+  const context=messages.map(m=>({role:m.role,content:[{type:'text',text:m.text}]}));
+  return {value,messages,context};
+}
+test('only the full game sequence present in outgoing history permits a delta',()=>{
+  const t=transcript();assert.deepEqual(G.contextState(t.value,t.messages,t.context),{rules:true,ply:4});
+  assert.deepEqual(G.contextState(t.value,t.messages,t.context.filter((_,i)=>i!==2)),{rules:true,ply:2});
+  assert.deepEqual(G.contextState(t.value,t.messages,t.context.slice(2)),{rules:false,ply:0});
+  assert.deepEqual(G.contextState(t.value,t.messages,[]),{rules:false,ply:0});
+});
+test('failed, unsent or edited messages cannot establish remembered game state',()=>{
+  const t=transcript();t.messages[0].sendFailed=true;assert.equal(G.contextState(t.value,t.messages,t.context).rules,false);
+  delete t.messages[0].sendFailed;t.messages[0].role='pending_user';assert.equal(G.contextState(t.value,t.messages,t.context).rules,false);
+  t.messages[0].role='user';t.messages[2].ckGame.autoText='a different original';assert.equal(G.contextState(t.value,t.messages,t.context).ply,2);
+});
+test('another game in the same chat cannot substitute for this game',()=>{
+  const t=transcript();const other={...t.value,id:'g-other'};
+  assert.deepEqual(G.contextState(other,t.messages,t.context),{rules:false,ply:0});
+});
+test('legacy full-board prompts and lowercase white moves keep ongoing games incremental',()=>{
+  const t=transcript();t.messages[2].text=G.movePrompt(game(['H8','I9','G8']));t.messages[2].ckGame={gameId:t.value.id};
+  t.messages[3].text='我接着下。\n【落子：j9】';
+  const context=t.messages.slice(2).map(m=>({role:m.role,content:[{type:'text',text:'\n'+m.text}]}));
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:4});
+});
+test('move display removes protocol lines and streaming fragments, keeping real speech and examples',()=>{
+  assert.equal(G.stripMove('你连了两个，我堵一下。\n【落子：J6】'),'你连了两个，我堵一下。');
+  for(const text of ['【','【落','【落子','【落子：','【落子：J'])assert.equal(G.stripMove('我想好了。\n'+text,true),'我想好了。');
+  assert.equal(G.stripMove('【落子：J6】'),'');
+  for(const text of ['我觉得 J6 可以。','> 【落子：J6】','```\n【落子：J6】\n```'])assert.equal(G.stripMove(text),text);
+});

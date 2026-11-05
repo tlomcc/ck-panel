@@ -114,7 +114,7 @@ async function run(name,fn){await fn();cases.push(name);console.log('PASS '+name
       await page.click('#games-new');await page.evaluate(()=>{chatCurrentSession().gomoku.moves=['D8','A1','E8','C1','F8','E1','G8','G1'];chatSaveSessions();CKGames.onChatUpdate()});
       await plan(page,{reply:'你连成五子了！\n【落子：I9】'});await play(page,'H8');await idle(page);
       assert.equal(await page.locator('#games-turn').textContent(),'你赢了');assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.moves.length),9);assert.equal(await page.locator('#games-ask').isVisible(),false);
-      assert.match((await calls(page))[0].body.text,/本局我赢了/);await noErrors(page);
+      assert.match((await calls(page))[0].body.text,/本局黑棋获胜/);await noErrors(page);
     }finally{await context.close()}
   });
   await run('rapid sends stay single and text typed during preparation remains a draft',async()=>{
@@ -153,6 +153,91 @@ async function run(name,fn){await fn();cases.push(name);console.log('PASS '+name
       await page.click('#games-new');await plan(page,{failure:true});await play(page,'H8');await idle(page);
       assert.equal((await calls(page)).length,1);assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.moves.length),1);
       await page.click('#games-ask');await moves(page,2);await idle(page);assert.equal((await calls(page)).length,2);await noErrors(page);
+    }finally{await context.close()}
+  });
+  await run('rules are sent once; subsequent moves remain incremental after chat and reload',async()=>{
+    const {context,page}=await boot();try{
+      await page.click('#games-new');await play(page,'H8');await moves(page,2);await idle(page);
+      const first=(await calls(page))[0].body;assert.match(first.text,/规则：15×15/);
+      await say(page,'我还在喝茶。','慢慢喝，我等你。');await idle(page);
+      await page.evaluate(()=>chatSaveSessionsToIndexedDb.pending);await page.reload();await loaded(page);
+      await plan(page,{reply:'那我接在这里。\n【落子：J9】'});await play(page,'G8');await moves(page,4);await idle(page);
+      const second=(await calls(page))[0].body;
+      assert.equal(second.text,'第 3 手：黑棋 G8。请落白棋。');assert.equal(second.system,first.system);assert.equal(second.client_cache_generation,first.client_cache_generation);
+      assert.equal(second.prompt_cache_ttl,'1h');assert.equal(second.execution_backend,'claude_code_subscription');assert.ok(!second.cache_rebuild_boundary);
+      assert.ok(second.transport_messages.some(m=>m.role==='user'&&m.content.some(p=>p.text===first.text)),'the old rules stay byte-for-byte in history');
+      const events=await page.locator('#games-conversation .ck-game-event').allTextContents();
+      for(const text of ['你落子 H8','小克落子 I9','你落子 G8','小克落子 J9'])assert.ok(events.some(e=>e.includes(text)),text);
+      const talk=await page.locator('#games-conversation .games-message').allTextContents();
+      assert.ok(talk.some(t=>t.includes('我还在喝茶。')));assert.ok(talk.some(t=>t.includes('那我接在这里。')));assert.ok(talk.every(t=>!t.includes('【落子')&&!t.includes('当前黑棋')&&!t.includes('请落白棋')));
+      await page.evaluate(()=>{navTo('chat');chatRenderMessages({force:true})});
+      assert.equal(await page.locator('#chat-messages .chat-bubble.user').count(),3,'only two old user messages and one typed message have bubbles');
+      assert.ok(!(await page.locator('#chat-messages .chat-bubble').allTextContents()).some(t=>/【落子|当前黑棋|请落白棋/.test(t)));
+      assert.equal(await page.locator('#chat-messages .ck-game-event').count(),4);await noErrors(page);
+    }finally{await context.close()}
+  });
+  await run('missing middle moves resync the board without repeating rules',async()=>{
+    const {context,page}=await boot();try{
+      await page.click('#games-new');await play(page,'H8');await moves(page,2);await idle(page);
+      await plan(page,{reply:'【落子：J9】'});await play(page,'G8');await moves(page,4);await idle(page);
+      await page.evaluate(()=>{const s=chatCurrentSession();s.transportMessages=s.transportMessages.filter(m=>!m.content.some(p=>p.text==='第 3 手：黑棋 G8。请落白棋。'));chatSaveSessions()});
+      await plan(page,{reply:'【落子：K9】'});await play(page,'F8');await moves(page,6);await idle(page);
+      const text=(await calls(page)).at(-1).body.text;assert.match(text,/当前黑棋：H8、G8、F8/);assert.match(text,/当前白棋：I9、J9/);assert.doesNotMatch(text,/规则|代码块/);await noErrors(page);
+    }finally{await context.close()}
+  });
+  await run('a trim during send preparation restores rules and board in the actual submitted request',async()=>{
+    const {context,page}=await boot();try{
+      await page.click('#games-new');await play(page,'H8');await moves(page,2);await idle(page);
+      await say(page,'这杯茶很好喝。','那就慢慢喝。');await idle(page);
+      await page.evaluate(()=>{
+        const original=chatApplyAutoTrimForPendingBatch;
+        chatApplyAutoTrimForPendingBatch=async function(cfg,pending,request){
+          chatApplyAutoTrimForPendingBatch=original;const result=await original(cfg,pending,request),s=chatCurrentSession();
+          s.transportMessages=s.transportMessages.slice(-2);chatMessages=chatMessages.slice(-2-pending.length);s.messages=chatMessages;return {...result,trimmed:true};
+        };
+      });
+      await plan(page,{reply:'继续这盘，我落这里。\n【落子：J9】'});await play(page,'G8');await moves(page,4);await idle(page);
+      const text=(await calls(page)).at(-1).body.text;assert.match(text,/继续这局/);assert.match(text,/规则：15×15/);assert.match(text,/当前黑棋：H8、G8/);assert.match(text,/当前白棋：I9/);
+      assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.error),'');await noErrors(page);
+    }finally{await context.close()}
+  });
+  await run('move-only replies and streaming command fragments never appear as speech bubbles',async()=>{
+    const {context,page}=await boot();try{
+      await page.click('#games-new');await plan(page,{reply:'【落子：I9】',partial:'【落子：',delay:1300});await play(page,'H8');
+      await page.waitForFunction(()=>chatSending);await page.waitForTimeout(220);
+      assert.ok(!(await page.locator('#games-conversation .games-message').allTextContents()).some(t=>t.includes('【')));
+      await page.evaluate(()=>navTo('chat'));await page.waitForTimeout(180);
+      assert.ok(!(await page.locator('#chat-messages .chat-bubble').allTextContents()).some(t=>t.includes('【')));
+      await moves(page,2);await idle(page);await page.evaluate(()=>chatRenderMessages({force:true}));
+      assert.equal(await page.locator('#chat-messages .chat-bubble.assistant').count(),2,'only the old actual speech remains');
+      assert.equal(await page.locator('#chat-messages .ck-game-event').filter({hasText:'小克落子 I9'}).count(),1);await noErrors(page);
+    }finally{await context.close()}
+  });
+  await run('legacy ongoing boards use events without rewriting messages and continue with a delta',async()=>{
+    const {context,page}=await boot();try{
+      await page.evaluate(()=>{
+        const text='我们在当前聊天里下五子棋，你还是带着原有记忆的小克，可以一边下棋一边和我正常聊天。\n规则：15×15 棋盘，列 A 到 O 从左到右，行 1 到 15 从上到下。我执黑先手，你执白。轮流落一子，横、竖、斜任意连续五子或更多即胜，没有禁手。\n当前黑棋：H6、I6。\n当前白棋：H8。\n上一手：我，黑棋 I6。\n现在轮到你落白棋，第 4 手。\n可以先自然回复我，再在最后单独一行写【落子：坐标】。';
+        const s=chatCurrentSession(),user={role:'user',text,turnId:'legacy-game',ts:Date.now()-2000,ckGame:{gameId:'g-legacy-ui',requestId:'r-legacy',caption:'我落黑棋 I6。'}},reply={role:'assistant',text:'我堵你。\n【落子：J6】',turnId:'legacy-game',ts:Date.now()-1000};
+        s.gomoku={version:1,id:'g-legacy-ui',created:1,moves:['H6','H8','I6','J6']};chatMessages.push(user,reply);s.messages=chatMessages;
+        s.transportMessages.push(...[user,reply].map(m=>({role:m.role,content:[{type:'text',text:m.text}]})));window.__legacyRaw=text;chatSaveSessions();CKGames.onChatUpdate();
+      });
+      await moves(page,4);await page.waitForTimeout(100);
+      assert.equal(await page.locator('#games-conversation .ck-game-event').filter({hasText:'你落子 I6'}).count(),1);
+      assert.equal(await page.locator('#games-conversation .ck-game-event').filter({hasText:'小克落子 J6'}).count(),1);
+      await plan(page,{reply:'【落子：G8】'});await play(page,'G6');await moves(page,6);await idle(page);
+      assert.equal((await calls(page))[0].body.text,'第 5 手：黑棋 G6。请落白棋。');
+      assert.equal(await page.evaluate(()=>chatMessages.find(m=>m.role==='user'&&m.turnId==='legacy-game').text===__legacyRaw),true);await noErrors(page);
+    }finally{await context.close()}
+  });
+  await run('corrections are system events and ordinary typed coordinates remain speech',async()=>{
+    const {context,page}=await boot();try{
+      await page.click('#games-new');await plan(page,{reply:'【落子：H8】'});await play(page,'H8');await idle(page);
+      await plan(page,{reply:'【落子：I9】'});await page.click('#games-ask');await moves(page,2);await idle(page);
+      const correction=(await calls(page)).at(-1).body.text;assert.match(correction,/未生效/);assert.doesNotMatch(correction,/规则|代码块/);
+      assert.equal(await page.locator('#games-conversation .ck-game-event').filter({hasText:'请小克重新落子'}).count(),1);
+      await say(page,'我只是举例：【落子：J10】','知道啦，这是你举的例子。');await idle(page);
+      assert.ok((await page.locator('#games-conversation .games-message.from-user').allTextContents()).some(t=>t.includes('我只是举例：【落子：J10】')));
+      assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.moves.length),2);await noErrors(page);
     }finally{await context.close()}
   });
   fs.writeFileSync(path.join(out,'browser-verification.json'),JSON.stringify({passed:true,syntheticData:true,externalRequestsBlocked:true,realChatSender:true,cases},null,2));
