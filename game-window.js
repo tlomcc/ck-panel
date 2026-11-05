@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  var timer=0,busy=false,wakeBusy=false;
+  var timer=0,busy=false,wakeBusy=false,gameModel='claude-opus-4-6';
   var promptFields=['system','systemPromptEnabled','thinkingPrompt','fakeThinkingPrompt','thinkingPromptEnabled',
     'thinkingMode','thinkingBudgetTokens','thinkingEffort','fakeThinking','thinkingInjectionPosition'];
   function current(){return root.chatSessions&&root.chatSessions.find(function(s){return s.id===root.chatActiveSessionId})}
@@ -9,6 +9,11 @@
   function parent(s){var p=profile(s);return p?(root.chatSessions||[]).find(function(x){return x.id===p.parentId}):s}
   function gameFor(s){return profile(s)?s:(root.chatSessions||[]).find(function(x){var p=profile(x);return p&&s&&p.parentId===s.id})}
   function save(s){root.chatSaveSessions({sessionIds:[s.id]})}
+  function applyModel(s){
+    var p=profile(s);
+    if(p&&p.model!==gameModel){p.model=gameModel;save(s)}
+    return p;
+  }
   function uid(){return root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
   function routeStamp(){var cfg=root.chatLoadConfig();return root.chatEndpoint(cfg)+'|'+((root.CKBackendRoute&&root.CKBackendRoute.current.execution)||'direct_api')}
   function idle(){return !root.chatSending&&!root.chatRecoverInFlightBusy&&!root.chatTrimBusy&&!root.chatTrimTransaction&&!root.chatDeleteDigestBusy&&!root.ckBackendSwitchBusy&&!(root.chatEditingIndex>=0)}
@@ -49,10 +54,10 @@
     promptFields.forEach(function(k){if(cfg[k]!==undefined)snapshot[k]=cfg[k]});
     if(!existing){
       existing=root.chatNormalizeSession({id:'ck-game-'+uid(),title:(main.title||'小克')+' · 五子棋',messages:[],created:Date.now(),updated:Date.now(),
-        gameWindow:{version:1,parentId:main.id,model:'claude-sonnet-5-5',reports:[]}});
+        gameWindow:{version:1,parentId:main.id,model:gameModel,reports:[]}});
       root.chatSessions.unshift(existing);
     }
-    var p=profile(existing);p.prompts=snapshot;p.route=routeStamp();p.gameId=game.id;p.startedAt=Date.now();delete p.nextGame;delete p.nextGameError;
+    var p=profile(existing);p.model=gameModel;p.prompts=snapshot;p.route=routeStamp();p.gameId=game.id;p.startedAt=Date.now();delete p.nextGame;delete p.nextGameError;
     existing.gomoku=game;
     existing.messages.push({role:'game_boundary',gameId:game.id,ts:p.startedAt});
     // Visible records remain in this reusable window; only this game's transport is active.
@@ -65,8 +70,8 @@
     return existing;
   }
   function config(cfg,s){
-    var p=profile(s);if(!p)return cfg;
-    return Object.assign({},cfg,p.prompts||{},{model:p.model||'claude-sonnet-5-5',recall:false,useMcp:false,
+    var p=applyModel(s);if(!p)return cfg;
+    return Object.assign({},cfg,p.prompts||{},{model:gameModel,recall:false,useMcp:false,
       dailyDigestEnabled:false,autoTrimEnabled:false,autoTrimRoundLimitEnabled:false,autoCleanEnabled:false,
       ncContextInjection:false,minimalTimeEnabled:false,backendSwitchNotification:false,worldbooks:[]});
   }
@@ -76,9 +81,9 @@
     return index>=0?list.slice(index+1):list.filter(function(m){return Number(m.ts)>=p.startedAt});
   }
   function body(value,s){
-    var p=profile(s);if(!p)return value;
+    var p=applyModel(s);if(!p)return value;
     value.game_context={version:1,kind:'gomoku',game_id:p.gameId,parent_session_id:p.parentId};
-    value.model=p.model||'claude-sonnet-5-5';value.worldbook_pack='';value.daily_digest_pack='';value.memory_pack='';
+    value.model=gameModel;value.worldbook_pack='';value.daily_digest_pack='';value.memory_pack='';
     value.recall=false;value.use_mcp=false;value.nc_context_injection=false;value.minimal_time_enabled=false;
     value.backend_switch_notification=false;value.chat_polling_enabled=false;delete value.digest_queue;delete value.mcp_url;
     return value;
@@ -188,7 +193,7 @@
     }finally{busy=false;render()}
   }
   function schedule(delay){if(!timer)timer=setTimeout(pump,delay===undefined?250:delay)}
-  function update(){if(!root.chatSessionsReady)return;(root.chatSessions||[]).forEach(observe);schedule();render()}
+  function update(){if(!root.chatSessionsReady)return;(root.chatSessions||[]).forEach(function(s){applyModel(s);observe(s)});schedule();render()}
   async function retry(){
     var s=gameFor(current()),r=s&&pendingReports(s).find(function(x){return x.state==='failed'});if(!r||!idle())return;
     var target=r.summaryText?parent(s):s,ident=r.summaryText?r.deliveryMessage:r.summaryMessage,m=target&&ident&&findMessage(target,ident);
@@ -206,7 +211,7 @@
   }
   function render(){
     var s=gameFor(current()),p=profile(s),info=document.getElementById('games-window-info'),wake=document.getElementById('games-wake-status'),status=document.getElementById('games-sync-status'),retryButton=document.getElementById('games-sync-retry'),wakeButton=document.getElementById('games-wake-retry');
-    if(info)info.textContent=p?'独立游戏窗口 · Sonnet 5.5':'新的一局会使用独立游戏窗口 · Sonnet 5.5';
+    if(info)info.textContent=p?'独立游戏窗口 · Opus 4.6':'新的一局会使用独立游戏窗口 · Opus 4.6';
     if(wake){
       var state=s&&root.chatWakeState&&root.chatWakeState[s.id],main=parent(s),mainState=main&&root.chatWakeState&&root.chatWakeState[main.id];
       wake.hidden=!p;
