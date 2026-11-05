@@ -7,6 +7,40 @@
   function id(prefix){return prefix+'-'+(root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2))}
   function tell(message){if($('games-notice')){$('games-notice').textContent=message;$('games-notice').hidden=!message}}
   function save(session){root.chatSaveSessions({sessionIds:[session.id]})}
+  function renderReturn(){
+    var button=$('chat-game-return'),session=current(),game,position;
+    if(!button)return;
+    try{game=G.restore(session&&session.gomoku);if(game)position=G.position(game.moves)}catch(e){}
+    var active=!!(root.chatSessionsReady&&game&&!game.closed&&!position.winner&&!position.draw);
+    button.hidden=!active;button.dataset.ckGameSession=active?session.id:'';
+    if(active){
+      var status=position.turn==='black'?'轮到你':'轮到小克';
+      $('chat-game-status').textContent='五子棋 · '+status;
+      button.setAttribute('aria-label','返回游戏，五子棋，'+status);
+    }
+  }
+  function foldBoard(closed){
+    $('games-board-area').hidden=closed;$('games-fold').setAttribute('aria-expanded',String(!closed));
+    $('games-fold').textContent=closed?'展开棋盘':'收起棋盘';
+  }
+  function openGame(sessionId){
+    var session=current();
+    if(!root.chatSessionsReady||!session||session.id!==sessionId){root.toast('聊天窗口已切换，请点击当前窗口的游戏入口。');return}
+    if(!session.gomoku){root.toast('当前窗口没有保存在此浏览器的棋局。');return}
+    foldBoard(false);root.navTo('games');
+    requestAnimationFrame(function(){
+      if(root.currentPanelTab==='games'&&current()===session)$('games-turn').focus({preventScroll:true});
+    });
+  }
+  function eventElement(text,session){
+    session=session||current();
+    var item=document.createElement('button');item.type='button';item.className='ck-game-event ck-game-event-link';
+    item.dataset.ckGameSession=session?session.id:'';item.title='返回游戏';item.setAttribute('aria-label','系统提示：'+text+'，返回游戏');
+    var label=document.createElement('span');label.className='ck-game-event-label';label.textContent='系统提示';
+    var body=document.createElement('span');body.textContent=text;
+    var arrow=document.createElement('span');arrow.className='ck-game-event-arrow';arrow.textContent='›';arrow.setAttribute('aria-hidden','true');
+    item.append(label,body,arrow);return item;
+  }
   function speech(message){
     var text=String(message&&message.text||'');
     if(message&&message.role==='assistant'&&typeof root.chatSplitThinkingText==='function')text=root.chatSplitThinkingText(text,{hideUnclosedThinking:true}).text||'';
@@ -54,14 +88,15 @@
     return view;
   }
   function makePrompt(session,game,kind,exclude){
-    var board=G.position(game.moves),mode='end';
+    var board=G.position(game.moves),mode='end',remindChatStyle=false;
     if(!game.closed&&!board.winner&&!board.draw){
       var history=rows(session).filter(function(m){return m!==exclude}).map(function(m){return m&&m.role==='assistant'?Object.assign({},m,{text:speech(m)}):m});
       var context=(session.transportMessages||[]).length?root.chatLimitArray(session.transportMessages,root.CHAT_MAX_TRANSPORT_MESSAGES):root.chatWindowContextMessages(history);
       var known=G.contextState(game,history,context);
       mode=!known.rules?'setup':kind!=='correct'&&known.ply===game.moves.length-1?'delta':'sync';
+      remindChatStyle=!known.chatStyle;
     }
-    return {text:G.movePrompt(game,{mode:mode,correct:kind==='correct'}),mode:mode};
+    return {text:G.movePrompt(game,{mode:mode,correct:kind==='correct',remindChatStyle:remindChatStyle}),mode:mode};
   }
   function metadata(game,requestId,kind,prepared,event){
     return {gameId:game.id,requestId:requestId,kind:kind,mode:prepared.mode,ply:game.moves.length,
@@ -110,6 +145,7 @@
     var changed=[];
     (root.chatSessions||[]).forEach(function(session){if(reconcile(session))changed.push(session.id)});
     if(changed.length){root.chatSaveSessions({sessionIds:changed});if(changed.indexOf(root.chatActiveSessionId)>=0)root.chatRenderMessages({respectUserScroll:true})}
+    renderReturn();
     if(visible)render();
   }
   function onChatUpdate(){if(!updateTimer)updateTimer=setTimeout(update,0)}
@@ -225,6 +261,7 @@
       submit(text);if(input.value===snapshot)input.value='';drafts[session.id]=input.value;render();
     }catch(error){tell(error.message)}finally{submitBusy=false}
   }
+  function submitTurn(){if(selected)play();else say()}
   async function selectSession(){
     try{
       var next=$('games-session').value,session=await actionReady();
@@ -283,8 +320,18 @@
       if(game.closed||position.winner||position.draw)throw Error('本局结束了，可以开新局。');
       if(position.turn!=='black')throw Error('轮到小克了，你可以先和它聊聊。');
       if(position.board[p.y*15+p.x])throw Error(name+' 已经有棋子。');
-      selected=name;tell('');renderBoard(game,position);
+      selected=selected===name?'':name;tell('');renderBoard(game,position);
     }catch(error){tell(error.message)}
+  }
+  function renderAction(game,position){
+    if(game===undefined){try{game=G.restore(current()&&current().gomoku)}catch(e){game=null}}
+    position=position||G.position(game?game.moves:[]);
+    var text=$('games-input').value.trim(),canMove=!!game&&!game.closed&&!position.winner&&!position.draw&&position.turn==='black',button=$('games-play');
+    var move=!!selected&&canMove;
+    button.textContent=move?(text?'落子并发送':'落子 '+selected):text?(root.chatSending?'排队发送':'发送'):canMove?'选择落点':game&&!game.closed&&!position.winner&&!position.draw?'等待小克':'发送';
+    button.disabled=move?!!root.chatSending:!text;
+    button.setAttribute('aria-label',move?'落子 '+selected+(text?' 并发送消息':''):button.textContent);
+    button.title=move?'落子 '+selected+(text?'，同时发送输入框中的话':''):text?'发送聊天消息':'先选落点，或输入想说的话';
   }
   var boardStamp='',sessionStamp='';
   function renderBoard(game,position){
@@ -307,10 +354,8 @@
     var status=!game?'你执黑，先落第一子':position.winner==='black'?'你赢了':position.winner==='white'?'小克赢了':position.draw?'和棋':game.closed?'本局已结束':position.turn==='black'?'轮到你，执黑':'轮到小克，执白';
     $('games-turn').textContent=status;
     $('games-move-count').textContent=game?'已落 '+game.moves.length+' 手':'15 × 15';
-    $('games-last').textContent=game&&game.moves.length?'上一手：'+(game.moves.length%2?'你':'小克')+' '+game.moves[game.moves.length-1]:'连成五子就赢，没有禁手。';
-    $('games-play').textContent=selected?'落子 '+selected:'选择落点';
-    $('games-play').hidden=!game||ended||position.turn!=='black';
-    $('games-play').disabled=!selected||!!root.chatSending;
+    $('games-last').textContent=selected?'已选 '+selected+' · 再点一次取消':game&&game.moves.length?'上一手：'+(game.moves.length%2?'你':'小克')+' '+game.moves[game.moves.length-1]:'连成五子就赢，没有禁手。';
+    renderAction(game,position);
     $('games-new').textContent=game?'新的一局':'开始对局';
     $('games-new').disabled=!!root.chatSending||!!root.chatRecoverInFlightBusy;
     $('games-end').hidden=!game||ended;
@@ -324,10 +369,18 @@
     $('games-move-error').textContent=error;$('games-move-error').hidden=!error;
   }
   function renderConversation(session){
-    var all=rows(session).filter(function(m){return m&&['user','assistant','pending_user'].indexOf(m.role)>=0}),recent=all.slice(-30),draft=session.replyDraft;
+    var all=rows(session).filter(function(m){return m&&['user','assistant','pending_user'].indexOf(m.role)>=0}),game=session.gomoku,start=-1;
+    all.forEach(function(m,i){
+      if(game&&m.ckGame&&m.ckGame.gameId===game.id&&automatic(m)&&
+        (m.ckGame.kind==='move'||!m.ckGame.kind&&G.promptMoves(m.text)&&!/^请/.test(m.ckGame.caption||'')))start=i;
+      else if(!game&&(m.role==='user'||m.role==='pending_user'))start=i;
+    });
+    var recent=start>=0?all.slice(start):game?all.filter(function(m){return m.ts>=game.created}):[],draft=session.replyDraft;
+    if(draft&&!recent.some(function(m){return m.role==='user'&&m.turnId===draft.turn_id}))draft=null;
+    // The view starts at the latest black move. Full history stays untouched in the chat.
+    var lastReply=recent.slice().reverse().find(function(m){return m.role==='assistant'});
     var live=draft&&String(draft.assistant_text||draft.text||'');
-    var stamp=JSON.stringify([recent.map(function(m){return [m.role,m.text,m.ts,m.turnId,m.sendFailed,m.inFlight,m.ckGame,m.gameReply]}),live,draft&&draft.state,root.chatSending]);
-    $('games-conversation-scope').textContent=all.length>30?'最近 30 条，完整记录在聊天里':'与当前窗口共用聊天记录';
+    var stamp=JSON.stringify([session.id,game&&game.id,start,recent.map(function(m){return [m.role,m.text,m.ts,m.turnId,m.sendFailed,m.inFlight,m.ckGame,m.gameReply]}),live,draft&&draft.state,root.chatSending]);
     if(chatStamp===stamp)return;
     chatStamp=stamp;
     var log=$('games-conversation'),follow=log.scrollHeight-log.scrollTop-log.clientHeight<48,fragment=document.createDocumentFragment();
@@ -336,25 +389,20 @@
       var heading=document.createElement('span');heading.className='games-speaker';heading.textContent=who+(pending?' · '+pending:'');
       var body=document.createElement('p');body.textContent=text;item.append(heading,body);fragment.appendChild(item);
     }
-    function event(text){
-      var item=document.createElement('div');item.className='ck-game-event';
-      var label=document.createElement('span');label.className='ck-game-event-label';label.textContent='系统提示';
-      var body=document.createElement('span');body.textContent=text;item.append(label,body);fragment.appendChild(item);
-    }
     recent.forEach(function(m){
+      if(m.role==='assistant'&&(live||lastReply&&m!==lastReply&&(!m.turnId||m.turnId!==lastReply.turnId)))return;
       var view=messageView(m,session),text=view?view.text:speech(m)||((m.images||[]).length?'[图片]':'');
       if(text)append(m.role==='assistant'?'小克':'你',text,m.sendFailed?'未发送成功':m.role==='pending_user'?'待发送':m.inFlight?'已发送':'');
-      if(view&&view.notice)event(view.notice+(m.sendFailed?' · 请求未完成':''));
     });
     var liveSpeech=live&&replyText(speech({role:'assistant',text:live}),draft.turn_id,true);
     if(liveSpeech)append('小克',liveSpeech,draft.state==='error'?'收到的部分回复':'正在回复');
-    else if(root.chatSending)event('小克正在思考，可以继续发消息。');
-    if(!recent.length&&!live&&!root.chatSending){var empty=document.createElement('p');empty.className='games-chat-empty';empty.textContent='下一子，也可以先说句话。';fragment.appendChild(empty)}
+    else if(root.chatSending){var waiting=document.createElement('p');waiting.className='games-reply-state';waiting.textContent='小克正在回复…';fragment.appendChild(waiting)}
+    log.hidden=!fragment.childNodes.length;
     log.replaceChildren(fragment);
     if(follow)log.scrollTop=log.scrollHeight;
-    $('games-say').textContent=root.chatSending?'排队发送':'发送';
   }
   function render(){
+    renderReturn();
     if(!visible||!$('tab-games'))return;
     var session=current();if(!session)return;
     if(selectedSession!==session.id){
@@ -381,19 +429,25 @@
   }
   function leave(){
     if(visible&&current())drafts[current().id]=$('games-input').value;
-    visible=false;clearInterval(refreshTimer);refreshTimer=0;document.body.classList.remove('games-active');
+    visible=false;clearInterval(refreshTimer);refreshTimer=0;document.body.classList.remove('games-active');renderReturn();
   }
   function bind(){
-    $('games-new').addEventListener('click',newGame);$('games-play').addEventListener('click',play);
+    $('games-new').addEventListener('click',newGame);
     $('games-ask').addEventListener('click',askMove);$('games-end').addEventListener('click',endGame);
     $('games-session').addEventListener('change',selectSession);
-    $('games-form').addEventListener('submit',function(event){event.preventDefault();say()});
-    $('games-input').addEventListener('input',function(){if(current())drafts[current().id]=this.value});
-    $('games-input').addEventListener('keydown',function(event){if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();say()}});
-    $('games-fold').addEventListener('click',function(){var board=$('games-board-area'),closed=!board.hidden;board.hidden=closed;this.setAttribute('aria-expanded',String(!closed));this.textContent=closed?'展开棋盘':'收起棋盘'});
+    $('games-form').addEventListener('submit',function(event){event.preventDefault();submitTurn()});
+    $('games-input').addEventListener('input',function(){if(current())drafts[current().id]=this.value;renderAction()});
+    $('games-input').addEventListener('keydown',function(event){if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();submitTurn()}});
+    $('games-fold').addEventListener('click',function(){foldBoard(!$('games-board-area').hidden)});
+    document.addEventListener('click',function(event){
+      var button=event.target.closest('button[data-ck-game-session]');
+      if(!button||!button.closest('#chat-game-return,#chat-messages,#games-conversation'))return;
+      openGame(button.dataset.ckGameSession);
+    });
     document.addEventListener('visibilitychange',function(){startTimer();if(visible&&!document.hidden)onChatUpdate()});
+    renderReturn();
     if(root.currentPanelTab==='games')enter();
   }
-  root.CKGames={onChatUpdate:onChatUpdate,enter:enter,leave:leave,preparePending:preparePending,messageView:messageView,replyText:replyText};
+  root.CKGames={onChatUpdate:onChatUpdate,enter:enter,leave:leave,preparePending:preparePending,messageView:messageView,replyText:replyText,eventElement:eventElement,renderReturn:renderReturn};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })(window);

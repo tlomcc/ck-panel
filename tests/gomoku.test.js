@@ -65,6 +65,13 @@ test('a board correction resends position without repeating known rules',()=>{
   assert.match(text,/当前黑棋：H6、I6/);assert.match(text,/当前白棋：H8/);assert.match(text,/未生效/);
   assert.doesNotMatch(text,/规则|15×15|代码块/);
 });
+test('game setup keeps ordinary conversation primary and makes move commentary optional',()=>{
+  const text=G.movePrompt(game(['H8']));
+  assert.match(text,/正常回应我说的内容/);assert.match(text,/不主动报坐标、数连子、提醒攻防/);
+  assert.match(text,/只有我主动问棋局或明确聊棋时才分析/);assert.match(text,/只有系统落子通知，可以只给落子标记/);
+  assert.equal(text.split('聊天约定：').length-1,1);
+  assert.match(text,/最后单独一行写【落子：坐标】/);
+});
 function transcript(){
   const value=game(['H8','I9','G8','J9','F8']);
   const first={role:'user',text:G.movePrompt(game(['H8'])),turnId:'first',ckGame:{gameId:value.id}};
@@ -74,11 +81,32 @@ function transcript(){
   const context=messages.map(m=>({role:m.role,content:[{type:'text',text:m.text}]}));
   return {value,messages,context};
 }
+test('an older game receives the conversation preference once without resending rules or the board',()=>{
+  const t=transcript();t.messages[0].text=t.messages[0].text.split('\n').filter(line=>!line.startsWith('聊天约定：')).join('\n');
+  const context=t.messages.map(m=>({role:m.role,text:m.text}));
+  const known=G.contextState(t.value,t.messages,context);
+  assert.deepEqual(known,{rules:true,ply:4,chatStyle:false});
+  const prompt=G.movePrompt(t.value,{mode:'delta',remindChatStyle:!known.chatStyle});
+  assert.match(prompt,/聊天约定/);assert.match(prompt,/第 5 手：黑棋 F8/);assert.doesNotMatch(prompt,/规则：|当前黑棋|当前白棋/);
+  const message={role:'user',text:prompt,turnId:'upgraded',ckGame:{gameId:t.value.id,mode:'delta',ply:5,coordinate:'F8',autoText:prompt}};
+  t.messages.push(message,{role:'assistant',text:'【落子：K9】',turnId:'upgraded'});
+  context.push(...t.messages.slice(-2).map(m=>({role:m.role,text:m.text})));
+  const next=game(['H8','I9','G8','J9','F8','K9','E8']),after=G.contextState(next,t.messages,context);
+  assert.deepEqual(after,{rules:true,ply:6,chatStyle:true});
+  assert.equal(G.movePrompt(next,{mode:'delta',remindChatStyle:!after.chatStyle}),'第 7 手：黑棋 E8。请落白棋。');
+  assert.equal(G.contextState(next,t.messages,context.slice(0,-2)).chatStyle,false,'removed instructions are not treated as remembered');
+});
+test('unsubmitted or failed preferences do not count as instructions in model history',()=>{
+  const t=transcript();t.messages[0].inFlight=true;
+  assert.equal(G.contextState(t.value,t.messages,t.context).chatStyle,false);
+  delete t.messages[0].inFlight;t.messages[0].sendFailed=true;
+  assert.equal(G.contextState(t.value,t.messages,t.context).chatStyle,false);
+});
 test('only the full game sequence present in outgoing history permits a delta',()=>{
-  const t=transcript();assert.deepEqual(G.contextState(t.value,t.messages,t.context),{rules:true,ply:4});
-  assert.deepEqual(G.contextState(t.value,t.messages,t.context.filter((_,i)=>i!==2)),{rules:true,ply:2});
-  assert.deepEqual(G.contextState(t.value,t.messages,t.context.slice(2)),{rules:false,ply:0});
-  assert.deepEqual(G.contextState(t.value,t.messages,[]),{rules:false,ply:0});
+  const t=transcript();assert.deepEqual(G.contextState(t.value,t.messages,t.context),{rules:true,ply:4,chatStyle:true});
+  assert.deepEqual(G.contextState(t.value,t.messages,t.context.filter((_,i)=>i!==2)),{rules:true,ply:2,chatStyle:true});
+  assert.deepEqual(G.contextState(t.value,t.messages,t.context.slice(2)),{rules:false,ply:0,chatStyle:false});
+  assert.deepEqual(G.contextState(t.value,t.messages,[]),{rules:false,ply:0,chatStyle:false});
 });
 test('speech sent with a move preserves delta context when history has separate user records',()=>{
   const t=transcript();t.messages[0].ckGame.requestId='r-first';t.messages[2].ckGame.requestId='r-next';
@@ -86,11 +114,11 @@ test('speech sent with a move preserves delta context when history has separate 
   t.messages.splice(1,0,spoken('first','r-first','先聊一句。'));
   t.messages.splice(4,0,spoken('next','r-next','接着聊一句。'));
   const context=t.messages.map(m=>({role:m.role,text:m.text}));
-  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:4});
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:4,chatStyle:true});
   t.messages[1].ckGameSpeech.requestId='r-another';
-  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:1});
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:1,chatStyle:true});
   t.messages[1].ckGameSpeech.requestId='r-first';t.messages[1].turnId='unrelated';
-  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:1});
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:1,chatStyle:true});
 });
 test('failed, unsent or edited messages cannot establish remembered game state',()=>{
   const t=transcript();t.messages[0].sendFailed=true;assert.equal(G.contextState(t.value,t.messages,t.context).rules,false);
@@ -99,13 +127,13 @@ test('failed, unsent or edited messages cannot establish remembered game state',
 });
 test('another game in the same chat cannot substitute for this game',()=>{
   const t=transcript();const other={...t.value,id:'g-other'};
-  assert.deepEqual(G.contextState(other,t.messages,t.context),{rules:false,ply:0});
+  assert.deepEqual(G.contextState(other,t.messages,t.context),{rules:false,ply:0,chatStyle:false});
 });
 test('legacy full-board prompts and lowercase white moves keep ongoing games incremental',()=>{
   const t=transcript();t.messages[2].text=G.movePrompt(game(['H8','I9','G8']));t.messages[2].ckGame={gameId:t.value.id};
   t.messages[3].text='我接着下。\n【落子：j9】';
   const context=t.messages.slice(2).map(m=>({role:m.role,content:[{type:'text',text:'\n'+m.text}]}));
-  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:4});
+  assert.deepEqual(G.contextState(t.value,t.messages,context),{rules:true,ply:4,chatStyle:true});
 });
 test('move display removes protocol lines and streaming fragments, keeping real speech and examples',()=>{
   assert.equal(G.stripMove('你连了两个，我堵一下。\n【落子：J6】'),'你连了两个，我堵一下。');

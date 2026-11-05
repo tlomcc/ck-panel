@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v375-gomoku-chat-together';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v376-gomoku-return-chat';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -9891,6 +9891,7 @@ function chatRestoreOpenAuxBlocks(box,state){
   });
 }
 function chatRenderMessages(opts){
+  if(window.CKGames&&window.CKGames.renderReturn)window.CKGames.renderReturn();
   opts=opts||{};
   chatRenderCurrentThinking();
   var box=chatMessagesBox();
@@ -10233,7 +10234,11 @@ function chatSwitchMessageVersion(i,dir){
   chatSaveLocalMessages();
   chatRenderMessages({respectUserScroll:true});
 }
-function chatGameEventHtml(text){return text?'<div class="ck-game-event"><span class="ck-game-event-label">系统提示</span><span>'+esc(text)+'</span></div>':'';}
+function chatGameEventHtml(text){
+  if(!text)return '';
+  if(window.CKGames&&window.CKGames.eventElement)return window.CKGames.eventElement(text).outerHTML;
+  return '<div class="ck-game-event"><span class="ck-game-event-label">系统提示</span><span>'+esc(text)+'</span></div>';
+}
 function chatRenderMessageRow(m,i){
   var rowAttrs=' data-chat-index="'+String(i)+'" data-chat-key="'+chatMessageRenderKey(m,i)+'"';
   var gameView=window.CKGames&&window.CKGames.messageView(m);
@@ -10295,7 +10300,7 @@ function chatMessageDisplayGateKey(){
 function chatMessageRenderKey(m,i){
   if(!m)return 'empty-'+String(i);
   var next=chatMessages[i+1];
-   var signature=[chatMessageDisplayGateKey(),m.role,m.ts,m.text,m.thinking,m.sendFailed,m.sendFailureCode,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostReason,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role,m.ckGame&&m.ckGame.event,m.gameReply&&m.gameReply.notice].join('|');
+   var signature=[chatMessageDisplayGateKey(),chatActiveSessionId,m.role,m.ts,m.text,m.thinking,m.sendFailed,m.sendFailureCode,m.failed,m.error,m.stopped,m.status,m.cacheHit,m.cacheRead,m.cacheCreate,m.cacheState,m.cacheInputTotal,m.cacheRatio,m.waitMs,m.apiCost,m.apiCostStatus,m.apiCostCurrency,m.versionIndex,m.tkIn,m.tkOut,m.tkRead,m.tkCreate,chatAssistantVariantSignature(m,i),chatMessageImages(m).length,m.recall&&m.recall.chars,(m.tools||[]).length,next&&next.role,m.ckGame&&m.ckGame.event,m.gameReply&&m.gameReply.notice].join('|');
   var memo=chatMessageRenderMemo.get(m);
   if(memo&&memo.signature===signature)return memo.key;
   var hash=2166136261;

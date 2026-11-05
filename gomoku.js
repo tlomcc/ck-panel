@@ -7,6 +7,7 @@
   'use strict';
   var SIZE=15,LETTERS='ABCDEFGHIJKLMNO';
   var RULES='规则：15×15 棋盘，列 A 到 O 从左到右，行 1 到 15 从上到下。我执黑先手，你执白。轮流落一子，横、竖、斜任意连续五子或更多即胜，没有禁手。';
+  var CHAT_STYLE='聊天约定：下棋时保持原来聊天的语气、话题和记忆。我主动说话时，正常回应我说的内容。落子不用配解说，不主动报坐标、数连子、提醒攻防或催我走棋；只有我主动问棋局或明确聊棋时才分析。若这次只有系统落子通知，可以只给落子标记，不必硬找话题。';
   function point(value){
     var name=String(value||'').trim().toUpperCase();
     if(!/^[A-O](?:[1-9]|1[0-5])$/.test(name))throw Error('落点应为 A1 到 O15。');
@@ -94,7 +95,7 @@
   }
   function contextState(raw,messages,context){
     // Only instructions actually present in the outgoing history count as known.
-    var game=restore(raw),known=0,rules=false,cursor=0;
+    var game=restore(raw),known=0,rules=false,chatStyle=false,cursor=0;
     var actual=(context||[]).map(function(m){
       var content=Array.isArray(m.content)?m.content.filter(function(p){return p&&p.type==='text'}).map(function(p){return p.text||''}).join('\n'):typeof m.content==='string'?m.content:'';
       return {role:m.role,text:String(m.text||content||'')};
@@ -104,6 +105,7 @@
       var index=-1;for(var i=cursor;i<actual.length;i++)if(actual[i].role==='user'&&actual[i].text.indexOf(m.text)>=0){index=i;break}
       if(index<0)return;
       cursor=index+1;if(m.text.indexOf(RULES)>=0&&m.text.indexOf('【落子：坐标】')>=0)rules=true;
+      if(m.text.indexOf(CHAT_STYLE)>=0)chatStyle=true;
       var snapshot=promptMoves(m.text),ply=m.ckGame.ply;
       if(snapshot&&snapshot.length&&snapshot.every(function(c,i){return c===game.moves[i]}))known=snapshot.length;
       else if(m.ckGame.mode==='delta'&&m.ckGame.autoText===m.text&&ply===known+1&&m.ckGame.coordinate===game.moves[ply-1])known=ply;
@@ -125,7 +127,7 @@
         try{if(parseReply(actual[j].text)===game.moves[known]){known++;cursor=j+1;break}}catch(e){}
       }
     });
-    return {rules:rules,ply:known};
+    return {rules:rules,ply:known,chatStyle:chatStyle};
   }
   function movePrompt(raw,options){
     var game=restore(raw),board=position(game.moves),opts=typeof options==='string'?{correct:options==='correct'}:options||{};
@@ -135,13 +137,15 @@
       return (game.moves.length&&!game.closed?'第 '+game.moves.length+' 手：'+(game.moves.length%2?'黑棋 ':'白棋 ')+game.moves[game.moves.length-1]+'。\n':'')+result+'可以继续聊天，请不要再落子。';
     }
     if(board.turn!=='white')throw Error('还没轮到小克。');
-    if(opts.mode==='delta'&&!opts.correct)return '第 '+game.moves.length+' 手：黑棋 '+game.moves[game.moves.length-1]+'。请落白棋。';
+    if(opts.mode==='delta'&&!opts.correct)return (opts.remindChatStyle?CHAT_STYLE+'\n':'')+'第 '+game.moves.length+' 手：黑棋 '+game.moves[game.moves.length-1]+'。请落白棋。';
     var black=game.moves.filter(function(_,i){return i%2===0}),white=game.moves.filter(function(_,i){return i%2===1});
     var lines=opts.mode==='sync'?['核对当前棋盘：']:[
       (game.moves.length===1?'新一局五子棋':'继续这局五子棋')+'，可以边下边聊。',RULES,
       '之后只通知新增落子，请接着棋谱走。只有明确请你落子时才走棋，普通消息只聊天。',
-      '想说话时可以自然回复；最后单独一行写【落子：坐标】，替换为一个空点，不要放进代码块，不要给多个落点。落子通知是面板系统事件，不是双方说的话。'
+      CHAT_STYLE,
+      '需要落子时，在回复最后单独一行写【落子：坐标】，替换为一个空点，不要放进代码块，不要给多个落点。落子通知是面板系统事件，不是双方说的话。'
     ];
+    if(opts.mode==='sync'&&opts.remindChatStyle)lines.push(CHAT_STYLE);
     lines.push(
       '当前黑棋：'+(black.join('、')||'无')+'。',
       '当前白棋：'+(white.join('、')||'无')+'。');
