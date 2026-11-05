@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v376-gomoku-return-chat';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v377-memory-noop';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -5344,7 +5344,7 @@ function chatStreamProgressTool(data){
   if(data.is_error||status==='error')chatStreamProgressSet('记忆未保存');
   else if(status==='generating')chatStreamProgressSet('正在记忆');
   else if(status==='running')chatStreamProgressSet(data.input&&data.input.action==='keep'?'核对记忆':'保存记忆');
-  else if(status==='done')chatStreamProgressSet(data.saved===true?'记忆已保存':data.unchanged===true?'记忆未变':'记忆已处理');
+  else if(status==='done')chatStreamProgressSet(data.saved===true?'记忆已保存':data.unchanged===true?'正在写':'记忆已处理');
   else chatStreamProgressSet('正在记忆');
   return true;
 }
@@ -8743,8 +8743,16 @@ function chatUpsertToolEvent(list,data){
   else list.push(item);
   return list;
 }
+function chatToolEventVisible(tool){
+  if(!tool)return false;
+  if(tool.name!=='update_active_memory'||tool.is_error||tool.status==='error')return true;
+  // Memory progress stays in the header; a keep decision is only an internal
+  // reply receipt. Retain the raw event for recovery and diagnostics.
+  if(tool.status==='generating'||tool.status==='running')return false;
+  return !(tool.status==='done'&&tool.unchanged===true&&tool.saved!==true);
+}
 function chatRenderToolTrace(tools){
-  tools=Array.isArray(tools)?tools.filter(Boolean):[];
+  tools=Array.isArray(tools)?tools.filter(chatToolEventVisible):[];
   if(!tools.length)return '';
   return '<div class="chat-tool-trace">'+tools.map(function(t,i){
     var status=String(t.status||'running');
@@ -9080,7 +9088,7 @@ function chatAppendAssistantReplies(rawText,recallInfo,toolEvents,opts){
   var parts=chatSplitAssistantReplies(rawText,opts.splitAssistantReplies);
   var tools=chatCloneToolEvents(toolEvents);
   var nativeThinking=String(opts.thinking||'').trim();
-  if(!parts.length&&(tools.length||nativeThinking))parts=[''];
+  if(!parts.length&&(tools.some(chatToolEventVisible)||nativeThinking))parts=[''];
   if(!parts.length)return Promise.resolve();
   chatFlushAssistantRevealQueue({render:false});
   var firstReplyTs=Number(opts.firstReplyTs)||Date.now();
@@ -10278,7 +10286,7 @@ function chatRenderMessageRow(m,i){
   var fileCount=chatMessageFileCount(m&&m.text);
   var bubbleState=(imageCount?' has-images':'')+(fileCount?' has-files':'')+(imageCount&&!String((m&&m.text)||'').trim()?' image-only':'');
   var bubble='<div class="chat-bubble '+role+(pending?' pending':'')+bubbleState+'" data-i="'+i+'">'+inner+'</div>';
-  if(gameView&&!gameView.text.trim()&&!(m.tools||[]).length){bubble='';tools='';}
+  if(gameView&&!gameView.text.trim()&&!(assistantParts&&assistantParts.toolTrace)){bubble='';tools='';}
   var versionNav=pending?'':chatVersionNavHtml(m,i,role);
   // 助手这边翻的是"整轮回复的版本"（重新生成攒出来的），挂在这一组的最后一条上，
   // 和重新生成按钮同一行位置，避免用户在中间某个气泡下面找翻页。
@@ -11302,7 +11310,7 @@ async function chatSubmitPendingMessages(options){
     if(streamForceText)streamShownCount=units.length;
     var shown=Math.min(streamShownCount,units.length);
     var shouldStick=chatShouldFollowMessages();
-    if((visibleThinking||toolEvents.length)&&!streamAux&&out.parentNode){
+    if((visibleThinking||toolEvents.some(chatToolEventVisible))&&!streamAux&&out.parentNode){
       streamAux=document.createElement('div');
       streamAux.className='chat-stream-aux';
       out.parentNode.insertBefore(streamAux,out);
@@ -11442,7 +11450,7 @@ async function chatSubmitPendingMessages(options){
         attemptState.receivedValidContent=true;
         if(ev==='done'||ev==='done_marker'){
           streamCompleted=true;
-          if(ev==='done'&&data&&data.active_memory&&currentPanelTab==='records'&&typeof ckActiveMemoryRefresh==='function')ckActiveMemoryRefresh();
+          if(ev==='done'&&data&&data.active_memory&&data.active_memory.saved===true&&currentPanelTab==='records'&&typeof ckActiveMemoryRefresh==='function')ckActiveMemoryRefresh();
           finishThinking();
           chatStreamProgressStop();
         }
