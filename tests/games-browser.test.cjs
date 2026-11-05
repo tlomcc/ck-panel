@@ -13,10 +13,11 @@ const server=http.createServer((req,res)=>{
   res.setHeader('Content-Security-Policy',"connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; frame-src 'none'; worker-src 'none'");res.end(body);
 });
 let browser,base;const cases=[];
-async function boot(width=390){
+async function boot(width=390,startTab='games'){
   const context=await browser.newContext({viewport:{width,height:width===768?1024:900},locale:'zh-CN',serviceWorkers:'block'});
   await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
-  const page=await context.newPage();await page.goto(base+'/#games');await loaded(page);
+  const page=await context.newPage();await page.goto(base+'/#'+startTab);
+  if(startTab==='games')await loaded(page);else await page.waitForFunction(()=>chatSessionsReady&&currentPanelTab==='chat');
   return {context,page};
 }
 async function loaded(page){await page.waitForFunction(()=>chatSessionsReady&&document.querySelectorAll('.games-point').length===225&&currentPanelTab==='games')}
@@ -32,6 +33,47 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
 (async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
   browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+  for(const width of [1440,768,390])await run('unstarted boards stay quiet through navigation, selection, reload and speech at '+width,async()=>{
+    const {context,page}=await boot(width,'chat');try{
+      const button=page.locator('#chat-game-return');
+      async function hidden(){
+        assert.equal(await button.isVisible(),false,'no playing prompt before a confirmed stone');
+        assert.equal(await button.isDisabled(),true);
+        assert.equal(await page.locator('#chat-game-status').textContent(),'');
+        assert.equal(await button.getAttribute('data-ck-game-session'),'');
+        assert.equal(await button.getAttribute('aria-label'),null);
+      }
+      const original=await page.evaluate(()=>({messages:chatMessages,transport:chatCurrentSession().transportMessages,generation:chatCurrentSession().cacheGeneration,wake:chatCurrentSession().wakeEnabled}));
+      await hidden();assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku),null);
+      await page.evaluate(()=>navTo('games'));await loaded(page);
+      await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();await hidden();
+      assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku),null,'visiting does not create a game');
+      await page.evaluate(()=>navTo('games'));await loaded(page);await page.click('#games-new');
+      const gameId=await page.evaluate(()=>chatCurrentSession().gomoku.id);
+      await page.locator('[data-coordinate="H8"]').click();
+      await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();await hidden();
+      assert.equal((await calls(page)).length,0,'preparing and selecting do not send a request');
+      assert.deepEqual(await page.evaluate(()=>({messages:chatMessages,transport:chatCurrentSession().transportMessages,generation:chatCurrentSession().cacheGeneration,wake:chatCurrentSession().wakeEnabled})),original);
+      await page.evaluate(()=>chatSaveSessionsToIndexedDb.pending);await page.reload();
+      await page.waitForFunction(()=>chatSessionsReady&&currentPanelTab==='chat');await hidden();
+      assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.id),gameId);
+      assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),[]);
+      assert.equal((await calls(page)).length,0,'restoring an empty board sends nothing');
+      await page.evaluate(()=>navTo('games'));await loaded(page);
+      await say(page,'先聊一会儿，还没开始下棋。','好，我们先聊。');await idle(page);
+      assert.equal((await calls(page))[0].body.text,'先聊一会儿，还没开始下棋。');
+      assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),[]);
+      await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();await hidden();
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      await page.screenshot({path:path.join(out,'no-game-'+width+'.png')});
+      if(width===390){await page.evaluate(()=>document.body.classList.add('dark'));await page.screenshot({path:path.join(out,'no-game-'+width+'-dark.png')});await page.evaluate(()=>document.body.classList.remove('dark'))}
+      await page.evaluate(()=>navTo('games'));await loaded(page);await play(page,'H8');await moves(page,2);await idle(page);
+      await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();
+      assert.equal(await button.isVisible(),true);assert.equal(await button.isEnabled(),true);
+      assert.equal(await page.locator('#chat-game-status').textContent(),'五子棋 · 轮到你');
+      assert.equal((await calls(page)).length,2);await noErrors(page);
+    }finally{await context.close().catch(()=>{})}
+  });
   for(const width of [1440,768,390])await run('board, shared memory, ordinary speech, persistence and navigation at '+width,async()=>{
     const {context,page}=await boot(width);
     try{
@@ -380,8 +422,10 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await page.click('#games-new');const fresh=await page.evaluate(()=>chatCurrentSession().gomoku.id);
       await page.evaluate(()=>navTo('chat'));await page.locator('#chat-messages .ck-game-event').filter({hasText:'小克落子 I9'}).click();await loaded(page);
       assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.id),fresh);assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),[]);
-      await page.evaluate(()=>{navTo('chat');document.getElementById('chat-game-return').dataset.ckGameSession='ck-gomoku-other'});
-      await page.locator('#chat-game-return').click();assert.equal(await page.evaluate(()=>currentPanelTab),'chat');assert.equal(await page.evaluate(()=>chatActiveSessionId),'ck-gomoku-fixture');assert.equal((await calls(page)).length,1);await noErrors(page);
+      await page.evaluate(()=>navTo('chat'));assert.equal(await page.locator('#chat-game-return').isVisible(),false);
+      const stale=page.locator('#chat-messages .ck-game-event').filter({hasText:'小克落子 I9'});
+      await stale.evaluate(el=>el.dataset.ckGameSession='ck-gomoku-other');
+      await stale.click();assert.equal(await page.evaluate(()=>currentPanelTab),'chat');assert.equal(await page.evaluate(()=>chatActiveSessionId),'ck-gomoku-fixture');assert.equal((await calls(page)).length,1);await noErrors(page);
     }finally{await context.close().catch(()=>{})}
   });
   await run('one button sends speech or a combined move, and only the current round stays visible',async()=>{

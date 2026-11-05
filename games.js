@@ -11,8 +11,10 @@
     var button=$('chat-game-return'),session=current(),game,position;
     if(!button)return;
     try{game=G.restore(session&&session.gomoku);if(game)position=G.position(game.moves)}catch(e){}
-    var active=!!(root.chatSessionsReady&&game&&!game.closed&&!position.winner&&!position.draw);
-    button.hidden=!active;button.dataset.ckGameSession=active?session.id:'';
+    // An empty board is only prepared; the first confirmed stone starts play.
+    var active=!!(root.chatSessionsReady&&game&&game.moves.length>0&&!game.closed&&!position.winner&&!position.draw);
+    button.hidden=!active;button.disabled=!active;button.dataset.ckGameSession=active?session.id:'';
+    if(!active){$('chat-game-status').textContent='';button.removeAttribute('aria-label');return}
     if(active){
       var status=position.turn==='black'?'轮到你':'轮到小克';
       $('chat-game-status').textContent='五子棋 · '+status;
