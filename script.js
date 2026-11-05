@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v372-token-usage';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v373-gomoku-games';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -693,6 +693,7 @@ function startPanelDataApp(){
     localStorage.removeItem('ckPanelAfterUpdateTab');
   }catch(e){}
   if(location.hash==='#token-usage')startTab='token-usage';
+  if(location.hash==='#games')startTab='games';
   if(!document.getElementById('tab-'+startTab))startTab='chat';
   switchPanelTab(startTab);
   // 启动遮罩以前要等 MCP 记忆分类全部读完才收；那套隐藏页已经删掉了，
@@ -4554,6 +4555,7 @@ function chatNormalizeSession(s){
     created:created,
     updated:updated,
     messages:Array.isArray(s.messages)?s.messages.slice():[],
+    gomoku:s.gomoku&&typeof s.gomoku==='object'?JSON.parse(JSON.stringify(s.gomoku)):null,
     transportMessages:Array.isArray(s.transportMessages)?s.transportMessages.slice():[],
     transportUpdated:Number(s.transportUpdated||0)||0,
     lastChatActivityAt:Number(s.lastChatActivityAt)||0,
@@ -6904,6 +6906,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
       created:s.created,
       updated:s.updated,
       messages:chatLimitArray(s.messages,maxVisible),
+      gomoku:s.gomoku,
       transportMessages:chatLimitArray(s.transportMessages,maxTransport),
       transportUpdated:Number(s.transportUpdated||0)||0,
     lastChatActivityAt:Number(s.lastChatActivityAt)||0,
@@ -7234,6 +7237,7 @@ function chatSaveLocalMessages(){
   chatSaveSessions();
   chatRenderSessions();
   chatRenderTrimState();
+  if(typeof window==='object'&&window.CKGames)window.CKGames.onChatUpdate();
 }
 var chatDeferredSessionIds={};
 function chatFlushDeferredSessionSave(){
@@ -7262,6 +7266,7 @@ function chatSaveLocalMessagesDeferred(){
   s.messages=chatLimitArray(chatMessages,CHAT_MAX_VISIBLE_MESSAGES);
   s.updated=Date.now();
   chatScheduleSessionSave(s.id);
+  if(typeof window==='object'&&window.CKGames)window.CKGames.onChatUpdate();
 }
 function chatInsertRenderedMessageRow(box,html,index){
   if(!box)return;
@@ -7343,6 +7348,7 @@ function chatReleaseSendingUi(request){
   chatActiveRequest=null;
   chatRestoreSendButton();
   if(typeof ckRefreshSubscription==='function')ckRefreshSubscription();
+  if(typeof window==='object'&&window.CKGames)window.CKGames.onChatUpdate();
   return true;
 }
 function chatFinalizeStoppedRequest(request){
@@ -11650,6 +11656,7 @@ function switchPanelTab(tab,opts) {
   if(subTabs)subTabs.style.display=(tab==='apiconfig')?'grid':'none';
   var panel=document.getElementById('tab-'+tab);
   if(panel)panel.classList.add('active');
+  if(window.CKGames){if(tab==='games')window.CKGames.enter();else window.CKGames.leave();}
   if(tab==='records'&&typeof ckActiveMemoryRefresh==='function')ckActiveMemoryRefresh();
   if(tab==='apiconfig'){
     renderApiConfig();
@@ -11786,8 +11793,8 @@ function closeSidebar(){
 }
 function navTo(tab){
   closeSidebar();
-  if(tab==='token-usage')history.replaceState(null,'',location.pathname+location.search+'#token-usage');
-  else if(location.hash==='#token-usage')history.replaceState(null,'',location.pathname+location.search);
+  if(tab==='token-usage'||tab==='games')history.replaceState(null,'',location.pathname+location.search+'#'+tab);
+  else if(location.hash==='#token-usage'||location.hash==='#games')history.replaceState(null,'',location.pathname+location.search);
   switchPanelTab(tab);
 }
 
