@@ -8,6 +8,7 @@
   var SIZE=15,LETTERS='ABCDEFGHIJKLMNO';
   var RULES='规则：15×15 棋盘，列 A 到 O 从左到右，行 1 到 15 从上到下。我执黑先手，你执白。轮流落一子，横、竖、斜任意连续五子或更多即胜，没有禁手。';
   var CHAT_STYLE='聊天约定：下棋时保持原来聊天的语气、话题和记忆。我主动说话时，正常回应我说的内容。落子不用配解说，不主动报坐标、数连子、提醒攻防或催我走棋；只有我主动问棋局或明确聊棋时才分析。若这次只有系统落子通知，可以只给落子标记，不必硬找话题。';
+  var UNDO_RULES='悔棋约定：双方都可以自行选择悔棋，不限次数，也可以一直不用；不要求你使用。悔棋撤回自己最近一手，以及对方随后的一手（若有），再由悔棋方重新落子。我的悔棋由面板通知并直接生效。轮到你执白时，如果你想悔棋，在回复最后单独一行写【悔棋：坐标】，表示撤回你上一手白棋和我随后那手黑棋，再在撤回后的空点重新落白棋。它与【落子：坐标】二选一，不能同时给出；没有上一手白棋时只能正常落子。';
   function point(value){
     var name=String(value||'').trim().toUpperCase();
     if(!/^[A-O](?:[1-9]|1[0-5])$/.test(name))throw Error('落点应为 A1 到 O15。');
@@ -40,14 +41,15 @@
     if(raw==null)return null;
     if(typeof raw!=='object'||raw.version!==1||!/^g-[a-z0-9-]{1,100}$/.test(raw.id||''))throw Error('棋局版本或标识无法读取。');
     var moves=Array.isArray(raw.moves)?raw.moves.map(function(c){return point(c).name}):null;
-    var board=position(moves),pending=null;
+    var board=position(moves),pending=null,revision=raw.revision==null?0:raw.revision;
+    if(!Number.isSafeInteger(revision)||revision<0)throw Error('悔棋记录无法读取。');
     if(raw.pending!=null){
       var p=raw.pending;
       if(typeof p!=='object'||!/^r-[a-z0-9-]{1,100}$/.test(p.id||'')||p.ply!==board.ply||board.turn!=='white'||board.winner||board.draw||raw.closed===true)throw Error('等待落子的记录与棋盘不一致。');
       if(typeof p.prompt!=='string'||p.prompt.length>16000)throw Error('落子消息记录无法读取。');
       pending={id:p.id,ply:p.ply,prompt:p.prompt,checkedTurn:String(p.checkedTurn||'').slice(0,200)};
     }
-    return {version:1,id:raw.id,created:Number(raw.created)||0,moves:moves,
+    return {version:1,id:raw.id,created:Number(raw.created)||0,moves:moves,revision:revision,
       closed:raw.closed===true,pending:pending,error:String(raw.error||'').slice(0,300)};
   }
   function create(id,now){return restore({version:1,id:id,created:now,moves:[]})}
@@ -59,19 +61,36 @@
     game.moves.push(p.name);game.pending=null;game.error='';position(game.moves);
     return game;
   }
-  function parseReply(text){
-    // A completed, matching chat turn must supply exactly one standalone move.
+  function undo(raw,player){
+    var game=restore(raw);
+    if(!game||game.closed)throw Error('本局已结束，请开新局。');
+    if(player!=='black'&&player!=='white')throw Error('悔棋方无法识别。');
+    var index=game.moves.length-1;
+    if(index%2!==(player==='white'?1:0))index--;
+    if(index<0)throw Error(player==='black'?'还没有你可以撤回的棋。':'小克还没有可以撤回的棋。');
+    game.moves=game.moves.slice(0,index);game.revision++;game.pending=null;game.error='';
+    return restore(game);
+  }
+  function parseAction(text){
+    // A completed, matching chat turn must supply exactly one standalone action.
     // Quoted examples, code blocks and speculative coordinates are not moves.
     var clean=String(text||'').replace(/<(?:pre|code)\b[^>]*>[\s\S]*?(?:<\/(?:pre|code)>|$)/gi,''),matches=[],fence='';
     clean.split(/\r?\n/).forEach(function(line){
       var delimiter=line.match(/^ {0,3}(`{3,}|~{3,})/);
       if(delimiter){if(!fence)fence=delimiter[1];else if(delimiter[1][0]===fence[0]&&delimiter[1].length>=fence.length)fence='';return}
       if(fence||/^(?: {4}|\t)/.test(line))return;
-      var match=line.trim().match(/^【落子[：:]\s*([^】]+)】$/);
-      if(match)matches.push(match[1]);
+      var match=line.trim().match(/^【(落子|悔棋)([^】]*)】$/);
+      if(match)matches.push(match);
     });
     if(matches.length!==1)throw Error(matches.length?'小克给了多个落点，尚未落子。':'小克还没有给出明确落点。');
-    return point(matches[0]).name;
+    var coordinateValue=matches[0][2].match(/^[：:]\s*(.+)$/);
+    if(!coordinateValue)throw Error('小克还没有给出明确落点。');
+    return {kind:matches[0][1]==='悔棋'?'undo':'move',coordinate:point(coordinateValue[1]).name};
+  }
+  function parseReply(text){
+    var action=parseAction(text);
+    if(action.kind!=='move')throw Error('这次是悔棋，请核对撤回后的棋盘。');
+    return action.coordinate;
   }
   function stripMove(text,streaming){
     var lines=String(text||'').split('\n'),fence='';
@@ -79,8 +98,8 @@
       var delimiter=line.match(/^ {0,3}(`{3,}|~{3,})/);
       if(delimiter){if(!fence)fence=delimiter[1];else if(delimiter[1][0]===fence[0]&&delimiter[1].length>=fence.length)fence='';return true}
       if(fence||/^(?: {4}|\t)/.test(line))return true;
-      if(/^【落子[：:][^】]*】$/.test(line.trim()))return false;
-      return !(streaming&&index===lines.length-1&&/^【(?:落(?:子(?:[：:][^】]*)?)?)?$/.test(line.trim()));
+      if(/^【(?:落子|悔棋)[^】]*】$/.test(line.trim()))return false;
+      return !(streaming&&index===lines.length-1&&/^【(?:落(?:子(?:[：:][^】]*)?)?|悔(?:棋(?:[：:][^】]*)?)?)?$/.test(line.trim()));
     }).join('\n').trim();
   }
   function promptMoves(text){
@@ -95,7 +114,7 @@
   }
   function contextState(raw,messages,context){
     // Only instructions actually present in the outgoing history count as known.
-    var game=restore(raw),known=0,rules=false,chatStyle=false,cursor=0;
+    var game=restore(raw),known=game.revision?-1:0,rules=false,chatStyle=false,undoRules=false,cursor=0;
     var actual=(context||[]).map(function(m){
       var content=Array.isArray(m.content)?m.content.filter(function(p){return p&&p.type==='text'}).map(function(p){return p.text||''}).join('\n'):typeof m.content==='string'?m.content:'';
       return {role:m.role,text:String(m.text||content||'')};
@@ -106,8 +125,11 @@
       if(index<0)return;
       cursor=index+1;if(m.text.indexOf(RULES)>=0&&m.text.indexOf('【落子：坐标】')>=0)rules=true;
       if(m.text.indexOf(CHAT_STYLE)>=0)chatStyle=true;
+      if(m.text.indexOf(UNDO_RULES)>=0)undoRules=true;
+      // Old branches remain in chat history, but cannot establish the current board.
+      if((m.ckGame.revision||0)!==game.revision)return;
       var snapshot=promptMoves(m.text),ply=m.ckGame.ply;
-      if(snapshot&&snapshot.length&&snapshot.every(function(c,i){return c===game.moves[i]}))known=snapshot.length;
+      if(snapshot&&snapshot.length<=game.moves.length&&snapshot.every(function(c,i){return c===game.moves[i]}))known=snapshot.length;
       else if(m.ckGame.mode==='delta'&&m.ckGame.autoText===m.text&&ply===known+1&&m.ckGame.coordinate===game.moves[ply-1])known=ply;
       else return;
       if(known>=game.moves.length||known%2===0||!m.turnId)return;
@@ -127,7 +149,7 @@
         try{if(parseReply(actual[j].text)===game.moves[known]){known++;cursor=j+1;break}}catch(e){}
       }
     });
-    return {rules:rules,ply:known,chatStyle:chatStyle};
+    return {rules:rules,ply:known,chatStyle:chatStyle,undoRules:undoRules};
   }
   function movePrompt(raw,options){
     var game=restore(raw),board=position(game.moves),opts=typeof options==='string'?{correct:options==='correct'}:options||{};
@@ -136,25 +158,34 @@
       var result=board.winner==='black'?'黑棋连成五子，本局黑棋获胜。':board.winner==='white'?'白棋连成五子，本局白棋获胜。':board.draw?'棋盘已满，本局和棋。':'本局已结束。';
       return (game.moves.length&&!game.closed?'第 '+game.moves.length+' 手：'+(game.moves.length%2?'黑棋 ':'白棋 ')+game.moves[game.moves.length-1]+'。\n':'')+result+'可以继续聊天，请不要再落子。';
     }
-    if(board.turn!=='white')throw Error('还没轮到小克。');
-    if(opts.mode==='delta'&&!opts.correct)return (opts.remindChatStyle?CHAT_STYLE+'\n':'')+'第 '+game.moves.length+' 手：黑棋 '+game.moves[game.moves.length-1]+'。请落白棋。';
+    if(board.turn!==(opts.undo?'black':'white'))throw Error(opts.undo?'悔棋后的轮次不一致。':'还没轮到小克。');
+    if(opts.mode==='delta'&&!opts.correct&&!opts.undo)return (opts.remindChatStyle?CHAT_STYLE+'\n':'')+(opts.remindUndoRules?UNDO_RULES+'\n':'')+'第 '+game.moves.length+' 手：黑棋 '+game.moves[game.moves.length-1]+'。请落白棋。';
     var black=game.moves.filter(function(_,i){return i%2===0}),white=game.moves.filter(function(_,i){return i%2===1});
     var lines=opts.mode==='sync'?['核对当前棋盘：']:[
       (game.moves.length===1?'新一局五子棋':'继续这局五子棋')+'，可以边下边聊。',RULES,
       '之后只通知新增落子，请接着棋谱走。只有明确请你落子时才走棋，普通消息只聊天。',
       CHAT_STYLE,
-      '需要落子时，在回复最后单独一行写【落子：坐标】，替换为一个空点，不要放进代码块，不要给多个落点。落子通知是面板系统事件，不是双方说的话。'
+      '正常落子时，在回复最后单独一行写【落子：坐标】，替换为一个空点，不要放进代码块，不要给多个落点。落子通知是面板系统事件，不是双方说的话。',
+      UNDO_RULES
     ];
     if(opts.mode==='sync'&&opts.remindChatStyle)lines.push(CHAT_STYLE);
+    if(opts.mode==='sync'&&opts.remindUndoRules)lines.push(UNDO_RULES);
+    if(opts.undo)lines.push('我已悔棋，撤回我最近一手及你随后的一手（若有）。以下是撤回后的棋盘，被撤回的棋不再有效。');
     lines.push(
       '当前黑棋：'+(black.join('、')||'无')+'。',
       '当前白棋：'+(white.join('、')||'无')+'。');
     if(opts.correct)lines.push('刚才的落点未生效，请按这份棋盘重新选择。');
-    lines.push('第 '+board.ply+' 手，请落白棋。');
+    lines.push(opts.undo?'悔棋已生效，轮到我执黑重新落子。你先不用落子，可以继续聊天。':'第 '+board.ply+' 手，请落白棋。');
     return lines.join('\n');
   }
-  function accept(raw,text){return play(raw,parseReply(text),'white')}
+  function accept(raw,text){
+    var action=parseAction(text),game=restore(raw),board=position(game.moves);
+    if(game.closed||board.winner||board.draw)throw Error('本局已结束。');
+    if(board.turn!=='white')throw Error('还没轮到小克。');
+    // Validate the replacement before returning any changed board; invalid undo is atomic.
+    return play(action.kind==='undo'?undo(game,'white'):game,action.coordinate,'white');
+  }
   return {SIZE:SIZE,LETTERS:LETTERS,point:point,coordinate:coordinate,position:position,
-    create:create,restore:restore,play:play,parseReply:parseReply,movePrompt:movePrompt,accept:accept,
+    create:create,restore:restore,play:play,undo:undo,parseAction:parseAction,parseReply:parseReply,movePrompt:movePrompt,accept:accept,
     stripMove:stripMove,promptMoves:promptMoves,contextState:contextState};
 });

@@ -90,24 +90,26 @@
     return view;
   }
   function makePrompt(session,game,kind,exclude){
-    var board=G.position(game.moves),mode='end',remindChatStyle=false;
+    var board=G.position(game.moves),mode='end',remindChatStyle=false,remindUndoRules=false;
     if(!game.closed&&!board.winner&&!board.draw){
       var history=rows(session).filter(function(m){return m!==exclude}).map(function(m){return m&&m.role==='assistant'?Object.assign({},m,{text:speech(m)}):m});
       var context=(session.transportMessages||[]).length?root.chatLimitArray(session.transportMessages,root.CHAT_MAX_TRANSPORT_MESSAGES):root.chatWindowContextMessages(history);
       var known=G.contextState(game,history,context);
-      mode=!known.rules?'setup':kind!=='correct'&&known.ply===game.moves.length-1?'delta':'sync';
+      mode=!known.rules?'setup':kind==='move'&&known.ply===game.moves.length-1?'delta':'sync';
       remindChatStyle=!known.chatStyle;
+      remindUndoRules=!known.undoRules;
     }
-    return {text:G.movePrompt(game,{mode:mode,correct:kind==='correct',remindChatStyle:remindChatStyle}),mode:mode};
+    return {text:G.movePrompt(game,{mode:mode,correct:kind==='correct',undo:kind==='undo',remindChatStyle:remindChatStyle,remindUndoRules:remindUndoRules}),mode:mode};
   }
   function metadata(game,requestId,kind,prepared,event){
-    return {gameId:game.id,requestId:requestId,kind:kind,mode:prepared.mode,ply:game.moves.length,
+    return {gameId:game.id,requestId:requestId,revision:game.revision,kind:kind,mode:prepared.mode,ply:game.moves.length,
       coordinate:game.moves[game.moves.length-1]||'',autoText:prepared.text,event:event};
   }
   function preparePending(session,pending){
     (pending||[]).forEach(function(message){
       if(!automatic(message)||!session.gomoku||message.ckGame.gameId!==session.gomoku.id)return;
       var game=G.restore(session.gomoku),meta=message.ckGame;
+      if((meta.revision||0)!==game.revision)return;
       if(meta.ply!==undefined&&meta.ply!==game.moves.length)return;
       if(game.pending&&(game.pending.id!==meta.requestId||game.pending.prompt!==message.text))return;
       var kind=meta.kind||(/刚才没有收到/.test(message.text)?'correct':'move');
@@ -126,7 +128,7 @@
     var game;
     try{game=G.restore(session.gomoku)}catch(e){return false}
     if(!game||!game.pending)return false;
-    var message=pendingMessage(session,game),pending=game.pending;
+    var message=pendingMessage(session,game),pending=game.pending,action,notice='';
     if(!message||message.role!=='user'||message.inFlight||message.sendFailed||!message.turnId)return false;
     if(pending.checkedTurn===message.turnId)return false;
     if(session.replyDraft&&session.replyDraft.turn_id===message.turnId)return false;
@@ -134,11 +136,15 @@
     if(!replies.length)return false;
     try{
       if(message.text!==pending.prompt)throw Error('这步消息已被编辑，请按当前棋盘重新请小克落子。');
-      game=G.accept(game,replies.map(speech).join('\n'));
+      if((message.ckGame.revision||0)!==game.revision)throw Error('棋盘已经悔棋，请按当前棋盘重新落子。');
+      var text=replies.map(speech).join('\n'),original=game;
+      action=G.parseAction(text);game=G.accept(game,text);
+      notice=action.kind==='undo'?'小克悔棋 · 撤回白棋 '+original.moves[original.moves.length-2]+'、黑棋 '+original.moves[original.moves.length-1]+'，改下 '+action.coordinate:'小克落子 '+action.coordinate;
     }catch(error){game.error=error.message;game.pending.checkedTurn=String(message.turnId)}
     replies.forEach(function(reply,i){reply.gameReply={gameId:game.id,requestId:pending.id,
-      notice:i===replies.length-1?(game.error?'小克未落子：'+game.error:'小克落子 '+game.moves[game.moves.length-1]):''}});
+      notice:i===replies.length-1?(game.error?'小克未落子：'+game.error:notice):''}});
     session.gomoku=game;
+    if(!game.error&&action&&action.kind==='undo'&&visible&&session===current())tell(notice+'，轮到你。');
     return true;
   }
   function update(){
@@ -255,6 +261,19 @@
       submit(prompt,metadata(game,requestId,'correct',prepared,'请小克重新落子'));render();
     }catch(error){tell(error.message)}
   }
+  async function undoMove(){
+    if(submitBusy)return;
+    var original=current()&&current().gomoku;
+    submitBusy=true;
+    try{
+      var session=await actionReady();guard(false);update();
+      if(session.gomoku!==original)throw Error('棋局有变化，请重新操作。');
+      var game=G.undo(original,'black'),removed=original.moves.slice(game.moves.length).map(function(c,i){return (i?'白棋 ':'黑棋 ')+c});
+      var prepared=makePrompt(session,game,'undo'),notice='你悔棋 · 撤回'+removed.join('、')+'，轮到你';
+      session.gomoku=game;selected='';tell('已悔棋，轮到你重新落子。');
+      submit(prepared.text,metadata(game,id('r'),'undo',prepared,notice));render();
+    }catch(error){tell(error.message)}finally{submitBusy=false}
+  }
   async function say(){
     var input=$('games-input'),snapshot=input&&input.value,text=snapshot&&snapshot.trim();if(!text||submitBusy)return;
     submitBusy=true;
@@ -362,6 +381,10 @@
     $('games-new').disabled=!!root.chatSending||!!root.chatRecoverInFlightBusy;
     $('games-end').hidden=!game||ended;
     $('games-end').disabled=!!root.chatSending;
+    var undoReason=!game||!game.moves.length?'还没有可撤回的棋。':game.closed?'本局已结束，请开新局。':'';
+    if(!undoReason){try{guard(false)}catch(error){undoReason=error.message}}
+    $('games-undo').disabled=!!undoReason||submitBusy;
+    $('games-undo').title=undoReason||'撤回你上一手与小克随后一手，重新落子';
     var message=game&&pendingMessage(current(),game),waiting=!!(message&&(message.inFlight||message.role==='pending_user'&&root.chatSending));
     $('games-ask').hidden=!game||ended||position.turn!=='white'||waiting||!!root.chatSending;
     $('games-ask').textContent=message&&(message.sendFailed||message.role==='pending_user')?'重试这步':'请小克落子';
@@ -436,6 +459,7 @@
   function bind(){
     $('games-new').addEventListener('click',newGame);
     $('games-ask').addEventListener('click',askMove);$('games-end').addEventListener('click',endGame);
+    $('games-undo').addEventListener('click',undoMove);
     $('games-session').addEventListener('change',selectSession);
     $('games-form').addEventListener('submit',function(event){event.preventDefault();submitTurn()});
     $('games-input').addEventListener('input',function(){if(current())drafts[current().id]=this.value;renderAction()});

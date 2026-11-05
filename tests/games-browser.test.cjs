@@ -456,6 +456,7 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await page.locator('#games-conversation').evaluate(el=>el.scrollTop=el.scrollHeight);assert.deepEqual(await page.evaluate(()=>({game:chatCurrentSession().gomoku,history:chatMessages})),snapshots);await noErrors(page);
     }finally{await context.close().catch(()=>{})}
   });
+  await require('./gomoku-undo-browser.cjs')({run,boot,loaded,idle,plan,moves,play,say,calls,pickWindow,noErrors,out});
   fs.writeFileSync(path.join(out,'browser-verification.json'),JSON.stringify({passed:true,syntheticData:true,externalRequestsBlocked:true,realChatSender:true,cases},null,2));
   console.log('PASS '+cases.length+' browser scenarios');
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{if(browser)await browser.close();server.close()});
