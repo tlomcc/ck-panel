@@ -130,6 +130,7 @@ function chatDigestPendingSync(session,cfg){
 }
 function chatDigestRecordSync(session,cfg,result){
   var record={id:String(Date.now())+'-'+Math.random().toString(36).slice(2,8),scope:chatDigestActiveScope(cfg),at:Date.now(),rounds:Number(result.dropped)||0,status:'pending',trigger:result.trigger};
+  if(session.digestModelRun&&session.digestModelRun.purpose==='trim')record.modelRunId=session.digestModelRun.id;
   session.digestLastSync=record;result.syncId=record.id;
   chatSaveSessions({sessionIds:[session.id]});return record;
 }
@@ -137,7 +138,20 @@ function chatDigestConfirmSync(session,cfg,id,turnId){
   var record=chatDigestPendingSync(session,cfg);
   if(!record||id&&record.id!==id||turnId&&record.turnId!==turnId||!id&&!turnId)return false;
   record.status='synced';record.syncedAt=Date.now();
+  chatDigestReleaseCompletedRun(session,cfg);
   chatSaveSessions({sessionIds:[session.id]});chatRenderNightlyStatus(session);return true;
+}
+function chatDigestReleaseCompletedRun(session,cfg){
+  var record=session.digestLastSync,run=session.digestModelRun;
+  if(!record||record.scope!==chatDigestActiveScope(cfg)||record.status!=='synced'||session.digestManualTrim||!run||run.purpose!=='trim')return false;
+  if(record.modelRunId){if(record.modelRunId!==run.id)return false;}
+  else{
+    var legacy=/^manual-(\d+)-/.exec(run.id||'');
+    if(!legacy||Number(legacy[1])>record.at)return false;
+  }
+  // A confirmed cut has a new local baseline to publish. Keeping the old
+  // blocked run here would leave every subsequent queue request read-only.
+  delete session.digestModelRun;return true;
 }
 function chatDigestPreparedTrim(session,cfg,plan,explicitSync){
   var groups=chatDigestPlanSources(session,plan),keys=new Set(groups.map(function(g){return g.key}));
@@ -218,8 +232,11 @@ async function chatDigestSyncNow(options){
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast(session.digestManualTrim&&session.digestManualTrim.immediate!==false?'当前回复结束后自动完成截断':'请等当前回复结束后同步');return false;}
   var pendingSync=chatDigestPendingSync(session,cfg);
   if(pendingSync){
-    var synced=await chatSyncTrimmedHistoryToGateway(cfg,{sessionId:session.id,syncId:pendingSync.id,dropped:pendingSync.rounds,trigger:'retry_sync'});
-    chatRenderNightlyStatus(session);if(synced)toast('同步完成，本次截断 '+pendingSync.rounds+' 轮');return synced;
+    var release;chatTrimTransaction=new Promise(function(resolve){release=resolve});
+    try{
+      var synced=await chatSyncTrimmedHistoryToGateway(cfg,{sessionId:session.id,syncId:pendingSync.id,dropped:pendingSync.rounds,trigger:'retry_sync',automatic:!!(options&&options.automatic)});
+      chatRenderNightlyStatus(session);if(synced){chatScheduleNightlySync(0);toast('同步完成，本次截断 '+pendingSync.rounds+' 轮');}return synced;
+    }finally{chatTrimTransaction=null;release();}
   }
   if(!chatDigestImmediateReady(session,cfg)){toast('当前范围尚未准备好，后台会继续处理；无需等待模型');chatScheduleNightlySync(0);return false;}
   var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync',commitPrepared:true,skipTrim:!!(options&&options.summaryOnly)});
@@ -335,9 +352,19 @@ function chatDigestReplyActive(session){
 }
 async function chatDigestFinishManualTrim(cfg,session){
   chatRenderNightlyStatus(session);
+  if(chatDigestReleaseCompletedRun(session,cfg)){chatSaveSessions({sessionIds:[session.id]});chatScheduleNightlySync(0);return false;}
+  var pendingSync=chatDigestPendingSync(session,cfg);
+  if(pendingSync){
+    if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||
+      Date.now()-Number(pendingSync.lastAttemptAt||0)<30000)return false;
+    return chatDigestSyncNow({automatic:true});
+  }
+  var partial=false;
   if(cfg.digestCurrentModel===true){
     var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
-    if(!local||!remote||local.id!==remote.id||remote.state!=='succeeded')return false;
+    if(!local||!remote||local.id!==remote.id)return false;
+    partial=local.purpose==='trim'&&remote.state==='blocked';
+    if(remote.state!=='succeeded'&&!partial)return false;
     if(local.purpose==='daily'){
       if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction)return false;
       var done=await chatDigestSyncNow({summaryOnly:true});
@@ -346,7 +373,7 @@ async function chatDigestFinishManualTrim(cfg,session){
   }
   var req=session.digestManualTrim;
   if(session!==chatCurrentSession()||!req||req.immediate===false||req.scope!==chatDigestActiveScope(cfg)||
-      chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||!chatDigestImmediateReady(session,cfg,false))return false;
+      chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||!chatDigestImmediateReady(session,cfg,partial))return false;
   var done=await chatDigestSyncNow();
   if(done&&cfg.digestCurrentModel===true){delete session.digestModelRun;chatSaveSessions();}return done;
 }

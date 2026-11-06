@@ -29,6 +29,9 @@ const server=http.createServer((req,res)=>{
   assert(results.some(r=>r.blockedSavedRecovery&&r.originalRunOnly&&r.newerRoundPreserved&&r.noModelRequest));assert.deepEqual(errors,[]);
   assert.equal(results.filter(r=>r.partialStatusSync).length,3);
   assert(results.some(r=>r.partialStatusSync&&r.sourceGroups===650&&r.cutRounds===325));
+  assert(results.some(r=>r.automaticStatusSync&&r.sourceGroups===650&&r.cutRounds===325&&r.baselineAfterAck));
+  assert.equal(results.filter(r=>r.automaticStatusSync).length,3);
+  assert.equal(results.filter(r=>r.automaticGuard).length,2);
   if(process.env.CK_BROWSER_OUTPUT){fs.mkdirSync(process.env.CK_BROWSER_OUTPUT,{recursive:true});await page.screenshot({path:path.join(process.env.CK_BROWSER_OUTPUT,'partial-sync-'+width+'.png')});fs.writeFileSync(path.join(process.env.CK_BROWSER_OUTPUT,'results-'+width+'.json'),JSON.stringify(results,null,2));}
   console.log(width+': '+results.length+' browser scenarios PASS, including failed-upload recovery, cancellation, active replies and next-message injection');
   await page.close();

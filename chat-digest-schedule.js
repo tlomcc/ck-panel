@@ -130,9 +130,9 @@ function chatDigestSyncView(session,cfg,remote){
   if(cfg.digestCurrentModel===true){
     var run=state.model_run||{},local=session.digestModelRun;
     if(!record&&!preparing){view.status='仅手动';view.note='点击立即截断或手动更新总结后，使用所选整理模型。';}
-    if(run.state==='blocked'&&ready&&!view.retry){
+    if(run.state==='blocked'&&ready&&!view.retry&&(!record||preparing)){
       view.status=chatDigestReplyActive(session)?'等待当前回复':'待同步';view.tone='attention';
-      view.note='本次截断总结已准备，'+(chatDigestReplyActive(session)?'当前回复结束后可立刻同步':'可立刻同步')+'；旧摘要整理仍待手动处理，已有总结会保留。';
+      view.note='本次截断总结已准备，'+(req&&req.immediate!==false?(chatDigestReplyActive(session)?'当前回复结束后自动截断并同步':'将按原请求自动截断并同步'):(chatDigestReplyActive(session)?'当前回复结束后可立刻同步':'可立刻同步'))+'；旧摘要整理仍待手动处理，已有总结会保留。';
     }else if(run.state==='blocked'&&record&&!preparing){
       view.note+='未完成的旧摘要整理仍保留待处理。';
     }else if(run.state==='blocked'){
@@ -363,6 +363,7 @@ function chatDigestNeedsPolling(session,cfg){
   return !!chatDigestPollingDelay(session,cfg);
 }
 function chatDigestPollingDelay(session,cfg){
+  if(chatDigestPendingSync(session,cfg))return 30000;
   if(cfg.digestCurrentModel!==true)return session.digestManualTrim||session.digestSettingsRequest?2000:0;
   var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
   if(!local||!remote||local.id!==remote.id)return 0;

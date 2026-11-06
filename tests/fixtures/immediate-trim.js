@@ -4,7 +4,7 @@
  const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast,panelDataFetch,storedPanelKey};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,cleanCalls,posts,preparedTrims,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,queueWrites,cleanCalls,posts,preparedTrims,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false,failClean=false;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
@@ -23,7 +23,7 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];cleanCalls=[];posts=[];preparedTrims=null;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];queueWrites=[];cleanCalls=[];posts=[];preparedTrims=null;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;failClean=false;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
    const groups=body.groups.filter(g=>body.candidate_keys.includes(g.key));
@@ -37,13 +37,15 @@
    if(target.pathname.endsWith('/wake'))return json({ok:true,enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240});
    if(target.pathname.endsWith('/queue')){
      queueCalls++;queueMethods.push(options.method||'GET');if(body)queueBody=body;
+     if(body)queueWrites.push({body:structuredClone(body),syncStatus:session.digestLastSync?.status});
      if(body&&loseUploadResponse){prepared(body);loseUploadResponse=false;throw new TypeError('Failed to fetch')}
      const reply=()=>json(body?prepared(body):{ok:true,sessions:[prepared(queueBody)]});
      if(deferQueue)return new Promise(resolve=>{releaseQueue=()=>resolve(reply())});
      return reply();
    }
    if(target.pathname.endsWith('/clean-history')){
-     cleanCalls.push(body);return json({ok:true,synchronized:true,digest_sync_id:body.digest_sync_id});
+     cleanCalls.push(body);if(failClean){failClean=false;throw new TypeError('Failed to fetch')}
+     return json({ok:true,synchronized:true,digest_sync_id:body.digest_sync_id});
    }
    if(target.pathname.endsWith('/chat')){
      posts.push(body);
@@ -161,11 +163,12 @@
    releaseReply();await nextSend;
    results.push({midnightSummaryInjected:true,stableSummaryPreserved:true,unrelatedNightly524DoesNotBlock:true,nextRequestChecked:true});
 
-   for(const kind of ['changed-config','missing-pack','foreign-pack']){
+   for(const kind of ['changed-config','missing-pack','foreign-pack','auto-production','auto-retry','auto-guards','auto-cancelled','auto-foreign-run']){
      await until(()=>!chatDigestMaintenanceBusy,'previous maintenance did not settle');
-     setup(kind==='changed-config'?'partial-production':'partial-'+kind);
+     const automatic=kind.startsWith('auto-'),production=kind==='changed-config'||kind==='auto-production';
+     setup(production?'partial-production':'partial-'+kind);
      cfg.digestCurrentModel=true;cfg.dailyDigestRetentionDays=10;cfg.dailyDigestDetailDays=3;cfg.dailyDigestRollupDays=2;
-     if(kind==='changed-config'){
+     if(production){
        cfg.autoTrimKeepRounds=100;
        session.transportMessages=session.transportMessages.map(m=>({...m,content:'传输记录 '+m.content}));
      }
@@ -175,7 +178,7 @@
      if(kind!=='missing-pack')session.digestActivePack={scope:kind==='foreign-pack'?'another-connection':chatDigestActiveScope(cfg),
        config:chatDigestConfigStamp({...cfg,dailyDigestRollupDays:7}),text:kind==='foreign-pack'?'另一连接的冻结总结':'此前实际生效的稳定总结',at:Date.now()-1000};
      modelRun='original-partial-'+kind;modelState='blocked';
-     check(await chatRequestManualDigestTrim({currentModel:true,immediate:false}),'partial manual request missing');
+     check(await chatRequestManualDigestTrim({currentModel:true,immediate:automatic}),'partial manual request missing');
      session.digestModelRun={id:modelRun,purpose:'trim',label:'Claude 订阅 · 合成验证'};
      session.digestRemote={scope:chatDigestActiveScope(cfg),revision:1};
      const candidates=chatDigestCandidateGroups(session,cfg,chatMessages);
@@ -194,6 +197,65 @@
      field('status-sub').textContent='截断进度 · 阶段、耗时与同步结果';
      document.querySelectorAll('.panel-tab').forEach(n=>n.classList.remove('active'));field('tab-status').classList.add('active');
      check(!session.digestStaged,'fixture must begin with metadata only');
+     if(automatic){
+       const requested=session.digestManualTrim.dropRounds,before=chatMessages.length;
+       if(kind==='auto-retry')failClean=true;
+       if(kind==='auto-cancelled'){modelState='cancelled';remote.model_run.state='cancelled';}
+       if(kind==='auto-foreign-run')session.digestModelRun.id='different-new-request';
+       if(kind==='auto-guards'){
+         session.replyDraft={state:'running',turn_id:'recover-original'};
+         const later=[{role:'user',text:'请求后新增的问题',turnId:'later',ts:Date.now()},
+           {role:'assistant',text:'请求后新增的回答',turnId:'later',ts:Date.now()+1}];
+         chatMessages.push(...later,{role:'pending_user',text:'尚未发送',pendingId:'retained-draft',ts:Date.now()+2});
+         session.transportMessages.push(...later.map(m=>({role:m.role,content:m.text})));
+       }
+       await ckRefreshMaintenance(false);
+       if(kind==='auto-cancelled'||kind==='auto-foreign-run'){
+         check(cleanCalls.length===0&&chatMessages.length===before&&posts.length===0,'cancelled or unrelated request was applied automatically');
+         check(session.digestManualTrim&&session.digestModelRun,'unrelated request metadata was cleared');
+         results.push({automaticGuard:true,kind,historyPreserved:true,noModelRequest:true});continue;
+       }
+       if(kind==='auto-guards'){
+         check(cleanCalls.length===0&&session.digestStaged,'active reply was not preserved');
+         session.replyDraft=null;chatDigestEditors[session.id+':today']={text:'还未保存的总结编辑'};
+         await ckRefreshMaintenance(false);check(cleanCalls.length===0,'unsaved editor was bypassed');
+         delete chatDigestEditors[session.id+':today'];
+         const staged=session.digestStaged,saved=staged.trims;
+         staged.trims=saved.map((t,i)=>i?t:{...t,keys:t.keys.slice(1)});
+         await ckRefreshMaintenance(false);check(cleanCalls.length===0,'missing source was cut automatically');
+         staged.trims=saved;await ckRefreshMaintenance(false);
+       }
+       if(kind==='auto-retry'){
+         check(session.digestLastSync?.status==='pending'&&cleanCalls.length===1,'failed acknowledgement was reported as synced');
+         check(queueWrites.length===0,'new baseline uploaded before history acknowledgement');
+         await chatDigestFinishManualTrim(cfg,session);check(cleanCalls.length===1,'failed synchronization ignored backoff');
+         session.digestLastSync.lastAttemptAt=Date.now()-31000;
+         await chatMaybeRollDigestAtDayBoundary();
+       }
+       await until(()=>session.digestLastSync?.status==='synced','original blocked run did not finish automatically: '+kind);
+       check(!session.digestModelRun&&!session.digestManualTrim&&posts.length===0,'auto completion retained blocked local run or called a model');
+       check(session.digestLastSync.rounds===requested,'automatic cut changed the requested boundary');
+       check(cleanCalls.length===(kind==='auto-retry'?2:1),'automatic synchronization repeated a successful cut');
+       const activePack=session.digestActivePack.text;
+       check(activePack.includes('已复核的截断总结第1批')&&activePack.includes('此前实际生效的稳定总结'),'auto completion lost verified or previously active summary');
+       check(session.digestActivePack.pendingCompaction&&remote.model_run.state==='blocked','old compaction was falsely marked complete');
+       check(field('chat-input').value==='未发送的输入草稿','automatic synchronization changed input draft');
+       if(production)check(candidates.length===650&&requested===325&&chatMessages.length===200&&session.transportMessages.length===200,'automatic production-shaped cut did not retain 100 rounds');
+       if(kind==='auto-guards')check(chatMessages.some(m=>m.pendingId==='retained-draft')&&chatMessages.some(m=>m.text==='请求后新增的回答')&&session.transportMessages.some(m=>m.content==='请求后新增的回答'),'automatic cut removed newer or pending messages');
+       await chatMaybeRollDigestAtDayBoundary();
+       check(queueWrites.length>0&&queueWrites.every(w=>w.syncStatus==='synced'&&!w.body.model_run),'committed baseline was not uploaded only after acknowledgement');
+       const coverage=new Set(queueWrites.at(-1).body.base.entries.flatMap(e=>e.covered||[]));
+       check(candidates.every(g=>coverage.has(g.key)),'uploaded baseline omitted proven cut sources');
+       const restored=chatNormalizeSession(JSON.parse(JSON.stringify(session)));
+       check(chatDailyDigestPack(cfg,restored)===activePack,'automatic summary injection changed across restoration');
+       chatSaveSessions({sessionIds:[session.id]});await chatSaveSessionsToIndexedDb.pending;
+       const persisted=(await chatLoadSessionsFromIndexedDb()).find(s=>s.id===session.id);
+       check(persisted&&persisted.digestLastSync.status==='synced'&&!persisted.digestModelRun&&
+         chatDailyDigestPack(cfg,persisted)===activePack&&persisted.messages.length===session.messages.length,'IndexedDB did not persist the acknowledged cut and full summary');
+       check(chatDigestSyncView(session,cfg,remote).status==='同步完成','old ready snapshot hid acknowledged synchronization');
+       results.push({automaticStatusSync:true,kind,sourceGroups:candidates.length,cutRounds:requested,baselineAfterAck:true,restoredInjection:true,oldCompactionPending:true,noModelRequest:true});
+       continue;
+     }
      await ckRefreshMaintenance(false);
      const card=()=>field('ck-digest-monitor').querySelector('.mm-digest-result');
      const syncButton=()=>card().querySelector('[data-mm-digest-action="sync"]');

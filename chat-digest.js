@@ -554,6 +554,11 @@ async function chatMaybeRollDigestAtDayBoundary(){
   try{
     for(var session of chatSessions.slice()){
       if(chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}
+      if(typeof chatDigestReleaseCompletedRun==='function'&&chatDigestReleaseCompletedRun(session,cfg))chatSaveSessions({sessionIds:[session.id]});
+      if(typeof chatDigestPendingSync==='function'&&chatDigestPendingSync(session,cfg)){
+        await chatDigestFinishManualTrim(cfg,session);
+        if(chatDigestPendingSync(session,cfg))continue;
+      }
       await chatRefreshRollingDigest(cfg,{session:session,readOnly:cfg.digestCurrentModel===true&&chatDigestPollingDelay(session,cfg)===30000});
       if(typeof chatDigestFinishManualTrim==='function')await chatDigestFinishManualTrim(cfg,session);
     }

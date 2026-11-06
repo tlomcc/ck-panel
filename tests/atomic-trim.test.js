@@ -313,6 +313,79 @@ test('blocked old compaction neither hides a ready cut nor its acknowledged sync
  assert.equal(pending.status,'同步未完成');assert.equal(pending.retry,true);
 });
 
+test('an existing immediate subscription cut finishes its proven sources while old compaction is blocked',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;
+ Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim({currentModel:true});prepare(x);
+ x.session.digestModelRun={id:'original-run',purpose:'trim'};
+ x.session.digestSchedule={model_run:{id:'original-run',state:'blocked'}};
+ const yesterday=x.ctx.chatDigestShiftDay(x.ctx.chatDailyDigestDayKey(x.ctx.Date.now()),-1);
+ x.session.dailyDigests=[{dayKey:yesterday,text:'已保存的完整旧总结'.repeat(500),covered:[]}];
+ assert.equal(x.ctx.chatDigestPackReady(x.cfg,x.session),false);
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);
+ assert.equal(x.session.messages.length,4);assert.equal(x.session.digestLastSync.status,'synced');
+ assert.equal(x.session.digestModelRun,undefined);assert.equal(x.session.digestSchedule.model_run.state,'blocked');
+ assert.match(x.session.digestActivePack.text,/前三个问题/);assert.match(x.session.digestActivePack.text,/已保存的完整旧总结/);
+ assert.equal(x.session.digestPending.length,3);assert.equal(x.requests.length,0);
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+});
+
+test('acknowledged subscription sync releases the old run so the committed summary can upload',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;
+ Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim({currentModel:true,immediate:false});prepare(x);
+ x.session.digestModelRun={id:'original-run',purpose:'trim'};
+ x.session.digestSchedule={model_run:{id:'original-run',state:'blocked'}};
+ assert.equal(await x.ctx.chatDigestSyncNow(),true);
+ assert.equal(x.session.digestLastSync.status,'synced');assert.equal(x.session.digestModelRun,undefined);
+ assert.equal(x.ctx.chatDigestPollingDelay(x.session,x.cfg),0);
+});
+
+test('a stale ready snapshot cannot replace the displayed acknowledged cut',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;
+ Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim({currentModel:true,immediate:false});prepare(x);
+ await x.ctx.chatDigestSyncNow();
+ x.session.digestStaged={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),
+  base:{entries:x.session.dailyDigests,rollup:null,omitted:[]},trims:[],result:{day:'2026-10-03'},revision:2};
+ const view=x.ctx.chatDigestSyncView(x.session,x.cfg,{model_run:{state:'blocked'}});
+ assert.equal(view.status,'同步完成');assert.equal(view.rounds,3);
+});
+
+test('a failed history acknowledgement resumes once under the shared trim barrier',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;
+ Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim({currentModel:true,immediate:false});prepare(x);
+ x.session.digestModelRun={id:'original-run',purpose:'trim'};
+ x.session.digestSchedule={model_run:{id:'original-run',state:'blocked'}};
+ x.ctx.chatSyncTrimmedHistoryToGateway=async()=>false;
+ await x.ctx.chatDigestSyncNow();assert.equal(x.session.digestLastSync.status,'pending');
+ assert.equal(x.ctx.chatDigestPollingDelay(x.session,x.cfg),30000);
+ let release,calls=0;
+ x.ctx.chatSyncTrimmedHistoryToGateway=async(cfg,result)=>{
+  calls++;assert.ok(x.ctx.chatTrimTransaction);await new Promise(r=>{release=r});
+  x.ctx.chatDigestConfirmSync(x.session,cfg,result.syncId);return true;
+ };
+ const retry=x.ctx.chatDigestFinishManualTrim(x.cfg,x.session);await tick();
+ assert.equal(calls,1);assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+ release();assert.equal(await retry,true);assert.equal(x.session.digestLastSync.status,'synced');
+ assert.equal(x.ctx.chatTrimTransaction,null);assert.equal(x.session.messages.length,4);
+ assert.equal(x.session.digestPending.length,3);assert.equal(x.requests.length,0);
+});
+
+test('a confirmed cut cannot release a different or newer manual run',()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;
+ x.session.digestLastSync={id:'done',scope:x.ctx.chatDigestActiveScope(x.cfg),status:'synced',at:x.ctx.Date.now(),modelRunId:'original'};
+ x.session.digestModelRun={id:'another-run',purpose:'trim'};
+ assert.equal(x.ctx.chatDigestReleaseCompletedRun(x.session,x.cfg),false);
+ assert.equal(x.session.digestModelRun.id,'another-run');
+ delete x.session.digestLastSync.modelRunId;
+ x.session.digestModelRun.id='manual-'+(x.ctx.Date.now()+1)+'-new';
+ assert.equal(x.ctx.chatDigestReleaseCompletedRun(x.session,x.cfg),false);
+ x.session.digestModelRun.id='manual-'+(x.ctx.Date.now()-1)+'-previous';
+ assert.equal(x.ctx.chatDigestReleaseCompletedRun(x.session,x.cfg),true);
+});
+
 test('an unrelated nightly error does not hide a prepared manual cut waiting for a reply',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true});
  await x.ctx.chatRequestManualDigestTrim();prepare(x);x.ctx.chatSending=true;

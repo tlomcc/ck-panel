@@ -10,6 +10,7 @@
  function context(){return CKBackendRoute.current.gateway+'\n'+model()+'\n'+(typeof storedPanelKey==='function'?storedPanelKey():'')}
  function timeText(value){return typeof value==='number'&&isFinite(value)?new Date(value*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'尚未提供'}
  function percent(w){return w&&!w.expired&&!(w.resets_at&&w.resets_at<=Date.now()/1000)&&typeof w.used_percent==='number'&&isFinite(w.used_percent)&&w.used_percent>=0?Math.min(100,w.used_percent):null}
+ function fresh(w){var observed=w&&(typeof w.usage_observed_at==='number'?w.usage_observed_at:w.updated_at),age=Date.now()/1000-observed;return percent(w)!==null&&!w.stale&&typeof observed==='number'&&isFinite(observed)&&age>=-30&&age<=900}
  function remaining(pct){return Number((100-pct).toFixed(1))+'%'}
  function renderInline(value,unavailable){
   var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();
@@ -20,14 +21,14 @@
   var parts=['Claude 剩余'],byKey={},old=!!unavailable,known=false;
   q.windows.forEach(function(w){byKey[w.key]=w});
   [['five_hour','5h'],['seven_day','7天']].forEach(function(pair){
-   var w=byKey[pair[0]],pct=percent(w);parts.push(pair[1]+' '+(pct===null?'—':remaining(pct)));
-   if(pct!==null){known=true;if(w.stale||Date.now()/1000-(w.usage_observed_at||w.updated_at)>900)old=true}
+   var w=byKey[pair[0]],pct=percent(w),current=!unavailable&&fresh(w);parts.push(pair[1]+' '+(current?remaining(pct):pct===null?'—':'待更新'));
+   if(pct!==null){known=true;if(!current)old=true}
   });
   var five=byKey.five_hour;
   if(five&&five.resets_at>Date.now()/1000)parts.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
   if(q.blocked)parts.push('已暂停');
   if(!known)parts.push('等待官方百分比');
-  if(unavailable)parts.push(known?'连接中断，上次数据':'连接中断');else if(old)parts.push('上次观测');
+  if(unavailable)parts.push('连接中断，额度待更新');else if(old)parts.push('等待新的官方数据');
   bar.textContent=parts.join(' · ');bar.dataset.level=q.level;
   bar.title='随聊天返回的官方额度更新。';
  }
@@ -71,15 +72,14 @@
  }
  function close(){if(saving)return;generation++;if(controller)controller.abort();controller=null;dialog.classList.remove('show');dialog.setAttribute('aria-hidden','true');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();schedule()}
  function schedule(){clearTimeout(timer);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},opened()?15000:30000)}
- function quotaCard(key,w){
-  var card=node('article','ck-sub-window'),valid=w&&!w.expired,pct=percent(w);
+ function quotaCard(key,w,unavailable){
+  var card=node('article','ck-sub-window'),valid=w&&!w.expired,pct=percent(w),current=!unavailable&&fresh(w);
   card.append(node('span','ck-sub-window-label',labels[key]||'额度'));
-  card.append(node('strong','ck-sub-number',pct===null?'—':remaining(pct)));
-  if(pct!==null){var progress=node('progress');progress.max=100;progress.value=100-pct;progress.setAttribute('aria-label',(labels[key]||'额度')+' 剩余 '+remaining(pct));card.append(progress)}
+  card.append(node('strong','ck-sub-number',current?remaining(pct):'—'));
+  if(current){var progress=node('progress');progress.max=100;progress.value=100-pct;progress.setAttribute('aria-label',(labels[key]||'额度')+' 剩余 '+remaining(pct));card.append(progress)}
   else card.append(node('div','ck-sub-empty-bar'));
-  var status=!w?'等待官方数据':w.expired?'周期已结束，等待新数据':w.status==='rejected'?'官方已限额':w.stale?'上次观测 · 非实时':pct===null?'官方暂未提供百分比':'剩余额度';
-  if(pct!==null)status+=' · 已用 '+Number(pct.toFixed(1))+'%';
-  if(w&&w.stale&&pct!==null&&status.indexOf('非实时')<0)status+=' · 上次观测，非实时';
+  var status=!w?'等待官方数据':w.expired?'周期已结束，等待新数据':w.status==='rejected'?'官方已限额':!current?'额度待更新':'剩余额度';
+  if(pct!==null)status+=current?' · 已用 '+Number(pct.toFixed(1))+'%':' · 上次确认剩余 '+remaining(pct);
   if(w&&w.applies===false)status+=' · 不影响所选模型';
   card.append(node('p','ck-sub-muted',status),node('p','ck-sub-reset',w&&w.resets_at?'重置：'+timeText(w.resets_at):'重置时间尚未提供'));
   if(pct!==null)card.append(node('p','ck-sub-muted','百分比观测：'+timeText(w.usage_observed_at||w.updated_at)));
@@ -134,6 +134,10 @@
    if(token!==generation)return;
    if(requestContext!==context()){clearContext();return}
    renderInline(dataContext===context()?data:null,true);
+   if(dialog&&data&&dataContext===context()){
+    var windows={};data.quota.windows.forEach(function(w){windows[w.key]=w});$('ck-sub-windows').replaceChildren();
+    ['five_hour','seven_day'].concat(Object.keys(windows).filter(function(k){return k!=='five_hour'&&k!=='seven_day'})).forEach(function(k){$('ck-sub-windows').append(quotaCard(k,windows[k],true))});
+   }
    if(dialog){$('ck-sub-error').hidden=false;$('ck-sub-error').textContent=e.name==='AbortError'?'连接超时；如果正在保存，请刷新核对设置。':e.message;$('ck-sub-state').textContent='暂未取得最新状态';$('ck-sub-renewal').textContent='登录维护状态暂未确认，请恢复连接后刷新。';$('ck-sub-fields').disabled=true;$('ck-sub-save').disabled=true;$('ck-sub-updated').textContent=data?'下方为上次观测，当前连接不可用。':'等待连接订阅服务';if(isSave)$('ck-sub-save-state').textContent='保存结果未确认，请刷新核对'}
    var badge=$('ck-sub-nav-state');if(badge)badge.textContent='状态未知';
   }finally{clearTimeout(timeout);if(token===generation){controller=null;if(dialog)$('ck-sub-refresh').disabled=false;schedule()}}

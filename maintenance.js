@@ -231,6 +231,7 @@ async function ckRunDigestAction(id,action){
             await chatSyncNightlyDigest(cfg,{session:local,readOnly:true});
             if(seq!==mySeq||key!==storedPanelKey()||backend!==GRAPH_API_BASE||section!==ckStatusTab||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig()))return;
           }
+          if(local===chatCurrentSession())await chatDigestFinishManualTrim(cfg,local);
         }
       }
       s.data=data;s.receivedAt=Date.now();s.refreshFailed=false;

@@ -63,7 +63,8 @@
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-state').textContent==='订阅用量偏高','unrelated model does not pause selected model');
  const opus=$('ck-sub-windows').lastChild.textContent;
- assert(opus.includes('不影响所选模型')&&opus.includes('非实时')&&opus.includes('百分比观测：'),'model scope and stale rejected percentage labeled');
+ assert(opus.includes('不影响所选模型')&&opus.includes('上次确认')&&opus.includes('百分比观测：'),'model scope and stale rejected percentage labeled');
+ assert($('ck-sub-windows').lastChild.querySelector('strong').textContent==='—','stale rejection cannot display an old balance as current');
  assert($('ck-sub-updated').textContent.includes('最近状态事件'),'status timestamp distinguished from percentage');
  state.quota.windows[0].expired=false;state.quota.blocked=true;state.quota.level='paused';state.quota.reason='<img src=x onerror="window.pwned=true">';
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent.includes('暂停'));
@@ -72,7 +73,8 @@
  assert($('ck-sub-updated').textContent.includes('上次观测'),'failed refresh clearly marks old data');
  assert($('ck-sub-save').disabled,'cannot save stale/unknown server settings');
  assert($('ck-sub-renewal').textContent.includes('暂未确认'),'failed refresh invalidates readiness display');
- assert($('ck-sub-inline').textContent.includes('上次数据'),'inline failure marks stale observation');
+ assert($('ck-sub-inline').textContent.includes('额度待更新')&&!$('ck-sub-inline').textContent.includes('13.8%'),'inline failure hides the old balance');
+ assert([...$('ck-sub-windows').querySelectorAll('strong')].every(n=>n.textContent==='—'),'failed refresh clears current values on all cards');
  error=false;state.quota.blocked=false;state.quota.level='high';state.quota.reason='';
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-save').disabled);
  // A closed dialog must ignore the in-flight response.
@@ -86,6 +88,13 @@
  chatReleaseSendingUi(null);
  await wait(()=>$('ck-sub-inline').textContent.includes('5h 10%'));
  assert(calls.length===roundCalls+1,'reply completion refreshes only local monitor once: '+JSON.stringify({before:roundCalls,after:calls.length,paths:calls.slice(roundCalls).map(c=>c.url),text:$('ck-sub-inline').textContent}));
+ state.quota.windows[0].used_percent=39;state.quota.windows[0].stale=true;state.quota.windows[0].usage_observed_at=now-8000;
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-inline').textContent.includes('5h 待更新')&&!$('ck-sub-inline').textContent.includes('61%'),'stuck 61 percent must not look like the latest balance');
+ assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='—'&&$('ck-sub-windows').firstChild.textContent.includes('上次确认剩余 61%'),'old official reading is retained with an explicit label');
+ state.quota.windows[0].used_percent=74;state.quota.windows[0].stale=false;state.quota.windows[0].usage_observed_at=Date.now()/1000;
+ chatReleaseSendingUi(null);await wait(()=>$('ck-sub-inline').textContent.includes('5h 26%'));
+ assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='26%','new official balance replaces stale value after reply');
  state.quota.windows[0].used_percent=null;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-inline').textContent.includes('5h —')&&!$('ck-sub-inline').textContent.includes('5h 100%'),'unknown is never remaining 100%');

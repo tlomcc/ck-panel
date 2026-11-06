@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v385-digest-partial-sync';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v386-digest-auto-sync-quota';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -7775,6 +7775,8 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
   var panelKey=cfg.panelKey||'';
   if(!session||!panelKey)return false;
   var targetSessionId=session.id;
+  var syncRecord=result.syncId&&chatDigestPendingSync(session,cfg);
+  if(syncRecord&&syncRecord.id===result.syncId){syncRecord.lastAttemptAt=Date.now();chatSaveSessions({sessionIds:[session.id]});}
   var controller=new AbortController();
   var timer;
   var timeout=new Promise(function(resolve,reject){timer=setTimeout(function(){controller.abort();reject(new Error('网关同步等待超时；本地历史已保留'))},15000)});
@@ -7820,7 +7822,7 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
   }catch(error){
     // 同步失败不回滚本地截断：本地已经是权威历史，下一次发送仍会把完整历史带给网关。
     chatDebug('trim_gateway_sync',{ok:false,error:String((error&&error.message)||error).slice(0,200)});
-    if(!result.thinkingClean)chatShowTrimFailure('本机已保存，但网关尚未同步。可重试同步，或在下一次发送时自动同步。'+chatFriendlyError(error),true);
+    if(!result.thinkingClean&&!result.automatic)chatShowTrimFailure('本机已保存，但网关尚未同步。可重试同步，或在下一次发送时自动同步。'+chatFriendlyError(error),true);
     return false;
   }finally{clearTimeout(timer)}
 }
