@@ -267,6 +267,52 @@ test('missing both a ready injection and a stable saved pack preserves original 
  assert.equal(x.session.messages.length,10);assert.ok(x.session.digestManualTrim);
 });
 
+test('explicit sync reuses the active summary while a changed digest range is still preparing',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ const oldCfg={...x.cfg,dailyDigestRetentionDays:10,dailyDigestDetailDays:3,dailyDigestRollupDays:7};
+ x.session.digestActivePack={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(oldCfg),text:'此前实际生效的总结',at:x.ctx.Date.now()-1000};
+ await x.ctx.chatRequestManualDigestTrim({immediate:false});prepare(x);
+ const entries=[{dayKey:x.ctx.chatDigestShiftDay(x.ctx.chatDailyDigestDayKey(x.ctx.Date.now()),-1),text:'等待精简的已存总结'.repeat(500),covered:[]}];
+ x.session.digestStaged={scope:x.ctx.chatDigestActiveScope(x.cfg),config:x.ctx.chatDigestConfigStamp(x.cfg),base:{entries,rollup:null,omitted:[]},trims:x.session.digestReadyTrims,result:{day:'2026-10-03'},revision:2};
+ x.session.digestReadyTrims=[];
+ assert.equal(x.ctx.chatDigestImmediateReady(x.session,x.cfg),true);
+ assert.equal(await x.ctx.chatDigestSyncNow(),true);
+ assert.equal(x.session.messages.length,4);
+ assert.match(x.session.digestActivePack.text,/此前实际生效的总结/);
+ assert.match(x.session.digestActivePack.text,/前三个问题/);
+ assert.doesNotMatch(x.session.digestActivePack.text,/等待精简/);
+});
+
+test('explicit sync can rebuild a missing active pack from saved summaries without accepting draft work',async()=>{
+ const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim({immediate:false});prepare(x);
+ x.session.dailyDigests=[{dayKey:x.ctx.chatDigestShiftDay(x.ctx.chatDailyDigestDayKey(x.ctx.Date.now()),-1),text:'已保存的完整旧总结'.repeat(500),covered:[]}];
+ x.session.digestWork={version:2,context:'unreviewed',results:[{key:'draft',text:'尚未复核的草稿'}]};
+ delete x.session.digestActivePack;
+ assert.equal((await x.run()).trimmed,false,'ordinary sends must still preserve an unprepared pack');
+ assert.equal(await x.ctx.chatDigestSyncNow(),true);
+ assert.equal(x.session.messages.length,4);
+ assert.match(x.session.digestActivePack.text,/已保存的完整旧总结/);
+ assert.match(x.session.digestActivePack.text,/前三个问题/);
+ assert.doesNotMatch(x.session.digestActivePack.text,/尚未复核的草稿/);
+ assert.equal(x.requests.length,0);
+});
+
+test('blocked old compaction neither hides a ready cut nor its acknowledged synchronization',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;
+ Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true,chatRenderMessages:()=>{}});
+ await x.ctx.chatRequestManualDigestTrim({currentModel:true,immediate:false});prepare(x);
+ const remote={status:'blocked',model_run:{state:'blocked'},last_error:'旧摘要压缩超时'};
+ const ready=x.ctx.chatDigestSyncView(x.session,x.cfg,remote);
+ assert.equal(ready.ready,true);assert.equal(ready.status,'待同步');assert.match(ready.note,/旧摘要.*待手动处理/);
+ await x.ctx.chatDigestSyncNow();
+ const done=x.ctx.chatDigestSyncView(x.session,x.cfg,remote);
+ assert.equal(done.status,'同步完成');assert.equal(done.rounds,3);assert.match(done.note,/旧摘要.*待处理/);
+ x.session.digestLastSync.status='pending';
+ const pending=x.ctx.chatDigestSyncView(x.session,x.cfg,remote);
+ assert.equal(pending.status,'同步未完成');assert.equal(pending.retry,true);
+});
+
 test('an unrelated nightly error does not hide a prepared manual cut waiting for a reply',async()=>{
  const x=setup();Object.assign(x.ctx,{chatInit:()=>{},chatSaveConfig:()=>x.cfg,chatSyncNightlyDigest:async()=>true});
  await x.ctx.chatRequestManualDigestTrim();prepare(x);x.ctx.chatSending=true;

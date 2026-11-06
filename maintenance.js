@@ -47,7 +47,8 @@ async function ckRunDigestAction(id,action){
     var current=chatCurrentSession(),locals=(typeof chatSessions!=='undefined'?chatSessions:[]).filter(function(s){return s===current||chatDigestHasContent(s)}),cfg=chatLoadConfig();
     function card(local){
       var remote=sessions.find(function(s){return s.session_id===String(local.id)}),v=chatDigestSyncView(local,cfg,remote);
-      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div>'+progressCard(local,remote,v)+'<div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(!v.ready?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
+      var busy=chatDigestReplyActive(local)||chatTrimBusy||chatTrimTransaction;
+      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div>'+progressCard(local,remote,v)+'<div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):busy?'当前回复结束后可同步':v.ready?'可立刻同步':'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(!v.ready||busy?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
     }
     var others=locals.filter(function(s){return s!==current});
     return (current?card(current):'')+(others.length?'<details class="mm-current-details" data-session="other-results"><summary>其他对话 · '+others.length+' 个</summary>'+others.map(card).join('')+'</details>':'');
@@ -219,6 +220,18 @@ async function ckRunDigestAction(id,action){
         data.sessions=(data.sessions||[]).filter(function(session){return visible.has(String(session.session_id))});
         data.history=Object.assign({},data.history,{items:((data.history||{}).items||[]).filter(function(row){return visible.has(String(row.session_id))})});
         s.rows=s.rows.filter(function(row){return visible.has(String(row.session_id))});
+        // This endpoint carries progress metadata, not the saved summaries.
+        // Reuse the queue reader and all its source/config/edit checks before
+        // deriving button readiness; merely visiting status never starts a run.
+        for(var remote of data.sessions){
+          var local=chatSessions.find(function(session){return String(session.id)===String(remote.session_id)});
+          var staged=local&&chatDigestStage(local,cfg);
+          if(local&&(local.digestManualTrim||local.digestSettingsRequest||local.digestModelRun&&local.digestModelRun.purpose==='daily')&&
+            (remote.ready_trim_groups>0||remote.status==='succeeded')&&(!staged||Number(remote.revision)>Number(staged.revision))){
+            await chatSyncNightlyDigest(cfg,{session:local,readOnly:true});
+            if(seq!==mySeq||key!==storedPanelKey()||backend!==GRAPH_API_BASE||section!==ckStatusTab||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig()))return;
+          }
+        }
       }
       s.data=data;s.receivedAt=Date.now();s.refreshFailed=false;
       var rows=data.history&&data.history.items||[];

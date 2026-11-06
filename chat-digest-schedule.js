@@ -130,13 +130,19 @@ function chatDigestSyncView(session,cfg,remote){
   if(cfg.digestCurrentModel===true){
     var run=state.model_run||{},local=session.digestModelRun;
     if(!record&&!preparing){view.status='仅手动';view.note='点击立即截断或手动更新总结后，使用所选整理模型。';}
-    if(run.state==='blocked'){
+    if(run.state==='blocked'&&ready&&!view.retry){
+      view.status=chatDigestReplyActive(session)?'等待当前回复':'待同步';view.tone='attention';
+      view.note='本次截断总结已准备，'+(chatDigestReplyActive(session)?'当前回复结束后可立刻同步':'可立刻同步')+'；旧摘要整理仍待手动处理，已有总结会保留。';
+    }else if(run.state==='blocked'&&record&&!preparing){
+      view.note+='未完成的旧摘要整理仍保留待处理。';
+    }else if(run.state==='blocked'){
       var stopCode=state.last_error_code||'';
       view.status=stopCode==='subscription_quota_low'||stopCode==='subscription_quota_blocked'?'等待额度恢复':
         stopCode==='subscription_egress_blocked'?'固定出口保护中':
         stopCode==='subscription_auth_unavailable'?'等待登录恢复':
         stopCode.indexOf('subscription_quota_')===0?'等待额度核实':'等待手动处理';
       view.tone='attention';view.note=state.last_error||'本次总结未完成；原文与成功批次已保留。';
+      if(progress&&!ready)view.note+='本机尚未就绪：'+(!progress.valid?'截断范围与原文尚未对齐。':progress.prepared<progress.sources?'已核对 '+progress.prepared+' / '+progress.sources+' 组来源，正在取回已存结果。':!chatDigestCanActivate(session,cfg)?'请先保存或取消总结编辑。':'正在核对已存总结。');
     }
     else if(local&&run.id===local.id&&(run.state==='queued'||run.state==='running')){view.status='手动总结进行中';view.note='使用 '+local.label+' 整理和校对；原文保留。';}
     else if(ready&&!preparing){view.note='结果已准备，可立刻同步；不会因缓存到期自动截断。';}

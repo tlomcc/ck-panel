@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v384-foreground-recovery';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v385-digest-partial-sync';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -7703,7 +7703,7 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   }
   var stageBoundary=!!((cfg.digestCurrentModel!==true||opts&&opts.commitPrepared)&&chatDigestCanActivate(activationSession,cfg)&&chatDigestStage(activationSession,cfg)&&(opts&&opts.commitPrepared||((submittedPending&&submittedPending.length)||(opts&&opts.idleCheck))&&chatDigestCacheExpired(activationSession)));
   function summaryOnlyPlan(source){return Object.assign({},source,{boundary:true,cacheBoundary:true,trimmed:false,dropped:0,after:source.before,historyAfter:source.before,localAfter:source.localBefore,transportAfter:source.transportBefore,transportDropped:0,localDropped:0,droppedMessages:[],droppedTransportMessages:[],trigger:'digest_sync',forceCacheRebuild:true});}
-  if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan))){
+  if(manualRequest&&!manualSend||manualSend&&(!plan.manualValid||!chatDigestManualPrepared(activationSession,cfg,plan,!!(opts&&opts.commitPrepared)))){
     if(stageBoundary&&chatDigestSettingsReady(activationSession,cfg)){plan=summaryOnlyPlan(plan);manualSend=false;}
     else{
     if(!(opts&&opts.idleCheck)&&submittedPending&&submittedPending.length)chatDigestRecordTrimDecision(activationSession,plan,!manualSend?'manual_scope_mismatch':!plan.manualValid?'manual_source_changed':plan.transportBefore!==plan.localBefore?'history_coverage_mismatch':'summary_not_ready');
@@ -7722,8 +7722,8 @@ async function chatApplyAutoTrimForPendingBatch(cfg,submittedPending,requestStat
   chatTrimTransaction=new Promise(function(resolve){release=resolve});
   try{
     if(plan.trimmed&&cfg.dailyDigestEnabled!==false){
-      var readyPlan=manualSend?null:chatDigestAutoPreparedPlan(session,cfg,plan,submittedPending);
-      var prepared=manualSend?chatDigestManualPrepared(session,cfg,plan):readyPlan&&readyPlan.digestPrepared;
+      var readyPlan=manualSend?null:chatDigestAutoPreparedPlan(session,cfg,plan,submittedPending,!!(opts&&opts.commitPrepared));
+      var prepared=manualSend?chatDigestManualPrepared(session,cfg,plan,!!(opts&&opts.commitPrepared)):readyPlan&&readyPlan.digestPrepared;
       if(!prepared){
         if(stageBoundary&&chatDigestSettingsReady(session,cfg))plan=summaryOnlyPlan(plan);
         else{

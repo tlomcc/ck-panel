@@ -35,6 +35,15 @@ test('actual synchronization completes the final step and freezes elapsed time',
  const f=fixture();f.remote.model_run.state='succeeded';f.remote.progress.phase='saved';f.remote.progress.finished_at=now/1000-10;
  f.sync={status:'同步完成',prepare:false};const v=make(f);assert.equal(v.stage,'截断并同步完成');assert.equal(v.eta,'已完成');assert.equal(v.step,4);assert.equal(v.elapsed,'1 分 30 秒');
 });
+test('a prepared cut can await explicit sync while an unrelated compaction remains blocked',()=>{
+ const f=fixture();f.remote.model_run.state='blocked';f.remote.progress.completed_batches=2;
+ f.remote.progress.finished_at=now/1000-10;f.remote.last_error='旧摘要压缩超时';
+ f.sync={ready:true,prepare:true,status:'待同步',note:'本次截断总结已准备；旧摘要仍待处理。'};
+ const v=make(f);assert.equal(v.stage,'总结就绪，等待截断同步');assert.equal(v.step,3);
+ assert.match(v.batch,/已完成 2 批/);assert.match(v.detail,/旧摘要仍待处理/);assert.notEqual(v.eta,'已完成');
+ f.sync={status:'同步完成',prepare:false,note:'本机与网关已同步；旧摘要仍待处理。'};
+ assert.equal(make(f).stage,'截断并同步完成');assert.match(make(f).detail,/旧摘要仍待处理/);
+});
 test('server observation handles skewed device clocks; reused work is identified',()=>{
  const f=fixture();f.remote.progress.reused_batches=1;f.remote.progress.measured_batches=0;
  const v=make(f,{now:now+600000,receivedAt:now+600000});assert.equal(v.elapsed,'1 分 40 秒');assert.match(v.batch,/复用 1 批/);assert.match(v.eta,/暂未形成估算/);

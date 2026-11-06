@@ -1,10 +1,10 @@
 (async()=>{
  const check=(ok,message)=>{if(!ok)throw Error(message)},pause=ms=>new Promise(r=>setTimeout(r,ms));
  const until=async(fn,message)=>{for(let i=0;i<500;i++){if(fn())return;await pause(10)}throw Error(message)};
- const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast};
+ const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast,panelDataFetch,storedPanelKey};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,cleanCalls,posts,preparedTrims,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,cleanCalls,posts,preparedTrims,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
@@ -12,8 +12,8 @@
    chatSessionsReady=true;chatSessionsLoadPromise=null;chatSending=false;chatEditingIndex=-1;chatTrimBusy=false;chatTrimTransaction=null;
    chatNightlySynced={};chatNightlyStatus={};chatNightlySyncs=new Map();chatDigestEditors={};
    const now=Date.now();chatActiveSessionId='immediate-trim-'+label+'-'+Math.random().toString(36).slice(2);
-   const messages=Array.from({length:5},(_,i)=>[{role:'user',text:'原问题'+i,turnId:'old'+i,ts:now-60000+i*2000},
-     {role:'assistant',text:'原回答'+i,turnId:'old'+i,ts:now-59000+i*2000}]).flat();
+   const messages=Array.from({length:label==='partial-production'?425:5},(_,i)=>[{role:'user',text:'原问题'+i,turnId:'old'+i,ts:now-900000+i*2000},
+     {role:'assistant',text:'原回答'+i,turnId:'old'+i,ts:now-899000+i*2000}]).flat();
    session=chatNormalizeSession({id:chatActiveSessionId,title:'立即截断验证',messages,transportMessages:messages.map(m=>({role:m.role,content:m.text})),
      cacheLastReadAt:now,transportUpdated:now,updated:now,wakeEnabled:true,wakeSyncAt:now});
    chatSessions=[session];chatMessages=session.messages;chatSessionsLoadPromise=Promise.resolve(chatSessions);chatDraftImages=[];chatDraftFiles=[];
@@ -23,7 +23,7 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;cleanCalls=[];posts=[];preparedTrims=null;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];cleanCalls=[];posts=[];preparedTrims=null;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
    const groups=body.groups.filter(g=>body.candidate_keys.includes(g.key));
@@ -36,7 +36,7 @@
    const target=new URL(url,location.href),body=options.body?JSON.parse(options.body):null;
    if(target.pathname.endsWith('/wake'))return json({ok:true,enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240});
    if(target.pathname.endsWith('/queue')){
-     queueCalls++;if(body)queueBody=body;
+     queueCalls++;queueMethods.push(options.method||'GET');if(body)queueBody=body;
      if(body&&loseUploadResponse){prepared(body);loseUploadResponse=false;throw new TypeError('Failed to fetch')}
      const reply=()=>json(body?prepared(body):{ok:true,sessions:[prepared(queueBody)]});
      if(deferQueue)return new Promise(resolve=>{releaseQueue=()=>resolve(reply())});
@@ -160,9 +160,90 @@
    check(!transmitted.includes('昨日尚未精简的长总结'),'unready long daily source expanded the prompt');
    releaseReply();await nextSend;
    results.push({midnightSummaryInjected:true,stableSummaryPreserved:true,unrelatedNightly524DoesNotBlock:true,nextRequestChecked:true});
+
+   for(const kind of ['changed-config','missing-pack','foreign-pack']){
+     await until(()=>!chatDigestMaintenanceBusy,'previous maintenance did not settle');
+     setup(kind==='changed-config'?'partial-production':'partial-'+kind);
+     cfg.digestCurrentModel=true;cfg.dailyDigestRetentionDays=10;cfg.dailyDigestDetailDays=3;cfg.dailyDigestRollupDays=2;
+     if(kind==='changed-config'){
+       cfg.autoTrimKeepRounds=100;
+       session.transportMessages=session.transportMessages.map(m=>({...m,content:'传输记录 '+m.content}));
+     }
+     chatSaveConfigObject(cfg);chatWriteForm(cfg);cfg=chatLoadConfig();
+     const yesterday=chatDigestShiftDay(chatDailyDigestDayKey(Date.now()),-1);
+     session.dailyDigests=[{dayKey:yesterday,text:'完整保留的旧总结'.repeat(500),covered:[]}];
+     if(kind!=='missing-pack')session.digestActivePack={scope:kind==='foreign-pack'?'another-connection':chatDigestActiveScope(cfg),
+       config:chatDigestConfigStamp({...cfg,dailyDigestRollupDays:7}),text:kind==='foreign-pack'?'另一连接的冻结总结':'此前实际生效的稳定总结',at:Date.now()-1000};
+     modelRun='original-partial-'+kind;modelState='blocked';
+     check(await chatRequestManualDigestTrim({currentModel:true,immediate:false}),'partial manual request missing');
+     session.digestModelRun={id:modelRun,purpose:'trim',label:'Claude 订阅 · 合成验证'};
+     session.digestRemote={scope:chatDigestActiveScope(cfg),revision:1};
+     const candidates=chatDigestCandidateGroups(session,cfg,chatMessages);
+     queueBody={groups:candidates,candidate_keys:candidates.map(g=>g.key),base:chatNightlyBase(session),base_stamp:chatNightlyBaseStamp(cfg,session),config:chatNightlyConfig(cfg)};
+     const chunks=candidates.length>306?[candidates.slice(0,306),candidates.slice(306)]:[candidates];
+     preparedTrims=chunks.map((groups,i)=>({keys:groups.map(g=>g.key),text:'已复核的截断总结第'+(i+1)+'批。',startTs:groups[0].start,endTs:groups.at(-1).end}));
+     const remote={session_id:session.id,revision:2,status:'blocked',ready_trim_groups:candidates.length,pending_groups:0,
+       model_run:{id:modelRun,state:'blocked',route:{execution:'claude_code_subscription',model:'claude-opus-4-6'}},
+       progress:{phase:'blocked',completed_batches:2,planned_batches:3,finished_at:Date.now()/1000},
+       manual:{id:String(session.digestManualTrim.requestedAt),sources:candidates.length,ready_sources:candidates.length},
+       last_error:'本次截断资料已完成总结，可点立刻同步；旧摘要压缩超时，保留待处理'};
+     storedPanelKey=()=>cfg.panelKey;panelDataFetch=async()=>json({ok:true,sessions:[remote],history:{items:[]}});
+     currentPanelTab='status';ckStatusTab='digest';document.body.classList.remove('chat-active');
+     field('loading-wrap')?.remove();
+     ['fact','topics','digest','events'].forEach(name=>{field('ck-status-'+name).hidden=name!=='digest';field('ck-status-tab-'+name).setAttribute('aria-selected',String(name==='digest'));});
+     field('status-sub').textContent='截断进度 · 阶段、耗时与同步结果';
+     document.querySelectorAll('.panel-tab').forEach(n=>n.classList.remove('active'));field('tab-status').classList.add('active');
+     check(!session.digestStaged,'fixture must begin with metadata only');
+     await ckRefreshMaintenance(false);
+     const card=()=>field('ck-digest-monitor').querySelector('.mm-digest-result');
+     const syncButton=()=>card().querySelector('[data-mm-digest-action="sync"]');
+     check(queueCalls===1&&queueMethods[0]==='GET'&&session.digestStaged,'status did not read the saved snapshot once without uploading');
+     check(!syncButton().disabled,'partial result button disabled: '+kind+' '+card().textContent);
+     check(card().textContent.includes('等待截断同步')&&card().textContent.includes('共 3 批'),'partial result lost its honest progress');
+     check(cleanCalls.length===0&&posts.length===0,'status view performed a cut or started a model');
+     const before=chatMessages.length,requested=session.digestManualTrim.dropRounds;
+     session.replyDraft={state:'running',turn_id:'unrecovered'};await ckRefreshMaintenance(false);
+     check(syncButton().disabled,'status allowed sync during an unrecovered reply');
+     session.replyDraft=null;
+     const staged=session.digestStaged,trims=staged.trims;
+     staged.trims=trims.map((t,i)=>i? t : {...t,keys:t.keys.slice(1)});await ckRefreshMaintenance(false);
+     check(syncButton().disabled,'saved-pack recovery bypassed missing source coverage');
+     check(await chatDigestSyncNow()===false&&chatMessages.length===before,'missing source was removed');
+     if(chatNightlyTimer){clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
+     staged.trims=trims;chatDigestEditors[session.id+':today']={text:'未保存的总结编辑'};
+     await ckRefreshMaintenance(false);check(syncButton().disabled,'unsaved summary edit was bypassed');
+     delete chatDigestEditors[session.id+':today'];await ckRefreshMaintenance(false);
+     check(!syncButton().disabled,'button did not recover after guards cleared');
+     check(syncButton().getBoundingClientRect().width>0,'status sync button is not visible');
+     if(window.__clickDigestSync)await window.__clickDigestSync(kind);else syncButton().click();
+     await until(()=>session.digestLastSync?.status==='synced','status button did not synchronize: '+kind);
+     await until(()=>card().textContent.includes('同步完成'),'status hid the actual synchronization');
+     check(cleanCalls.length===1&&posts.length===0,'partial sync did not commit exactly once without a model');
+     check(session.digestLastSync.rounds===requested,'status reported the wrong actual cut');
+     check(field('chat-input').value==='未发送的输入草稿','partial sync changed the input draft');
+     check(session.digestActivePack.pendingCompaction&&remote.model_run.state==='blocked','partial cut falsely completed old compaction');
+     const activePack=session.digestActivePack.text;
+     check(activePack.includes('已复核的截断总结第1批'),'new summary missing from active pack');
+     check(!activePack.includes('另一连接的冻结总结'),'foreign frozen pack was reused');
+     if(kind==='changed-config'){
+       check(candidates.length===650&&requested===325&&chatMessages.length===200&&session.transportMessages.length===200,'production-shaped source/round coverage is wrong');
+       check(activePack.includes('此前实际生效的稳定总结')&&!activePack.includes('完整保留的旧总结'),'changed settings replaced the currently active summary');
+     }else check(activePack.includes('完整保留的旧总结'),'missing pack lost the saved old summary');
+     const restored=chatNormalizeSession(JSON.parse(JSON.stringify(session)));session=restored;chatSessions=[session];chatMessages=session.messages;
+     check(chatDailyDigestPack(cfg,session)===activePack,'summary injection changed across session restoration');
+     currentPanelTab='chat';document.body.classList.add('chat-active');field('tab-status').classList.remove('active');field('tab-chat').classList.add('active');
+     field('chat-input').value='沿用这次已经同步的总结';const sending=chatSendMessage();
+     await until(()=>posts.length===1&&releaseReply,'next request did not use the restored summary');
+     check(posts[0].daily_digest_pack===activePack,'next request lost part of the recovered summary');
+     releaseReply();await sending;
+     results.push({partialStatusSync:true,kind,sourceGroups:candidates.length,cutRounds:requested,snapshotGetOnly:true,guardsPreserved:true,restoredInjection:true,oldCompactionPending:true});
+     currentPanelTab='status';document.body.classList.remove('chat-active');field('tab-chat').classList.remove('active');field('tab-status').classList.add('active');
+     await ckRefreshMaintenance(false);
+   }
    return results;
  }finally{
    if(chatNightlyTimer){clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
    window.fetch=original.fetch;chatInit=original.init;chatEnsureMainRouteReady=original.route;toast=original.toast;
+   panelDataFetch=original.panelDataFetch;storedPanelKey=original.storedPanelKey;currentPanelTab='chat';
  }
 })()
