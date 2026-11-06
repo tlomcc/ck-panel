@@ -39,7 +39,8 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await page.evaluate(()=>document.getElementById('chat-input').value='主窗口未发送的草稿');await start(page);
       await page.fill('#games-input','这次只聊本局的事。');await play(page,'H8','嗯，陪着你。\n【落子：I9】');
       const req=(await calls(page))[0];
-      assert.equal(req.model,'claude-opus-4-6');assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'high');assert.equal(req.thinking_prompt,'保留小克原来的思考词。');
+      assert.equal(req.model,'claude-opus-4-6');assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'medium');assert.equal(req.thinking_prompt,'保留小克原来的思考词。');
+      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ckChatConfigV2')).thinkingEffort),'high');
       assert.equal(req.recall,false);assert.equal(req.use_mcp,false);assert.equal(req.worldbook_pack,'');assert.equal(req.daily_digest_pack,'');assert.equal(req.game_context.parent_session_id,'ck-gomoku-fixture');
       assert.ok(!JSON.stringify(req).includes('茉莉花茶'));assert.equal(req.execution_backend,'claude_code_subscription');assert.equal(req.prompt_cache_ttl,'1h');assert.equal(req.chat_polling_enabled,false);
       assert.equal(await page.evaluate(()=>CKBackendRoute.current.subscriptionModel),'claude-opus-4-6');
@@ -62,7 +63,7 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       const previous=await page.evaluate(()=>({id:chatActiveSessionId,board:chatCurrentSession().gomoku,
         prompts:chatCurrentSession().gameWindow.prompts,reports:chatCurrentSession().gameWindow.reports,
         mainModel:CKBackendRoute.current.subscriptionModel,main:chatSessions.find(s=>s.id==='ck-gomoku-fixture').messages}));
-      await page.evaluate(()=>{chatCurrentSession().gameWindow.model='claude-sonnet-5-5';chatSaveSessions();return chatSaveSessionsToIndexedDb.pending});
+      await page.evaluate(()=>{chatCurrentSession().gameWindow.model='claude-sonnet-5-5';chatCurrentSession().gameWindow.prompts.thinkingEffort='high';chatSaveSessions();return chatSaveSessionsToIndexedDb.pending});
       await page.reload();
       await page.waitForFunction(()=>chatSessionsReady&&chatCurrentSession().gameWindow&&chatCurrentSession().gameWindow.model==='claude-opus-4-6');
       assert.equal((await calls(page)).length,0);
@@ -75,8 +76,90 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await play(page,'G8','继续这局。\n【落子：J9】');
       const req=(await calls(page)).at(-1);
       assert.equal(req.model,'claude-opus-4-6');assert.equal(req.session_id,previous.id);
-      assert.equal(req.game_context.game_id,previous.board.id);assert.equal(req.thinking_effort,'high');
+      assert.equal(req.game_context.game_id,previous.board.id);assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'medium');
+      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ckChatConfigV2')).thinkingEffort),'high');
       assert.equal(await page.evaluate(()=>__fixtureWakeStates[chatActiveSessionId].enabled),false);
+      assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
+    }finally{await context.close()}
+  });
+  for(const event of ['visibility','pageshow'])await run('games foreground '+event+' resumes the original move immediately',async()=>{
+    const {context,page}=await boot();try{
+      await start(page);
+      await plan(page,{reply:'回来啦，这步下在这里。\n【落子：I9】',partial:'回来啦',delay:60000,durableReceipt:true});
+      await page.click('[data-coordinate="H8"]');await page.click('#games-play');
+      await page.waitForFunction(()=>chatSending&&chatActiveRequest&&chatActiveRequest.responseReceived);
+      await page.evaluate(kind=>{
+        if(kind==='visibility'){
+          Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));
+          Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'));
+        }else{
+          window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));
+          window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));
+        }
+      },event);
+      await page.waitForFunction(()=>chatCurrentSession().gomoku.moves.length===2&&!chatSending&&!chatRecoverInFlightBusy,{},{timeout:3500});
+      assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),['H8','I9']);
+      assert.equal((await calls(page)).length,1);
+      assert.ok(await page.evaluate(()=>__fixtureRequests.some(r=>r.path.endsWith('/ck/chat/last'))));
+      assert.equal(await page.evaluate(()=>currentPanelTab),'games');
+      await page.evaluate(()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))});
+      await page.waitForTimeout(150);
+      assert.equal((await calls(page)).length,1);assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.moves.length),2);
+      assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
+    }finally{await context.close()}
+  });
+  await run('a foreground game shows recovery while its original turn is still running',async()=>{
+    const {context,page}=await boot();try{
+      await start(page);
+      await plan(page,{reply:'思考完成，继续下这一步。\n【落子：I9】',partial:'思考',delay:60000,durableReceipt:true,receiptReadyDelay:4500});
+      await page.click('[data-coordinate="H8"]');await page.click('#games-play');
+      await page.waitForFunction(()=>chatSending&&chatActiveRequest&&chatActiveRequest.responseReceived);
+      await page.evaluate(()=>{
+        Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));
+        Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await page.waitForFunction(()=>!chatSending&&chatMessages.some(m=>m.ckGame&&m.inFlight));
+      await page.waitForFunction(()=>document.getElementById('games-conversation').textContent.includes('正在补收'));
+      assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),['H8']);
+      assert.equal(await page.locator('#games-ask').textContent(),'补收这步');
+      await page.click('#games-ask');
+      assert.equal((await calls(page)).length,1);
+      await page.waitForFunction(()=>chatCurrentSession().gomoku.moves.length===2&&!chatRecoverInFlightBusy,{},{timeout:12000});
+      assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),['H8','I9']);
+      assert.equal((await calls(page)).length,1);assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
+    }finally{await context.close()}
+  });
+  await run('the game recovery button reads the original reply without resending the move',async()=>{
+    const {context,page}=await boot();try{
+      await start(page);
+      await plan(page,{reply:'补收原来这一步。\n【落子：I9】',partial:'补收',delay:60000,durableReceipt:true});
+      await page.click('[data-coordinate="H8"]');await page.click('#games-play');
+      await page.waitForFunction(()=>chatSending&&chatActiveRequest&&chatActiveRequest.responseReceived);
+      assert.equal(await page.locator('#games-ask').textContent(),'补收这步');await page.click('#games-ask');
+      await page.waitForFunction(()=>chatCurrentSession().gomoku.moves.length===2&&!chatSending&&!chatRecoverInFlightBusy,{},{timeout:3500});
+      assert.equal((await calls(page)).length,1);assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
+    }finally{await context.close()}
+  });
+  for(const kind of ['stopped','error'])await run('foreground recovery preserves an explicitly '+kind+' move without automatic retry',async()=>{
+    const {context,page}=await boot();try{
+      await start(page);
+      await plan(page,{reply:'这条不应自动落子。\n【落子：I9】',partial:'这条',delay:60000,durableReceipt:true});
+      await page.click('[data-coordinate="H8"]');await page.click('#games-play');
+      await page.waitForFunction(()=>chatSending&&chatActiveRequest&&chatActiveRequest.responseReceived);
+      await page.evaluate(kind=>{
+        if(kind==='stopped')chatStopMessage();
+        else{
+          const turn=chatActiveRequest.turnId;
+          sessionStorage.setItem('__gomoku_receipt_'+turn,JSON.stringify({ok:true,found:false,pending:false,state:'error',turn_id:turn,error:'模拟的生成失败'}));
+        }
+        window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));
+        window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));
+      },kind);
+      await page.waitForFunction(kind=>!chatSending&&!chatRecoverInFlightBusy&&chatMessages.some(m=>m.ckGame&&(kind==='stopped'?m.role==='pending_user':m.sendFailed)),kind);
+      await page.evaluate(()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))});
+      await page.waitForTimeout(500);
+      assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),['H8']);
+      assert.equal((await calls(page)).length,1);assert.equal(await page.locator('#games-ask').textContent(),'重试这步');
       assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
     }finally{await context.close()}
   });
@@ -89,6 +172,7 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await page.click('#games-end');await page.getByRole('button',{name:'结束本局',exact:true}).last().click();
       await page.waitForFunction(()=>chatSessions.some(s=>s.gameWindow&&s.gameWindow.reports.some(r=>r.state==='delivered')),{},{timeout:20000});
       const req=await calls(page);assert.equal(req.length,3);assert.equal(req[1].model,'claude-opus-4-6');assert.equal(req[2].model,'claude-opus-4-6');assert.equal(req[2].session_id,'ck-gomoku-fixture');
+      assert.equal(req[1].thinking_effort,'medium');assert.equal(req[2].thinking_effort,'high');
       assert.ok(req[2].text.includes('本局下了两手后先休息。我们约好明天接着下。'));assert.ok(req[2].transport_messages);assert.equal(req[2].game_context,undefined);
       assert.equal(await page.inputValue('#chat-input'),'主窗口草稿保留');
       await page.evaluate(()=>{CKGameWindow.update();CKGameWindow.update();chatSaveSessions()});await page.waitForTimeout(1200);assert.equal((await calls(page)).length,3);

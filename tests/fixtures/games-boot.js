@@ -24,6 +24,7 @@ function fixtureSse(body,options){
   var previous=body.transport_messages||(body.window_messages||[]).map(function(m){return {role:m.role,content:m.content||[{type:'text',text:m.text||''}]}}),transport=previous.concat([{role:'user',content:[{type:'text',text:body.text}]},{role:'assistant',content:[{type:'text',text:reply}]}]);
   var usage={cache_hit:true,cache_read_input_tokens:8000,cache_creation_input_tokens:120,input_tokens:120,output_tokens:55,model:'sonnet',execution_backend:'claude_code_subscription'};
   var receipt={ok:true,found:true,turn_matched:true,turn_id:body.turn_id,state:'done',pending:false,created_at:Date.now()/1000,assistant_text:reply,assistant_thinking:'',tools:[],usage:usage,transport_messages:transport};
+  if(plan.receiptReadyDelay)receipt.fixtureReadyAt=Date.now()+plan.receiptReadyDelay;
   var encoder=new TextEncoder(),timers=[],closed=false;
   function storeReceipt(){sessionStorage.setItem('__gomoku_receipt_'+body.turn_id,JSON.stringify(receipt))}
   if(plan.durableReceipt)storeReceipt();
@@ -51,7 +52,9 @@ window.fetch=async function(input,options){
   if(url.pathname.endsWith('/ck/subscription/status'))return fixtureJson({ok:true,ready:__fixtureSubscriptionReady,status:__fixtureSubscriptionReady?'ready':'unavailable',message:__fixtureSubscriptionReady?'':'固定出口验证未通过',egress:{ready:__fixtureSubscriptionReady,state:__fixtureSubscriptionReady?'verified':'blocked',observed_ip:'192.220.15.95',expected_ip:'192.220.15.95'}});
   if(url.pathname.endsWith('/ck/chat/last')){
     var turn=url.searchParams.get('turn_id')||'',raw=sessionStorage.getItem('__gomoku_receipt_'+turn);
-    return fixtureJson(raw?JSON.parse(raw):{ok:true,found:false,pending:true,state:'running',turn_id:turn});
+    var stored=raw&&JSON.parse(raw);
+    if(stored&&stored.fixtureReadyAt>Date.now())return fixtureJson({ok:true,found:false,pending:true,state:'running',turn_id:turn,assistant_text:'',assistant_thinking:''});
+    return fixtureJson(stored||{ok:true,found:false,pending:true,state:'running',turn_id:turn});
   }
   if(url.pathname.includes('wake'))return fixtureJson({ok:true,enabled:true,status:'scheduled',interval_seconds:3000,next_wake_at:Date.now()/1000+2800,cache_strategy:'dual_1h',session_id:url.searchParams.get('session_id')||'ck-gomoku-fixture'});
   if(url.pathname.endsWith('/config'))return fixtureJson({providers:{},keys:[]});

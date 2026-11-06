@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v381-gomoku-opus';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v382-gomoku-medium-resume';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -9752,7 +9752,7 @@ document.addEventListener('keydown',function(e){
 window.addEventListener('pagehide',function(){if(chatActiveRequest){chatActiveRequest.hiddenAt=Date.now();if(chatActiveRequest.checkpointReply)chatActiveRequest.checkpointReply();}chatFlushDeferredSessionSave();chatFlushDebugSave()});
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){if(chatActiveRequest){chatActiveRequest.hiddenAt=Date.now();if(chatActiveRequest.checkpointReply)chatActiveRequest.checkpointReply();}chatFlushDeferredSessionSave();chatFlushDebugSave()}
-  if(!document.hidden&&currentPanelTab==='chat'){
+  if(!document.hidden&&(currentPanelTab==='chat'||currentPanelTab==='games')){
     chatUpdateCacheExpiryHint(true);
     // 回到前台就检查有没有"发出去了却没收到回复"的那一轮：
     // 这正是用户中途退出 CK 的那个场景，页面没被杀只是被冻结时也走这条。
@@ -9760,7 +9760,7 @@ document.addEventListener('visibilitychange',function(){
   }
 });
 window.addEventListener('pageshow',function(){
-  if(currentPanelTab==='chat')chatResumeAfterVisibility();
+  if(currentPanelTab==='chat'||currentPanelTab==='games')chatResumeAfterVisibility();
 });
 function chatMessagesBox(){
   return document.getElementById('chat-messages');

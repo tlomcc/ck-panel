@@ -264,6 +264,9 @@
   async function askMove(){
     try{
       var session=await actionReady();update();var game=G.restore(session.gomoku),message=pendingMessage(session,game);
+      if(message&&message.inFlight){
+        tell('');await root.chatCheckReplyNow();onChatUpdate();return;
+      }
       if(message&&(message.role==='pending_user'||message.sendFailed)){
         guard(false,message);tell('');requestExisting(message);return;
       }
@@ -400,9 +403,10 @@
     if(!undoReason){try{guard(false)}catch(error){undoReason=error.message}}
     $('games-undo').disabled=!!undoReason||submitBusy;
     $('games-undo').title=undoReason||'撤回你上一手与小克随后一手，重新落子';
-    var message=game&&pendingMessage(linked(current()),game),waiting=!!(message&&(message.inFlight||message.role==='pending_user'&&root.chatSending));
-    $('games-ask').hidden=!game||ended||position.turn!=='white'||waiting||!!root.chatSending;
-    $('games-ask').textContent=message&&(message.sendFailed||message.role==='pending_user')?'重试这步':'请小克落子';
+    var message=game&&pendingMessage(linked(current()),game),recoverable=!!(message&&message.role==='user'&&message.inFlight);
+    $('games-ask').hidden=!game||ended||position.turn!=='white'||!!root.chatSending&&!recoverable;
+    $('games-ask').disabled=!!root.chatRecoverInFlightBusy;
+    $('games-ask').textContent=recoverable?'补收这步':message&&(message.sendFailed||message.role==='pending_user')?'重试这步':'请小克落子';
     var error=game&&game.error||'';
     if(message&&message.sendFailed)error='落子请求未完成，棋盘已保留。';
     if(game&&game.pending&&!message)error='这步的聊天记录已移除，可按当前棋盘重新请小克落子。';
@@ -419,8 +423,9 @@
     if(draft&&!recent.some(function(m){return m.role==='user'&&m.turnId===draft.turn_id}))draft=null;
     // The view starts at the latest black move. Full history stays untouched in the chat.
     var lastReply=recent.slice().reverse().find(function(m){return m.role==='assistant'});
-    var live=draft&&String(draft.assistant_text||draft.text||'');
-    var stamp=JSON.stringify([session.id,game&&game.id,start,recent.map(function(m){return [m.role,m.text,m.ts,m.turnId,m.sendFailed,m.inFlight,m.ckGame,m.gameReply]}),live,draft&&draft.state,root.chatSending]);
+    var live=draft&&String(draft.assistant_text||draft.text||''),pending=game&&pendingMessage(session,game);
+    var recovering=!!(pending&&pending.inFlight&&(!root.chatSending||root.chatActiveRequest&&root.chatActiveRequest.recovering));
+    var stamp=JSON.stringify([session.id,game&&game.id,start,recent.map(function(m){return [m.role,m.text,m.ts,m.turnId,m.sendFailed,m.inFlight,m.ckGame,m.gameReply]}),live,draft&&draft.state,root.chatSending,recovering]);
     if(chatStamp===stamp)return;
     chatStamp=stamp;
     var log=$('games-conversation'),follow=log.scrollHeight-log.scrollTop-log.clientHeight<48,fragment=document.createDocumentFragment();
@@ -435,8 +440,8 @@
       if(text)append(m.role==='assistant'?'小克':'你',text,m.sendFailed?'未发送成功':m.role==='pending_user'?'待发送':m.inFlight?'已发送':'');
     });
     var liveSpeech=live&&replyText(speech({role:'assistant',text:live}),draft.turn_id,true);
-    if(liveSpeech)append('小克',liveSpeech,draft.state==='error'?'收到的部分回复':'正在回复');
-    else if(root.chatSending){var waiting=document.createElement('p');waiting.className='games-reply-state';waiting.textContent='小克正在回复…';fragment.appendChild(waiting)}
+    if(liveSpeech)append('小克',liveSpeech,draft.state==='error'?'收到的部分回复':recovering?'正在补收':'正在回复');
+    else if(root.chatSending||recovering){var waiting=document.createElement('p');waiting.className='games-reply-state';waiting.textContent=recovering?'正在补收小克这步的回复…':'小克正在回复…';fragment.appendChild(waiting)}
     log.hidden=!fragment.childNodes.length;
     log.replaceChildren(fragment);
     if(follow)log.scrollTop=log.scrollHeight;

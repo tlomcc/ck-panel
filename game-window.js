@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  var timer=0,busy=false,wakeBusy=false,gameModel='claude-opus-4-6';
+  var timer=0,busy=false,wakeBusy=false,gameModel='claude-opus-4-6',gameEffort='medium';
   var promptFields=['system','systemPromptEnabled','thinkingPrompt','fakeThinkingPrompt','thinkingPromptEnabled',
     'thinkingMode','thinkingBudgetTokens','thinkingEffort','fakeThinking','thinkingInjectionPosition'];
   function current(){return root.chatSessions&&root.chatSessions.find(function(s){return s.id===root.chatActiveSessionId})}
@@ -9,9 +9,16 @@
   function parent(s){var p=profile(s);return p?(root.chatSessions||[]).find(function(x){return x.id===p.parentId}):s}
   function gameFor(s){return profile(s)?s:(root.chatSessions||[]).find(function(x){var p=profile(x);return p&&s&&p.parentId===s.id})}
   function save(s){root.chatSaveSessions({sessionIds:[s.id]})}
-  function applyModel(s){
+  function applyProfile(s){
     var p=profile(s);
-    if(p&&p.model!==gameModel){p.model=gameModel;save(s)}
+    if(!p)return p;
+    var changed=p.model!==gameModel;
+    p.model=gameModel;
+    if(!p.prompts||p.prompts.thinkingMode!=='adaptive'||p.prompts.thinkingEffort!==gameEffort||p.prompts.fakeThinking!==false){
+      p.prompts=Object.assign({},p.prompts||{},{thinkingMode:'adaptive',thinkingEffort:gameEffort,fakeThinking:false});
+      changed=true;
+    }
+    if(changed)save(s);
     return p;
   }
   function uid(){return root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
@@ -52,6 +59,7 @@
     if(existing&&!safe(existing))throw Error('游戏窗口还有未完成消息，请先处理。');
     var cfg=root.chatLoadConfig(),snapshot={};
     promptFields.forEach(function(k){if(cfg[k]!==undefined)snapshot[k]=cfg[k]});
+    Object.assign(snapshot,{thinkingMode:'adaptive',thinkingEffort:gameEffort,fakeThinking:false});
     if(!existing){
       existing=root.chatNormalizeSession({id:'ck-game-'+uid(),title:(main.title||'小克')+' · 五子棋',messages:[],created:Date.now(),updated:Date.now(),
         gameWindow:{version:1,parentId:main.id,model:gameModel,reports:[]}});
@@ -70,7 +78,7 @@
     return existing;
   }
   function config(cfg,s){
-    var p=applyModel(s);if(!p)return cfg;
+    var p=applyProfile(s);if(!p)return cfg;
     return Object.assign({},cfg,p.prompts||{},{model:gameModel,recall:false,useMcp:false,
       dailyDigestEnabled:false,autoTrimEnabled:false,autoTrimRoundLimitEnabled:false,autoCleanEnabled:false,
       ncContextInjection:false,minimalTimeEnabled:false,backendSwitchNotification:false,worldbooks:[]});
@@ -81,7 +89,7 @@
     return index>=0?list.slice(index+1):list.filter(function(m){return Number(m.ts)>=p.startedAt});
   }
   function body(value,s){
-    var p=applyModel(s);if(!p)return value;
+    var p=applyProfile(s);if(!p)return value;
     value.game_context={version:1,kind:'gomoku',game_id:p.gameId,parent_session_id:p.parentId};
     value.model=gameModel;value.worldbook_pack='';value.daily_digest_pack='';value.memory_pack='';
     value.recall=false;value.use_mcp=false;value.nc_context_injection=false;value.minimal_time_enabled=false;
@@ -193,7 +201,7 @@
     }finally{busy=false;render()}
   }
   function schedule(delay){if(!timer)timer=setTimeout(pump,delay===undefined?250:delay)}
-  function update(){if(!root.chatSessionsReady)return;(root.chatSessions||[]).forEach(function(s){applyModel(s);observe(s)});schedule();render()}
+  function update(){if(!root.chatSessionsReady)return;(root.chatSessions||[]).forEach(function(s){applyProfile(s);observe(s)});schedule();render()}
   async function retry(){
     var s=gameFor(current()),r=s&&pendingReports(s).find(function(x){return x.state==='failed'});if(!r||!idle())return;
     var target=r.summaryText?parent(s):s,ident=r.summaryText?r.deliveryMessage:r.summaryMessage,m=target&&ident&&findMessage(target,ident);
@@ -211,7 +219,7 @@
   }
   function render(){
     var s=gameFor(current()),p=profile(s),info=document.getElementById('games-window-info'),wake=document.getElementById('games-wake-status'),status=document.getElementById('games-sync-status'),retryButton=document.getElementById('games-sync-retry'),wakeButton=document.getElementById('games-wake-retry');
-    if(info)info.textContent=p?'独立游戏窗口 · Opus 4.6':'新的一局会使用独立游戏窗口 · Opus 4.6';
+    if(info)info.textContent=(p?'独立游戏窗口':'新的一局会使用独立游戏窗口')+' · Opus 4.6 · 中档思考';
     if(wake){
       var state=s&&root.chatWakeState&&root.chatWakeState[s.id],main=parent(s),mainState=main&&root.chatWakeState&&root.chatWakeState[main.id];
       wake.hidden=!p;
