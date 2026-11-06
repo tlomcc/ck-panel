@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v383-gomoku-return-chat';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v384-foreground-recovery';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -11564,6 +11564,9 @@ async function chatSubmitPendingMessages(options){
         var chunk=decoder.decode(r.value,{stream:true});
         if(!attemptState.receivedValidContent)beforeContentRaw=(beforeContentRaw+chunk).slice(-4000);
         buffer+=chunk;
+        // Large transport frames are progress before their final blank line.
+        // SSE comments remain heartbeats, so a stalled reply can still recover.
+        if(typeof chatNoteReplyProgress==='function'&&/(?:^|\n)(?:event|data):/.test(buffer))chatNoteReplyProgress(requestState,'stream_chunk');
         buffer=chatParseSse(buffer,handleStreamEvent);
         if(streamError)throw streamError;
         if(!attemptState.receivedValidContent&&chatContainsPlatformExitError(beforeContentRaw)){

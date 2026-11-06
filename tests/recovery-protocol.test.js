@@ -12,7 +12,7 @@ test('heartbeat-only streams check their exact receipt, while ongoing thinking s
   const request={turnId:'t',controller:{abort(){aborts++}}};c.chatActiveRequest=request;
   c.chatReadDelivery=async()=>{reads++;if(mode==='superseded')c.chatActiveRequest={};return {turn_id:mode==='unknown'?'other':'t',pending:mode!=='completed',found:mode==='completed',assistant_text:mode==='heartbeat'?'已生成却未送达的内容':''}};
   const stop=c.chatStartReplyWatch(request,cfg);
-  now+=mode==='completed'?2500:8000;
+  now+=8000;
   if(mode==='thinking')c.chatNoteReplyProgress(request,'thinking',{text:'持续思考'});
   if(mode==='completed'){request.replyCompleteAt=1000;}
   await request.checkReceipt(false);
@@ -20,6 +20,38 @@ test('heartbeat-only streams check their exact receipt, while ongoing thinking s
   assert.equal(aborts,['heartbeat','completed'].includes(mode)?1:0);
   stop();assert.equal(timers.size,0);assert.equal(request.checkReceipt,undefined);
  }
+});
+test('completed replies keep receiving unfinished transport frames before any recovery check',async()=>{
+ const {c,cfg}=setup();let now=1000,aborts=0,reads=0;const statuses=[];
+ c.Date=class extends Date{static now(){return now}};c.chatSending=true;c.chatActiveSessionId='a';c.chatSetStatus=s=>statuses.push(s);
+ const request={turnId:'t',controller:{abort(){aborts++}}};c.chatActiveRequest=request;
+ c.chatReadDelivery=async()=>{reads++;return {turn_id:'t',found:true,state:'complete'}};
+ const stop=c.chatStartReplyWatch(request,cfg);c.chatNoteReplyProgress(request,'reply_complete',{});
+ now+=3000;await request.checkReceipt(false);assert.equal(reads,0,'normal finalization must not be called recovery');
+ for(let i=0;i<6;i++){now+=3000;c.chatNoteReplyProgress(request,'stream_chunk');await request.checkReceipt(false)}
+ assert.equal(reads,0);assert.equal(aborts,0);assert.deepEqual(statuses,[]);
+ now+=8000;await request.checkReceipt(false);
+ assert.equal(reads,1);assert.equal(aborts,1,'a genuinely stalled completed reply still recovers');stop();
+});
+test('new stream progress invalidates an in-flight automatic receipt check even if its timestamp repeats',async()=>{
+ const {c,cfg}=setup();let now=1000,resolveReceipt,aborts=0;const statuses=[];
+ c.Date=class extends Date{static now(){return now}};c.chatSending=true;c.chatActiveSessionId='a';c.chatSetStatus=s=>statuses.push(s);
+ const request={turnId:'t',controller:{abort(){aborts++}}};c.chatActiveRequest=request;
+ c.chatReadDelivery=()=>new Promise(resolve=>resolveReceipt=resolve);
+ const stop=c.chatStartReplyWatch(request,cfg);now+=8000;
+ const pending=request.checkReceipt(false);c.chatNoteReplyProgress(request,'stream_chunk');
+ // A clock correction can preserve the timestamp; the sequence still changes.
+ request.streamProgressAt=1000;resolveReceipt({turn_id:'t',found:true,state:'complete'});await pending;
+ assert.equal(aborts,0);assert.deepEqual(statuses,[]);stop();
+});
+test('a failed background receipt probe does not label the live stream as disconnected',async()=>{
+ const {c,cfg}=setup();let now=1000,aborts=0;const statuses=[];
+ c.Date=class extends Date{static now(){return now}};c.chatSending=true;c.chatActiveSessionId='a';c.chatSetStatus=s=>statuses.push(s);
+ const request={turnId:'t',controller:{abort(){aborts++}}};c.chatActiveRequest=request;
+ c.chatReadDelivery=async()=>{throw Error('receipt-only timeout')};
+ const stop=c.chatStartReplyWatch(request,cfg);now+=8000;await request.checkReceipt(false);
+ assert.equal(aborts,0);assert.deepEqual(statuses,[]);
+ await request.checkReceipt(true);assert(statuses.some(s=>s.includes('原连接会继续接收')));assert(statuses.every(s=>!s.includes('补收')));stop();
 });
 function setup(){
  const timers=new Map();let seq=0;
