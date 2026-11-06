@@ -46,11 +46,19 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       assert.equal(await page.evaluate(()=>CKBackendRoute.current.subscriptionModel),'claude-opus-4-6');
       const states=await page.evaluate(()=>({p:chatWakeState['ck-gomoku-fixture'],g:chatWakeState[chatActiveSessionId]}));
       assert.equal(states.p.enabled,true);assert.equal(states.g.enabled,true);assert.equal(states.g.interval_seconds,3000);assert.equal(states.g.idle_shutdown_enabled,true);assert.equal(states.g.idle_shutdown_minutes,180);
+      const sid=await page.evaluate(()=>chatActiveSessionId);
+      await page.fill('#games-input','游戏里还没发送的草稿');
       await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();
-      assert.equal(await page.evaluate(()=>chatActiveSessionId),'ck-gomoku-fixture');assert.equal(await page.inputValue('#chat-input'),'主窗口未发送的草稿');
-      assert.deepEqual(await page.evaluate(()=>({messages:chatMessages,transport:chatCurrentSession().transportMessages,cacheGeneration:chatCurrentSession().cacheGeneration})),original);
+      assert.equal(await page.evaluate(()=>currentPanelTab),'chat');
+      assert.equal(await page.evaluate(()=>chatActiveSessionId),sid);assert.equal(await page.inputValue('#chat-input'),'主窗口未发送的草稿');
+      assert.ok((await page.textContent('#chat-messages')).includes('这次只聊本局的事。'));
+      assert.ok((await page.textContent('#chat-messages')).includes('嗯，陪着你。'));
+      assert.deepEqual(await page.evaluate(()=>{const main=chatSessions.find(s=>s.id==='ck-gomoku-fixture');return {messages:main.messages,transport:main.transportMessages,cacheGeneration:main.cacheGeneration}}),original);
       await page.click('#chat-game-return');await page.waitForFunction(()=>currentPanelTab==='games');
+      assert.equal(await page.evaluate(()=>chatActiveSessionId),sid);
+      assert.equal(await page.inputValue('#games-input'),'游戏里还没发送的草稿');
       assert.equal(await page.evaluate(()=>chatCurrentSession().gomoku.moves.length),2);
+      assert.equal((await calls(page)).length,1);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       await page.screenshot({path:path.join(out,'game-'+width+'.png'),fullPage:true});
       assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
@@ -108,7 +116,7 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
     }finally{await context.close()}
   });
-  await run('a foreground game shows recovery while its original turn is still running',async()=>{
+  await run('a foreground game keeps recovering its original turn after returning to game chat',async()=>{
     const {context,page}=await boot();try{
       await start(page);
       await plan(page,{reply:'思考完成，继续下这一步。\n【落子：I9】',partial:'思考',delay:60000,durableReceipt:true,receiptReadyDelay:4500});
@@ -124,8 +132,15 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       assert.equal(await page.locator('#games-ask').textContent(),'补收这步');
       await page.click('#games-ask');
       assert.equal((await calls(page)).length,1);
+      const sid=await page.evaluate(()=>chatActiveSessionId);
+      await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();
+      assert.equal(await page.evaluate(()=>currentPanelTab),'chat');
+      assert.equal(await page.evaluate(()=>chatActiveSessionId),sid);
       await page.waitForFunction(()=>chatCurrentSession().gomoku.moves.length===2&&!chatRecoverInFlightBusy,{},{timeout:12000});
       assert.deepEqual(await page.evaluate(()=>chatCurrentSession().gomoku.moves),['H8','I9']);
+      assert.ok((await page.textContent('#chat-messages')).includes('思考完成，继续下这一步。'));
+      await page.click('#chat-game-return');await page.waitForFunction(()=>currentPanelTab==='games');
+      assert.equal(await page.locator('.games-point.is-black,.games-point.is-white').count(),2);
       assert.equal((await calls(page)).length,1);assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
     }finally{await context.close()}
   });
@@ -195,12 +210,19 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
     }finally{await context.close()}
   });
-  await run('refresh restores the short window and original complete move receipt',async()=>{
+  await run('returning to game chat while streaming and refreshing preserves the original move receipt',async()=>{
     const {context,page}=await boot();try{
       await start(page);const sid=await page.evaluate(()=>chatActiveSessionId);
       await plan(page,{reply:'补收这一步。\n【落子：I9】',partial:'补收',delay:9000,durableReceipt:true});
       await page.click('[data-coordinate="H8"]');await page.click('#games-play');
-      await page.waitForFunction(()=>chatSending&&chatMessages.some(m=>m.inFlight));await page.evaluate(()=>chatSaveSessionsToIndexedDb.pending);
+      await page.waitForFunction(()=>chatSending&&chatMessages.some(m=>m.inFlight));
+      await page.getByRole('button',{name:'返回 CK 聊天',exact:true}).click();
+      assert.equal(await page.evaluate(()=>currentPanelTab),'chat');
+      assert.equal(await page.evaluate(()=>chatActiveSessionId),sid);
+      assert.equal(await page.evaluate(()=>chatSending),true);assert.equal((await calls(page)).length,1);
+      await page.click('#chat-game-return');await page.waitForFunction(()=>currentPanelTab==='games');
+      assert.equal(await page.evaluate(()=>chatSending),true);
+      await page.evaluate(()=>chatSaveSessionsToIndexedDb.pending);
       await page.reload();await page.waitForFunction(()=>chatSessionsReady&&chatCurrentSession().gomoku.moves.length===2&&!chatSending&&!chatRecoverInFlightBusy);
       assert.equal(await page.evaluate(()=>chatActiveSessionId),sid);assert.equal((await calls(page)).length,0);
       await play(page,'G8','继续。\n【落子：J9】');assert.equal((await calls(page)).length,1);

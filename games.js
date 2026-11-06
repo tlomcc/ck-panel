@@ -475,12 +475,7 @@
     try{await ready();if(!visible)return;var target=linked(current());if(target!==current()&&root.CKGameWindow&&!root.CKGameWindow.select(target))tell('等当前回复完成后再打开独立游戏窗口。');makeBoard();update();startTimer()}catch(error){tell(error.message)}
   }
   function returnToChat(){
-    var session=current(),main=root.CKGameWindow&&root.CKGameWindow.parent(session);
-    if(main&&main!==session){
-      drafts[session.id]=$('games-input').value;
-      if(!root.CKGameWindow.select(main)){tell('等当前回复或处理完成后再回主窗口。');return}
-    }
-    root.navTo('chat');
+    openRecords();
   }
   function openRecords(){
     var session=linked(current());
