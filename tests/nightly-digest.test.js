@@ -5,7 +5,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 function setup(){
   let now=Date.parse('2026-10-04T04:00:00+08:00'),sequence=0;
   const storage=new Map(),timers=new Map(),calls=[];
-  const cfg={panelKey:'fixture-key',gatewayUrl:'https://fixture.invalid',dailyDigestEnabled:true,dailyDigestRetentionDays:7};
+  const cfg={panelKey:'fixture-key',gatewayUrl:'https://fixture.invalid',dailyDigestEnabled:true,digestCycleCount:3};
   const session={id:'nightly-one',title:'夜间测试',messages:[{role:'user',text:'她的周末安排',ts:now-10*3600000,turnId:'t1'},{role:'assistant',text:'我记住了。',ts:now-10*3600000+1000,turnId:'t1'}],dailyDigests:[],updated:1};
   const ctx={console,Set,Map,Promise,AbortController,CKChatHistory:history,chatSessionsReady:true,chatSending:false,chatTrimBusy:false,chatTrimTransaction:null,
     Date:class extends Date{static now(){return now}},document:{hidden:false,getElementById:()=>null},
@@ -24,7 +24,7 @@ function setup(){
 }
 function result(x,body,revision=2){
   return {ok:true,status:'succeeded',accepted_keys:body.groups.map(g=>g.key),snapshot:{revision,source_stamp:body.base_stamp,
-    base:{entries:[{dayKey:'2026-10-03',startTs:x.session.messages[0].ts,endTs:x.session.messages[1].ts,text:'我记下了她的安排。',covered:body.groups.map(g=>g.key)}],rollup:null,omitted:[]},result:{day:'2026-10-04'}}};
+    base:{entries:[{id:'cy-result',kind:'cycle',sequence:1,active:true,dayKey:'2026-10-03',startTs:x.session.messages[0].ts,endTs:x.session.messages[1].ts,text:'我记下了她的安排。',covered:body.groups.map(g=>g.key)}],rollup:null,omitted:[]},result:{day:'2026-10-04'}}};
 }
 
 test('wake GET bypasses throttle and stages the finished result without acknowledging unsent edits',async()=>{
@@ -51,32 +51,29 @@ test('an extra failed local turn does not rename already summarized transport tu
   assert.equal(changed.length,2,'changed transport content must still require separate proven coverage');
 });
 
-test('expanding x waits for compact summaries instead of freezing a 24k source fallback',()=>{
-  const x=setup();x.cfg.dailyDigestDetailDays=3;x.cfg.dailyDigestRollupDays=0;
-  const raw='详细底稿'.repeat(6000);
-  x.session.dailyDigests=[{dayKey:'2026-10-02',text:raw}];
-  x.session.digestActivePack={scope:x.ctx.chatDigestActiveScope(x.cfg),text:'已启用的五千字摘要',at:1};
+test('missing older brief cannot replace the frozen prompt with its full source',()=>{
+  const x=setup(),raw='详细底稿'.repeat(6000);
+  x.session.dailyDigests=[{id:'cy-1',kind:'cycle',sequence:1,dayKey:'2026-10-02',text:raw},
+    {id:'cy-2',kind:'cycle',sequence:2,dayKey:'2026-10-03',text:'最新总结'}];
+  x.session.digestActivePack={scope:x.ctx.chatDigestActiveScope(x.cfg),text:'已启用的摘要',at:1};
   assert.equal(x.ctx.chatDigestResetPack(x.cfg,x.session),false);
-  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'已启用的五千字摘要');
-  x.session.dailyDigests[0].detail={source:x.ctx.chatDigestStamp(raw),text:'压缩后摘要'};
+  assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),'已启用的摘要');
+  x.session.dailyDigests[0].brief={source:x.ctx.chatDigestStamp(raw),text:'压缩后摘要'};
   assert.equal(x.ctx.chatDigestResetPack(x.cfg,x.session),true);
   assert.match(x.ctx.chatDailyDigestPack(x.cfg,x.session),/压缩后摘要/);
   assert.ok(!x.ctx.chatDailyDigestPack(x.cfg,x.session).includes(raw));
 });
-
-test('reviewed subscription summaries above X and Y suggestions activate and upload intact',async()=>{
+test('reviewed subscription summaries above length suggestions upload intact',async()=>{
   const x=setup();x.cfg.digestCurrentModel=true;x.cfg.executionBackend='claude_code_subscription';
-  x.cfg.dailyDigestDetailDays=1;x.cfg.dailyDigestRollupDays=2;
-  const raw='详细来源'.repeat(2000),longX='近期摘要'.repeat(1200)+'近期尾部保留。',longY='较早摘要'.repeat(800)+'较早尾部保留。';
-  x.session.dailyDigests=[{dayKey:'2026-10-03',text:raw,detail:{source:x.ctx.chatDigestStamp(raw),text:longX}},
-    {dayKey:'2026-10-02',text:'较早来源'}];
-  x.session.digestRollup={start:'2026-10-01',end:'2026-10-02',text:longY,source:x.ctx.chatDigestRollupSource(x.cfg,x.session).stamp};
+  const raw='详细来源'.repeat(2000),detail='最近详细'.repeat(1200)+'详细尾部保留。',brief='简版摘要'.repeat(800)+'简版尾部保留。';
+  x.session.dailyDigests=[{id:'cy-1',kind:'cycle',sequence:1,dayKey:'2026-10-02',text:raw,brief:{source:x.ctx.chatDigestStamp(raw),text:brief}},
+    {id:'cy-2',kind:'cycle',sequence:2,dayKey:'2026-10-03',text:detail}];
   assert.equal(x.ctx.chatDigestPackReady(x.cfg,x.session),true);
   assert.equal(x.ctx.chatDigestResetPack(x.cfg,x.session),true);
   const pack=x.ctx.chatDailyDigestPack(x.cfg,x.session);
-  assert.ok(pack.includes(longX));assert.ok(pack.includes(longY));
+  assert.ok(pack.includes(detail));assert.ok(pack.includes(brief));
   await x.sync();const base=x.calls[0].body.base;
-  assert.equal(base.entries[0].text,'较早来源');assert.equal(base.entries[1].detail.text,longX);assert.equal(base.rollup.text,longY);
+  assert.equal(base.entries[0].brief.text,brief);assert.equal(base.entries[1].text,detail);assert.equal(base.rollup,null);
 });
 test('Shanghai preparation runs all day starting at midnight',()=>{
   const x=setup();
@@ -276,11 +273,11 @@ test('snapshot processing errors remain distinct from network failures and hide 
   assert.match(message,/页面处理失败/);assert(!message.includes(x.cfg.panelKey));assert(!message.includes('private'));
 });
 
-test('changing XY during an upload rejects the old range and queues the new settings',async()=>{
+test('changing Z during an upload rejects the old range and queues the new settings',async()=>{
   const x=setup();let finish,body;
   x.ctx.fetch=async(u,o)=>{body=JSON.parse(o.body);return new Promise(r=>finish=r)};
   const work=x.sync();
-  x.cfg.dailyDigestDetailDays=2;x.cfg.dailyDigestRollupDays=0;
+  x.cfg.digestCycleCount=2;
   x.ctx.chatNightlySettingsPriority(x.cfg);
   const old=result(x,body);old.snapshot.config=body.config;
   finish({ok:true,json:async()=>old});
@@ -289,8 +286,8 @@ test('changing XY during an upload rejects the old range and queues the new sett
   assert.ok([...x.timers.values()].some(t=>t.delay===0));
 });
 
-test('accepted XY changes preserve a newer server baseline on the next upload',async()=>{
-  const x=setup();x.cfg.dailyDigestDetailDays=2;x.cfg.dailyDigestRollupDays=0;x.ctx.chatNightlySettingsPriority(x.cfg);
+test('accepted Z changes preserve a newer server baseline on the next upload',async()=>{
+  const x=setup();x.cfg.digestCycleCount=2;x.ctx.chatNightlySettingsPriority(x.cfg);
   const serverBase={entries:[{dayKey:'2026-10-02',text:'后台刚保存的新底稿',covered:['archived']}],rollup:null,omitted:[]};
   let firstBody;
   x.ctx.fetch=async(u,o)=>{firstBody=JSON.parse(o.body);return {ok:true,json:async()=>({ok:true,conflict:true,settings_accepted:true,status:'queued',snapshot:{revision:8,config:firstBody.config,source_stamp:'server-newer',base:serverBase,result:null}})}};
@@ -326,7 +323,7 @@ test('an in-flight source upload cannot restore a deleted local session',async()
   finish({ok:true,json:async()=>result(x,body)});assert.equal(await pending,false);assert.equal(x.session.digestStaged,undefined);
 });
 test('background completion and midnight do not change the byte-exact active prompt',async()=>{
-  const x=setup();x.session.dailyDigests=[{dayKey:'2026-10-03',text:'昨天定稿',covered:[]}];
+  const x=setup();x.session.dailyDigests=[{id:'cy-1',kind:'cycle',sequence:1,dayKey:'2026-10-03',text:'昨天定稿',covered:[]}];
   const original=x.ctx.chatDailyDigestPack(x.cfg,x.session);x.session.cacheLastReadAt=x.ctx.Date.now();
   x.ctx.fetch=async(u,o)=>({ok:true,json:async()=>result(x,JSON.parse(o.body))});await x.sync();
   assert.equal(x.ctx.chatDailyDigestPack(x.cfg,x.session),original);assert.equal(x.ctx.chatDigestActivate(x.session,x.cfg,false),false);

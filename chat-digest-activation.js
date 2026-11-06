@@ -27,7 +27,7 @@ function chatDigestTransportText(content){
 }
 function chatDigestTransportRows(messages){
   return messages.map(function(m){
-    var text=chatDigestTransportText(m.content).replace(/\s*<ck_gateway_context>[\s\S]*?<\/ck_gateway_context>\s*/g,'\n\n').replace(/\s*<ck_gateway_context>[\s\S]*$/g,'').replace(/\n{3,}/g,'\n\n').trim();
+    var text=chatDigestTransportText(m.content).replace(/\s*<(ck_active_memory_(?:current|event))>[\s\S]*?<\/\1>\s*/g,'').replace(/\s*<ck_gateway_context>[\s\S]*?<\/ck_gateway_context>\s*/g,'\n\n').replace(/\s*<ck_gateway_context>[\s\S]*$/g,'').replace(/\n{3,}/g,'\n\n').trim();
     if(m.role==='assistant')text=String((chatSplitThinkingText(text,{suppressThinking:true,hideUnclosedThinking:true})||{}).text||'').trim();
     return {role:m.role,text:text};
   }).filter(function(m){return (m.role==='user'||m.role==='assistant')&&m.text});
@@ -94,13 +94,6 @@ function chatDigestResetPack(cfg,session){
   session.digestActivePack={scope:chatDigestActiveScope(cfg),config:chatDigestConfigStamp(cfg),text:chatDailyDigestBuildPack(cfg,session),at:Date.now()};
   return true;
 }
-function chatDigestPackReady(cfg,session){
-  var range=chatDigestRange(cfg),entries=chatDailyDigestEntries(session,range.today,cfg);
-  var xReady=entries.filter(function(row){return row.dayKey>=range.detailStart&&row.dayKey<range.today}).every(function(row){
-    return row.edited||Array.from(row.text).length<=2500||(row.detail&&row.detail.source===chatDigestStamp(row.text));
-  });
-  return xReady&&chatDigestRollupFresh(cfg,session);
-}
 function chatDigestCanActivate(session,cfg){
   return cfg.dailyDigestEnabled!==false&&!session.digestManualPending&&!['detail','rollup','today'].some(function(k){return !!chatDigestEditors[session.id+':'+k]});
 }
@@ -110,7 +103,7 @@ function chatDigestActivate(session,cfg,force,preparedPack){
   if(!stage)return false;
   var packProven=preparedPack&&preparedPack.scope===chatDigestActiveScope(cfg)&&preparedPack.config===chatDigestConfigStamp(cfg);
   if(!packProven&&!chatDigestPackReady(cfg,Object.assign({},session,{dailyDigests:stage.base.entries,digestRollup:stage.base.rollup})))return false;
-  session.dailyDigests=chatDailyDigestNormalize(stage.base.entries);
+  session.dailyDigests=chatDigestRetainCycles(stage.base.entries,cfg);
   session.digestRollup=chatNormalizeDigestRollup(stage.base.rollup);
   session.digestOmittedCovered=chatDigestOmittedCoverage(stage.base.omitted);
   session.digestCheckedDay=stage.result&&stage.result.day;
@@ -152,46 +145,6 @@ function chatDigestReleaseCompletedRun(session,cfg){
   // A confirmed cut has a new local baseline to publish. Keeping the old
   // blocked run here would leave every subsequent queue request read-only.
   delete session.digestModelRun;return true;
-}
-function chatDigestPreparedTrim(session,cfg,plan,explicitSync){
-  var groups=chatDigestPlanSources(session,plan),keys=new Set(groups.map(function(g){return g.key}));
-  // With only transport history available we cannot safely prove coverage.
-  if(!groups.length||plan.canonicalTransport&&plan.transportDropped>groups.length)return null;
-  var covered=new Set();chatDailyDigestNormalize(session.dailyDigests).forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
-  chatDigestOmittedCoverage(session.digestOmittedCovered).forEach(function(r){covered.add(r.key)});
-  var used=(session.digestReadyTrims||[]).filter(function(t){return t.keys.some(function(k){return keys.has(k)&&!covered.has(k)})&&t.keys.every(function(k){return keys.has(k)||covered.has(k)})});
-  used.forEach(function(t){t.keys.forEach(function(k){covered.add(k)})});
-  if(groups.some(function(g){return !covered.has(g.key)}))return null;
-  var entries=chatDailyDigestNormalize(session.dailyDigests),today=chatDailyDigestDayKey(Date.now()),additions=[];
-  var entry=entries.find(function(e){return e.dayKey===today});
-  if(!entry){entry={id:'dg-'+today,dayKey:today,kind:'daily',text:'',covered:[],rounds:0,startTs:0,endTs:0};entries.push(entry)}
-  used.forEach(function(t){
-    if(t.keys.every(function(k){return entry.covered.includes(k)}))return;
-    var source=t.keys.some(function(k){return k.indexOf('tr:')===0})?'':'【'+chatDailyDigestRangeLabel(t)+'】\n';
-    var addition=source+t.text;additions.push(addition);
-    entry.text+=(entry.text?'\n\n':'')+addition;
-    entry.startTs=entry.startTs?Math.min(entry.startTs,t.startTs):t.startTs;entry.endTs=Math.max(entry.endTs,t.endTs);
-    entry.covered=Array.from(new Set(entry.covered.concat(t.keys)));entry.rounds+=t.keys.length;entry.detail=null;entry.brief=null;
-  });
-  entries=entries.filter(function(e){return e.text});
-  var candidate=Object.assign({},session,{dailyDigests:entries}),text,packReady=chatDigestPackReady(cfg,candidate);
-  if(packReady)text=chatDailyDigestBuildPack(cfg,candidate);
-  else{
-    // A manual sync may retain the same pack already used by chat, even while
-    // a new date range is preparing. It must still belong to this connection.
-    var frozen=session.digestActivePack;
-    if(frozen&&frozen.text&&frozen.scope===chatDigestActiveScope(cfg)&&(explicitSync||frozen.config===chatDigestConfigStamp(cfg)))
-      text=frozen.text+(additions.length?'\n\n'+additions.join('\n\n'):'');
-    else if(explicitSync){
-      // Imported/restored windows may have no frozen pack. Reuse the existing
-      // renderer for saved summaries; unpublished work/drafts are never read.
-      // Automatic sends still wait for a ready or previously active pack.
-      text=chatDailyDigestBuildPack(cfg,candidate);
-      if(!text)return null;
-    }else return null;
-  }
-  return {entries:entries,rollup:session.digestRollup,used:used,
-    activePack:{scope:chatDigestActiveScope(cfg),config:chatDigestConfigStamp(cfg),text:text,at:Date.now(),pendingCompaction:!packReady}};
 }
 function chatDigestPreparedSession(session,cfg){
   var stage=chatDigestStage(session,cfg);

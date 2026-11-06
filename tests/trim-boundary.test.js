@@ -20,6 +20,8 @@ function extractFunction(name){
 
 function load(context,names){
   vm.createContext(context);
+  const digest=fs.readFileSync(require.resolve('../chat-digest.js'),'utf8');
+  vm.runInContext(digest.slice(digest.indexOf('function chatDigestCompactMemoryHistory('),digest.indexOf('function chatDigestEditorValue(')),context);
   names.forEach(name=>vm.runInContext(extractFunction(name),context));
   return context;
 }

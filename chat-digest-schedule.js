@@ -62,7 +62,7 @@ function chatArchiveDigestSources(session,messages,sourceGroups){
   session.digestPending=pending;chatScheduleNightlySync();return true;
 }
 function chatNightlyBase(session){
-  var cfg=chatLoadConfig(),staged=chatDigestStage(session,cfg);if(staged)return staged.base;
+  var cfg=chatLoadConfig();chatDailyDigestPrune(session,null,cfg);var staged=chatDigestStage(session,cfg);if(staged)return staged.base;
   var preparing=session.digestPreparingBase;
   if(preparing&&preparing.scope===chatNightlyScope(cfg)&&preparing.config===chatDigestConfigStamp(cfg)&&!session.digestManualPending)return preparing.base;
   return {entries:chatDailyDigestNormalize(session.dailyDigests),rollup:chatNormalizeDigestRollup(session.digestRollup),omitted:chatDigestOmittedCoverage(session.digestOmittedCovered)};
@@ -115,7 +115,7 @@ function chatDigestSyncView(session,cfg,remote){
   if(preparing&&!view.retry){
     view.rounds=0;view.status=ready?'待同步':'正在准备';view.tone=ready?'live':'';view.cutNote='尚未截断';view.at=0;
     var progress=req&&current&&typeof chatPlanAutoTrimForPendingBatch==='function'?chatDigestPreparationProgress(session,cfg):null;
-    view.note=settings?'正在按 X='+settings.x+'、Y='+settings.y+' 准备新总结。':'计划截断 '+(progress?progress.rounds:req.dropRounds)+' 轮。';
+    view.note=settings?'已设置保留 '+settings.z+' 次总结，等待同步。':'计划截断 '+(progress?progress.rounds:req.dropRounds)+' 轮。';
     if(progress&&progress.sources)view.note+='总结已准备 '+progress.prepared+' / '+progress.sources+' 组。';
     if(progress&&!progress.valid){view.status='正在更新截断范围';view.note+='原内容有变化，正在复用已有总结并补齐变化部分。';}
     else if(req&&req.immediate!==false){
@@ -178,6 +178,11 @@ function chatSyncNightlyDigest(cfg,options){
   if(!chatSessionsReady||!session||!cfg.panelKey)return Promise.resolve(false);
   if(session.digestManualCompleted&&session.digestManualCompleted.cleanupState==='pending'&&typeof chatApplyWindowCleanup==='function')return chatApplyWindowCleanup(session,cfg,null).catch(function(){chatScheduleNightlySync(3000);return false});
   if(chatDigestIsDeleted(session.id,cfg)||!chatDigestHasContent(session))return Promise.resolve(false);
+  chatDailyDigestPrune(session,null,cfg);
+  if(chatDigestMigrationPending(session)){
+    if(options.modelRun)return Promise.resolve(false);
+    options=Object.assign({},options,{readOnly:true});
+  }
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
   if(!options.readOnly&&cfg.digestCurrentModel!==true)chatDigestRefreshManualSources(session,cfg);
   var scope=chatNightlyScope(cfg),configStamp=chatDigestConfigStamp(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
@@ -304,7 +309,7 @@ function chatNightlySettingsPriority(cfg){
   var scope=chatNightlyScope(cfg);
   chatSessions.forEach(function(session){
     session.digestSettingsPending=scope;
-    session.digestSettingsRequest=cfg.dailyDigestEnabled===false?null:{id:String(Date.now()),at:Date.now(),scope:scope,config:chatDigestConfigStamp(cfg),x:chatDigestOptions(cfg).x,y:chatDigestOptions(cfg).y};
+    session.digestSettingsRequest=cfg.dailyDigestEnabled===false?null:{id:String(Date.now()),at:Date.now(),scope:scope,config:chatDigestConfigStamp(cfg),z:chatDigestOptions(cfg).z};
     delete session.digestStaged;delete chatNightlySynced[scope+':'+session.id];
     if(cfg.digestCurrentModel===true){delete session.digestManualTrim;delete session.digestModelRun;}
   });
@@ -334,6 +339,8 @@ var chatCurrentModelStarting=false;
 async function chatStartCurrentModelDigest(purpose){
   if(chatCurrentModelStarting)return false;
   var cfg=chatLoadConfig(),session=chatCurrentSession();
+  chatDailyDigestPrune(session,null,cfg);
+  if(chatDigestMigrationPending(session)){toast('请先完成旧总结的同步；当前注入原文会作为第 1 份保留。');return false;}
   if(cfg.digestCurrentModel!==true||cfg.dailyDigestEnabled===false)return false;
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后手动启动总结');return false;}
   var running=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;

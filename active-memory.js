@@ -14,8 +14,8 @@ function ckActiveMemoryRender(){
   var state=document.getElementById('ck-active-memory-state');if(state)state.textContent=lines.join('\n');
   // Also make an older cached page read-only while it receives the new shell.
   ['save','merge','load'].forEach(function(name){var button=document.getElementById('ck-active-memory-'+name);if(button){button.disabled=true;button.hidden=true}});
-  var toggle=document.getElementById('ck-active-memory-toggle');if(toggle){toggle.textContent=data&&data.enabled===false?'恢复小克自主更新':'暂停小克自主更新';toggle.disabled=!data||!data.writable||ckActiveMemoryBusy}
-  var saved=document.getElementById('ck-active-memory-saved');if(saved)saved.textContent=text||'小克会在聊天中自行决定值得记住的内容。';
+  var toggle=document.getElementById('ck-active-memory-toggle');if(toggle){toggle.textContent=data&&data.enabled===false?'恢复截断前补记':'暂停截断前补记';toggle.disabled=!data||!data.writable||ckActiveMemoryBusy}
+  var saved=document.getElementById('ck-active-memory-saved');if(saved)saved.textContent=text||'准备截断时，小克会集中保存值得记住的内容。';
 }
 function ckActiveMemoryInput(){ckActiveMemoryRender()}
 function ckActiveMemorySave(){ckActiveMemoryMessage='主动记忆正文只能由小克更新。';ckActiveMemoryRender();return false}
@@ -33,7 +33,7 @@ async function ckActiveMemoryRefresh(action,payload){
     if(response.status===409&&action){var latest=await fetch(endpoint,{cache:'no-store',signal:controller.signal});var current=await latest.json();if(latest.ok&&current.ok&&ckActiveMemoryScope(chatLoadConfig())===scope)ckActiveMemoryData=current}
     if(!response.ok||data.ok!==true)throw new Error(data.error||'主动记忆暂时无法读取');
     if(ckActiveMemoryScope(chatLoadConfig())!==scope)return false;ckActiveMemoryData=data;
-    ckActiveMemoryMessage=action?(data.enabled?'小克可以继续自主更新记忆。':'已暂停自主更新，保存的记忆仍在每轮带入。'):'';
+    ckActiveMemoryMessage=action?(data.enabled?'准备截断时可以更新记忆。':'已暂停自主更新，保存的记忆仍在每轮带入。'):'';
     return true;
   }catch(error){if(ckActiveMemoryScope(chatLoadConfig())===scope)ckActiveMemoryMessage=(action?'开关操作尚未确认，已有记忆保留：':'读取尚未完成：')+(error.message||'连接失败');return false}
   finally{

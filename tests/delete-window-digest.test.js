@@ -3,10 +3,10 @@ const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
 const history=require('../chat-history.js'),copy=x=>JSON.parse(JSON.stringify(x));
 function setup(){
   let now=Date.parse('2026-10-14T23:59:00+08:00'),choice='summarize',answer,saveFailure=false;
-  const cfg={gatewayUrl:'https://fixture.invalid',panelKey:'fixture',dailyDigestEnabled:true,dailyDigestRetentionDays:7,dailyDigestDetailDays:3,dailyDigestRollupDays:0};
+  const cfg={gatewayUrl:'https://fixture.invalid',panelKey:'fixture',dailyDigestEnabled:true,digestCycleCount:3};
   const turn=(id,ts=now)=>[{role:'user',text:'问题 '+id,ts,turnId:id},{role:'assistant',text:'答复 '+id,ts:ts+1,turnId:id}];
   const source={id:'temp',title:'临时对话',messages:[...turn('old'),...turn('new')],dailyDigests:[],transportMessages:[]};
-  const target={id:'main',title:'小克',messages:turn('main'),dailyDigests:[{dayKey:'2026-10-14',text:'主窗口已有总结',startTs:now,endTs:now,covered:[]}]};
+  const target={id:'main',title:'小克',messages:turn('main'),dailyDigests:[{id:'cy-main',kind:'cycle',sequence:1,active:true,dayKey:'2026-10-14',text:'主窗口已有总结',startTs:now,endTs:now,covered:[]}]};
   const other={id:'other',title:'其它',messages:turn('other'),dailyDigests:[]};
   const storage=new Map(),saved=new Map(),calls=[],events=[],messages=[];
   const ctx={console,Promise,AbortController,setTimeout,clearTimeout,setInterval,clearInterval,
@@ -32,7 +32,7 @@ function setup(){
   ctx.chatScheduleNightlySync=()=>{};ctx.chatRenderDailyDigest=()=>{};ctx.chatDigestForgetSession=id=>events.push({name:'delete',id});
   return {ctx,cfg,source,target,other,calls,saved,events,messages,turn,realSync,choice:v=>choice=v,reply:v=>answer=v,failSave:()=>saveFailure=true,advance:ms=>now+=ms,run:()=>ctx.chatDeleteSession(source.id)};
 }
-test('only unsummarized chat goes into today; durable main precedes deletion and raw main is unchanged',async()=>{
+test('only unsummarized chat joins the latest detailed cycle; durable main precedes deletion and raw main is unchanged',async()=>{
   const x=setup(),old=x.ctx.chatDigestMessageGroups(x.source.messages)[0];
   x.source.dailyDigests=[{dayKey:'2026-10-14',text:'已有临时总结',covered:[old.key]}];
   const mainRaw=copy(x.target.messages),other=copy(x.other);
@@ -83,13 +83,13 @@ test('cleanup failure after commit retries without a second model call or duplic
   const reload=copy(x.saved.get('main'));Object.assign(x.target,reload);x.ctx.chatWakeForget=async()=>true;await x.run();
   assert.equal(x.calls.length,1);assert.equal(x.target.dailyDigests[0].text,text);assert(!x.ctx.chatSessions.includes(x.source));
 });
-test('midnight handoff is assigned to the actual save date; prior days remain intact',async()=>{
+test('midnight handoff supplements the same latest cycle without a daily rollup',async()=>{
   const x=setup();x.reply(async()=>{x.advance(120000);return {ok:true,json:async()=>({ok:true,prepared:true,text:'跨日内容'})}});await x.run();
-  assert.equal(x.target.dailyDigests.length,2);assert.equal(x.target.dailyDigests[0].text,'主窗口已有总结');assert.equal(x.target.dailyDigests[1].dayKey,'2026-10-15');assert.match(x.target.dailyDigests[1].text,/跨日内容/);
+  assert.equal(x.target.dailyDigests.length,1);assert.equal(x.target.dailyDigests[0].sequence,1);assert.match(x.target.dailyDigests[0].text,/主窗口已有总结/);assert.match(x.target.dailyDigests[0].text,/跨日内容/);
 });
 test('prepared main summaries and raw transport-only history are preserved',async()=>{
   const x=setup(),cfgStamp=x.ctx.chatDigestConfigStamp(x.cfg),scope=x.ctx.chatNightlyScope(x.cfg);
-  x.target.digestStaged={scope,config:cfgStamp,base:{entries:[{dayKey:'2026-10-14',text:'后台最新总结',covered:[]}],rollup:null,omitted:[]},revision:3};
+  x.target.digestStaged={scope,config:cfgStamp,base:{entries:[{id:'cy-main',kind:'cycle',sequence:1,active:true,dayKey:'2026-10-14',text:'后台最新总结',covered:[]}],rollup:null,omitted:[]},revision:3};
   x.source.transportMessages=[{role:'user',content:'仅传输历史问题'},{role:'assistant',content:'仅传输历史答案'},...x.source.messages.map(m=>({role:m.role,content:m.text}))];
   await x.run();assert.match(x.target.dailyDigests[0].text,/后台最新总结/);assert(x.calls.flatMap(c=>c.messages).some(m=>m.text==='仅传输历史问题'));
   assert.equal(x.calls.flatMap(c=>c.messages).filter(m=>m.text==='问题 new').length,1);

@@ -16,23 +16,19 @@ const server=http.createServer((req,res)=>{
   const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
   page.on('pageerror',e=>errors.push(e.message));
-  await page.exposeFunction('__clickDigestSync',async kind=>{
-   const button=page.locator('.mm-digest-result [data-mm-digest-action="sync"]').first();
-   await button.scrollIntoViewIfNeeded();
-   if(process.env.CK_BROWSER_OUTPUT){fs.mkdirSync(process.env.CK_BROWSER_OUTPUT,{recursive:true});await page.screenshot({path:path.join(process.env.CK_BROWSER_OUTPUT,'partial-ready-'+width+'-'+kind+'.png')});}
-   await button.click();
-  });
+  await page.exposeFunction('__clickCycleAction',async selector=>{await page.locator(selector).click();});
+  await page.exposeFunction('__captureCycleSettings',async()=>{assert(await page.locator('#chat-digest-cycle-count').isVisible());assert.equal(await page.locator('#loading-wrap').count(),0);if(process.env.CK_BROWSER_OUTPUT){fs.mkdirSync(process.env.CK_BROWSER_OUTPUT,{recursive:true});await page.locator('#chat-digest-cycle-count').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(process.env.CK_BROWSER_OUTPUT,'cycle-settings-'+width+'.png')});}});
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.waitForFunction(()=>typeof chatDigestFinishManualTrim==='function');
   const results=await page.evaluate(fs.readFileSync(path.join(__dirname,'fixtures/immediate-trim.js'),'utf8'));
   assert(results.some(r=>r.lostUploadRecovered&&r.readBeforeResend));
   assert(results.some(r=>r.blockedSavedRecovery&&r.originalRunOnly&&r.newerRoundPreserved&&r.noModelRequest));assert.deepEqual(errors,[]);
-  assert.equal(results.filter(r=>r.partialStatusSync).length,3);
-  assert(results.some(r=>r.partialStatusSync&&r.sourceGroups===650&&r.cutRounds===325));
-  assert(results.some(r=>r.automaticStatusSync&&r.sourceGroups===650&&r.cutRounds===325&&r.baselineAfterAck));
-  assert.equal(results.filter(r=>r.automaticStatusSync).length,3);
-  assert.equal(results.filter(r=>r.automaticGuard).length,2);
+  assert(results.some(r=>r.zThreeFourCycles&&r.generatedCycles===3&&r.nextRequestChecked));
   if(process.env.CK_BROWSER_OUTPUT){fs.mkdirSync(process.env.CK_BROWSER_OUTPUT,{recursive:true});await page.screenshot({path:path.join(process.env.CK_BROWSER_OUTPUT,'partial-sync-'+width+'.png')});fs.writeFileSync(path.join(process.env.CK_BROWSER_OUTPUT,'results-'+width+'.json'),JSON.stringify(results,null,2));}
+  await page.reload();
+  await page.waitForFunction(()=>typeof chatLoadSessionsFromIndexedDb==='function');
+  const reloaded=await page.evaluate(async()=>{const expected=JSON.parse(localStorage.getItem('ck_cycle_reload_fixture'));const session=(await chatLoadSessionsFromIndexedDb()).find(s=>s.id===expected.id);return {same:session.digestActivePack.text===expected.pack,sequence:session.dailyDigests.filter(s=>s.kind==='cycle'&&s.active!==false).map(s=>s.sequence),first:session.dailyDigests.find(s=>s.sequence===1).text===expected.first,z:chatLoadConfig().digestCycleCount};});
+  assert.deepEqual(reloaded,{same:true,sequence:[3,4],first:true,z:3});
   console.log(width+': '+results.length+' browser scenarios PASS, including failed-upload recovery, cancellation, active replies and next-message injection');
   await page.close();
  }}finally{await browser.close();server.close()}

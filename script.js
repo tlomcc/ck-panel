@@ -2565,9 +2565,7 @@ function chatDefaultConfig(){
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
     digestCurrentModel:false,
-    dailyDigestRetentionDays:7,
-    dailyDigestDetailDays:3,
-    dailyDigestRollupDays:4,
+    digestCycleCount:3,
     newSessionDigestSyncEnabled:true,
     costPricing:chatDefaultCostPricing(),
     costPricingDefaults:[],
@@ -3635,11 +3633,7 @@ function chatLoadConfig(){
         Object.prototype.hasOwnProperty.call(saved||{},'autoCleanRounds'))cfg.autoCleanMode='rounds';
     }
   }catch(e){}
-  if(saved&&!Object.prototype.hasOwnProperty.call(saved,'dailyDigestDetailDays')){
-    cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(saved.dailyDigestRetentionDays);
-    cfg.dailyDigestDetailDays=Math.min(3,cfg.dailyDigestRetentionDays);
-    cfg.dailyDigestRollupDays=cfg.dailyDigestRetentionDays-cfg.dailyDigestDetailDays;
-  }
+
   ['recordsManualModel','factManualModel','eventManualModel'].forEach(function(k){delete cfg[k]});
   cfg.panelKey=storedPanelKey();
   try{
@@ -3679,8 +3673,8 @@ function chatLoadConfig(){
   cfg.worldbookInjectionPosition=chatNormalizeInjectionPosition(cfg.worldbookInjectionPosition,'system_tail');
   cfg.thinkingInjectionPosition=chatNormalizeInjectionPosition(cfg.thinkingInjectionPosition,'system_after_anchor');
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
-  cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
-  var digestOptions=chatDigestOptions(cfg);cfg.dailyDigestDetailDays=digestOptions.x;cfg.dailyDigestRollupDays=digestOptions.y;
+  cfg.digestCycleCount=chatDigestCount(cfg.digestCycleCount);
+  delete cfg.dailyDigestRetentionDays;delete cfg.dailyDigestDetailDays;delete cfg.dailyDigestRollupDays;
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.gatewayInternalRetryEnabled=cfg.gatewayInternalRetryEnabled===true;
   cfg.gatewayInternalRetryMax=Math.max(0,Math.min(5,Math.round(Number(cfg.gatewayInternalRetryMax)||0)));
@@ -3771,8 +3765,8 @@ function chatSaveConfigObject(cfg){
   cfg.autoCleanMode=autoCleanSave.mode;
   cfg.autoCleanRounds=autoCleanSave.rounds;
   cfg.dailyDigestEnabled=cfg.dailyDigestEnabled!==false;
-  cfg.dailyDigestRetentionDays=chatDailyDigestRetentionDays(cfg.dailyDigestRetentionDays);
-  var digestOptions=chatDigestOptions(cfg);cfg.dailyDigestDetailDays=digestOptions.x;cfg.dailyDigestRollupDays=digestOptions.y;
+  cfg.digestCycleCount=chatDigestCount(cfg.digestCycleCount);
+  delete cfg.dailyDigestRetentionDays;delete cfg.dailyDigestDetailDays;delete cfg.dailyDigestRollupDays;
   cfg.newSessionDigestSyncEnabled=cfg.newSessionDigestSyncEnabled!==false;
   cfg.cacheStrategy=chatNormalizeCacheStrategy(cfg.cacheStrategy);
   cfg.allowFourthCacheBreakpoint=cfg.allowFourthCacheBreakpoint===true;
@@ -4563,6 +4557,7 @@ function chatNormalizeSession(s){
     timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
     replyDraft:s.replyDraft||null,
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
+    digestCycleMigration:s.digestCycleMigration||null,
     digestRollup:chatNormalizeDigestRollup(s.digestRollup),
     digestWork:chatDigestNormalizeWork(s.digestWork),
     digestOmittedCovered:chatDigestOmittedCoverage(s.digestOmittedCovered),
@@ -4841,9 +4836,7 @@ function chatReadForm(){
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
     digestCurrentModel:saved.digestCurrentModel===true,
     digestManualModel:saved.digestManualModel,
-    dailyDigestRetentionDays:chatDigestOptions(saved).n,
-    dailyDigestDetailDays:chatDigestOptions(saved).x,
-    dailyDigestRollupDays:chatDigestOptions(saved).y,
+    digestCycleCount:chatDigestOptions(saved).z,
     newSessionDigestSyncEnabled:chatFieldChecked('chat-new-session-digest-sync',saved.newSessionDigestSyncEnabled!==false),
     costPricing:chatReadCostPricing(saved.costPricing),
     costPricingDefaults:chatReadCostDefaults(saved.costPricingDefaults),
@@ -6236,7 +6229,7 @@ function chatFormatDigestDiagnostic(ev,data){
   if(ev==='trim_result')return (data.ok?'✂️ 截断完成':'⚠️ 截断未完成')+'｜'+trigger+'｜'+(data.before||0)+' → '+(data.after||0)+' 轮｜'+(data.ok?'移除 '+(data.dropped||0)+' 轮，保留 '+(data.after||0)+' 轮':'原历史已保留｜'+(data.error||'总结未完成'))+(data.request_id?'｜关联请求 '+data.request_id:'');
   if(ev==='digest_result')return (data.ok?'✅ 总结已保存':'⚠️ 总结未保存')+'｜'+trigger+(data.ok?'｜现有 '+(data.entries||0)+' 个日期的总结':'｜'+(data.error||'校验未通过')+'｜原内容已保留')+(data.request_id?'｜关联请求 '+data.request_id:'');
   var phases={started:'开始',generated:'生成成功（尚待保存）',checkpoint:'批次进度已保存',reused:'复用已完成批次（未调用模型）',failed:'失败',cancelled:'已取消',server:'服务器生成成功（保存/截断结果以本地记录为准）'};
-  var stage=data.mode==='compact_day'?(data.tier==='y'?'y 每日精简摘要':'x 每日摘要'):data.mode==='rolling_summary'?'y 大总结':'当日详细总结';
+  var stage=data.mode==='cycle_final'?'本次总结、上一份简版与截断前补记':data.mode==='cycle_part'?'本次总结分批处理':data.mode==='daily_part'?'对话总结':'历史总结记录';
   var lines=[(data.ok===false?'❌ ':'🗂 ')+'截断总结｜'+(data.phase==='server'&&data.ok===false?'服务器生成失败':phases[data.phase]||'批次结果')+'｜'+stage+'｜'+(data.day_key||data.start_day||'-')+'｜'+trigger];
   if(data.batch)lines.push('批次 '+data.batch+'/'+(data.batches||data.batch)+'｜输入 '+(data.input_messages||0)+' 条 / '+(data.input_chars||data.source_chars||0)+' 字');
   else lines.push('输入 '+(data.input_messages||0)+' 条 / '+(data.input_chars||data.source_chars||0)+' 字');
@@ -6915,6 +6908,7 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     timeReminderRoundCount:Number(s.timeReminderRoundCount)||0,
       replyDraft:s.replyDraft||null,
     dailyDigests:chatDailyDigestNormalize(s.dailyDigests),
+    digestCycleMigration:s.digestCycleMigration||null,
     digestRollup:chatNormalizeDigestRollup(s.digestRollup),
     digestWork:chatDigestNormalizeWork(s.digestWork),
     digestOmittedCovered:chatDigestOmittedCoverage(s.digestOmittedCovered),
@@ -7589,7 +7583,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
     forceCacheRebuild:pendingBoundary||drop>0,
   };
 }
-// Rolling-summary storage and preparation live in chat-digest.js.
+// Summary-cycle storage and preparation live in chat-digest.js.
 function chatCommitAutoTrimPlan(cfg,plan){
   var s=plan.session||chatCurrentSession();
   var active=s===chatCurrentSession();
@@ -7621,7 +7615,7 @@ function chatCommitAutoTrimPlan(cfg,plan){
     }
   }
   if(trimCommitted&&s.digestTransportEpoch){s.digestTransportEpoch=String(Date.now())+'-'+Math.random().toString(36).slice(2,9);s.digestTransportSourceAt=Date.now();}
-  if(plan.cacheBoundary)s.cacheRebuildPending=true;
+  if(plan.cacheBoundary){s.cacheRebuildPending=true;s.transportMessages=chatDigestCompactMemoryHistory(s.transportMessages);}
   chatResetSessionAnchorFromMessages(s);
   s.updated=Date.now();
   chatSaveSessions();
@@ -11933,7 +11927,7 @@ var API_TABS=[
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。也可以勾「随机模式」不按顺序、每次在队列里摇一个用。只影响聊天、Fact 和召回配置。'},
   {key:'memory',label:'记忆',info:'这一栏管 Fact 提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'chat_digest',label:'截断总结',info:'生成滚动每日详细总结、y 天合并大总结和当日新总结。截断前更新未总结的内容；跨日时补齐并滚动，也支持手动更新。n、x、y 在「截断总结」设置，注入直接读取保存的总结。以上生成共用这一组 API，请为这一组独立选择供应商和模型。'}
+    {key:'chat_digest',label:'截断总结',info:'截断前只总结新增对话，同时将上一份详细总结压成简版并集中补记主动记忆。保留次数 Z 在「截断总结」设置，默认 3；更早简版直接复用，跨天不重写。未启用当前聊天线路时，生成与校对使用这一组 API。'}
   ]},
   {key:'topics',label:'主题与事件 API',info:'主题选材、事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'主题选材与事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[

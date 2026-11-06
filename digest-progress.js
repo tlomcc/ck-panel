@@ -52,7 +52,7 @@
       v.step=1;v.tone='live';v.stage=phases[phase]||'正在整理总结';
       if(phase==='preparing'&&!p.batch_index){v.step=0;v.stage='正在准备材料';}
       if(execution&&execution!=='claude_code_subscription')v.stage=v.stage.replace('Claude','模型');
-      v.detail=remote.stage==='compact_day:x'?'正在压缩近期每日摘要。':remote.stage==='compact_day:y'?'正在压缩较早日期摘要。':'正在整理本次选中的对话。';
+      v.detail=remote.stage==='cycle_final'?'正在完成本次总结、上一份简版与截断前补记。':'正在整理本次选中的新增对话。';
       if(p.day)v.detail+=' 处理日期 '+p.day+'。';
       v.eta='首批计时中，暂未形成估算';
       v.etaNote='每次模型请求最多等待 3 分钟；整批还包含复核。';
