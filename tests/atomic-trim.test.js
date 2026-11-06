@@ -526,6 +526,32 @@ test('manual XY sync succeeds with zero cut rounds while unrelated cuts are stil
  assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'同步完成');
 });
 
+test('one-time reviewed range sync applies once and preserves all current chat rows',async()=>{
+ const x=setup();x.cfg.digestCurrentModel=true;stageRange(x);x.ctx.chatRenderMessages=()=>{};
+ x.session.digestStaged.result.sync_once={id:'review-once',session_id:x.session.id,config:x.ctx.chatNightlyConfig(x.cfg)};
+ const before=JSON.stringify(x.session.messages);x.session.cacheLastReadAt=x.ctx.Date.now();
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),true);
+ assert.equal(JSON.stringify(x.session.messages),before);assert.equal(x.session.digestStaged,undefined);
+ assert.match(x.session.digestActivePack.text,/新范围摘要/);assert.equal(x.session.digestLastSync.status,'synced');
+ assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false);
+ assert.equal(x.requests.length,0);
+});
+
+test('one-time range sync waits for matching scope, settings, idle reply and saved edits',async()=>{
+ for(const block of ['session','config','reply','edit','new-run','new-cut']){
+  const x=setup();x.cfg.digestCurrentModel=true;stageRange(x);x.ctx.chatRenderMessages=()=>{};
+  const once=x.session.digestStaged.result.sync_once={id:'review-once',session_id:x.session.id,config:x.ctx.chatNightlyConfig(x.cfg)};
+  if(block==='session')once.session_id='other';
+  if(block==='config')once.config={...once.config,x:9};
+  if(block==='reply')x.ctx.chatSending=true;
+  if(block==='edit')x.ctx.chatDigestEditors[x.session.id+':detail']={text:'draft'};
+  if(block==='new-run')x.session.digestModelRun={id:'new-run',purpose:'daily'};
+  if(block==='new-cut')x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),immediate:false,keys:[],keep:2,minimum:1,dropRounds:1,requestedAt:x.ctx.Date.now()};
+  assert.equal(await x.ctx.chatDigestFinishManualTrim(x.cfg,x.session),false,block);
+  assert.equal(x.session.digestActivePack.text,'旧启用总结');assert.equal(x.requests.length,0);
+ }
+});
+
 test('stale wake status preserves a ready prefix without making normal sends wait',async()=>{
  const x=setup();prepare(x);let reads=0;
  x.session.wakeEnabled=true;x.session.wakeSyncAt=x.ctx.Date.now()-60000;

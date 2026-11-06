@@ -359,6 +359,13 @@ async function chatDigestFinishManualTrim(cfg,session){
       Date.now()-Number(pendingSync.lastAttemptAt||0)<30000)return false;
     return chatDigestSyncNow({automatic:true});
   }
+  var stage=chatDigestStage(session,cfg),once=stage&&stage.result&&stage.result.sync_once;
+  if(once&&typeof once.id==='string'&&once.session_id===session.id&&
+      JSON.stringify(once.config)===JSON.stringify(chatNightlyConfig(cfg))&&!session.digestManualTrim&&!session.digestModelRun){
+    if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||
+        !chatDigestCanActivate(session,cfg)||!chatDigestPackReady(cfg,chatDigestPreparedSession(session,cfg)))return false;
+    return chatDigestSyncNow({summaryOnly:true,automatic:true});
+  }
   var partial=false;
   if(cfg.digestCurrentModel===true){
     var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;

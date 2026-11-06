@@ -10,7 +10,7 @@
  function context(){return CKBackendRoute.current.gateway+'\n'+model()+'\n'+(typeof storedPanelKey==='function'?storedPanelKey():'')}
  function timeText(value){return typeof value==='number'&&isFinite(value)?new Date(value*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'尚未提供'}
  function percent(w){return w&&!w.expired&&!(w.resets_at&&w.resets_at<=Date.now()/1000)&&typeof w.used_percent==='number'&&isFinite(w.used_percent)&&w.used_percent>=0?Math.min(100,w.used_percent):null}
- function fresh(w){var observed=w&&(typeof w.usage_observed_at==='number'?w.usage_observed_at:w.updated_at),age=Date.now()/1000-observed;return percent(w)!==null&&!w.stale&&typeof observed==='number'&&isFinite(observed)&&age>=-30&&age<=900}
+ function fresh(w){var observed=w&&(typeof w.usage_observed_at==='number'?w.usage_observed_at:w.updated_at),age=Date.now()/1000-observed;return percent(w)!==null&&!w.stale&&typeof observed==='number'&&isFinite(observed)&&age>=-30&&age<60}
  function remaining(pct){return Number((100-pct).toFixed(1))+'%'}
  function renderInline(value,unavailable){
   var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();
@@ -30,7 +30,7 @@
   if(!known)parts.push('等待官方百分比');
   if(unavailable)parts.push('连接中断，额度待更新');else if(old)parts.push('等待新的官方数据');
   bar.textContent=parts.join(' · ');bar.dataset.level=q.level;
-  bar.title='随聊天返回的官方额度更新。';
+  bar.title='优先使用聊天返回的官方额度，超过一分钟自动限频核实。';
  }
  function clearContext(){
   data=null;dataContext='';dirty=false;notified='';renderInline(null,false);
@@ -52,8 +52,8 @@
    '<div class="ck-sub-thresholds"><label>提醒<input id="ck-sub-warn" type="number" min="1" max="98" step="1" value="70" required><span>%</span></label><label>高用量提醒<input id="ck-sub-high" type="number" min="2" max="99" step="1" value="85" required><span>%</span></label><label>暂停请求<input id="ck-sub-stop" type="number" min="3" max="100" step="1" value="95" required><span>%</span></label></div>'+
    '<label class="ck-sub-check"><input id="ck-sub-paused" type="checkbox">手动暂停订阅请求</label></fieldset>'+
    '<div class="ck-sub-save"><button class="btn btn-blue btn-sm" id="ck-sub-save" type="submit" disabled>保存保护设置</button><span id="ck-sub-save-state" role="status" aria-live="polite">正在读取服务器设置</span></div></form>'+
-   '<details class="ck-sub-help"><summary>首次授权与登录维护</summary><ol><li>按已确定的 iOS 礼品卡方案，在官方 App 完成订阅。</li><li>在 VPS 的订阅专用环境发起官方登录，用手机或 iPad 打开授权链接，登录同一个 Claude 账号。</li><li>若出现一次性登录码，直接粘回发起登录的终端，不填入 CK。</li><li>在连接设置选择「Claude Code · 订阅」，开始正常聊天。</li></ol><p>登录信息保存在 VPS，由官方客户端负责续签。无需额外的定时刷新程序。登录到期且无法刷新时，需重新完成官方授权。</p><p>刷新状态只检查本地登录和用量观测，不发送聊天。已登录不代表续签已验证，也不代表订阅会自动续费。</p></details>'+
-   '<p class="ck-sub-footnote">额度随聊天返回更新，可能延迟或暂缺；没有百分比时，百分比暂停线无法触发，一次请求也可能跨过暂停线。阈值用于预留额度，不代表账号安全线。辅助总结、向量与 Fact 继续使用各自 API；额外付费开关以官方设置为准。</p></section>';
+   '<details class="ck-sub-help"><summary>首次授权与登录维护</summary><ol><li>按已确定的 iOS 礼品卡方案，在官方 App 完成订阅。</li><li>在 VPS 的订阅专用环境发起官方登录，用手机或 iPad 打开授权链接，登录同一个 Claude 账号。</li><li>若出现一次性登录码，直接粘回发起登录的终端，不填入 CK。</li><li>在连接设置选择「Claude Code · 订阅」，开始正常聊天。</li></ol><p>登录信息保存在 VPS，由官方客户端负责续签。无需额外的定时刷新程序。登录到期且无法刷新时，需重新完成官方授权。</p><p>刷新状态检查登录和官方额度；数据超过一分钟时限频核实，不发送聊天或总结。已登录不代表续签已验证，也不代表订阅会自动续费。</p></details>'+
+   '<p class="ck-sub-footnote">额度优先随聊天返回更新，过旧时自动核实，每分钟最多一次；失败或过旧显示待更新。没有百分比时，百分比暂停线无法触发，一次请求也可能跨过暂停线。阈值用于预留额度，不代表账号安全线。手动总结按所选模型计入相应额度，向量与 Fact 使用各自 API；额外付费开关以官方设置为准。</p></section>';
   document.body.append(dialog);
   $('ck-sub-close').onclick=close; $('ck-sub-refresh').onclick=function(){refresh(false)};
   $('ck-sub-connect').onclick=function(){close();ckOpenBackendRoute()};
@@ -98,13 +98,13 @@
   }else notified='';
   if(!dialog)return;
   $('ck-sub-state').textContent=state;$('ck-sub-state').dataset.level=q.level;
-  $('ck-sub-detail').textContent=!auth.ready?(auth.message||'订阅后，在 VPS 的订阅专用环境完成官方授权。'):q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'随聊天返回更新官方额度；剩余 = 100% − 官方已用比例，不按 token 估算。';
+  $('ck-sub-detail').textContent=!auth.ready?(auth.message||'订阅后，在 VPS 的订阅专用环境完成官方授权。'):q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'优先使用聊天回传，超过一分钟自动核实；剩余 = 100% − 官方已用比例。';
   $('ck-sub-renewal').textContent=auth.renewal?auth.renewal.message:'登录维护信息尚未提供，请更新服务器后检查。';
   $('ck-sub-route-label').textContent=(selected()?'当前聊天：Claude 订阅':'当前聊天未使用 Claude 订阅')+' · 保护状态按 '+(q.model||model())+' 显示';
   var body=$('ck-sub-windows');body.replaceChildren();
   var byKey={};q.windows.forEach(function(w){byKey[w.key]=w});
   ['five_hour','seven_day'].concat(Object.keys(byKey).filter(function(k){return k!=='five_hour'&&k!=='seven_day'})).forEach(function(key){body.append(quotaCard(key,byKey[key]))});
-  $('ck-sub-updated').textContent=q.last_observed_at?'最近状态事件：'+timeText(q.last_observed_at)+' · 百分比更新时间见各额度卡片；刷新不会主动更新官方额度':'尚未收到官方用量，不表示已用 0%';
+  $('ck-sub-updated').textContent=q.last_observed_at?'最近状态事件：'+timeText(q.last_observed_at)+' · 百分比时间见各卡片；旧数据自动限频核实':'尚未收到官方用量，不表示已用 0%';
   if(!dirty){$('ck-sub-enabled').checked=q.policy.enabled;$('ck-sub-paused').checked=q.policy.paused;$('ck-sub-warn').value=q.policy.warn_percent;$('ck-sub-high').value=q.policy.high_percent;$('ck-sub-stop').value=q.policy.stop_percent;$('ck-sub-save-state').textContent='已读取服务器设置'}
   $('ck-sub-fields').disabled=saving||q.storage_error;$('ck-sub-save').disabled=saving||q.storage_error;
  }
