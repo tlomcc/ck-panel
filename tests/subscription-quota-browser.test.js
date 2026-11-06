@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('node:assert/strict');
-const root=path.resolve(__dirname,'..');
+const root=path.resolve(process.env.CK_QUOTA_TEST_ROOT||path.join(__dirname,'..'));
 const out=process.env.CK_BROWSER_OUTPUT||fs.mkdtempSync(path.join(require('os').tmpdir(),'ck-subscription-quota-'));
 fs.mkdirSync(out,{recursive:true});
 const server=http.createServer((req,res)=>{
@@ -24,8 +24,20 @@ const server=http.createServer((req,res)=>{
   await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);
   const result=await page.evaluate(fs.readFileSync(path.join(__dirname,'fixtures/subscription.js'),'utf8'));
   assert.deepEqual(errors,[]);assert(result.replyRefresh&&result.accountRace&&result.policySaved);
-  await page.screenshot({path:path.join(out,'quota-'+width+'-'+dark+'.png')});
-  results.push({width,dark,...result});console.log(width+' '+dark+': subscription quota browser checks PASS');
+  const views=[];
+  for(const mode of ['last-known','unavailable','expired']){
+   views.push(await page.evaluate(mode=>window.__subscriptionPreview(mode),mode));
+   await page.screenshot({path:path.join(out,'quota-'+width+'-'+dark+'-'+mode+'.png')});
+  }
+  await page.evaluate(()=>window.__subscriptionPreview('last-known'));
+  await page.locator('#ck-sub-close').click();
+  const inline=page.locator('#ck-sub-inline');
+  await inline.scrollIntoViewIfNeeded();
+  const inlineGeometry=await inline.evaluate(el=>({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,scroll:el.scrollWidth,client:el.clientWidth}));
+  assert(inlineGeometry.left>=0&&inlineGeometry.right<=width&&inlineGeometry.scroll<=inlineGeometry.client+1,'inline quota fits the viewport');
+  await page.locator('.chat-compose').screenshot({path:path.join(out,'quota-inline-'+width+'-'+dark+'.png')});
+  assert.deepEqual(errors,[]);
+  results.push({width,dark,...result,views,inlineGeometry});console.log(width+' '+dark+': subscription quota browser checks PASS');
   await page.close();
  }
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify(results,null,2));

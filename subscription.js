@@ -9,8 +9,9 @@
  function model(){return CKBackendRoute.current.subscriptionModel||'sonnet'}
  function context(){return CKBackendRoute.current.gateway+'\n'+model()+'\n'+(typeof storedPanelKey==='function'?storedPanelKey():'')}
  function timeText(value){return typeof value==='number'&&isFinite(value)?new Date(value*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'尚未提供'}
- function percent(w){return w&&!w.expired&&!(w.resets_at&&w.resets_at<=Date.now()/1000)&&typeof w.used_percent==='number'&&isFinite(w.used_percent)&&w.used_percent>=0?Math.min(100,w.used_percent):null}
- function fresh(w){var observed=w&&(typeof w.usage_observed_at==='number'?w.usage_observed_at:w.updated_at),age=Date.now()/1000-observed;return percent(w)!==null&&!w.stale&&typeof observed==='number'&&isFinite(observed)&&age>=-30&&age<60}
+ function percent(w){return w&&typeof w.used_percent==='number'&&isFinite(w.used_percent)&&w.used_percent>=0?Math.min(100,w.used_percent):null}
+ function expired(w){return !!(w&&(w.expired||w.resets_at&&w.resets_at<=Date.now()/1000))}
+ function observedAt(w){return w&&(typeof w.usage_observed_at==='number'&&isFinite(w.usage_observed_at)?w.usage_observed_at:w.updated_at)}
  function remaining(pct){return Number((100-pct).toFixed(1))+'%'}
  function renderInline(value,unavailable){
   var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();
@@ -18,23 +19,24 @@
   if(bar.hidden)return;
   var q=value&&value.quota,auth=value&&value.auth;
   if(!q||!auth||!auth.ready){bar.dataset.level='unknown';bar.textContent='Claude 额度 · '+(unavailable?'状态暂不可用':auth&&!auth.ready?'登录状态需检查':'正在读取');return}
-  var parts=['Claude 剩余'],byKey={},old=!!unavailable,known=false;
+  var parts=['Claude 剩余'],byKey={},observations=[],known=false;
   q.windows.forEach(function(w){byKey[w.key]=w});
   [['five_hour','5h'],['seven_day','7天']].forEach(function(pair){
-   var w=byKey[pair[0]],pct=percent(w),current=!unavailable&&fresh(w);parts.push(pair[1]+' '+(current?remaining(pct):pct===null?'—':'待更新'));
-   if(pct!==null){known=true;if(!current)old=true}
+   var w=byKey[pair[0]],pct=percent(w);parts.push(pair[1]+' '+(pct===null?'—':(expired(w)?'上期 ':'')+remaining(pct)));
+   if(pct!==null){known=true;observations.push({label:pair[1],time:timeText(observedAt(w))})}
   });
   var five=byKey.five_hour;
   if(five&&five.resets_at>Date.now()/1000)parts.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
   if(q.blocked)parts.push('已暂停');
   if(!known)parts.push('等待官方百分比');
-  if(unavailable)parts.push('连接中断，额度待更新');else if(old)parts.push('等待新的官方数据');
+  if(observations.length)parts.push('观测 '+(observations.every(function(item){return item.time===observations[0].time})?observations[0].time:observations.map(function(item){return item.label+' '+item.time}).join(' / ')));
+  if(unavailable)parts.push('连接中断，保留最近记录');
   bar.textContent=parts.join(' · ');bar.dataset.level=q.level;
-  bar.title='优先使用聊天返回的官方额度，超过一分钟自动限频核实。';
+  bar.title='显示最近一次官方额度及观测时间；取得新数据后自动替换，已结束的周期标为上期。';
  }
  function clearContext(){
   data=null;dataContext='';dirty=false;notified='';renderInline(null,false);
-  var badge=$('ck-sub-nav-state');if(badge)badge.textContent='状态待更新';
+  var badge=$('ck-sub-nav-state');if(badge)badge.textContent='正在读取';
   if(dialog){$('ck-sub-windows').replaceChildren();$('ck-sub-fields').disabled=true;$('ck-sub-save').disabled=true;$('ck-sub-state').textContent='正在读取订阅状态';$('ck-sub-detail').textContent='';$('ck-sub-renewal').textContent='';$('ck-sub-updated').textContent='等待当前连接的官方用量数据'}
  }
  function make(){
@@ -53,7 +55,7 @@
    '<label class="ck-sub-check"><input id="ck-sub-paused" type="checkbox">手动暂停订阅请求</label></fieldset>'+
    '<div class="ck-sub-save"><button class="btn btn-blue btn-sm" id="ck-sub-save" type="submit" disabled>保存保护设置</button><span id="ck-sub-save-state" role="status" aria-live="polite">正在读取服务器设置</span></div></form>'+
    '<details class="ck-sub-help"><summary>首次授权与登录维护</summary><ol><li>按已确定的 iOS 礼品卡方案，在官方 App 完成订阅。</li><li>在 VPS 的订阅专用环境发起官方登录，用手机或 iPad 打开授权链接，登录同一个 Claude 账号。</li><li>若出现一次性登录码，直接粘回发起登录的终端，不填入 CK。</li><li>在连接设置选择「Claude Code · 订阅」，开始正常聊天。</li></ol><p>登录信息保存在 VPS，由官方客户端负责续签。无需额外的定时刷新程序。登录到期且无法刷新时，需重新完成官方授权。</p><p>刷新状态检查登录和官方额度；数据超过一分钟时限频核实，不发送聊天或总结。已登录不代表续签已验证，也不代表订阅会自动续费。</p></details>'+
-   '<p class="ck-sub-footnote">额度优先随聊天返回更新，过旧时自动核实，每分钟最多一次；失败或过旧显示待更新。没有百分比时，百分比暂停线无法触发，一次请求也可能跨过暂停线。阈值用于预留额度，不代表账号安全线。手动总结按所选模型计入相应额度，向量与 Fact 使用各自 API；额外付费开关以官方设置为准。</p></section>';
+   '<p class="ck-sub-footnote">额度显示最近一次官方记录及观测时间，取得新数据后自动替换；暂未刷新成功时保留最近记录，已结束的周期标为上期。没有百分比时，百分比暂停线无法触发，一次请求也可能跨过暂停线。阈值用于预留额度，不代表账号安全线。手动总结按所选模型计入相应额度，向量与 Fact 使用各自 API；额外付费开关以官方设置为准。</p></section>';
   document.body.append(dialog);
   $('ck-sub-close').onclick=close; $('ck-sub-refresh').onclick=function(){refresh(false)};
   $('ck-sub-connect').onclick=function(){close();ckOpenBackendRoute()};
@@ -73,17 +75,18 @@
  function close(){if(saving)return;generation++;if(controller)controller.abort();controller=null;dialog.classList.remove('show');dialog.setAttribute('aria-hidden','true');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();schedule()}
  function schedule(){clearTimeout(timer);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},opened()?15000:30000)}
  function quotaCard(key,w,unavailable){
-  var card=node('article','ck-sub-window'),valid=w&&!w.expired,pct=percent(w),current=!unavailable&&fresh(w);
+  var card=node('article','ck-sub-window'),ended=expired(w),pct=percent(w);
   card.append(node('span','ck-sub-window-label',labels[key]||'额度'));
-  card.append(node('strong','ck-sub-number',current?remaining(pct):'—'));
-  if(current){var progress=node('progress');progress.max=100;progress.value=100-pct;progress.setAttribute('aria-label',(labels[key]||'额度')+' 剩余 '+remaining(pct));card.append(progress)}
+  card.append(node('strong','ck-sub-number',pct===null?'—':remaining(pct)));
+  if(pct!==null&&!ended){var progress=node('progress');progress.max=100;progress.value=100-pct;progress.setAttribute('aria-label',(labels[key]||'额度')+' 最近观测剩余 '+remaining(pct));card.append(progress)}
   else card.append(node('div','ck-sub-empty-bar'));
-  var status=!w?'等待官方数据':w.expired?'周期已结束，等待新数据':w.status==='rejected'?'官方已限额':!current?'额度待更新':'剩余额度';
-  if(pct!==null)status+=current?' · 已用 '+Number(pct.toFixed(1))+'%':' · 上次确认剩余 '+remaining(pct);
+  var status=!w?'等待官方数据':ended?'上期剩余额度 · 周期已结束':w.status==='rejected'?'官方已限额':pct===null?'官方暂未提供百分比':'最近观测';
+  if(pct!==null)status+=' · 已用 '+Number(pct.toFixed(1))+'%';
+  if(unavailable)status+=' · 保留最近记录';
   if(w&&w.applies===false)status+=' · 不影响所选模型';
   card.append(node('p','ck-sub-muted',status),node('p','ck-sub-reset',w&&w.resets_at?'重置：'+timeText(w.resets_at):'重置时间尚未提供'));
-  if(pct!==null)card.append(node('p','ck-sub-muted','百分比观测：'+timeText(w.usage_observed_at||w.updated_at)));
-  if(valid&&w.status==='rejected')card.dataset.level='paused';
+  if(pct!==null)card.append(node('p','ck-sub-muted','百分比观测：'+timeText(observedAt(w))));
+  if(w&&!ended&&w.status==='rejected')card.dataset.level='paused';
   return card;
  }
  function render(value){
@@ -98,13 +101,13 @@
   }else notified='';
   if(!dialog)return;
   $('ck-sub-state').textContent=state;$('ck-sub-state').dataset.level=q.level;
-  $('ck-sub-detail').textContent=!auth.ready?(auth.message||'订阅后，在 VPS 的订阅专用环境完成官方授权。'):q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'优先使用聊天回传，超过一分钟自动核实；剩余 = 100% − 官方已用比例。';
+  $('ck-sub-detail').textContent=!auth.ready?(auth.message||'订阅后，在 VPS 的订阅专用环境完成官方授权。'):q.blocked?q.reason:!value.event_supported?'当前客户端组件未提供用量事件，需要更新后才能自动监控。':'显示最近一次官方额度及观测时间；剩余 = 100% − 官方已用比例。';
   $('ck-sub-renewal').textContent=auth.renewal?auth.renewal.message:'登录维护信息尚未提供，请更新服务器后检查。';
   $('ck-sub-route-label').textContent=(selected()?'当前聊天：Claude 订阅':'当前聊天未使用 Claude 订阅')+' · 保护状态按 '+(q.model||model())+' 显示';
   var body=$('ck-sub-windows');body.replaceChildren();
   var byKey={};q.windows.forEach(function(w){byKey[w.key]=w});
   ['five_hour','seven_day'].concat(Object.keys(byKey).filter(function(k){return k!=='five_hour'&&k!=='seven_day'})).forEach(function(key){body.append(quotaCard(key,byKey[key]))});
-  $('ck-sub-updated').textContent=q.last_observed_at?'最近状态事件：'+timeText(q.last_observed_at)+' · 百分比时间见各卡片；旧数据自动限频核实':'尚未收到官方用量，不表示已用 0%';
+  $('ck-sub-updated').textContent=q.last_observed_at?'最近状态事件：'+timeText(q.last_observed_at)+' · 百分比观测时间见各卡片，新数据取得后自动替换':'尚未收到官方用量，不表示已用 0%';
   if(!dirty){$('ck-sub-enabled').checked=q.policy.enabled;$('ck-sub-paused').checked=q.policy.paused;$('ck-sub-warn').value=q.policy.warn_percent;$('ck-sub-high').value=q.policy.high_percent;$('ck-sub-stop').value=q.policy.stop_percent;$('ck-sub-save-state').textContent='已读取服务器设置'}
   $('ck-sub-fields').disabled=saving||q.storage_error;$('ck-sub-save').disabled=saving||q.storage_error;
  }
@@ -138,7 +141,7 @@
     var windows={};data.quota.windows.forEach(function(w){windows[w.key]=w});$('ck-sub-windows').replaceChildren();
     ['five_hour','seven_day'].concat(Object.keys(windows).filter(function(k){return k!=='five_hour'&&k!=='seven_day'})).forEach(function(k){$('ck-sub-windows').append(quotaCard(k,windows[k],true))});
    }
-   if(dialog){$('ck-sub-error').hidden=false;$('ck-sub-error').textContent=e.name==='AbortError'?'连接超时；如果正在保存，请刷新核对设置。':e.message;$('ck-sub-state').textContent='暂未取得最新状态';$('ck-sub-renewal').textContent='登录维护状态暂未确认，请恢复连接后刷新。';$('ck-sub-fields').disabled=true;$('ck-sub-save').disabled=true;$('ck-sub-updated').textContent=data?'下方为上次观测，当前连接不可用。':'等待连接订阅服务';if(isSave)$('ck-sub-save-state').textContent='保存结果未确认，请刷新核对'}
+   if(dialog){$('ck-sub-error').hidden=false;$('ck-sub-error').textContent=e.name==='AbortError'?'连接超时；如果正在保存，请刷新核对设置。':e.message;$('ck-sub-state').textContent='暂未取得最新状态';$('ck-sub-renewal').textContent='登录维护状态暂未确认，请恢复连接后刷新。';$('ck-sub-fields').disabled=true;$('ck-sub-save').disabled=true;$('ck-sub-updated').textContent=data?'额度保留上次观测，当前连接不可用。':'等待连接订阅服务';if(isSave)$('ck-sub-save-state').textContent='保存结果未确认，请刷新核对'}
    var badge=$('ck-sub-nav-state');if(badge)badge.textContent='状态未知';
   }finally{clearTimeout(timeout);if(token===generation){controller=null;if(dialog)$('ck-sub-refresh').disabled=false;schedule()}}
  }

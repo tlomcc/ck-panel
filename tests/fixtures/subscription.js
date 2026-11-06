@@ -55,16 +55,28 @@
  assert($('ck-sub-windows').querySelectorAll('progress').length===2,'two independent quota windows');
  const dims=()=>{const card=document.querySelector('.ck-sub-card');return {width:innerWidth,card:card.getBoundingClientRect().width,scroll:card.scrollWidth,client:card.clientWidth}};
  let d=dims();assert(d.card<=innerWidth&&d.scroll<=d.client+1,'responsive without horizontal overflow '+JSON.stringify(d));
+ state.quota.windows[0].usage_observed_at=now-61;state.quota.refresh_status='waiting';
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-inline').textContent.includes('5h 13.8%')&&!$('ck-sub-inline').textContent.includes('待更新'),'one-minute age must not hide the last known balance');
+ const olderTime=new Date((now-61)*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ assert($('ck-sub-inline').textContent.includes('5h '+olderTime)&&$('ck-sub-windows').firstChild.textContent.includes('百分比观测：'+olderTime),'each window keeps its actual percentage observation time');
+ assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='13.8%','one-minute-old card keeps its number');
+ state.quota.windows[0].usage_observed_at=now;
  state.quota.windows[0].expired=true;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert(!$('ck-sub-windows').firstChild.querySelector('progress'),'expired data not shown as current');
- assert($('ck-sub-inline').textContent.includes('5h —'),'expired inline value is unknown');
+ assert($('ck-sub-inline').textContent.includes('5h 上期 13.8%'),'expired inline balance is explicitly from the previous period');
+ assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='13.8%'&&$('ck-sub-windows').firstChild.textContent.includes('上期剩余额度'),'expired card retains the dated previous period without inventing a reset balance');
+ state.quota.windows[0].expired=false;state.quota.windows[0].resets_at=now-1;
+ $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-inline').textContent.includes('5h 上期 13.8%')&&!$('ck-sub-windows').firstChild.querySelector('progress'),'reset timestamp alone marks the old period');
+ state.quota.windows[0].resets_at=now+1800;
  state.quota.windows.push({key:'seven_day_opus',used_percent:98,resets_at:now+86400,updated_at:now,usage_observed_at:now-1800,status:'rejected',expired:false,stale:true,applies:false});
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-state').textContent==='订阅用量偏高','unrelated model does not pause selected model');
  const opus=$('ck-sub-windows').lastChild.textContent;
- assert(opus.includes('不影响所选模型')&&opus.includes('上次确认')&&opus.includes('百分比观测：'),'model scope and stale rejected percentage labeled');
- assert($('ck-sub-windows').lastChild.querySelector('strong').textContent==='—','stale rejection cannot display an old balance as current');
+ assert(opus.includes('不影响所选模型')&&opus.includes('官方已限额')&&opus.includes('百分比观测：'),'model scope, rejection and observation time remain visible');
+ assert($('ck-sub-windows').lastChild.querySelector('strong').textContent==='2%','stale rejected window keeps the official percentage with its rejection');
  assert($('ck-sub-updated').textContent.includes('最近状态事件'),'status timestamp distinguished from percentage');
  state.quota.windows[0].expired=false;state.quota.blocked=true;state.quota.level='paused';state.quota.reason='<img src=x onerror="window.pwned=true">';
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent.includes('暂停'));
@@ -73,8 +85,9 @@
  assert($('ck-sub-updated').textContent.includes('上次观测'),'failed refresh clearly marks old data');
  assert($('ck-sub-save').disabled,'cannot save stale/unknown server settings');
  assert($('ck-sub-renewal').textContent.includes('暂未确认'),'failed refresh invalidates readiness display');
- assert($('ck-sub-inline').textContent.includes('额度待更新')&&!$('ck-sub-inline').textContent.includes('13.8%'),'inline failure hides the old balance');
- assert([...$('ck-sub-windows').querySelectorAll('strong')].every(n=>n.textContent==='—'),'failed refresh clears current values on all cards');
+ assert($('ck-sub-inline').textContent.includes('保留最近记录')&&$('ck-sub-inline').textContent.includes('5h 13.8%')&&$('ck-sub-inline').textContent.includes('7天 68%'),'inline failure retains both latest known balances');
+ assert([...$('ck-sub-windows').querySelectorAll('strong')].map(n=>n.textContent).join(',')==='13.8%,68%,2%','failed refresh retains the last numbers on all cards');
+ assert(!$('ck-sub-inline').textContent.includes('待更新')&&!$('ck-sub-windows').textContent.includes('待更新'),'refresh failure does not replace quota with pending text');
  error=false;state.quota.blocked=false;state.quota.level='high';state.quota.reason='';
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-save').disabled);
  // A closed dialog must ignore the in-flight response.
@@ -90,14 +103,18 @@
  assert(calls.length===roundCalls+1,'reply completion refreshes only local monitor once: '+JSON.stringify({before:roundCalls,after:calls.length,paths:calls.slice(roundCalls).map(c=>c.url),text:$('ck-sub-inline').textContent}));
  state.quota.windows[0].used_percent=39;state.quota.windows[0].stale=true;state.quota.windows[0].usage_observed_at=now-8000;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
- assert($('ck-sub-inline').textContent.includes('5h 待更新')&&!$('ck-sub-inline').textContent.includes('61%'),'stuck 61 percent must not look like the latest balance');
- assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='—'&&$('ck-sub-windows').firstChild.textContent.includes('上次确认剩余 61%'),'old official reading is retained with an explicit label');
+ assert($('ck-sub-inline').textContent.includes('5h 61%')&&$('ck-sub-inline').textContent.includes('观测'),'old official percentage stays visible with its observation time');
+ assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='61%'&&$('ck-sub-windows').firstChild.textContent.includes('最近观测'),'old official reading remains the main number');
  state.quota.windows[0].used_percent=74;state.quota.windows[0].stale=false;state.quota.windows[0].usage_observed_at=Date.now()/1000;
  chatReleaseSendingUi(null);await wait(()=>$('ck-sub-inline').textContent.includes('5h 26%'));
  assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='26%','new official balance replaces stale value after reply');
  state.quota.windows[0].used_percent=null;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-inline').textContent.includes('5h —')&&!$('ck-sub-inline').textContent.includes('5h 100%'),'unknown is never remaining 100%');
+ for(const [used,left] of [[0,'100%'],[100,'0%']]){
+  state.quota.windows[0].used_percent=used;$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+  assert($('ck-sub-windows').firstChild.querySelector('strong').textContent===left,'explicit official boundary percentage stays numeric');
+ }
  state.quota.windows[0].used_percent=90;
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  let accountRelease;delay=resolve=>{accountRelease=resolve};
@@ -109,5 +126,16 @@
  $('ck-sub-close').focus();$('ck-sub-close').dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
  assert(document.activeElement===$('ck-sub-dialog').querySelector('summary'),'focus trap includes details');
  window.__subscriptionEmpty=async()=>{state.auth.ready=false;state.quota.windows=[];state.quota.level='unknown';state.quota.last_observed_at=null;$('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent==='尚未登录订阅')};
- return {calls:calls.length,policySaved:true,remaining:true,replyRefresh:true,accountRace:true,unknown:true,expired:true,escaped:true,closeRace:true,geometry:dims()};
+ window.__subscriptionPreview=async(mode)=>{
+  error=false;state.auth={ready:true,state:'ready',renewal:{prepared:true,message:'订阅已连接'}};state.quota.level='warning';state.quota.blocked=false;state.quota.reason='';state.quota.refresh_status='waiting';
+  state.quota.windows=[{key:'five_hour',used_percent:84,resets_at:now+1800,updated_at:now,usage_observed_at:now-3600,status:'allowed',expired:false,stale:true},{key:'seven_day',used_percent:59,resets_at:now+86400,updated_at:now,usage_observed_at:now-3600,status:'allowed',expired:false,stale:true}];
+  if(mode==='expired')state.quota.windows[0].resets_at=now-1;
+  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+  if(mode==='unavailable'){error=true;$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-error').hidden)}
+  document.querySelector('.ck-sub-card').scrollTop=0;
+  assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='16%'&&$('ck-sub-windows').children[1].querySelector('strong').textContent==='41%','preview retains both known numbers');
+  const geometry=dims();assert(geometry.card<=innerWidth&&geometry.scroll<=geometry.client+1,'quota state fits viewport '+mode);
+  return {mode,inline:$('ck-sub-inline').textContent,geometry};
+ };
+ return {calls:calls.length,policySaved:true,remaining:true,replyRefresh:true,accountRace:true,unknown:true,expired:true,escaped:true,closeRace:true,lastKnown:true,failedRefreshRetained:true,minuteOldRetained:true,percentageTimes:true,boundaries:true,geometry:dims()};
 })();
