@@ -39,8 +39,8 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await page.evaluate(()=>document.getElementById('chat-input').value='主窗口未发送的草稿');await start(page);
       await page.fill('#games-input','这次只聊本局的事。');await play(page,'H8','嗯，陪着你。\n【落子：I9】');
       const req=(await calls(page))[0];
-      assert.equal(req.model,'claude-opus-4-6');assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'medium');assert.equal(req.thinking_prompt,'保留小克原来的思考词。');
-      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ckChatConfigV2')).thinkingEffort),'high');
+      assert.equal(req.model,'claude-opus-4-6');assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'high');assert.equal(req.thinking_prompt,'保留小克原来的思考词。');
+      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ckChatConfigV2')).thinkingEffort),'medium');
       assert.equal(req.recall,false);assert.equal(req.use_mcp,false);assert.equal(req.worldbook_pack,'');assert.equal(req.daily_digest_pack,'');assert.equal(req.game_context.parent_session_id,'ck-gomoku-fixture');
       assert.ok(!JSON.stringify(req).includes('茉莉花茶'));assert.equal(req.execution_backend,'claude_code_subscription');assert.equal(req.prompt_cache_ttl,'1h');assert.equal(req.chat_polling_enabled,false);
       assert.equal(await page.evaluate(()=>CKBackendRoute.current.subscriptionModel),'claude-opus-4-6');
@@ -64,14 +64,14 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
     }finally{await context.close()}
   });
-  await run('saved Sonnet game upgrades to Opus without replay or changing its board and wake choice',async()=>{
+  await run('saved medium game restores adaptive default effort without replay or changing its board and wake choice',async()=>{
     const {context,page}=await boot();try{
       await start(page);await play(page,'H8','保留这局。\n【落子：I9】');
       await page.evaluate(async()=>{await chatWakeRequest({enabled:false},chatActiveSessionId)});
       const previous=await page.evaluate(()=>({id:chatActiveSessionId,board:chatCurrentSession().gomoku,
         prompts:chatCurrentSession().gameWindow.prompts,reports:chatCurrentSession().gameWindow.reports,
         mainModel:CKBackendRoute.current.subscriptionModel,main:chatSessions.find(s=>s.id==='ck-gomoku-fixture').messages}));
-      await page.evaluate(()=>{chatCurrentSession().gameWindow.model='claude-sonnet-5-5';chatCurrentSession().gameWindow.prompts.thinkingEffort='high';chatSaveSessions();return chatSaveSessionsToIndexedDb.pending});
+      await page.evaluate(()=>{chatCurrentSession().gameWindow.model='claude-sonnet-5-5';chatCurrentSession().gameWindow.prompts.thinkingEffort='medium';chatSaveSessions();return chatSaveSessionsToIndexedDb.pending});
       await page.reload();
       await page.waitForFunction(()=>chatSessionsReady&&chatCurrentSession().gameWindow&&chatCurrentSession().gameWindow.model==='claude-opus-4-6');
       assert.equal((await calls(page)).length,0);
@@ -81,11 +81,12 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       assert.deepEqual(restored,previous);
       assert.equal(await page.evaluate(()=>__fixtureWakeStates[chatActiveSessionId].enabled),false);
       assert.ok((await page.textContent('#games-window-info')).includes('Opus 4.6'));
+      assert.ok((await page.textContent('#games-window-info')).includes('自适应思考'));
       await play(page,'G8','继续这局。\n【落子：J9】');
       const req=(await calls(page)).at(-1);
       assert.equal(req.model,'claude-opus-4-6');assert.equal(req.session_id,previous.id);
-      assert.equal(req.game_context.game_id,previous.board.id);assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'medium');
-      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ckChatConfigV2')).thinkingEffort),'high');
+      assert.equal(req.game_context.game_id,previous.board.id);assert.equal(req.thinking_mode,'adaptive');assert.equal(req.thinking_effort,'high');
+      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ckChatConfigV2')).thinkingEffort),'medium');
       assert.equal(await page.evaluate(()=>__fixtureWakeStates[chatActiveSessionId].enabled),false);
       assert.deepEqual(await page.evaluate(()=>__fixtureErrors),[]);
     }finally{await context.close()}
@@ -187,7 +188,7 @@ async function run(name,fn){if(process.env.CK_GAME_TEST_FILTER&&!new RegExp(proc
       await page.click('#games-end');await page.getByRole('button',{name:'结束本局',exact:true}).last().click();
       await page.waitForFunction(()=>chatSessions.some(s=>s.gameWindow&&s.gameWindow.reports.some(r=>r.state==='delivered')),{},{timeout:20000});
       const req=await calls(page);assert.equal(req.length,3);assert.equal(req[1].model,'claude-opus-4-6');assert.equal(req[2].model,'claude-opus-4-6');assert.equal(req[2].session_id,'ck-gomoku-fixture');
-      assert.equal(req[1].thinking_effort,'medium');assert.equal(req[2].thinking_effort,'high');
+      assert.equal(req[1].thinking_effort,'high');assert.equal(req[2].thinking_effort,'medium');
       assert.ok(req[2].text.includes('本局下了两手后先休息。我们约好明天接着下。'));assert.ok(req[2].transport_messages);assert.equal(req[2].game_context,undefined);
       assert.equal(await page.inputValue('#chat-input'),'主窗口草稿保留');
       await page.evaluate(()=>{CKGameWindow.update();CKGameWindow.update();chatSaveSessions()});await page.waitForTimeout(1200);assert.equal((await calls(page)).length,3);

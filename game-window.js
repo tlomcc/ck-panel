@@ -1,6 +1,7 @@
 (function(root){
   'use strict';
-  var timer=0,busy=false,wakeBusy=false,gameModel='claude-opus-4-6',gameEffort='medium';
+  // Opus 4.6's default effort; adaptive thinking decides the amount for each turn.
+  var timer=0,busy=false,wakeBusy=false,gameModel='claude-opus-4-6',gameEffort='high';
   var promptFields=['system','systemPromptEnabled','thinkingPrompt','fakeThinkingPrompt','thinkingPromptEnabled',
     'thinkingMode','thinkingBudgetTokens','thinkingEffort','fakeThinking','thinkingInjectionPosition'];
   function current(){return root.chatSessions&&root.chatSessions.find(function(s){return s.id===root.chatActiveSessionId})}
@@ -219,7 +220,7 @@
   }
   function render(){
     var s=gameFor(current()),p=profile(s),info=document.getElementById('games-window-info'),wake=document.getElementById('games-wake-status'),status=document.getElementById('games-sync-status'),retryButton=document.getElementById('games-sync-retry'),wakeButton=document.getElementById('games-wake-retry');
-    if(info)info.textContent=(p?'独立游戏窗口':'新的一局会使用独立游戏窗口')+' · Opus 4.6 · 中档思考';
+    if(info)info.textContent=(p?'独立游戏窗口':'新的一局会使用独立游戏窗口')+' · Opus 4.6 · 自适应思考';
     if(wake){
       var state=s&&root.chatWakeState&&root.chatWakeState[s.id],main=parent(s),mainState=main&&root.chatWakeState&&root.chatWakeState[main.id];
       wake.hidden=!p;

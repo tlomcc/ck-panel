@@ -2,7 +2,7 @@
 var fixtureRoute=JSON.parse(localStorage.getItem('ckBackendRouteV1'));
 fixtureRoute.subscriptionModel='claude-opus-4-6';localStorage.setItem('ckBackendRouteV1',JSON.stringify(fixtureRoute));
 var fixtureConfig=JSON.parse(localStorage.getItem('ckChatConfigV2'));
-Object.assign(fixtureConfig,{thinkingPrompt:'保留小克原来的思考词。',thinkingPromptEnabled:true,thinkingMode:'adaptive',thinkingEffort:'high',fakeThinking:false});
+Object.assign(fixtureConfig,{thinkingPrompt:'保留小克原来的思考词。',thinkingPromptEnabled:true,thinkingMode:'adaptive',thinkingEffort:'medium',fakeThinking:false});
 localStorage.setItem('ckChatConfigV2',JSON.stringify(fixtureConfig));
 window.__fixtureWakeStates=JSON.parse(sessionStorage.getItem('__fixtureWakeStates')||'{}');
 var fixtureBaseFetch=window.fetch;
