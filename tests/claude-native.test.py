@@ -60,7 +60,9 @@ class Provider(BaseHTTPRequestHandler):
         self.beta_headers.append(self.headers.get('anthropic-beta', ''))
         messages = value.get('messages') or []
         packed = json.dumps(messages, ensure_ascii=False)
-        last = messages[-1].get('content', '') if messages else ''
+        # Long-context models may append a native system/environment block.
+        # Fixture commands and tool results belong to the latest user message.
+        last = next((m.get('content', '') for m in reversed(messages) if m.get('role') == 'user'), '')
         last_text = last if isinstance(last, str) else '\n'.join(b.get('text', '') for b in last if b.get('type') == 'text')
         for marker in ('RECOVER_FEEDBACK', 'FAIL_FEEDBACK'):
             if marker not in last_text:

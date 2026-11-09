@@ -57,4 +57,7 @@ def api_environment(profile, config_dir, *, test=False):
         'NO_PROXY': '127.0.0.1,localhost', 'no_proxy': '127.0.0.1,localhost',
         'LANG': 'C.UTF-8', 'TZ': 'Asia/Shanghai',
     })
+    if profile.get('id') == ANY_PROFILE_ID:
+        env.update(CLAUDE_CODE_AUTO_COMPACT_WINDOW='300000',
+                   DISABLE_AUTO_COMPACT='0', DISABLE_COMPACT='0')
     return env

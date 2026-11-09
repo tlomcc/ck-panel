@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 from claude_api_config import api_environment, claude_model
+from claude_context import native_settings
 from key_store import KeyStore
 
 
@@ -23,7 +24,8 @@ def main():
     if args and args[0] in ('auth', 'setup-token', 'gateway', 'install', 'update', 'upgrade'):
         raise SystemExit('此入口使用 Any API，不执行官方账号登录或更新；请由管理员维护客户端')
     cli = '/opt/ck-claude-tasks/bin/claude'
-    os.execve(cli, [cli, '--model', model, *args], api_environment(profile, directory))
+    os.execve(cli, [cli, '--model', model, '--settings', native_settings(profile), *args],
+              api_environment(profile, directory))
 
 
 if __name__ == '__main__':

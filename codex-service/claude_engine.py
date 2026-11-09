@@ -10,6 +10,7 @@ import time
 import uuid
 
 from claude_api_config import api_environment
+import claude_context
 
 class ClaudeEngine:
     FEEDBACK_INTERVAL = 15
@@ -35,6 +36,15 @@ class ClaudeEngine:
         self.started_at = 0
         self.retry_at = None
         self.active_tools = set()
+        self.context_policy = claude_context.enabled(self.profile)
+        self.context_tokens = None
+        self.context_input_tokens = None
+        self.context_error = ''
+        self.compact_started = None
+        self.context_abort_sent = False
+        self.context_abort_timer = None
+        self.task_text = ''
+        self.context_handoff = None
 
     def feedback(self, state, text, *, terminal=False, refresh=False, **data):
         """Persist one visible status card, including before the first model token."""
@@ -69,8 +79,52 @@ class ClaudeEngine:
             await asyncio.sleep(self.FEEDBACK_INTERVAL)
             if self.stopping:
                 return
+            if (self.context_policy and self.compact_started is not None
+                    and time.monotonic() - self.compact_started >= claude_context.COMPACT_TIMEOUT):
+                self.context_error = self.context_error or '上下文压缩已超过 5 分钟，已停止继续等待；此次压缩未确认成功。'
+                await self.abort_context()
             if self.feedback_state:
                 self.feedback(self.feedback_state, self.feedback_text, refresh=True)
+
+    async def abort_context(self):
+        if self.context_abort_sent or self.stopping or not self.client:
+            return
+        self.context_abort_sent = True
+        self.feedback('context_stopped', self.context_error + '\n正在停止请求并保留接续资料。')
+        if self.main_task:
+            self.context_abort_timer = self.loop.call_later(12, self.main_task.cancel)
+        try:
+            await asyncio.wait_for(self.client.interrupt(), timeout=10)
+        except (Exception, asyncio.CancelledError):
+            if self.main_task:
+                self.main_task.cancel()
+
+    def context_failure(self):
+        """Write references and the unfinished request, never raw tool output/thinking."""
+        if not self.context_handoff:
+            path = self.home / ('context-handoff-' + self.turn_id + '.md')
+            touched = []
+            for item in self.tools.values():
+                for change in item.get('changes', []):
+                    touched.append(str(change.get('path', '')) + ' — ' + item.get('status', 'unknown'))
+            text = ('# Any CC 任务接续\n\n'
+                    '这是停止时的定位记录，不是任务成功证明，也不是对完整历史的模型总结。\n\n'
+                    '- 工作目录：' + self.manager.store.one(self.wid)['cwd'] + '\n'
+                    '- 原窗口：' + self.wid + '\n- 原生会话：' + self.session_id + '\n'
+                    '- 原生记录：' + str(self.home / 'native' / 'projects') + '/*/' + self.session_id + '.jsonl\n'
+                    '- 停止原因：' + self.context_error + '\n\n'
+                    '## 当前未完成的任务\n\n' + self.task_text + '\n\n'
+                    '## 尚未处理的追加指令\n\n' + ('\n\n'.join(self.pending) or '无排队追加指令') + '\n\n'
+                    '## 本轮涉及的文件\n\n' + ('\n'.join(touched) or '请按原窗口的工具记录核对；未自动推断文件修改。') + '\n\n'
+                    '新窗口先读工作目录现行规则、日记和项目交接，再核 Git/现役状态。'
+                    '按需读取旧记录中的最近用户任务、文字结论和工具状态；不要整文件载入图片、base64或原始思考。'
+                    '已经执行的命令、发布和数据写入必须先核实，不能直接重放。受限材料继续保留待处理。\n')
+            text = self.manager.redact(text)
+            with os.fdopen(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), 'w') as out:
+                out.write(text)
+            self.context_handoff = str(path)
+        error = self.context_error + '\n请新建窗口，发送：读取 ' + self.context_handoff + '，核对已完成操作后继续。'
+        return {'id': self.turn_id, 'status': 'failed', 'error': {'message': error}}
 
     def retry_feedback(self, data):
         def number(*keys):
@@ -83,6 +137,10 @@ class ClaudeEngine:
         attempt = number('attempt', 'retryAttempt')
         maximum = number('max_retries', 'maxRetries')
         delay = number('retry_delay_ms', 'retryInMs')
+        if (self.context_policy and attempt is not None and attempt >= claude_context.STALL_RETRIES
+                and ((self.context_tokens or 0) >= claude_context.STALL_CONTEXT or self.compact_started is not None)):
+            self.context_error = '长上下文请求已连续重试 3 次，触发止损；可能是供应商故障或会话拥塞，未判定为死锁。'
+            return
         self.retry_at = time.monotonic() + delay / 1000 if delay is not None else None
         text = '供应商返回 HTTP ' + str(status) if status else '供应商请求暂时失败'
         text += '，Claude Code 正在按原版策略重试。'
@@ -127,7 +185,12 @@ class ClaudeEngine:
                 self.started_at = time.monotonic()
                 self.retry_at = None
                 self.active_tools.clear()
+                self.tools.clear()
+                self.context_error, self.context_handoff = '', None
+                self.compact_started = None
+                self.context_abort_sent = False
                 text = '\n'.join(x['text'] for x in params['input'] if x.get('type') == 'text')
+                self.task_text = text
                 self.emit('turn/started', turn={'id': self.turn_id})
                 self.feedback('starting', '任务已收到，正在国内 VPS 启动 Claude Code。')
                 self.worker = threading.Thread(target=self.run, args=(text,), daemon=True)
@@ -137,7 +200,9 @@ class ClaudeEngine:
             with self.lock:
                 if not self.executing or not self.accepting or params['expectedTurnId'] != self.turn_id:
                     raise Problem('本轮已结束，请作为下一条任务发送', 409)
-                self.pending.append('\n'.join(x['text'] for x in params['input'] if x.get('type') == 'text'))
+                addition = '\n'.join(x['text'] for x in params['input'] if x.get('type') == 'text')
+                self.pending.append(addition)
+                self.task_text += '\n\n补充指令：\n' + addition
             return {}
         elif method == 'turn/interrupt':
             self.stopping = True
@@ -153,8 +218,11 @@ class ClaudeEngine:
             outcome = asyncio.run(self.conversation(text))
         except BaseException as exc:
             if not self.stopping:
-                error = self.failure_text(exc)
-                outcome = {'id': self.turn_id, 'status': 'failed', 'error': {'message': error}}
+                if self.context_error:
+                    outcome = self.context_failure()
+                else:
+                    error = self.failure_text(exc)
+                    outcome = {'id': self.turn_id, 'status': 'failed', 'error': {'message': error}}
         finally:
             self.loop = self.client = self.main_task = None
             with self.lock:
@@ -211,6 +279,9 @@ class ClaudeEngine:
         try:
             return await self.native_conversation(text)
         finally:
+            if self.context_abort_timer:
+                self.context_abort_timer.cancel()
+                self.context_abort_timer = None
             heartbeat.cancel()
             try:
                 await heartbeat
@@ -225,6 +296,10 @@ class ClaudeEngine:
         # stopped before ResultMessage, so completion is not a resume marker.
         persisted = any(p.stat().st_size for p in
                         (native / 'projects').glob('*/' + self.session_id + '.jsonl'))
+        self.context_tokens = None
+        if self.context_policy and persisted:
+            transcript = next((native / 'projects').glob('*/' + self.session_id + '.jsonl'))
+            self.context_tokens = claude_context.transcript_tokens(transcript)
         kwargs = {'resume': self.session_id} if persisted else {'session_id': self.session_id}
         options = ClaudeAgentOptions(
             cli_path=os.environ.get('CK_CLAUDE_BIN', '/opt/ck-claude-tasks/bin/claude'),
@@ -236,12 +311,18 @@ class ClaudeEngine:
             # progress events are adapted; provider requests stay native.
             system_prompt={'type': 'preset', 'preset': 'claude_code'},
             setting_sources=['user', 'project', 'local'],
+            settings=claude_context.native_settings(self.profile, hosted=True),
             can_use_tool=self.permission,
             include_partial_messages=True, stderr=lambda _: None,
             **kwargs,
         )
         async with ClaudeSDKClient(options=options) as client:
             self.client = client
+            image_compactions = 0
+            compacting_image = None
+            compact_sequence = 0
+            compact_boundary = False
+            deferred_image_inputs = []
             await client.query(text, session_id=self.session_id)
             self.feedback('requesting', 'Claude Code 已启动，正在等待供应商返回。')
             async for message in client.receive_messages():
@@ -249,11 +330,58 @@ class ClaudeEngine:
                     return
                 kind = type(message).__name__
                 if kind == 'ResultMessage':
+                    if self.context_error:
+                        return self.context_failure()
                     usage = getattr(message, 'usage', {}) or {}
                     total = sum(int(usage.get(k) or 0) for k in
                                 ('input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'))
                     self.emit('thread/tokenUsage/updated', tokenUsage={'total': {'totalTokens': total}})
                     failed = bool(message.is_error) or message.subtype != 'success'
+                    if compacting_image is not None:
+                        state = claude_context.read_state(native, self.session_id)
+                        if failed or not compact_boundary or state.get('compact_seq', 0) <= compact_sequence or not state.get('compacted'):
+                            self.context_error = '看图前压缩未确认成功，已拦截图片并停止自动继续。'
+                            return self.context_failure()
+                        compacting_image = None
+                        self.compact_started = None
+                        self.feedback('requesting', '看图前压缩已确认成功，正在接续刚才的读取。')
+                        await client.query('看图前的原生压缩已经确认成功。继续本轮被推迟的图片读取，工具及参数为 '
+                            + json.dumps(deferred_image_inputs, ensure_ascii=False)
+                            + '。从压缩摘要接续原任务，先核已完成操作，不重放已完成的写入、部署或命令。',
+                            session_id=self.session_id)
+                        continue
+                    deferred = getattr(message, 'deferred_tool_use', None)
+                    if deferred is not None:
+                        state = claude_context.read_state(native, self.session_id) if self.context_policy else {}
+                        if (not self.context_policy or not state.get('needs_compact')
+                                or deferred.id not in state.get('deferred_tool_ids', [])):
+                            return {'id': self.turn_id, 'status': 'failed', 'error': {'message': '工具被原生钩子推迟，本次任务尚未完成。'}}
+                        if image_compactions >= 1:
+                            self.context_error = '本轮已经为看图压缩过一次，仍未满足读取条件；停止重复压缩并保留原图。'
+                            return self.context_failure()
+                        if self.active_tools - set(state.get('deferred_tool_ids', [])):
+                            self.context_error = '图片读取已推迟，但还有并行工具未确认结束；先核对执行记录，停止自动压缩接续。'
+                            return self.context_failure()
+                        deferred_image_inputs = []
+                        for iid in state.get('deferred_tool_ids', []):
+                            item = self.tools.get(iid)
+                            if item:
+                                deferred_image_inputs.append({'name': item.get('name'), 'input': item.get('input', {})})
+                                item.update(status='failed', output='读取已推迟，图片尚未进入模型；等待成功压缩后接续。')
+                                self.active_tools.discard(iid)
+                                self.emit('item/completed', item=dict(item))
+                        if not deferred_image_inputs:
+                            deferred_image_inputs = [{'name': deferred.name, 'input': deferred.input}]
+                        image_compactions += 1
+                        compacting_image = deferred
+                        compact_sequence = state.get('compact_seq', 0)
+                        compact_boundary = False
+                        self.compact_started = time.monotonic()
+                        self.feedback('compacting', '图片读取已暂停，正在先压缩上下文；失败时不会放行图片。')
+                        await client.query('/compact 保留当前任务、用户约束、工作目录、已完成改动与验证、待办和必要路径。'
+                            '不要复制图片、base64、大段日志或原始思考。说明刚才的图片读取尚未执行，接续时先核已完成操作。',
+                            session_id=self.session_id)
+                        continue
                     with self.lock:
                         pending, self.pending = self.pending, []
                         if not pending or failed:
@@ -276,7 +404,12 @@ class ClaudeEngine:
                                                         dict(json.loads(old['data']), phase='final_answer'))
                         outcome = {'id': self.turn_id, 'status': 'completed'}
                     return outcome
-                self.consume(message)
+                if kind == 'SystemMessage' and message.subtype == 'compact_boundary':
+                    compact_boundary = True
+                if compacting_image is None or kind == 'SystemMessage':
+                    self.consume(message)
+                if self.context_error:
+                    await self.abort_context()
             raise RuntimeError('Claude Code 未返回完整结束记录；请检查已完成操作后继续')
 
     def consume(self, message):
@@ -290,13 +423,24 @@ class ClaudeEngine:
             elif message.subtype == 'status':
                 state = data.get('status')
                 if state == 'compacting':
+                    if self.context_policy and self.compact_started is None:
+                        self.compact_started = time.monotonic()
                     self.feedback('compacting', '正在整理会话上下文，完成后继续任务。')
                 elif state == 'requesting' and self.feedback_state != 'retrying':
                     self.feedback('requesting', '正在等待供应商返回。')
+            elif message.subtype == 'compact_boundary':
+                self.compact_started = None
+                self.context_tokens = None
+                self.context_input_tokens = None
             return
         if kind == 'StreamEvent':
             event = message.event
             if event.get('type') == 'message_start':
+                tokens = claude_context.token_count(event.get('message', {}).get('usage'))
+                if not getattr(message, 'parent_tool_use_id', None):
+                    self.context_tokens = tokens
+                    self.context_input_tokens = (tokens - int(event['message']['usage'].get('output_tokens', 0))
+                                                 if tokens is not None else None)
                 self.message_id = event.get('message', {}).get('id') or uuid.uuid4().hex
                 self.feedback('responding', '已收到供应商响应，Claude Code 正在处理任务。')
             elif event.get('type') == 'content_block_delta':
@@ -309,6 +453,10 @@ class ClaudeEngine:
                 elif delta.get('type') == 'thinking_delta':
                     self.feedback('thinking', 'Claude Code 正在思考，尚未生成可显示的回复。')
                     self.manager.progress(self.wid, self.turn_id)
+            elif event.get('type') == 'message_delta' and not getattr(message, 'parent_tool_use_id', None):
+                output = (event.get('usage') or {}).get('output_tokens')
+                if self.context_input_tokens is not None and isinstance(output, int) and output >= 0:
+                    self.context_tokens = self.context_input_tokens + output
             return  # Raw thinking and signatures are never stored in panel items.
         if kind == 'AssistantMessage':
             text = ''.join(getattr(block, 'text', '') for block in message.content
@@ -324,6 +472,8 @@ class ClaudeEngine:
             for block in message.content:
                 if type(block).__name__ != 'ToolUseBlock':
                     continue
+                if self.context_policy and not getattr(message, 'parent_tool_use_id', None):
+                    claude_context.record_tool_tokens(self.home / 'native', self.session_id, block.id, self.context_tokens)
                 inputs = block.input or {}
                 if block.name in ('Bash', 'PowerShell'):
                     item = {'id': block.id, 'type': 'commandExecution', 'status': 'running',
@@ -356,6 +506,7 @@ class ClaudeEngine:
                     item['aggregatedOutput'] = output
                 else:
                     item['output'] = output
+                self.tools[value.get('tool_use_id')] = item
                 self.emit('item/completed', item=item)
                 if not self.active_tools:
                     self.feedback('requesting', '工具执行已结束，正在等待模型继续处理。')

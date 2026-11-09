@@ -18,7 +18,7 @@ from claude_api_config import EFFORTS, PROXY, api_base, claude_model
 from claude_engine import ClaudeEngine
 from claude_provider_sync import atomic_json
 
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -80,6 +80,9 @@ class ClaudeManager(Manager):
                 'workspace': str(WORKSPACE), 'parallel_windows': True, 'scheduling': True,
                 'key_storage': 'encrypted', 'shared_providers': True, 'efforts': list(EFFORTS),
                 'any_retry_switch': False, 'any_retry_controls': False,
+                'any_context_policy': {'window_tokens': 300000, 'image_limit_tokens': 160000,
+                    'large_task_subagents': [2, 6], 'stall_context_tokens': 200000,
+                    'stall_retries': 3, 'compact_timeout_seconds': 300, 'local_ocr': True},
                 'source_revision': self.config.get('source_revision'),
                 'synced_at': self.config.get('synced_at'), 'steer_mode': 'after_response',
                 'servers': [{'name': '国内 VPS', 'address': '123.57.175.84',
