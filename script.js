@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v391-gomoku-adaptive';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v392-digest-memory-quota';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4836,6 +4836,7 @@ function chatReadForm(){
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
     digestCurrentModel:saved.digestCurrentModel===true,
     digestManualModel:saved.digestManualModel,
+    digestModelPolicy:saved.digestModelPolicy,
     digestCycleCount:chatDigestOptions(saved).z,
     newSessionDigestSyncEnabled:chatFieldChecked('chat-new-session-digest-sync',saved.newSessionDigestSyncEnabled!==false),
     costPricing:chatReadCostPricing(saved.costPricing),

@@ -319,6 +319,8 @@ function chatDigestPreparedTrim(session,cfg,plan){
   entries.forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
   chatDigestOmittedCoverage(session.digestOmittedCovered).forEach(function(r){covered.add(r.key)});
   var used=(session.digestReadyTrims||[]).filter(function(t){return t.kind==='cycle'&&t.keys.some(function(k){return keys.has(k)&&!covered.has(k)})&&t.keys.every(function(k){return keys.has(k)||covered.has(k)})});
+  if(used.some(function(t){var m=t.memory||{};return t.memory_required&&(!m.decided||!m.confirmed_at||!m.model||
+    !['keep','update'].includes(m.decision)||m.decision==='update'&&!m.saved&&!m.unchanged)}))return null;
   used.forEach(function(t){t.keys.forEach(function(k){covered.add(k)})});
   if(groups.some(function(g){return !covered.has(g.key)}))return null;
   used.forEach(function(t){if(!entries.some(function(e){return e.id===t.id}))entries.push({id:t.id,kind:'cycle',sequence:t.sequence,active:true,dayKey:chatDailyDigestDayKey(Date.now()),

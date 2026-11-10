@@ -318,11 +318,15 @@ function chatNightlySettingsPriority(cfg){
 
 function chatManualModelValue(cfg,kind){
   var key='digestManualModel';
-  return typeof cfg[key]==='string'?cfg[key]:(window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription'?'sonnet':'');
+  var subscription=window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription';
+  if(subscription&&cfg.digestModelPolicy!=='sonnet55-adaptive-high-v1')return 'claude-sonnet-5-5';
+  return typeof cfg[key]==='string'?cfg[key]:(subscription?'claude-sonnet-5-5':'');
 }
 function chatSaveManualModel(kind,value){
   var cfg=chatLoadConfig(),key='digestManualModel';
-  cfg[key]=String(value||'').trim();chatSaveConfigObject(cfg);
+  cfg[key]=String(value||'').trim();
+  if(window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription')cfg.digestModelPolicy='sonnet55-adaptive-high-v1';
+  chatSaveConfigObject(cfg);
 }
 function chatManualModelRoute(cfg,kind){
   var route=chatWindowApiRouteConfig(cfg);
@@ -332,8 +336,25 @@ function chatManualModelRoute(cfg,kind){
   if(!/^[^\s\x00-\x1f]{1,160}$/.test(model))throw new Error('请填写完整模型名，不能包含空格');
   if(execution==='claude_code_subscription'&&!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('订阅请填官方完整模型 ID（claude- 开头），或 sonnet、opus、haiku');
   var selected={execution:execution,model:model};
+  if(execution==='claude_code_subscription'){
+    selected.thinking={type:'adaptive'};selected.output_config={effort:'high'};
+  }
   if(execution!=='claude_code_subscription')selected.provider_id=route.provider&&route.provider.id||'';
   return {selected:selected,label:(route.providerName||'当前聊天线路')+' / '+model};
+}
+function chatMemoryModelRoute(cfg){
+  var route=chatWindowApiRouteConfig(cfg);
+  if(!route.ok)throw new Error(route.reason||'正常聊天模型尚未就绪');
+  var execution=window.CKBackendRoute&&CKBackendRoute.current.execution||'direct_api';
+  var selected={execution:execution,model:route.model};
+  if(execution!=='claude_code_subscription')selected.provider_id=route.provider&&route.provider.id||'';
+  if(execution==='claude_code_subscription'||execution==='claude_code_api'){
+    var mode=chatNormalizeThinkingMode(cfg.thinkingMode,cfg.fakeThinking===true);
+    selected.thinking={type:mode==='adaptive'?'adaptive':mode==='native'?'enabled':'disabled'};
+    if(mode==='native')selected.thinking.budget_tokens=chatNormalizeThinkingBudget(cfg.thinkingBudgetTokens);
+    if(mode==='adaptive')selected.output_config={effort:chatNormalizeThinkingEffort(cfg.thinkingEffort)};
+  }
+  return selected;
 }
 var chatCurrentModelStarting=false;
 async function chatStartCurrentModelDigest(purpose){
@@ -345,8 +366,11 @@ async function chatStartCurrentModelDigest(purpose){
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后手动启动总结');return false;}
   var running=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
   if(running&&['queued','running'].includes(running.state)){toast('本次手动总结正在进行；可取消后重新选择范围');return false;}
-  var route;try{route=chatManualModelRoute(cfg,'digest')}catch(error){toast(error.message);return false;}
+  var route,memoryRoute;try{route=chatManualModelRoute(cfg,'digest');memoryRoute=chatMemoryModelRoute(cfg)}catch(error){toast(error.message);return false;}
   var selected=route.selected;
+  if(selected.execution==='claude_code_subscription'&&cfg.digestModelPolicy!=='sonnet55-adaptive-high-v1'){
+    cfg.digestManualModel=selected.model;cfg.digestModelPolicy='sonnet55-adaptive-high-v1';chatSaveConfigObject(cfg);
+  }
   chatCurrentModelStarting=true;
   try{
     // First acknowledge pending settings/baseline; no model is started by sync.
@@ -355,12 +379,13 @@ async function chatStartCurrentModelDigest(purpose){
     if(chatNightlySynced[chatNightlyScope(cfg)+':'+session.id]&&chatNightlySynced[chatNightlyScope(cfg)+':'+session.id].readBack){toast('先同步确认上次请求，再手动启动');return false;}
     if(purpose==='daily')delete session.digestManualTrim;
     if(purpose==='trim'&&!await chatRequestManualDigestTrim({currentModel:true}))return false;
-    var run={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:purpose,route:selected};
+    var run={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:purpose,route:selected,
+      memory_route:memoryRoute,auto_resume_quota:selected.execution==='claude_code_subscription'};
     session.digestModelRun={id:run.id,purpose:purpose,label:route.label};
     chatSaveSessions();
     var ok=await chatSyncNightlyDigest(cfg,{session:session,force:true,modelRun:run});
     chatRenderNightlyStatus(session);
-    if(ok){toast('已手动启动，使用 '+session.digestModelRun.label+'；完成后同步总结');chatScheduleNightlySync(2000);}
+    if(ok){toast('已开始准备；小克完成记忆维护并确认保存后才会截断');chatScheduleNightlySync(2000);}
     else toast('启动状态尚未确认，请先同步查看；不会自动重新发起总结');
     return ok;
   }finally{chatCurrentModelStarting=false;}

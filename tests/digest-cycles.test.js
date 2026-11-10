@@ -79,6 +79,19 @@ test('a missing previous brief blocks a cut and retains all source history',()=>
   assert.equal(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}),null);
   assert.deepEqual(plain(x.session),before);
 });
+test('new cycles cannot trim until normal-chat memory has a confirmed keep or save receipt',()=>{
+ const x=setup();x.cfg.digestCycleCount=1;
+ x.ctx.chatDigestPlanSources=()=>[{key:'g'}];
+ const trim={id:'cy-2',kind:'cycle',sequence:2,keys:['g'],text:'新总结',startTs:1,endTs:2,memory_required:true};
+ x.session.digestReadyTrims=[trim];const before=plain(x.session);
+ assert.equal(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}),null);
+ assert.deepEqual(plain(x.session),before);
+ trim.memory={decided:true,decision:'update',model:'claude-opus-4-6',confirmed_at:123};
+ assert.equal(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}),null);
+ trim.memory.saved=true;assert.ok(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}));
+ trim.memory={decided:true,decision:'keep',model:'claude-opus-4-6',confirmed_at:123};
+ assert.ok(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}));
+});
 test('hidden full memory copies are excluded from source matching, signed blocks survive cleanup',()=>{
   const x=setup(),block={type:'thinking',thinking:'private fixture',signature:'fixture-signature'};
   const messages=[{role:'user',content:[{type:'text',text:'你好'},{type:'text',text:'<ck_active_memory_current>暂停</ck_active_memory_current>'}]},
