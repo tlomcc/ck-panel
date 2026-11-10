@@ -263,7 +263,7 @@ function chatSyncNightlyDigest(cfg,options){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(1500);
       }
       if(body&&body.settings_override&&matchingConfig&&JSON.stringify(chatNightlyConfig(chatLoadConfig()))===JSON.stringify(body.config))delete session.digestSettingsPending;
-      session.digestSchedule={scope:scope,model_run:data.model_run,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',last_error_code:data.last_error_code||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
+      session.digestSchedule={scope:scope,model_run:data.model_run,quota_wait:data.quota_wait,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',last_error_code:data.last_error_code||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
       chatSaveSessions({sessionIds:[session.id]});
       if(session===chatCurrentSession()&&!chatSending&&data.auto&&data.auto.due)setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
       var pollDelay=chatDigestNextPollingDelay(cfg);if(pollDelay)chatScheduleNightlySync(pollDelay);
