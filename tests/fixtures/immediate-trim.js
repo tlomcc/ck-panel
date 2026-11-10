@@ -5,7 +5,7 @@
  const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast,panelDataFetch,storedPanelKey};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,queueWrites,cleanCalls,posts,preparedTrims,preparedBase,preparedRevision,generatedCycles=0,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false,failClean=false;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,queueWrites,cleanCalls,posts,preparedTrims,preparedBase,preparedRevision,generatedCycles=0,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false,failClean=false,recoverOnce=null;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
@@ -24,7 +24,7 @@
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];queueWrites=[];cleanCalls=[];posts=[];preparedTrims=null;preparedBase=null;preparedRevision=0;generatedCycles=0;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;failClean=false;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];queueWrites=[];cleanCalls=[];posts=[];preparedTrims=null;preparedBase=null;preparedRevision=0;generatedCycles=0;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;failClean=false;recoverOnce=null;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
    const covered=new Set(body.base.entries.flatMap(e=>e.covered||[]));
@@ -39,7 +39,7 @@
    }
    const outstanding=preparedTrims&&preparedTrims.some(t=>t.keys.some(k=>!covered.has(k)));
    return {ok:true,status:modelState||(queueReady?'succeeded':'queued'),model_run:modelRun?{id:modelRun,state:modelState}:undefined,accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:outstanding?preparedRevision:(Number(body.revision)||1)+(body.settings_override?1:0),source_stamp:body.base_stamp,config:body.config,base:outstanding?preparedBase:body.base,
-     result:outstanding&&queueReady?{day:chatDailyDigestDayKey(Date.now())}:body.settings_override?{settings_only:true}:null,
+     result:outstanding&&queueReady?{day:chatDailyDigestDayKey(Date.now()),recover_trim_once:recoverOnce}:body.settings_override?{settings_only:true}:null,
      trims:outstanding?preparedTrims:[]}};
  }
  window.fetch=async(url,options={})=>{
@@ -72,6 +72,35 @@
    throw Error('Unexpected immediate-trim fixture request '+target.pathname);
  };
  try{
+   setup('cancelled-recovery');cfg.digestCurrentModel=true;chatSaveConfigObject(cfg);chatWriteForm(cfg);
+   const restoredGroups=chatDigestMessageGroups(chatMessages.slice(0,6));
+   preparedBase=structuredClone(chatNightlyBase(session));preparedRevision=2;modelRun='cancelled-original-run';modelState='succeeded';
+   preparedTrims=[{id:'cy-recovered-fixture',kind:'cycle',sequence:1,keys:restoredGroups.map(g=>g.key),text:'已完成的原任务摘要。',startTs:restoredGroups[0].start,endTs:restoredGroups.at(-1).end,memory_required:true}];
+   recoverOnce={id:'recover-fixture',cycle_id:preparedTrims[0].id,session_id:session.id,config:chatNightlyConfig(cfg),run_id:modelRun,authorized_at:Date.now()/1000};
+   queueBody={session_id:session.id,base:preparedBase,base_stamp:chatNightlyBaseStamp(cfg,session),config:chatNightlyConfig(cfg),revision:1,groups:[],candidate_keys:[]};
+   session.digestRemote={scope:chatDigestActiveScope(cfg),revision:1};
+   const afterCancel=[{role:'user',text:'取消之后的新问题',turnId:'after-cancel',ts:Date.now()},{role:'assistant',text:'取消之后的新回答',turnId:'after-cancel',ts:Date.now()+1}];
+   chatMessages.push(...afterCancel);session.transportMessages.push(...afterCancel.map(m=>({role:m.role,content:m.text})));
+   chatRenderNightlyStatus(session);check(!field('chat-trim-sync-now').disabled,'stale state disabled readback');
+   await chatSyncNightlyDigest(cfg,{session,readOnly:true,force:true});
+   check(!await chatDigestFinishManualTrim(cfg,session)&&cleanCalls.length===0,'missing memory receipt allowed a recovered cut');
+   preparedTrims[0].memory={saved:true,decided:true,decision:'update',revision:29,model:'fixture-memory',confirmed_at:Date.now()/1000};
+   await chatSyncNightlyDigest(cfg,{session,readOnly:true,force:true});
+   session.digestRecoveryCancelled={scope:chatDigestActiveScope(cfg),at:Date.now()+1};
+   check(!await chatDigestFinishManualTrim(cfg,session)&&cleanCalls.length===0,'newer cancellation was ignored');
+   check(chatNormalizeSession(session).digestRecoveryCancelled.at===session.digestRecoveryCancelled.at,'cancel barrier lost on reload');
+   session.digestRecoveryCancelled.at=recoverOnce.authorized_at*1000-1;
+   session.digestModelRun={id:'newer-run',purpose:'trim'};
+   check(!await chatDigestFinishManualTrim(cfg,session)&&cleanCalls.length===0,'recovery replaced a newer request');
+   delete session.digestModelRun;
+   check(await chatDigestFinishManualTrim(cfg,session),'authorized cancelled task did not reconnect');
+   check(session.digestLastSync?.status==='synced'&&session.digestLastSync.rounds===3,'recovery did not confirm exact prefix');
+   check(cleanCalls.length===1&&posts.length===0&&queueWrites.length===0,'recovery sent another model run or uploaded sources before cutting');
+   check(afterCancel.every(m=>chatMessages.some(row=>row.text===m.text))&&CKChatHistory.transportTurnGroups(session.transportMessages).length===3,'later history was lost');
+   check(field('chat-input').value==='未发送的输入草稿','recovery changed input draft');
+   await chatDigestFinishManualTrim(cfg,session);check(cleanCalls.length===1,'recovery cut the same cycle twice');
+   results.push({cancelledRecoveredOnce:true,missingMemoryBlocked:true,newerCancelBlocked:true,newerRequestPreserved:true,laterHistoryPreserved:true,noModelRequest:true});
+
    setup('active');field('chat-input').value='正在发送的新问题';const sending=chatSendMessage();
    await until(()=>releaseReply&&chatMessages.some(m=>m.inFlight),'actual reply did not start');
    field('chat-digest-prepare').click();await until(()=>session.digestManualTrim&&queueBody?.manual_request,'manual click did not reach queue');

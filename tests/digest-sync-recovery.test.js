@@ -22,6 +22,7 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>typeof chatDigestFinishManualTrim==='function');
   const results=await page.evaluate(fs.readFileSync(path.join(__dirname,'fixtures/immediate-trim.js'),'utf8'));
   assert(results.some(r=>r.lostUploadRecovered&&r.readBeforeResend));
+  assert(results.some(r=>r.cancelledRecoveredOnce&&r.missingMemoryBlocked&&r.newerCancelBlocked&&r.laterHistoryPreserved));
   assert(results.some(r=>r.blockedSavedRecovery&&r.originalRunOnly&&r.newerRoundPreserved&&r.noModelRequest));assert.deepEqual(errors,[]);
   assert(results.some(r=>r.zThreeFourCycles&&r.generatedCycles===3&&r.nextRequestChecked));
   if(process.env.CK_BROWSER_OUTPUT){fs.mkdirSync(process.env.CK_BROWSER_OUTPUT,{recursive:true});await page.screenshot({path:path.join(process.env.CK_BROWSER_OUTPUT,'partial-sync-'+width+'.png')});fs.writeFileSync(path.join(process.env.CK_BROWSER_OUTPUT,'results-'+width+'.json'),JSON.stringify(results,null,2));}

@@ -220,6 +220,7 @@ function chatDigestImmediateReady(session,cfg,explicitSync){
 }
 function chatDigestCancelManualTrim(){
   var session=chatCurrentSession();delete session.digestManualTrim;
+  session.digestRecoveryCancelled={scope:chatDigestActiveScope(chatLoadConfig()),at:Date.now()};
   if(chatLoadConfig().digestCurrentModel===true){delete session.digestModelRun;chatSyncNightlyDigest(chatLoadConfig(),{force:true,cancelModelRun:true});}
   chatSaveSessions();chatRenderNightlyStatus(session);chatScheduleNightlySync();
   chatRenderTrimState(chatLoadConfig());
@@ -309,6 +310,25 @@ function chatDigestReplyActive(session){
   var rows=session===chatCurrentSession()?chatMessages:session.messages||[];
   return chatSending||rows.some(function(m){return m.inFlight})||!!(session.replyDraft&&['running','finalizing'].includes(session.replyDraft.state));
 }
+// An explicitly authorized recovery names one archived cycle. It cannot start
+// another model run, override a newer local request, or cut unrelated history.
+function chatDigestRecoveredTrimReady(session,cfg,stage){
+  var recovery=stage&&stage.result&&stage.result.recover_trim_once;
+  if(!recovery||typeof recovery.id!=='string'||typeof recovery.cycle_id!=='string'||
+      recovery.session_id!==session.id||JSON.stringify(recovery.config)!==JSON.stringify(chatNightlyConfig(cfg))||
+      !Number(recovery.authorized_at)||session.digestManualTrim||session.digestModelRun)return false;
+  var cancelled=session.digestRecoveryCancelled;
+  if(cancelled&&cancelled.scope===chatDigestActiveScope(cfg)&&cancelled.at>=Number(recovery.authorized_at)*1000)return false;
+  var run=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
+  if(!run||run.id!==recovery.run_id||run.state!=='succeeded')return false;
+  if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||
+      !chatDigestCanActivate(session,cfg))return false;
+  if(!(stage.trims||[]).some(function(t){return t.id===recovery.cycle_id}))return false;
+  var pending=chatPendingMessages(),plan=chatPlanAutoTrimForPendingBatch(cfg,pending,{force:true,trigger:'manual_digest_sync'});
+  var prepared=chatDigestAutoPreparedPlan(session,cfg,plan,pending,true);
+  var used=prepared&&prepared.digestPrepared&&prepared.digestPrepared.used;
+  return !!(prepared&&prepared.trimmed&&used&&used.length===1&&used[0].id===recovery.cycle_id);
+}
 async function chatDigestFinishManualTrim(cfg,session){
   chatRenderNightlyStatus(session);
   if(chatDigestReleaseCompletedRun(session,cfg)){chatSaveSessions({sessionIds:[session.id]});chatScheduleNightlySync(0);return false;}
@@ -319,6 +339,7 @@ async function chatDigestFinishManualTrim(cfg,session){
     return chatDigestSyncNow({automatic:true});
   }
   var stage=chatDigestStage(session,cfg),once=stage&&stage.result&&stage.result.sync_once;
+  if(chatDigestRecoveredTrimReady(session,cfg,stage))return chatDigestSyncNow({automatic:true});
   if(once&&typeof once.id==='string'&&once.session_id===session.id&&
       JSON.stringify(once.config)===JSON.stringify(chatNightlyConfig(cfg))&&!session.digestManualTrim&&!session.digestModelRun){
     if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||
