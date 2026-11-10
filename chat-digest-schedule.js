@@ -158,9 +158,9 @@ function chatRenderNightlyStatus(session){
   ['chat-digest-cancel-manual','chat-trim-cancel-manual'].forEach(function(id){var node=document.getElementById(id);if(node)node.hidden=!(session.digestManualTrim||session.digestModelRun)});
   ['chat-digest-sync-now','chat-trim-sync-now'].forEach(function(id){
     var button=document.getElementById(id);if(!button)return;
-    button.hidden=false;button.disabled=!!(replyActive||chatTrimBusy||chatTrimTransaction||!view.ready);
+    button.hidden=false;button.disabled=!!(replyActive||chatTrimBusy||chatTrimTransaction);
     button.textContent=view.retry?'重试同步':'立刻同步';
-    button.title=replyActive?'当前回复结束后可同步':view.ready?'应用已准备的总结；下一条消息建立新缓存':'总结准备完成后可同步';
+    button.title=replyActive?'当前回复结束后可同步':view.ready?'应用已准备的总结；下一条消息建立新缓存':'取回服务器结果，核对完成后同步';
   });
   var prepare=document.getElementById('chat-digest-prepare');if(prepare){prepare.hidden=false;prepare.disabled=!!(chatTrimBusy||chatTrimTransaction);prepare.textContent=session.digestManualTrim?'更新截断范围':'立即截断';}
   var text='本次截断 '+view.rounds+' 轮 · '+view.status+'。'+view.note;

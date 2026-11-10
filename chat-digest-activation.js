@@ -191,7 +191,13 @@ async function chatDigestSyncNow(options){
       chatRenderNightlyStatus(session);if(synced){chatScheduleNightlySync(0);toast('同步完成，本次截断 '+pendingSync.rounds+' 轮');}return synced;
     }finally{chatTrimTransaction=null;release();}
   }
-  if(!chatDigestImmediateReady(session,cfg)){toast('当前范围尚未准备好，后台会继续处理；无需等待模型');chatScheduleNightlySync(0);return false;}
+  if(!chatDigestImmediateReady(session,cfg)){
+    var scope=chatDigestActiveScope(cfg),config=chatDigestConfigStamp(cfg);
+    await chatSyncNightlyDigest(cfg,{session:session,readOnly:true,force:true});
+    if(chatCurrentSession()!==session||chatDigestActiveScope(chatLoadConfig())!==scope||chatDigestConfigStamp(chatLoadConfig())!==config)return false;
+    if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){chatRenderNightlyStatus(session);return false;}
+    if(!chatDigestImmediateReady(session,cfg)){toast('已检查服务器结果；当前范围尚未准备齐全，原文保留');chatRenderNightlyStatus(session);return false;}
+  }
   var result=await chatApplyAutoTrimForPendingBatch(cfg,[],null,{force:true,trigger:'manual_digest_sync',commitPrepared:true,skipTrim:!!(options&&options.summaryOnly)});
   if(!result.cacheBoundary){chatRenderNightlyStatus(session);return false;}
   chatSaveSessions();chatRenderDailyDigest(cfg);chatRenderMessages();chatScheduleNightlySync();
