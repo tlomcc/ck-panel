@@ -1,7 +1,7 @@
 {
-  "version": "chat-v397-quota-readonly",
+  "version": "chat-v398-claude-progress-feedback",
   "notes": [
-    "聊天底部 Claude 剩余额度只作显示，不再响应点击。",
-    "完整额度与用量保护仍从侧边菜单「Claude 订阅」打开。"
+    "国内 Claude Code 展示读取、命令和文件修改等简短工具进度。",
+    "输入框上方持续显示执行、模型等待、供应商重试、用时和最近回传。"
   ]
 }

@@ -13,7 +13,7 @@ const server = http.createServer((req, res) => {
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   if (out) fs.mkdirSync(out, {recursive: true});
-  const browser = await chromium.launch({args: ['--no-sandbox', '--disable-dev-shm-usage']});
+  const browser = await chromium.launch({executablePath:process.env.CHROME_PATH||undefined,args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']});
   try {
     for (const width of [320, 390, 768, 1280]) {
       const context = await browser.newContext({viewport: {width, height: 900}, serviceWorkers: 'block'});
@@ -51,7 +51,7 @@ const server = http.createServer((req, res) => {
         } else if (endpoint === '/threads/same-id') {
           if (engine === 'codex' && holdRead) { readArrived(); await holdRead; holdRead = null; }
           const text = engine === 'claude' ? '国内任务：原生工具执行完成，上下文已保留。' : '美国任务记录保持。';
-          result = {window: windows[engine], cursor: windows[engine].seq, items: [{id: 'reply', seq: 2, kind: 'agentMessage', text, data: {phase: 'final_answer'}, created: 1}], schedules: []};
+          result = {window: windows[engine], cursor: windows[engine].seq, items: [{id: 'reply', seq: 2, kind: 'agentMessage', text, data: {phase: 'final_answer'}, created: 1},{id:'engine-tool',seq:2,kind:'tool',text:'hidden tool body',data:{name:'Read',status:'completed',input:{file_path:'/workspace/'+engine+'-file.css'}},created:1.1}], schedules: []};
         }
         try { await route.fulfill({json: result}); } catch (_) { /* A cancelled old-engine read is expected. */ }
       });
@@ -71,15 +71,19 @@ const server = http.createServer((req, res) => {
       }
       await page.goto('http://127.0.0.1:' + server.address().port + '/#codex-tasks');
       await page.getByText('美国任务记录保持。', {exact: true}).waitFor();
+      assert.equal(await page.locator('#cx-feed .cx-item-tool-progress').count(),0);
       await page.locator('#cx-input').fill('美国草稿');
       await choose('claude');
       await page.getByText('国内任务：原生工具执行完成，上下文已保留。', {exact: true}).waitFor();
+      await page.locator('#cx-feed .cx-item-tool-progress').getByText('读取文件：claude-file.css',{exact:true}).waitFor();
+      assert(!(await page.locator('#cx-feed').innerText()).includes('hidden tool body'));
       assert.equal(await page.locator('#cx-input').inputValue(), '');
       await page.locator('#cx-input').fill('国内任务草稿');
       if (out) await page.screenshot({path: path.join(out, 'cc-task-' + width + '.png')});
       await choose('codex');
       assert.equal(await page.locator('#cx-input').inputValue(), '美国草稿');
       assert(!(await page.locator('#cx-feed').innerText()).includes('国内任务：'));
+      assert.equal(await page.locator('#cx-feed .cx-item-tool-progress').count(),0);
       await tab('api');
       let card = await profile();
       await card.locator('[name=model]').fill('codex-unsaved');

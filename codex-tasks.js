@@ -271,7 +271,7 @@
       '<form id="cx-login" class="cx-login" hidden><h3>连接你的 Codex</h3><p>使用「VPS 管理 → Codex 任务中心 → 查看访问密钥」里的专用密钥。只需在这台设备填写一次。</p><label>服务地址<input id="cx-endpoint" type="url" required autocomplete="off"></label><label>任务中心访问密钥<input id="cx-access" type="password" required autocomplete="off"></label><button class="btn btn-blue" type="submit">连接</button><small>这是任务中心的访问密钥。模型 API 密钥在连接后单独配置。</small></form>'+
       '<div id="cx-tasks" class="cx-workspace" hidden><main class="cx-main">'+
       '<div id="cx-feed-area" class="cx-feed-area"><div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div><nav id="cx-user-nav" class="cx-user-nav" aria-label="用户消息跳转" hidden><button id="cx-user-prev" type="button" aria-label="上一条用户消息" title="上一条用户消息" aria-controls="cx-feed">↑</button><span id="cx-user-position" role="status" aria-live="polite">用户</span><button id="cx-user-next" type="button" aria-label="下一条用户消息" title="下一条用户消息" aria-controls="cx-feed">↓</button></nav></div>'+
-      '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="1" aria-describedby="cx-compose-hint" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><div class="cx-compose-settings"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span></div><div class="cx-compose-meta"><details id="cx-schedule-options" class="cx-schedule-options"><summary id="cx-schedule-summary" title="安排一次性定时任务">定时</summary><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间（北京时间）</label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div></details><span id="cx-usage"></span></div><div class="cx-compose-actions"><span class="cx-stop-slot"><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button></span><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
+      '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><section id="cx-live-progress" class="cx-live-progress" role="status" aria-live="polite" aria-atomic="true" hidden></section><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="1" aria-describedby="cx-compose-hint" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><div class="cx-compose-settings"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span></div><div class="cx-compose-meta"><details id="cx-schedule-options" class="cx-schedule-options"><summary id="cx-schedule-summary" title="安排一次性定时任务">定时</summary><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间（北京时间）</label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div></details><span id="cx-usage"></span></div><div class="cx-compose-actions"><span class="cx-stop-slot"><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button></span><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
       '<section id="cx-api" class="cx-api" hidden><div class="cx-section-heading"><div><h3>Codex API 配置</h3><p>每个供应商单独保存，下次任务生效。密钥加密保存，无需设置密码。</p></div><button id="cx-add-profile" type="button" class="btn btn-outline btn-sm">添加供应商</button></div><div id="cx-profiles"></div><p id="cx-api-state" class="cx-muted" role="status"></p></section>'+
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
       '</div></section>';
@@ -363,7 +363,59 @@
   }
   function windowState(w){
     if(Date.now()-(confirmedAt.get(w.id)||0)>5000)return '状态待同步';
+    if(engine==='claude'&&w.status==='running'){
+      var report=claudeFeedback(w);return report?claudePhase(report.data.state):'任务进行中';
+    }
     return statusLabel(w);
+  }
+  function claudePhase(state){
+    return {starting:'正在启动',requesting:'等待模型返回',retrying:'等待供应商重试',responding:'正在接收回复',thinking:'正在处理回复',working:'正在执行工具',compacting:'正在整理上下文',waiting_answer:'等待你回复',provider_error:'供应商报错',context_stopped:'正在停止请求'}[state]||'任务进行中';
+  }
+  function claudeFeedback(w){
+    if(engine!=='claude'||!w||w.id!==selected||!w.turn_id)return null;
+    return items.get('cc-status:'+w.turn_id)||null;
+  }
+  function claudeTool(item){return engine==='claude'&&['commandExecution','fileChange','tool'].includes(item.kind);}
+  function toolLabel(item){
+    var data=item.data||{},input=data.input||{},name=data.name||'';
+    function file(value){return String(value||'').split(/[\\/]/).pop().slice(0,120);}
+    if(item.kind==='commandExecution')return '执行命令';
+    if(item.kind==='fileChange'){
+      var paths=(data.changes||[]).map(function(change){return file(change.path);}).filter(Boolean);
+      return '修改文件'+(paths.length?'：'+paths.slice(0,2).join('、')+(paths.length>2?' 等 '+paths.length+' 个文件':''):'');
+    }
+    var label={Read:'读取文件',Grep:'查找代码',Glob:'查找文件',WebSearch:'检索网上资料',WebFetch:'读取网页',AskUserQuestion:'等待你的回答',Task:'执行分配的任务',Agent:'执行分配的任务',TodoWrite:'更新任务清单'}[name]||('执行工具'+(name?'：'+name:''));
+    var path=file(input.file_path||input.notebook_path);return label+(path?'：'+path:'');
+  }
+  function toolState(item){return {running:'执行中',inProgress:'执行中',completed:'已完成',failed:'这一步报错'}[(item.data||{}).status]||'收到工具状态';}
+  function elapsedText(seconds){
+    seconds=Math.floor(seconds);var hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
+    return (hours?hours+' 小时 ':'')+(minutes?minutes+' 分 ':'')+(seconds%60)+' 秒';
+  }
+  function renderLiveProgress(){
+    var box=$('live-progress'),w=current();if(!box)return;
+    box.hidden=engine!=='claude'||!w||!['queued','starting','running','waiting'].includes(w.status);
+    if(box.hidden){box.replaceChildren();delete box.dataset.signature;return;}
+    var report=claudeFeedback(w),data=report&&report.data||{},stale=Date.now()-(confirmedAt.get(w.id)||0)>5000;
+    var heading=stale?'状态待同步':w.status==='waiting'?'等待你回复':w.status==='queued'?'任务排队中':claudePhase(data.state||w.status);
+    var meta=[],state=data.state;
+    if(state==='retrying'){
+      if(data.http_status)meta.push('HTTP '+data.http_status);
+      if(Number.isFinite(data.attempt))meta.push('第 '+data.attempt+(data.max_retries?' / '+data.max_retries:'')+' 次重试');
+      if(data.retry_in_seconds>0)meta.push('约 '+data.retry_in_seconds+' 秒后再试');
+    }
+    if(Number.isFinite(data.elapsed_seconds))meta.push('本轮已用时 '+elapsedText(data.elapsed_seconds));
+    var tools=report?Array.from(items.values()).filter(function(item){return claudeTool(item)&&item.created>=report.created;}):[];
+    var recent=tools.reduce(function(last,item){return !last||Number(item.seq)>Number(last.seq)?item:last;},null);
+    var detail=recent?'最近工具回传：'+toolLabel(recent)+' · '+toolState(recent):report?report.text.split('\n')[0]:'尚未收到本轮工具记录';
+    if(stale)detail='正在核对连接；以下为上次收到的记录。 '+detail;
+    var signature=JSON.stringify([heading,meta,detail,w.updated]);if(box.dataset.signature===signature)return;
+    box.dataset.signature=signature;box.dataset.state=stale?'stale':state||w.status;
+    var head=node('header','cx-live-progress-head');head.append(node('strong','',heading));
+    if(w.updated)head.append(node('time','','状态回传 '+new Date(w.updated*1000).toLocaleTimeString('zh-CN',{hour12:false})));
+    box.replaceChildren(head);
+    if(meta.length)box.append(node('p','cx-live-progress-meta',meta.join(' · ')));
+    box.append(node('p','cx-live-progress-detail',detail));
   }
   function renderWindows(){
     renderTaskNotices();
@@ -383,6 +435,7 @@
   function renderToolbar(){
     if(!config)return;
     var w=current(), running=w&&['queued','starting','running','waiting'].includes(w.status);
+    renderLiveProgress();
     var timed=!!$('schedule-time').value;
     $('schedule-summary').textContent=timed?'已定时':'定时';$('schedule-options').classList.toggle('cx-has-time',timed);
     $('window-title').textContent=w?w.title:'选择或新建任务窗口';
@@ -415,6 +468,11 @@
   }
   function card(item){
     if(['request','resolved'].includes(item.kind)&&item.data.method)return questionCard(item);
+    if(claudeTool(item)){
+      var progress=node('article','cx-item cx-item-tool-progress'),head=node('header','cx-item-head');progress.dataset.itemId=item.id;progress.dataset.state=(item.data||{}).status||'';
+      head.append(node('strong','',toolState(item)),node('time','',stamp(item.created)));
+      progress.append(head,node('div','cx-text',toolLabel(item)));return progress;
+    }
     var titles={userMessage:'你的任务',agentMessage:item.data.phase==='final_answer'?'完成回复':engineName(),warning:'运行提示',error:'运行出错',resolved:'已处理',diary:'VPS 日记'};
     var el=node('article','cx-item cx-item-'+item.kind);el.dataset.itemId=item.id;
     if(item.kind==='diary'){
@@ -522,8 +580,12 @@
     if(reset){feed.replaceChildren();userJump=null;anchor=null;}
     var existing=new Map(Array.from(feed.children).map(function(el){return [el.dataset.itemId,el];}));
     changed.forEach(function(item){
-      if(!['userMessage','agentMessage','request','resolved','warning','error','diary'].includes(item.kind)){
+      if(!['userMessage','agentMessage','request','resolved','warning','error','diary'].includes(item.kind)&&!claudeTool(item)){
         items.delete(item.id);var hidden=existing.get(item.id);if(hidden)hidden.remove();return;
+      }
+      if(claudeTool(item)){
+        var data=item.data||{},input=data.input||{};
+        item=Object.assign({},item,{text:'',data:{status:data.status,name:data.name,input:{file_path:input.file_path,notebook_path:input.notebook_path},changes:Array.isArray(data.changes)?data.changes.map(function(change){return {path:change.path};}):[]}});
       }
       var previous=items.get(item.id);if(item.kind==='resolved'&&!item.data.method&&previous&&previous.data.method)item=Object.assign({},item,{data:previous.data});
       items.set(item.id,item);
@@ -539,7 +601,7 @@
     });
     if(!feed.childElementCount){var empty=node('div','cx-empty');empty.append(node('span','','>_'),node('h3','','窗口已准备好'),node('p','','输入任务后，Codex 会在美国 VPS 上开始执行。'));feed.append(empty);}
     if(changed.length&&feed.querySelector('.cx-empty')&&feed.childElementCount>1)feed.querySelector('.cx-empty').remove();
-    renderPending();
+    renderPending();renderLiveProgress();
     var questions=questionItems();$('question-nav').hidden=!questions.length;
     if(questions.length){questionIndex=Math.min(questionIndex,questions.length-1);$('question-nav').querySelector('span').textContent=questions.length+' 处提问';}
     $('user-nav').hidden=!userMessages().length;
