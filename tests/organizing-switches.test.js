@@ -2,7 +2,7 @@ const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),out=path.resolve(root,'../screenshots');fs.mkdirSync(out,{recursive:true});
 const markup=fs.readFileSync(path.join(root,'index.html'),'utf8').match(/<div id="ck-organizing-control"[\s\S]*?(?=\n<div id="ck-status-fact")/)[0];
-let states={fact:false,topics:false,events:false,records:false},posts=[],failure=false,delay=0;
+let states={fact:false,events:false,records:false},posts=[],failure=false,delay=0;
 const server=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://fixture');
  if(url.pathname==='/fixture'){
@@ -32,15 +32,15 @@ const server=http.createServer(async(req,res)=>{
    assert.equal(await toggle.getAttribute('aria-checked'),'false');await toggle.click();await page.waitForFunction(()=>document.querySelector('#ck-organizing-toggle').getAttribute('aria-checked')==='true'&&!document.querySelector('#ck-organizing-toggle').disabled);
    await toggle.press('Space');await page.waitForFunction(()=>document.querySelector('#ck-organizing-toggle').getAttribute('aria-checked')==='false'&&!document.querySelector('#ck-organizing-toggle').disabled);
   }
-  assert.equal(posts.length,8);assert.equal(posts[2].body.expected_revision,6);assert.equal(posts[0].body.revision,3);
+  assert.equal(posts.length,6);assert.equal(posts[0].body.revision,3);
   for(const width of [320,390,1280]){
    await page.setViewportSize({width,height:700});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    await page.screenshot({path:path.join(out,'switch-'+width+'.png')});
   }
   await page.evaluate(()=>{ckStatusTab='digest';ckOrganizingEnter()});assert(await page.locator('#ck-organizing-control').isHidden());
   failure=true;await page.evaluate(()=>{ckStatusTab='events';ckOrganizingEnter()});await page.waitForFunction(()=>document.querySelector('#ck-organizing-note').textContent.includes('测试连接失败'));assert(await toggle.isDisabled());failure=false;
-  delay=200;await page.evaluate(()=>{ckStatusTab='fact';ckOrganizingEnter();ckStatusTab='topics';ckOrganizingEnter()});await page.waitForFunction(()=>!document.querySelector('#ck-organizing-toggle').disabled);assert.equal(await toggle.getAttribute('aria-label'),'主题整理');
+  delay=200;await page.evaluate(()=>{ckStatusTab='fact';ckOrganizingEnter();ckStatusTab='events';ckOrganizingEnter()});await page.waitForFunction(()=>!document.querySelector('#ck-organizing-toggle').disabled);assert.equal(await toggle.getAttribute('aria-label'),'事件整理');
   await page.evaluate(()=>{key='b';ckOrganizingEnter()});assert(await toggle.isDisabled());await page.waitForFunction(()=>!document.querySelector('#ck-organizing-toggle').disabled);
-  assert.deepEqual(errors,[]);console.log('PASS: four durable switches, keyboard, refresh, failure, stale replies, principal change, 320/390/1280 layouts');
+  assert.deepEqual(errors,[]);console.log('PASS: three retained durable switches, keyboard, refresh, failure, stale replies, principal change, 320/390/1280 layouts');
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1});

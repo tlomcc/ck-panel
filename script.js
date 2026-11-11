@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v395-quota-single-line';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v396-retire-topic-organizer';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -11681,6 +11681,7 @@ async function chatSubmitPendingMessages(options){
   }
 }
 function switchPanelTab(tab,opts) {
+  if(tab==='topics')tab='events';
   opts=opts||{};
   if(!isPanelAuthenticated()){
     ensurePanelAuthenticated().then(function(){switchPanelTab(tab,opts)});
@@ -11932,7 +11933,7 @@ var API_TABS=[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
     {key:'chat_digest',label:'截断总结',info:'截断前只总结新增对话，同时将上一份详细总结压成简版并集中补记主动记忆。保留次数 Z 在「截断总结」设置，默认 3；更早简版直接复用，跨天不重写。未启用当前聊天线路时，生成与校对使用这一组 API。'}
   ]},
-  {key:'topics',label:'主题与事件 API',info:'主题选材、事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'主题选材与事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'主题选材与事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
+  {key:'topics',label:'事件整理 API',info:'事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
     {key:'recall_rewrite',label:'意图改写',info:'同一份配置同时用于召回前的意图改写，以及候选记忆中的相关性筛选/精筛。这里直接选择两步共用的供应商和模型。'},
     {key:'recall_vector',label:'向量化',info:'把 Fact 变成电脑能比对“意思像不像”的向量，供 Fact 召回使用。这里选择向量化服务供应商和模型。'}

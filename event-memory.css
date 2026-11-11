@@ -1,0 +1,7 @@
+/* Existing event reader styling, separated from the retired topic editor. */
+#tab-events{max-width:1120px;margin-inline:auto}
+#tab-events .mw-reader{padding:26px 30px;background:var(--nb-paper);border:1px solid var(--nb-line);border-radius:18px}
+#tab-events .mw-reader-head{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+#tab-events .mw-reader-head>div{flex:1;min-width:150px}
+#tab-events .mw-reader h3{font:600 25px/1.5 var(--ck-font-display);margin:5px 0 0;overflow-wrap:anywhere}
+@media(max-width:600px){#tab-events .mw-reader{padding:20px 18px;border-radius:14px}#tab-events .mw-reader h3{font-size:22px}#tab-events .mw-reader-head{gap:15px}}

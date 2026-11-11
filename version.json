@@ -1,7 +1,7 @@
 {
-  "version": "chat-v395-quota-single-line",
+  "version": "chat-v396-retire-topic-organizer",
   "notes": [
-    "聊天底部 Claude 剩余额度保持单行，长观测时间不再把输入区撑高。",
-    "优先完整显示两个剩余百分比与暂停状态，点击额度栏可查看完整详情。"
+    "移除停用的主题整理入口、审批与运行状态。",
+    "保留 Fact、事件整理和 B/C 召回，事件记忆可直接查看与核对出处。"
   ]
 }
