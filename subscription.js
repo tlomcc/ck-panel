@@ -18,7 +18,7 @@
   if(typeof chatLayoutCompose==='function')requestAnimationFrame(function(){chatLayoutCompose({force:true})});
   if(bar.hidden)return;
   var q=value&&value.quota,auth=value&&value.auth;
-  if(!q||!auth||!auth.ready){bar.dataset.level='unknown';bar.textContent='Claude 额度 · '+(unavailable?'状态暂不可用':auth&&!auth.ready?'登录状态需检查':'正在读取');bar.title=bar.textContent+'，点击查看详情';return}
+  if(!q||!auth||!auth.ready){bar.dataset.level='unknown';bar.textContent='Claude 额度 · '+(unavailable?'状态暂不可用':auth&&!auth.ready?'登录状态需检查':'正在读取');bar.title=bar.textContent;return}
   var parts=['Claude 剩余'],details=[],byKey={},observations=[],known=false;
   q.windows.forEach(function(w){byKey[w.key]=w});
   [['five_hour','5h'],['seven_day','7天']].forEach(function(pair){
@@ -34,7 +34,7 @@
   bar.replaceChildren(node('span','ck-sub-inline-summary',parts.join(' · ')));
   if(details.length)bar.append(node('span','ck-sub-inline-detail',' · '+details.join(' · ')));
   bar.dataset.level=q.level;
-  bar.title=bar.textContent+'\n点击查看完整额度与观测时间。';
+  bar.title=bar.textContent;
  }
  function clearContext(){
   data=null;dataContext='';dirty=false;notified='';renderInline(null,false);

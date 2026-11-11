@@ -1,7 +1,7 @@
 {
-  "version": "chat-v396-retire-topic-organizer",
+  "version": "chat-v397-quota-readonly",
   "notes": [
-    "移除停用的主题整理入口、审批与运行状态。",
-    "保留 Fact、事件整理和 B/C 召回，事件记忆可直接查看与核对出处。"
+    "聊天底部 Claude 剩余额度只作显示，不再响应点击。",
+    "完整额度与用量保护仍从侧边菜单「Claude 订阅」打开。"
   ]
 }

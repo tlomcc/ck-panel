@@ -33,6 +33,10 @@ const server=http.createServer((req,res)=>{
   await page.locator('#ck-sub-close').click();
   const inline=page.locator('#ck-sub-inline');
   await inline.scrollIntoViewIfNeeded();
+  const inlineState=await inline.evaluate(el=>({tag:el.tagName,tabIndex:el.tabIndex,handler:el.hasAttribute('onclick')||!!el.onclick,popup:el.hasAttribute('aria-haspopup'),cursor:getComputedStyle(el).cursor,tooltip:el.title===el.textContent&&!el.title.includes('点击')}));
+  assert.deepEqual(inlineState,{tag:'DIV',tabIndex:-1,handler:false,popup:false,cursor:'default',tooltip:true},'inline quota is display only');
+  await inline.click();
+  assert.equal(await page.evaluate(()=>document.getElementById('ck-sub-dialog').classList.contains('show')||document.activeElement===document.getElementById('ck-sub-inline')),false,'clicking the inline quota neither opens details nor takes focus');
   const inlineGeometry=await inline.evaluate(el=>({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,scroll:el.scrollWidth,client:el.clientWidth}));
   assert(inlineGeometry.left>=0&&inlineGeometry.right<=width&&inlineGeometry.scroll<=inlineGeometry.client+1,'inline quota fits the viewport');
   await page.locator('.chat-compose').screenshot({path:path.join(out,'quota-inline-'+width+'-'+dark+'.png')});
