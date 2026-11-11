@@ -18,21 +18,23 @@
   if(typeof chatLayoutCompose==='function')requestAnimationFrame(function(){chatLayoutCompose({force:true})});
   if(bar.hidden)return;
   var q=value&&value.quota,auth=value&&value.auth;
-  if(!q||!auth||!auth.ready){bar.dataset.level='unknown';bar.textContent='Claude 额度 · '+(unavailable?'状态暂不可用':auth&&!auth.ready?'登录状态需检查':'正在读取');return}
-  var parts=['Claude 剩余'],byKey={},observations=[],known=false;
+  if(!q||!auth||!auth.ready){bar.dataset.level='unknown';bar.textContent='Claude 额度 · '+(unavailable?'状态暂不可用':auth&&!auth.ready?'登录状态需检查':'正在读取');bar.title=bar.textContent+'，点击查看详情';return}
+  var parts=['Claude 剩余'],details=[],byKey={},observations=[],known=false;
   q.windows.forEach(function(w){byKey[w.key]=w});
   [['five_hour','5h'],['seven_day','7天']].forEach(function(pair){
    var w=byKey[pair[0]],pct=percent(w);parts.push(pair[1]+' '+(pct===null?'—':(expired(w)?'上期 ':'')+remaining(pct)));
    if(pct!==null){known=true;observations.push({label:pair[1],time:timeText(observedAt(w))})}
   });
-  var five=byKey.five_hour;
-  if(five&&five.resets_at>Date.now()/1000)parts.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
   if(q.blocked)parts.push('已暂停');
-  if(!known)parts.push('等待官方百分比');
-  if(observations.length)parts.push('观测 '+(observations.every(function(item){return item.time===observations[0].time})?observations[0].time:observations.map(function(item){return item.label+' '+item.time}).join(' / ')));
-  if(unavailable)parts.push('连接中断，保留最近记录');
-  bar.textContent=parts.join(' · ');bar.dataset.level=q.level;
-  bar.title='显示最近一次官方额度及观测时间；取得新数据后自动替换，已结束的周期标为上期。';
+  if(unavailable)details.push('连接中断，保留最近记录');
+  var five=byKey.five_hour;
+  if(five&&five.resets_at>Date.now()/1000)details.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
+  if(!known)details.push('等待官方百分比');
+  if(observations.length)details.push('观测 '+(observations.every(function(item){return item.time===observations[0].time})?observations[0].time:observations.map(function(item){return item.label+' '+item.time}).join(' / ')));
+  bar.replaceChildren(node('span','ck-sub-inline-summary',parts.join(' · ')));
+  if(details.length)bar.append(node('span','ck-sub-inline-detail',' · '+details.join(' · ')));
+  bar.dataset.level=q.level;
+  bar.title=bar.textContent+'\n点击查看完整额度与观测时间。';
  }
  function clearContext(){
   data=null;dataContext='';dirty=false;notified='';renderInline(null,false);
