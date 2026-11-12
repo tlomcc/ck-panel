@@ -10,22 +10,26 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   let windows=[{id:'one',title:'任务1',profile:'p',thread_id:'native',status:'running',updated:1},{id:'two',title:'任务2',profile:'p',thread_id:'other',status:'completed',updated:1}],seq=1,fail=false,delay=0,requests=[],posted=[],created=[];
   const q=(id,label)=>({id,kind:'request',seq:seq++,text:'',created:10,data:{id,method:'item/tool/requestUserInput',params:{questions:[{id:'scope',question:label,options:[{label:'仅本次',description:'只处理当前任务'},{label:'全部窗口',description:'包括其它窗口'}]}]}}});
-  const base=[{id:'u',kind:'userMessage',text:'检查任务并保留已完成操作。',created:1,data:{}},{id:'a',kind:'agentMessage',text:'开始检查。\n'.repeat(70),created:2,data:{}},{id:'cmd',kind:'commandExecution',text:'complete command output',created:3,data:{command:'check status'}}];
+  const base=[{id:'u',kind:'userMessage',text:'检查任务并保留已完成操作。',created:1,data:{}},{id:'a',kind:'agentMessage',text:'开始检查。\n'.repeat(70),created:2,data:{}},{id:'diary',kind:'diary',text:'验证记录。',created:3,data:{date:'2026-11-12'}}];
   await page.route('https://codex.test/codex/**',async route=>{
    const url=new URL(route.request().url()),body=route.request().postDataJSON();let result={};
    if(delay)await new Promise(r=>setTimeout(r,delay));if(fail)return route.fulfill({status:503,json:{error:'temporary connection failure'}});
    if(url.pathname.endsWith('/config'))result={profiles:[{id:'p',name:'供应商A',model:'model-a',effort:'high',base_url:'https://a.test/v1',has_key:true},{id:'q',name:'供应商B',model:'model-b',effort:'high',base_url:'https://b.test/v1',has_key:true}],default_profile:'p',efforts:['high','xhigh'],workspace:'/workspace'};
-   else if(url.pathname.endsWith('/threads')&&body){created.push(body);const w={...windows[0],id:'new'+created.length,title:body.title,status:'idle',error:''};windows.unshift(w);result=w;}
-   else if(url.pathname.endsWith('/threads'))result={windows};
+   else if(url.pathname.endsWith('/threads')&&body){created.push(body);const w={...windows[0],id:'new'+created.length,title:body.title,status:'idle',error:'',seq};windows.unshift(w);result=w;}
+   else if(url.pathname.endsWith('/threads'))result={windows:windows.map(w=>({...w,seq}))};
    else if(url.pathname.endsWith('/answer')){posted.push(body);requests=requests.map(r=>r.id===body.request_id?{...r,kind:'resolved',seq:seq++}:r);windows[1].status=requests.some(r=>r.kind==='request')?'waiting':'running';}
-   else if(url.pathname.includes('/threads/')){const id=url.pathname.split('/')[3];result={window:windows.find(w=>w.id===id),items:base.concat(id==='two'?requests:[]),cursor:seq++};}
+   else if(url.pathname.includes('/threads/')){const id=url.pathname.split('/')[3];result={window:{...windows.find(w=>w.id===id),seq},items:base.concat(id==='two'?requests:[]),cursor:seq++};}
    await route.fulfill({json:result});
   });
   await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');await page.locator('.cx-item-agentMessage').waitFor();
   const refresh=async()=>{if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');};
   assert.equal(await page.locator('.cx-task-status').textContent(),'正常运行');
   for(const dark of [false,true]){await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);assert.equal(await page.locator('.cx-task-status').evaluate(e=>getComputedStyle(e).color),await page.locator('#cx-root').evaluate(e=>getComputedStyle(e).getPropertyValue('--ck-accent-strong').trim()).then(hex=>{const n=parseInt(hex.slice(1),16);return `rgb(${n>>16}, ${(n>>8)&255}, ${n&255})`;}));}
-  const positions=await page.evaluate(()=>['.cx-item-userMessage .cx-text','.cx-item-agentMessage .cx-text'].map(s=>document.querySelector(s).getBoundingClientRect().left));assert(Math.abs(positions[0]-positions[1])<1);
+  // Each message kind keeps its existing padding; both must remain inside the feed.
+  assert(await page.locator('#cx-feed').evaluate(feed=>{
+    const box=feed.getBoundingClientRect();
+    return [...feed.querySelectorAll('.cx-text')].every(text=>{const r=text.getBoundingClientRect();return r.left>=box.left&&r.right<=box.right;});
+  }));
   if(width<640){await page.locator('#cx-window-toggle').click();await page.locator('#cx-search').fill('任务');assert(await page.locator('#cx-window-sidebar').isVisible());await page.locator('#cx-window-title').click();assert.equal(await page.locator('#cx-window-sidebar').isVisible(),false);assert.equal(await page.locator('#cx-window-toggle').getAttribute('aria-expanded'),'false');}
   await page.locator('.cx-window-menu summary').click();await page.locator('#cx-window-title').click();assert.equal(await page.locator('.cx-window-menu').getAttribute('open'),null);
   await page.locator('.cx-window-menu summary').click();await page.locator('#cx-rename').click();await page.locator('dialog[open]').waitFor();await page.locator('dialog input').fill('草稿名字');await page.mouse.click(3,3);await page.locator('dialog').waitFor({state:'detached'});assert.equal(windows[0].title,'任务1');
@@ -56,7 +60,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.reload();await page.locator('.cx-item-question').first().waitFor();assert.equal(await page.locator('.cx-item-question').count(),2);assert((await page.locator('.cx-item-question').first().innerText()).includes('已结束'));
   await page.locator('#cx-exit').click();assert(!await page.locator('#cx-task-notices').isVisible());assert.equal(await page.locator('#cx-question-outside').count(),0);await page.evaluate(()=>ckOpenCodex('tasks'));await page.locator('.cx-question').waitFor();assert(await page.locator('#cx-tasks').isVisible());
   await page.goto('http://127.0.0.1:'+server.address().port+'/');assert.equal(await page.locator('#cx-root').isVisible(),false);await page.evaluate(()=>ckOpenCodex('tasks'));await page.locator('.cx-question').waitFor();
-  await page.screenshot({path:'/home/ckcodex/workspace/work/codex-refresh-menu-20261015/interactions-'+width+'.png'});
+  await page.screenshot({path:(process.env.CX_TEST_OUT||'/home/ckcodex/workspace/work/codex-refresh-menu-20261015')+'/interactions-'+width+'.png'});
   if(width<640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-new').click();await page.waitForFunction(()=>document.getElementById('cx-window-title').textContent==='任务3');if(width<640)await page.locator('#cx-window-toggle').click();await page.locator('#cx-new').click();await page.waitForFunction(()=>document.getElementById('cx-window-title').textContent==='任务4');assert.deepEqual(created.map(w=>w.title),['任务3','任务4']);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);console.log(width+': outside dismissal, feedback, status, alignment, question navigation/copy/history/cross-window alert, sequential names PASS');await context.close();
  }}finally{await browser.close();server.close();}

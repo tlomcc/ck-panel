@@ -85,8 +85,19 @@ body.dark .cx-overlay,html.dark .cx-overlay{--cx-question:#bd9aed;--cx-question-
 /* Float above the content without reserving a row or covering the desktop menu. */
 .cx-task-notices{position:absolute;z-index:4;top:6px;left:calc(var(--cx-sidebar-width) + 6px);display:block;width:33.333vw;min-width:0;max-height:calc(100% - 12px);overflow:auto;overscroll-behavior:contain;margin:0;padding:0;background:transparent;pointer-events:none;scrollbar-width:thin}
 .cx-task-notices .cx-notice-list{pointer-events:auto}
-/* Messages that need the user's attention paint above the floating task strips. */
-.cx-item-userMessage,.cx-item-question,.cx-text-question,.cx-pending,.cx-compose,.cx-question-nav{position:relative;z-index:5}
+/* All messages start below the task strips. Only the explicitly raised article crosses them. */
+.cx-item{position:relative;z-index:0}
+.cx-pending,.cx-compose,.cx-question-nav{position:relative;z-index:1}
+.cx-item.cx-item-raised{z-index:5;background:var(--ck-surface);outline:2px solid var(--ck-accent-strong);outline-offset:4px}
+.cx-item.cx-item-raised.cx-item-userMessage{background:var(--ck-accent-wash)}
+.cx-item.cx-item-raised.cx-item-question{background:var(--cx-question-wash)}
+.cx-item:focus-visible{outline:2px solid var(--ck-focus);outline-offset:4px}
+.cx-user-nav{z-index:1}
+.cx-message{z-index:3}
+.cx-task-notice{touch-action:pan-y}
+.cx-task-notice.cx-sort-chosen{cursor:grabbing}
+.cx-task-notice.cx-sort-ghost{opacity:.4}
+.cx-notice-list.cx-sorting{cursor:grabbing}
 @media(max-width:640px){.cx-body{--cx-sidebar-width:0px}}
 .cx-task-notices[hidden],.cx-task-notices [hidden]{display:none!important}
 .cx-window-heading p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

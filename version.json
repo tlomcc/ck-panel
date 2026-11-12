@@ -1,7 +1,7 @@
 {
-  "version": "chat-v398-claude-progress-feedback",
+  "version": "chat-v399-task-window-controls",
   "notes": [
-    "国内 Claude Code 展示读取、命令和文件修改等简短工具进度。",
-    "输入框上方持续显示执行、模型等待、供应商重试、用时和最近回传。"
+    "左上角窗口支持拖动排序，并在刷新后保留顺序。",
+    "消息默认在窗口条下层，双击某条置顶，再次双击恢复。"
   ]
 }

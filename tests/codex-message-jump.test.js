@@ -17,8 +17,8 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
   await page.route('https://codex.test/codex/**',async route=>{
    const req=route.request(),url=new URL(req.url());if(req.method()==='POST')posts.push(url.pathname);let result={};
    if(url.pathname.endsWith('/config'))result={profiles:[{id:'p',name:'测试供应商',model:'test-model',effort:'high',base_url:'https://model.test/v1',has_key:true}],default_profile:'p',workspace:'/workspace'};
-   else if(url.pathname.endsWith('/threads'))result={windows};
-   else if(url.pathname.includes('/threads/')){const id=url.pathname.split('/')[3];result={window:windows.find(w=>w.id===id),items:records[id],cursor:seq,schedules:[]};}
+   else if(url.pathname.endsWith('/threads'))result={windows:windows.map(w=>({...w,seq}))};
+   else if(url.pathname.includes('/threads/')){const id=url.pathname.split('/')[3];result={window:{...windows.find(w=>w.id===id),seq},items:records[id],cursor:seq,schedules:[]};}
    await route.fulfill({json:result});
   });
   await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');await page.locator('[data-item-id=u5]').waitFor();
