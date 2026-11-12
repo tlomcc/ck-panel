@@ -1,7 +1,7 @@
 {
-  "version": "chat-v399-task-window-controls",
+  "version": "chat-v400-codex-scroll-controls",
   "notes": [
-    "左上角窗口支持拖动排序，并在刷新后保留顺序。",
-    "消息默认在窗口条下层，双击某条置顶，再次双击恢复。"
+    "Codex 任务记录新增回顶、回底按钮。",
+    "右侧消息跳转按钮缩小，并统一靠右竖排。"
   ]
 }

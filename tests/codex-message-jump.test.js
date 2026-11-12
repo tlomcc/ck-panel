@@ -5,13 +5,13 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({args:['--no-sandbox','--disable-dev-shm-usage']});
  try{for(const width of [320,390,1440]){
-  const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'});
+  const context=await browser.newContext({viewport:{width,height:900},hasTouch:width===390,serviceWorkers:'block'});
   await context.addInitScript(()=>{window.copied=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.copied.push(text);}}});localStorage.setItem('ck_codex_access','fixture-access');localStorage.setItem('ck_codex_endpoint','https://codex.test/codex');const vv=window.visualViewport;let h=innerHeight;Object.defineProperty(vv,'height',{get:()=>h});window.testKeyboard=height=>{h=height;vv.dispatchEvent(new Event('resize'));};});
   const page=await context.newPage(),errors=[],posts=[];page.on('pageerror',e=>errors.push(e.message));
   let seq=1;
-  const windows=['one','two','empty'].map((id,i)=>({id,title:'任务'+(i+1),profile:'p',status:'running',thread_id:id,updated:1}));
+  const windows=['one','two','empty','output'].map((id,i)=>({id,title:'任务'+(i+1),profile:'p',status:'running',thread_id:id,updated:1}));
   const message=(id,kind,text)=>({id,kind,text,created:1,data:{}});
-  const records={one:[],two:[message('other','userMessage','另一个窗口的用户消息')],empty:[]};
+  const records={one:[],two:[message('other','userMessage','另一个窗口的用户消息')],empty:[],output:[message('output-only','agentMessage','执行记录\n'.repeat(80))]};
   for(let i=1;i<=5;i++)records.one.push(message('u'+i,'userMessage','用户消息 '+i+'\n'+(i===3?'长消息内容\n'.repeat(55):'')),message('a'+i,'agentMessage','助手回复 '+i+'\n'+'执行进度与说明\n'.repeat(30)));
   records.one.push({id:'question',kind:'resolved',created:1,text:'',data:{method:'item/tool/requestUserInput',params:{questions:[{id:'q',question:'已回答的原生提问',options:[]}]}}});
   await page.route('https://codex.test/codex/**',async route=>{
@@ -23,18 +23,32 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
   });
   await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');await page.locator('[data-item-id=u5]').waitFor();
   const prev=page.getByRole('button',{name:'上一条用户消息',exact:true}),next=page.getByRole('button',{name:'下一条用户消息',exact:true});
+  const top=page.getByRole('button',{name:'回顶',exact:true}),bottom=page.getByRole('button',{name:'回底',exact:true});
+  const atEdge=async end=>assert(await page.locator('#cx-feed').evaluate((feed,end)=>end?Math.abs(feed.scrollHeight-feed.scrollTop-feed.clientHeight)<=1:feed.scrollTop===0,end));
   const at=async id=>assert.equal(await page.locator('.cx-user-highlight').getAttribute('data-item-id'),id);
   const refresh=async()=>{seq++;await page.evaluate(()=>document.getElementById('cx-refresh').click());await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');};
+  // The compact controls are real pointer/touch targets and only scroll the task feed.
+  assert(await bottom.isDisabled());
+  await (width===390?top.tap():top.click());await atEdge(false);assert(await top.isDisabled());
+  await (width===390?bottom.tap():bottom.click());await atEdge(true);assert(await bottom.isDisabled());
   // From the latest output, every click targets exactly one earlier user message.
   await prev.click();await at('u5');assert(await next.isDisabled());
   await page.evaluate(()=>{document.getElementById('cx-user-prev').click();document.getElementById('cx-user-prev').click();});await at('u3');
   assert.equal(await page.locator('#cx-user-position').textContent(),'3 / 5');
+  await page.locator('[data-item-id=u3]').evaluate(el=>el.focus({preventScroll:true}));await page.keyboard.press('Alt+Enter');
+  assert(await page.locator('#cx-user-nav button').evaluateAll(buttons=>buttons.every(button=>{const r=button.getBoundingClientRect();return button.contains(document.elementFromPoint(r.left+3,r.top+r.height/2));})), 'Navigation must remain clickable above a raised long message');
+  await page.locator('[data-item-id=u3]').evaluate(el=>el.focus({preventScroll:true}));await page.keyboard.press('Alt+Enter');
   let offset=await page.locator('[data-item-id=u3]').evaluate(el=>el.getBoundingClientRect().top-document.getElementById('cx-feed').getBoundingClientRect().top);assert(offset>=14&&offset<=25);
   await prev.click();await at('u2');await prev.click();await at('u1');assert(await prev.isDisabled());
   await next.click();await at('u2');
   // Refreshes and output above/below the target preserve the selected message.
   records.one[1].text+='more output\n'.repeat(20);records.one[9].text+='new streamed output\n'.repeat(20);await refresh();await at('u2');
   offset=await page.locator('[data-item-id=u2]').evaluate(el=>el.getBoundingClientRect().top-document.getElementById('cx-feed').getBoundingClientRect().top);assert(offset>=14&&offset<=25);
+  // Returning to an edge clears message anchoring. Top stays put; bottom follows new output.
+  await top.click();await atEdge(false);assert.equal(await page.locator('.cx-user-highlight').count(),0);
+  records.one[9].text+='new output while reading the top\n'.repeat(8);await refresh();await atEdge(false);
+  await bottom.click();await atEdge(true);assert.equal(await page.locator('.cx-user-highlight').count(),0);
+  records.one[9].text+='new output while following the bottom\n'.repeat(8);await refresh();await atEdge(true);
   // A manual scroll re-bases navigation on the visible position instead of the old target.
   await page.locator('[data-item-id=a3]').evaluate(el=>{const f=document.getElementById('cx-feed');f.scrollTop+=el.getBoundingClientRect().top-f.getBoundingClientRect().top+80;});
   await page.waitForFunction(()=>!document.querySelector('.cx-user-highlight'));await next.click();await at('u4');
@@ -47,11 +61,19 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
   await page.locator('#cx-question-nav').getByRole('button',{name:'回到提问',exact:true}).click();assert.equal(await page.locator('.cx-question-highlight').getAttribute('data-item-id'),'question');
   await page.waitForFunction(()=>!document.querySelector('.cx-user-highlight'));await next.click();await at('u6');
   // Controls stay inside the chat and clear when switching to an empty window.
-  const geometry=await page.evaluate(()=>{const nav=document.getElementById('cx-user-nav'),feed=document.getElementById('cx-feed'),area=document.getElementById('cx-feed-area'),n=nav.getBoundingClientRect(),f=feed.getBoundingClientRect(),a=area.getBoundingClientRect(),c=document.getElementById('cx-compose').getBoundingClientRect();nav.hidden=true;const hidden=feed.getBoundingClientRect();nav.hidden=false;const gapHit=document.elementFromPoint(n.left+n.width/2,n.top+48);return {left:n.left,right:n.right,feedLeft:f.left,feedRight:f.right,feedWidth:f.width,areaWidth:a.width,hiddenWidth:hidden.width,hiddenHeight:hidden.height,feedHeight:f.height,bottom:n.bottom,composeTop:c.top,gapPassesToFeed:feed.contains(gapHit),overflow:document.documentElement.scrollWidth>innerWidth};});assert(geometry.left>=geometry.feedLeft&&geometry.left<geometry.feedRight);assert(geometry.right<=geometry.feedRight);assert.equal(geometry.feedWidth,geometry.areaWidth);assert.equal(geometry.hiddenWidth,geometry.feedWidth);assert.equal(geometry.hiddenHeight,geometry.feedHeight);assert(geometry.gapPassesToFeed);assert(geometry.bottom<=geometry.composeTop);assert(!geometry.overflow);
+  const geometry=await page.evaluate(()=>{const nav=document.getElementById('cx-user-nav'),feed=document.getElementById('cx-feed'),area=document.getElementById('cx-feed-area'),n=nav.getBoundingClientRect(),f=feed.getBoundingClientRect(),a=area.getBoundingClientRect(),c=document.getElementById('cx-compose').getBoundingClientRect();nav.hidden=true;const hidden=feed.getBoundingClientRect();nav.hidden=false;const buttons=Array.from(nav.querySelectorAll('button')).map(button=>{const r=button.getBoundingClientRect();return {id:button.id,left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height,hit:button.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))};}),gapHit=document.elementFromPoint(n.left+n.width/2,(buttons[0].bottom+buttons[1].top)/2);return {buttons,left:n.left,right:n.right,feedLeft:f.left,feedRight:f.right,feedWidth:f.width,areaWidth:a.width,hiddenWidth:hidden.width,hiddenHeight:hidden.height,feedHeight:f.height,bottom:n.bottom,composeTop:c.top,gapPassesToFeed:feed.contains(gapHit),overflow:document.documentElement.scrollWidth>innerWidth};});assert(geometry.left>=geometry.feedLeft&&geometry.left<geometry.feedRight);assert(geometry.right<=geometry.feedRight);assert(geometry.feedRight-geometry.right<=8);assert.equal(geometry.feedWidth,geometry.areaWidth);assert.equal(geometry.hiddenWidth,geometry.feedWidth);assert.equal(geometry.hiddenHeight,geometry.feedHeight);assert(geometry.gapPassesToFeed);assert(geometry.bottom<=geometry.composeTop);assert(!geometry.overflow);
+  assert.deepEqual(geometry.buttons.map(b=>b.id),['cx-feed-top','cx-user-prev','cx-user-next','cx-feed-bottom']);
+  geometry.buttons.forEach((b,i)=>{assert(b.hit);assert(b.width>=24&&b.width<=30&&b.height>=24&&b.height<=30);assert.equal(b.right,geometry.buttons[0].right);if(i)assert(b.top>=geometry.buttons[i-1].bottom+4);});
   for(const dark of [false,true]){await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);await page.screenshot({path:out+'/jump-'+width+(dark?'-dark':'')+'.png'});}
-  if(width===390){await page.locator('#cx-input').focus();await page.evaluate(()=>window.testKeyboard(420));await page.waitForTimeout(80);assert(await prev.isVisible());const bottom=await next.evaluate(el=>el.getBoundingClientRect().bottom);assert(bottom<420);await page.evaluate(()=>window.testKeyboard(900));}
+  if(width===390){await page.locator('#cx-input').focus();await page.evaluate(()=>window.testKeyboard(420));await page.waitForTimeout(80);assert(await prev.isVisible());const bounds=await page.locator('#cx-user-nav').evaluate(nav=>{const n=nav.getBoundingClientRect(),f=document.getElementById('cx-feed').getBoundingClientRect();return {top:n.top,bottom:n.bottom,feedTop:f.top,feedBottom:f.bottom};});await page.screenshot({path:out+'/keyboard-'+width+'.png'});assert(bounds.top>=bounds.feedTop&&bounds.bottom<=bounds.feedBottom&&bounds.bottom<420,JSON.stringify(bounds));await page.evaluate(()=>window.testKeyboard(900));}
   await page.locator('[data-window-id=empty]').click({position:{x:2,y:6}});await page.locator('#cx-user-nav').waitFor({state:'hidden'});
   assert(!await page.locator('#cx-question-nav').isVisible());
+  // Edge navigation is available for output-only records too, including keyboard activation.
+  await page.locator('[data-window-id=output]').click({position:{x:2,y:6}});await page.locator('[data-item-id=output-only]').waitFor();
+  assert(await top.isVisible());assert(!await prev.isVisible());assert(!await next.isVisible());
+  await top.focus();await top.press('Enter');await atEdge(false);
+  await bottom.focus();await bottom.press('Space');await atEdge(true);
+  await page.locator('[data-window-id=empty]').click({position:{x:2,y:6}});await page.locator('#cx-user-nav').waitFor({state:'hidden'});
   // Ordinary lists, quoted examples, code and the user's own question are not assistant questions.
   const example='any 同时请求 n 个窗口时，哪个时点选中胜出窗口并断开其余窗口？\n- 最先开始正常回复或执行的窗口胜出（推荐，尽早断开其余请求）\n- 最先完整完成任务的窗口胜出（其余窗口也可能已经执行相同操作）';
   records.empty.push(message('ordinary','agentMessage','执行步骤：\n- 检查现役\n- 验证修改\n\n```text\n'+example+'\n```\n> 哪个选项？\n> - 甲\n> - 乙'),message('user-example','userMessage',example));await refresh();
@@ -70,6 +92,6 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,new URL(
   await page.locator('#cx-question-nav').getByRole('button',{name:'回到提问',exact:true}).click();assert(await page.locator('[data-item-id=stream] .cx-text-question').evaluate(e=>e.classList.contains('cx-question-highlight')));
   records.empty.at(-1).text='提问已改为普通执行说明。';records.empty.find(r=>r.id==='choice').text='普通答复，没有选项。';await refresh();assert(!await page.locator('#cx-question-nav').isVisible());
   await page.locator('#cx-exit').click();assert(!await prev.isVisible());assert.deepEqual(posts,[]);assert.deepEqual(errors,[]);
-  console.log(width+': message order, rapid clicks, boundaries, long/short messages, manual scroll, live updates, window cache, drafts, native/text question detection, individual option copy, conditional navigation, layout PASS');await context.close();
+  console.log(width+': top/bottom clicks and touch, stream following, compact right-aligned hit targets, output-only and empty windows, keyboard, message order, rapid clicks, boundaries, long/short messages, manual scroll, live updates, window cache, drafts, native/text question detection, individual option copy, conditional navigation, layout PASS');await context.close();
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});

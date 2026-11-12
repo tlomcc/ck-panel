@@ -322,7 +322,7 @@
       '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation cx-navigation-top" aria-label="Codex 设置"><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>已关闭</h3></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div></aside>'+
       '<form id="cx-login" class="cx-login" hidden><h3>连接你的 Codex</h3><p>使用「VPS 管理 → Codex 任务中心 → 查看访问密钥」里的专用密钥。只需在这台设备填写一次。</p><label>服务地址<input id="cx-endpoint" type="url" required autocomplete="off"></label><label>任务中心访问密钥<input id="cx-access" type="password" required autocomplete="off"></label><button class="btn btn-blue" type="submit">连接</button><small>这是任务中心的访问密钥。模型 API 密钥在连接后单独配置。</small></form>'+
       '<div id="cx-tasks" class="cx-workspace" hidden><main class="cx-main">'+
-      '<div id="cx-feed-area" class="cx-feed-area"><div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div><nav id="cx-user-nav" class="cx-user-nav" aria-label="用户消息跳转" hidden><button id="cx-user-prev" type="button" aria-label="上一条用户消息" title="上一条用户消息" aria-controls="cx-feed">↑</button><span id="cx-user-position" role="status" aria-live="polite">用户</span><button id="cx-user-next" type="button" aria-label="下一条用户消息" title="下一条用户消息" aria-controls="cx-feed">↓</button></nav></div>'+
+      '<div id="cx-feed-area" class="cx-feed-area"><div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div><nav id="cx-user-nav" class="cx-user-nav" aria-label="任务记录导航" hidden><button id="cx-feed-top" class="cx-feed-edge" type="button" aria-label="回顶" title="回到任务记录顶部" aria-controls="cx-feed">回顶</button><button id="cx-user-prev" type="button" aria-label="上一条用户消息" title="上一条用户消息" aria-controls="cx-feed">↑</button><span id="cx-user-position" role="status" aria-live="polite">用户</span><button id="cx-user-next" type="button" aria-label="下一条用户消息" title="下一条用户消息" aria-controls="cx-feed">↓</button><button id="cx-feed-bottom" class="cx-feed-edge" type="button" aria-label="回底" title="回到任务记录底部" aria-controls="cx-feed">回底</button></nav></div>'+
       '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><section id="cx-live-progress" class="cx-live-progress" role="status" aria-live="polite" aria-atomic="true" hidden></section><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="1" aria-describedby="cx-compose-hint" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><div class="cx-compose-settings"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span></div><div class="cx-compose-meta"><details id="cx-schedule-options" class="cx-schedule-options"><summary id="cx-schedule-summary" title="安排一次性定时任务">定时</summary><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间（北京时间）</label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div></details><span id="cx-usage"></span></div><div class="cx-compose-actions"><span class="cx-stop-slot"><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button></span><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
       '<section id="cx-api" class="cx-api" hidden><div class="cx-section-heading"><div><h3>Codex API 配置</h3><p>每个供应商单独保存，下次任务生效。密钥加密保存，无需设置密码。</p></div><button id="cx-add-profile" type="button" class="btn btn-outline btn-sm">添加供应商</button></div><div id="cx-profiles"></div><p id="cx-api-state" class="cx-muted" role="status"></p></section>'+
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
@@ -367,7 +367,10 @@
     jump.append(node('span'),button('上一处',function(){jumpQuestion(-1);}),button('回到提问',function(){jumpQuestion(0);}),button('下一处',function(){jumpQuestion(1);}));$('feed-area').after(jump);
     $('user-prev').onclick=function(){jumpUserMessage(-1);};
     $('user-next').onclick=function(){jumpUserMessage(1);};
+    $('feed-top').onclick=function(){jumpFeedEdge(-1);};
+    $('feed-bottom').onclick=function(){jumpFeedEdge(1);};
     $('feed').addEventListener('scroll',renderUserNavigation,{passive:true});
+    if(typeof ResizeObserver==='function')new ResizeObserver(renderUserNavigation).observe($('feed'));
     installWindowSort();
     $('feed').addEventListener('dblclick',function(e){
       if(e.target.closest('button,a,input,textarea,select,summary,label,[contenteditable]'))return;
@@ -609,14 +612,23 @@
     userJump={id:el.dataset.itemId,scroll:feed.scrollTop};
   }
   function renderUserNavigation(){
-    var messages=userMessages(),anchor=activeUserMessage();if(!anchor)userJump=null;
-    $('user-nav').hidden=!messages.length;
+    var feed=$('feed'),messages=userMessages(),anchor=activeUserMessage();if(!anchor)userJump=null;
+    $('user-nav').hidden=!feed.querySelector('.cx-item');
+    $('user-nav').classList.toggle('cx-user-nav-tight',feed.clientHeight<180);
+    $('feed-top').disabled=feed.scrollTop<=1;
+    $('feed-bottom').disabled=feed.scrollHeight-feed.scrollTop-feed.clientHeight<=1;
+    $('user-prev').hidden=$('user-next').hidden=$('user-position').hidden=!messages.length;
     $('user-prev').disabled=!userMessageTarget(-1,messages,anchor);
     $('user-next').disabled=!userMessageTarget(1,messages,anchor);
     messages.forEach(function(el){el.classList.toggle('cx-user-highlight',el===anchor);});
     var label=anchor?(messages.indexOf(anchor)+1)+' / '+messages.length:'用户';
     if($('user-position').textContent!==label)$('user-position').textContent=label;
     $('user-position').setAttribute('aria-label',anchor?'第 '+(messages.indexOf(anchor)+1)+' 条，共 '+messages.length+' 条用户消息':'共 '+messages.length+' 条用户消息');
+  }
+  function jumpFeedEdge(direction){
+    userJump=null;
+    var feed=$('feed');feed.scrollTop=direction<0?0:feed.scrollHeight;
+    renderUserNavigation();
   }
   function jumpUserMessage(direction){
     var messages=userMessages(),target=userMessageTarget(direction,messages,activeUserMessage());
