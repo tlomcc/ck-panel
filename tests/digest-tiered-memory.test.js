@@ -12,9 +12,9 @@ function context(){
  c.window=c;vm.createContext(c);vm.runInContext(fs.readFileSync(require.resolve('../chat-digest-schedule.js'),'utf8'),c);
  return {c,cfg};
 }
-test('new summary selection migrates to Sonnet 5.5 with adaptive high without changing chat',()=>{
+test('new summary selection migrates to Sonnet 5.5 with adaptive medium without changing chat',()=>{
  const {c,cfg}=context(),summary=plain(c.chatManualModelRoute(cfg,'digest').selected);
- assert.deepEqual(summary,{execution:'claude_code_subscription',model:'claude-sonnet-5-5',thinking:{type:'adaptive'},output_config:{effort:'high'}});
+ assert.deepEqual(summary,{execution:'claude_code_subscription',model:'claude-sonnet-5-5',thinking:{type:'adaptive'},output_config:{effort:'medium'}});
  assert.equal(c.chatMemoryModelRoute(cfg).model,'claude-opus-4-6');
  c.chatSaveManualModel('digest','claude-haiku-4-5');assert.equal(c.chatManualModelValue(cfg,'digest'),'claude-haiku-4-5');
  assert.equal(c.chatMemoryModelRoute(cfg).model,'claude-opus-4-6');
@@ -66,7 +66,7 @@ test('a manual click always delegates to the explicit normal-chat memory workflo
 });
 test('choosing the chat model for summaries cannot start either model',async()=>{
  const {c,cfg}=context();Object.assign(cfg,{digestCurrentModel:true,dailyDigestEnabled:true,
-  digestModelPolicy:'sonnet55-adaptive-high-v1',digestManualModel:'claude-opus-4-6'});
+  digestModelPolicy:'sonnet55-adaptive-medium-v2',digestManualModel:'claude-opus-4-6'});
  const notices=[];c.toast=x=>notices.push(x);c.chatCurrentSession=()=>({id:'s'});c.chatDailyDigestPrune=()=>{};
  c.chatDigestMigrationPending=()=>false;c.chatDigestReplyActive=()=>false;c.chatTrimBusy=false;c.chatTrimTransaction=null;
  c.chatNightlyStatus={};c.chatSyncNightlyDigest=()=>{throw Error('unexpected network call')};

@@ -172,6 +172,19 @@ function chatScheduleNightlySync(delay){
   chatNightlyTimerAt=next;
   chatNightlyTimer=setTimeout(function(){chatNightlyTimer=0;chatNightlyTimerAt=0;chatMaybeRollDigestAtDayBoundary()},delay);
 }
+function chatMemoryCadenceSnapshot(cfg,session,rows,purpose){
+  var complete=(rows||[]).filter(function(m){return !m.inFlight&&m.role!=='pending_user'});
+  var turns=CKChatHistory.transportTurnGroups(session.transportMessages||[]);
+  var rounds=(turns.length?chatDigestTransportSources(session,complete,[],turns.length):chatDigestMessageGroups(complete))||[];
+  rounds=rounds.filter(function(g){return g.messages.some(function(m){return m.role==='assistant'})});
+  var selected=purpose==='daily'?rounds.length:session.digestManualTrim?Math.min(rounds.length,Number(session.digestManualTrim.dropRounds)||0):0;
+  if(!purpose&&!session.digestManualTrim){
+    var trim=typeof chatWindowTrimConfigFromSession==='function'&&chatWindowTrimConfigFromSession(session);
+    if(!trim&&typeof chatAutoTrimConfigFrom==='function')trim=chatAutoTrimConfigFrom(Object.assign({},cfg,{windowTrimOverride:false}));
+    if(trim&&(trim.enabled||trim.roundLimitEnabled))selected=Math.max(0,rounds.length-trim.keep);
+  }
+  return {policy:'fifty-rounds-v1',route:chatMemoryModelRoute(cfg),rounds:rounds,selected_rounds:selected};
+}
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
   if(session&&session.gameWindow)return Promise.resolve(false);
@@ -207,6 +220,7 @@ function chatSyncNightlyDigest(cfg,options){
     chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
     body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
     body.auto=auto;
+    body.memory_cadence=chatMemoryCadenceSnapshot(cfg,session,rows,options.modelRun&&options.modelRun.purpose);
     if(options.modelRun){
       body.model_run=options.modelRun;
       if(options.modelRun.purpose==='daily'){
@@ -319,13 +333,13 @@ function chatNightlySettingsPriority(cfg){
 function chatManualModelValue(cfg,kind){
   var key='digestManualModel';
   var subscription=window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription';
-  if(subscription&&cfg.digestModelPolicy!=='sonnet55-adaptive-high-v1')return 'claude-sonnet-5-5';
+  if(subscription&&cfg.digestModelPolicy!=='sonnet55-adaptive-medium-v2')return 'claude-sonnet-5-5';
   return typeof cfg[key]==='string'?cfg[key]:(subscription?'claude-sonnet-5-5':'');
 }
 function chatSaveManualModel(kind,value){
   var cfg=chatLoadConfig(),key='digestManualModel';
   cfg[key]=String(value||'').trim();
-  if(window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription')cfg.digestModelPolicy='sonnet55-adaptive-high-v1';
+  if(window.CKBackendRoute&&CKBackendRoute.current.execution==='claude_code_subscription')cfg.digestModelPolicy='sonnet55-adaptive-medium-v2';
   chatSaveConfigObject(cfg);
 }
 function chatManualModelRoute(cfg,kind){
@@ -337,7 +351,7 @@ function chatManualModelRoute(cfg,kind){
   if(execution==='claude_code_subscription'&&!/^(sonnet|opus|haiku|claude-[a-zA-Z0-9._-]{1,100})$/.test(model))throw new Error('订阅请填官方完整模型 ID（claude- 开头），或 sonnet、opus、haiku');
   var selected={execution:execution,model:model};
   if(execution==='claude_code_subscription'){
-    selected.thinking={type:'adaptive'};selected.output_config={effort:'high'};
+    selected.thinking={type:'adaptive'};selected.output_config={effort:'medium'};
   }
   if(execution!=='claude_code_subscription')selected.provider_id=route.provider&&route.provider.id||'';
   return {selected:selected,label:(route.providerName||'当前聊天线路')+' / '+model};
@@ -380,8 +394,8 @@ async function chatStartCurrentModelDigest(purpose){
   if(purpose==='trim'&&cfg.digestCurrentModel!==true){
     cfg.digestCurrentModel=true;chatSaveConfigObject(cfg);
   }
-  if(selected.execution==='claude_code_subscription'&&cfg.digestModelPolicy!=='sonnet55-adaptive-high-v1'){
-    cfg.digestManualModel=selected.model;cfg.digestModelPolicy='sonnet55-adaptive-high-v1';chatSaveConfigObject(cfg);
+  if(selected.execution==='claude_code_subscription'&&cfg.digestModelPolicy!=='sonnet55-adaptive-medium-v2'){
+    cfg.digestManualModel=selected.model;cfg.digestModelPolicy='sonnet55-adaptive-medium-v2';chatSaveConfigObject(cfg);
   }
   chatCurrentModelStarting=true;
   try{
@@ -397,7 +411,7 @@ async function chatStartCurrentModelDigest(purpose){
     chatSaveSessions();
     var ok=await chatSyncNightlyDigest(cfg,{session:session,force:true,modelRun:run});
     chatRenderNightlyStatus(session);
-    if(ok){toast('已开始：先主动记忆，再截断总结，最后一起同步');chatScheduleNightlySync(2000);}
+    if(ok){toast('已开始：先判断尚未处理的记忆余量，再总结、截断并同步');chatScheduleNightlySync(2000);}
     else toast('启动状态尚未确认，请先同步查看；不会自动重新发起总结');
     return ok;
   }finally{chatCurrentModelStarting=false;}

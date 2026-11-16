@@ -35,11 +35,19 @@ function chatWakeRender(){
   var idleToggle=document.getElementById('chat-wake-idle-enabled'),idleMinutes=document.getElementById('chat-wake-idle-minutes');
   if(idleToggle){idleToggle.checked=s.idle_shutdown_enabled===true;idleToggle.disabled=chatWakeWriteBusy;}
   if(idleMinutes){idleMinutes.disabled=chatWakeWriteBusy;if(document.activeElement!==idleMinutes)idleMinutes.value=s.idle_shutdown_minutes||30;}
-  if(label)label.textContent=subscription?'Claude 订阅 · 1h 缓存，默认每 50 分钟唤醒，最长 59分50秒。唤醒消耗订阅额度，遵守额度保护。':mode?(mode==='1h'?'1h · 最长 59分50秒':'5min · 最长 04分50秒')+'，保留 10 秒缓冲。':'当前供应商策略不使用 5min / 1h 唤醒';
+  if(label)label.textContent=subscription?'Claude 订阅 · 1h 缓存，默认每 50 分钟唤醒，实际调度至少预留 90 秒完成时间。失败最多补试两次，过期暂停；唤醒遵守额度保护。':mode?(mode==='1h'?'1h · 最长 59分50秒':'5min · 最长 04分50秒')+'，保留 10 秒缓冲。':'当前供应商策略不使用 5min / 1h 唤醒';
   var status=document.getElementById('chat-wake-status');
   if(status){
     var remaining=Math.max(0,Math.ceil((Number(s.next_at||0)*1000-Date.now())/1000));
     var text=!enabled?(s.status==='auto_off'?'已因连续 '+(s.idle_shutdown_minutes||30)+' 分钟没有真实用户请求而自动关闭':'当前窗口已关闭'):!mode?'等待供应商改为 5min / 1h 策略':s.status==='waiting_chat'?'已开启，发送一条正常消息后开始维持缓存':s.status==='chatting'?'正在聊天，本轮结束后继续计时':s.status==='waking'?'正在唤醒':s.last_error?'上次唤醒失败：'+s.last_error+'；下一次按间隔重试':'下次唤醒 '+Math.floor(remaining/60)+'分'+String(remaining%60).padStart(2,'0')+'秒';
+    if(enabled&&subscription){
+      var pauses={cache_expired:'缓存已到期，后台唤醒已暂停，下一次正常聊天成功后恢复',
+        cache_deadline:'缓存剩余时间不足，后台唤醒已暂停，下一次正常聊天成功后恢复',
+        cache_unconfirmed:'本次未确认缓存成功，后台唤醒已暂停',
+        retry_stopped:'自动补试已停止，等待正常聊天重新确认缓存'};
+      if(pauses[s.status])text=pauses[s.status];
+      else if(s.status==='retry')text='上次唤醒失败，等待第 '+Math.min(2,Number(s.failure_count)||1)+'/2 次补试：'+remaining+' 秒';
+    }
     if(enabled&&s.idle_shutdown_at)text+=' · 无新消息将于 '+new Date(s.idle_shutdown_at*1000).toLocaleTimeString('zh-CN',{hour12:false})+' 自动关闭';
     if(enabled&&s.idle_shutdown_enabled&&Number(s.idle_shutdown_minutes)*60<=seconds)text+=' · 自动关闭时间不长于唤醒间隔，空闲时可能在首次唤醒前关闭';
     if(s.last_success_at)text+=' · 最近成功 '+new Date(s.last_success_at*1000).toLocaleTimeString('zh-CN',{hour12:false});
