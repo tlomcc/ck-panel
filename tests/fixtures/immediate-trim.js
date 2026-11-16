@@ -2,11 +2,13 @@
  document.getElementById('loading-wrap')?.remove();
  const check=(ok,message)=>{if(!ok)throw Error(message)},pause=ms=>new Promise(r=>setTimeout(r,ms));
  const until=async(fn,message)=>{for(let i=0;i<500;i++){if(fn())return;await pause(10)}throw Error(message)};
- const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,toast,panelDataFetch,storedPanelKey};
+ const original={fetch:window.fetch,init:chatInit,route:chatEnsureMainRouteReady,windowRoute:chatWindowApiRouteConfig,toast,panelDataFetch,storedPanelKey};
  const results=[],notices=[],json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
  const field=id=>document.getElementById(id);
- let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,queueWrites,cleanCalls,posts,preparedTrims,preparedBase,preparedRevision,generatedCycles=0,modelRun=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false,failClean=false,recoverOnce=null;
+ let cfg,session,queueBody,releaseQueue,releaseReply,queueCalls,queueMethods,queueWrites,cleanCalls,posts,preparedTrims,preparedBase,preparedRevision,generatedCycles=0,modelRun=null,modelRunPayload=null,modelState='',deferQueue=false,queueReady=true,nightlyError=false,loseUploadResponse=false,failClean=false,recoverOnce=null;
  chatInit=()=>{};chatEnsureMainRouteReady=async()=>({ok:true,apiBase:'https://example.invalid/v1',upstreamKey:'fixture',model:'fixture',provider:{id:'fixture'}});
+ chatWindowApiRouteConfig=()=>({ok:true,model:'fixture-chat',providerName:'fixture',provider:{id:'fixture'},cacheStrategy:'5m'});
+ CKBackendRoute.current.execution='direct_api';
  panelAuthKey='fixture';apiProvidersLoaded=true;apiProviders={};toast=text=>notices.push(String(text));
  function setup(label){
    if(chatNightlyTimer){clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
@@ -19,14 +21,17 @@
      cacheLastReadAt:now,transportUpdated:now,updated:now,wakeEnabled:true,wakeSyncAt:now});
    chatSessions=[session];chatMessages=session.messages;chatSessionsLoadPromise=Promise.resolve(chatSessions);chatDraftImages=[];chatDraftFiles=[];
    cfg=Object.assign(chatDefaultConfig(),{sessionId:session.id,panelKey:'fixture',gatewayUrl:location.origin+'/gateway',recall:true,factRecallMode:'b',
-     dailyDigestEnabled:true,digestCycleCount:3,autoTrimEnabled:false,autoTrimKeepRounds:2,splitAssistantReplies:false,
+     dailyDigestEnabled:true,digestCurrentModel:true,digestManualModel:'fixture-summary',digestCycleCount:3,autoTrimEnabled:false,autoTrimKeepRounds:2,splitAssistantReplies:false,
      mainRouteCacheStrategy:'native_5m',mainRouteProviderId:'fixture'});
    chatSaveConfigObject(cfg);chatWriteForm(cfg);chatRenderMessages({force:true,removeEphemeral:true});
    chatWakeState={};chatWakeState[session.id]={enabled:true,mode:'5m',interval:4,next_at:Date.now()/1000+240};chatWakeLastFetch=Date.now();
    chatWakePending=null;chatWakeBusy=false;chatWakeWriteBusy=false;
-   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];queueWrites=[];cleanCalls=[];posts=[];preparedTrims=null;preparedBase=null;preparedRevision=0;generatedCycles=0;modelRun=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;failClean=false;recoverOnce=null;field('chat-input').value='未发送的输入草稿';
+   queueBody=null;releaseQueue=null;releaseReply=null;queueCalls=0;queueMethods=[];queueWrites=[];cleanCalls=[];posts=[];preparedTrims=null;preparedBase=null;preparedRevision=0;generatedCycles=0;modelRun=null;modelRunPayload=null;modelState='';deferQueue=false;queueReady=true;nightlyError=false;loseUploadResponse=false;failClean=false;recoverOnce=null;field('chat-input').value='未发送的输入草稿';
  }
  function prepared(body){
+   if(body.model_run&&body.model_run.id!==modelRun){modelRunPayload=structuredClone(body.model_run);modelRun=body.model_run.id;modelState=queueReady?'succeeded':'queued';}
+   if(queueReady&&modelState==='queued')modelState='succeeded';
+   if(body.cancel_model_run)modelState='cancelled';
    const covered=new Set(body.base.entries.flatMap(e=>e.covered||[]));
    const groups=body.groups.filter(g=>body.candidate_keys.includes(g.key)&&!covered.has(g.key));
    if(queueReady&&groups.length&&!preparedTrims){
@@ -34,11 +39,12 @@
      preparedBase=structuredClone(body.base);
      const previous=preparedBase.entries.filter(e=>e.kind==='cycle'&&e.active!==false).at(-1);
      if(previous&&body.config.z>1)previous.brief={source:chatDigestStamp(previous.text),text:'简版第'+previous.sequence+'次'};
-     preparedTrims=[{id:'cy-fixture-'+session.id+'-'+sequence,kind:'cycle',sequence,keys:groups.map(g=>g.key),text:'详细第'+sequence+'次：已完整整理本次选中的旧对话。',startTs:groups[0].start,endTs:groups.at(-1).end}];
+     preparedTrims=[{id:'cy-fixture-'+session.id+'-'+sequence,kind:'cycle',sequence,keys:groups.map(g=>g.key),text:'详细第'+sequence+'次：已完整整理本次选中的旧对话。',startTs:groups[0].start,endTs:groups.at(-1).end,
+       memory_required:true,memory:{memory_first:true,prepared_at:Date.now()/1000-1,decided:true,decision:'keep',model:'fixture-chat',unchanged:true,confirmed_at:Date.now()/1000}}];
      preparedRevision=(Number(body.revision)||1)+1;generatedCycles++;
    }
    const outstanding=preparedTrims&&preparedTrims.some(t=>t.keys.some(k=>!covered.has(k)));
-   return {ok:true,status:modelState||(queueReady?'succeeded':'queued'),model_run:modelRun?{id:modelRun,state:modelState}:undefined,accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:outstanding?preparedRevision:(Number(body.revision)||1)+(body.settings_override?1:0),source_stamp:body.base_stamp,config:body.config,base:outstanding?preparedBase:body.base,
+   return {ok:true,status:modelState||(queueReady?'succeeded':'queued'),model_run:modelRun?{...modelRunPayload,id:modelRun,state:modelState}:undefined,accepted_keys:body.groups.map(g=>g.key),snapshot:{revision:outstanding?preparedRevision:(Number(body.revision)||1)+(body.settings_override?1:0),source_stamp:body.base_stamp,config:body.config,base:outstanding?preparedBase:body.base,
      result:outstanding&&queueReady?{day:chatDailyDigestDayKey(Date.now()),recover_trim_once:recoverOnce}:body.settings_override?{settings_only:true}:null,
      trims:outstanding?preparedTrims:[]}};
  }
@@ -48,9 +54,9 @@
    if(target.pathname.endsWith('/queue')){
      queueCalls++;queueMethods.push(options.method||'GET');if(body)queueBody=body;
      if(body)queueWrites.push({body:structuredClone(body),syncStatus:session.digestLastSync?.status});
-     if(body&&loseUploadResponse){prepared(body);loseUploadResponse=false;throw new TypeError('Failed to fetch')}
+     if(body&&(body.model_run||body.manual_request)&&loseUploadResponse){prepared(body);loseUploadResponse=false;throw new TypeError('Failed to fetch')}
      const reply=()=>json(body?prepared(body):{ok:true,sessions:[prepared(queueBody)]});
-     if(deferQueue)return new Promise(resolve=>{releaseQueue=()=>resolve(reply())});
+     if(deferQueue&&(!body||body.model_run||body.manual_request))return new Promise(resolve=>{releaseQueue=()=>resolve(reply())});
      return reply();
    }
    if(target.pathname.endsWith('/clean-history')){
@@ -84,7 +90,7 @@
    chatRenderNightlyStatus(session);check(!field('chat-trim-sync-now').disabled,'stale state disabled readback');
    await chatSyncNightlyDigest(cfg,{session,readOnly:true,force:true});
    check(!await chatDigestFinishManualTrim(cfg,session)&&cleanCalls.length===0,'missing memory receipt allowed a recovered cut');
-   preparedTrims[0].memory={saved:true,decided:true,decision:'update',revision:29,model:'fixture-memory',confirmed_at:Date.now()/1000};
+   preparedTrims[0].memory={memory_first:true,prepared_at:Date.now()/1000-1,saved:true,decided:true,decision:'update',revision:29,model:'fixture-memory',confirmed_at:Date.now()/1000};
    await chatSyncNightlyDigest(cfg,{session,readOnly:true,force:true});
    session.digestRecoveryCancelled={scope:chatDigestActiveScope(cfg),at:Date.now()+1};
    check(!await chatDigestFinishManualTrim(cfg,session)&&cleanCalls.length===0,'newer cancellation was ignored');
@@ -101,10 +107,12 @@
    await chatDigestFinishManualTrim(cfg,session);check(cleanCalls.length===1,'recovery cut the same cycle twice');
    results.push({cancelledRecoveredOnce:true,missingMemoryBlocked:true,newerCancelBlocked:true,newerRequestPreserved:true,laterHistoryPreserved:true,noModelRequest:true});
 
-   setup('active');field('chat-input').value='正在发送的新问题';const sending=chatSendMessage();
-   await until(()=>releaseReply&&chatMessages.some(m=>m.inFlight),'actual reply did not start');
-   field('chat-digest-prepare').click();await until(()=>session.digestManualTrim&&queueBody?.manual_request,'manual click did not reach queue');
+   setup('active');queueReady=false;
+   field('chat-digest-prepare').click();await until(()=>session.digestManualTrim&&queueBody?.model_run,'manual click did not reach queue: '+notices.join(';'));
    const requested=[...session.digestManualTrim.keys];
+   field('chat-input').value='正在发送的新问题';const sending=chatSendMessage();
+   await until(()=>releaseReply&&chatMessages.some(m=>m.inFlight),'actual reply did not start');
+   queueReady=true;await chatSyncNightlyDigest(cfg,{session,force:true,readOnly:true});
    await until(()=>session.digestStaged,'ready snapshot not staged');
    check(cleanCalls.length===0,'manual trim ran during the active reply');
    field('chat-input').value='截断后仍保留的输入草稿';
@@ -118,7 +126,7 @@
    results.push({activeReply:true,alignedAfterReply:true,summaryReused:true,cleanCalls:cleanCalls.length,requestedSources:requested.length,preparedSources:preparedTrims[0].keys.length,queueCalls});
    await until(()=>!chatDigestMaintenanceBusy,'background maintenance did not settle');
 
-   setup('poll');queueReady=false;field('chat-digest-prepare').click();await until(()=>queueBody,'queue request missing');
+   setup('poll');queueReady=false;field('chat-digest-prepare').click();await until(()=>queueBody?.model_run,'queue request missing');
    delete session.digestManualTrim.immediate; // A pending request saved by the previous release.
    await until(()=>!chatNightlySyncs.size,'initial queue request did not finish');
    check(chatMessages.length===10&&cleanCalls.length===0,'unprepared sources were removed');
@@ -170,7 +178,10 @@
    results.push({lostUploadRecovered:true,readBeforeResend:true,summaryReused:true});
    await until(()=>!chatDigestMaintenanceBusy,'recovery maintenance did not settle');
 
-   setup('restored');session.replyDraft={state:'running',turn_id:'restored-original'};field('chat-digest-prepare').click();
+   setup('restored');queueReady=false;field('chat-digest-prepare').click();
+   await until(()=>queueBody?.model_run&&!chatNightlySyncs.size,'restored request did not start');
+   session.replyDraft={state:'running',turn_id:'restored-original'};queueReady=true;
+   await chatSyncNightlyDigest(cfg,{session,force:true,readOnly:true});
    await until(()=>session.digestStaged,'restored task did not prepare');
    check(field('chat-digest-sync-now').disabled,'sync button allowed a restored active reply');
    check(field('chat-digest-schedule-status').textContent.includes('当前回复'),'waiting reason absent');
@@ -255,7 +266,7 @@
    return results;
  }finally{
    if(chatNightlyTimer){clearTimeout(chatNightlyTimer);chatNightlyTimer=0;}
-   window.fetch=original.fetch;chatInit=original.init;chatEnsureMainRouteReady=original.route;toast=original.toast;
+   window.fetch=original.fetch;chatInit=original.init;chatEnsureMainRouteReady=original.route;chatWindowApiRouteConfig=original.windowRoute;toast=original.toast;
    panelDataFetch=original.panelDataFetch;storedPanelKey=original.storedPanelKey;currentPanelTab='chat';
  }
 })()

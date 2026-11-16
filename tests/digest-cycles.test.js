@@ -88,8 +88,9 @@ test('new cycles cannot trim until normal-chat memory has a confirmed keep or sa
  assert.deepEqual(plain(x.session),before);
  trim.memory={decided:true,decision:'update',model:'claude-opus-4-6',confirmed_at:123};
  assert.equal(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}),null);
- trim.memory.saved=true;assert.ok(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}));
- trim.memory={decided:true,decision:'keep',model:'claude-opus-4-6',confirmed_at:123};
+ trim.memory.saved=true;assert.equal(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}),null);
+ trim.memory.memory_first=true;trim.memory.prepared_at=100;assert.ok(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}));
+ trim.memory={memory_first:true,prepared_at:100,decided:true,decision:'keep',model:'claude-opus-4-6',confirmed_at:123};
  assert.ok(x.ctx.chatDigestPreparedTrim(x.session,x.cfg,{canonicalTransport:false}));
 });
 test('hidden full memory copies are excluded from source matching, signed blocks survive cleanup',()=>{

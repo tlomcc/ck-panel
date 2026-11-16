@@ -281,7 +281,7 @@ function chatDigestPreparationProgress(session,cfg){
 async function chatRequestManualDigestTrim(options){
   chatInit();
   var cfg=chatSaveConfig(true),session=chatCurrentSession();
-  if(cfg.digestCurrentModel===true&&!(options&&options.currentModel))return chatStartCurrentModelDigest('trim');
+  if(!(options&&options.currentModel))return chatStartCurrentModelDigest('trim');
   var previous=session.digestManualTrim;
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(!plan.trimmed){toast('当前轮数未超过保留数量，无需截断');return false;}

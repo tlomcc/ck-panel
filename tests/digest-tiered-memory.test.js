@@ -48,3 +48,28 @@ test('completed summary batches still wait for memory and show the actual six-mi
  remote.stage='cycle_part';remote.progress={phase:'draft',completed_batches:0,planned_batches:4};
  assert.match(view({},remote,{}, {now,receivedAt:now}).etaNote,/6 分钟/);
 });
+test('the visible stages put memory first and count its batches independently',()=>{
+ const now=1794290000000,remote={observed_at:now/1000,status:'running',stage:'cycle_memory',
+  model_run:{id:'same',state:'running',route:{execution:'claude_code_subscription',model:'claude-sonnet-5-5'},memory_route:{model:'claude-opus-4-6'}},
+  progress:{phase:'review',memory_pending:true,completed_batches:0,planned_batches:5,memory_completed_batches:1,memory_planned_batches:3}};
+ const v=view({digestModelRun:{id:'same'}},remote,{prepare:true},{now,receivedAt:now});
+ assert.deepEqual(v.steps,['主动记忆','截断总结','统一保存','截断同步']);assert.equal(v.step,0);
+ assert.match(v.batch,/主动记忆/);assert.match(v.batch,/已完成 1 批/);assert.match(v.batch,/共 3 批/);
+ assert.match(v.detail,/之后才开始总结/);
+});
+test('a manual click always delegates to the explicit normal-chat memory workflow',async()=>{
+ const {c,cfg}=context();cfg.digestCurrentModel=false;const calls=[];
+ c.chatInit=()=>{};c.chatSaveConfig=()=>cfg;c.chatCurrentSession=()=>({id:'s'});
+ c.chatStartCurrentModelDigest=async purpose=>{calls.push(purpose);return true};
+ vm.runInContext(fs.readFileSync(require.resolve('../chat-digest-activation.js'),'utf8'),c);
+ assert.equal(await c.chatRequestManualDigestTrim(),true);assert.deepEqual(calls,['trim']);
+});
+test('choosing the chat model for summaries cannot start either model',async()=>{
+ const {c,cfg}=context();Object.assign(cfg,{digestCurrentModel:true,dailyDigestEnabled:true,
+  digestModelPolicy:'sonnet55-adaptive-high-v1',digestManualModel:'claude-opus-4-6'});
+ const notices=[];c.toast=x=>notices.push(x);c.chatCurrentSession=()=>({id:'s'});c.chatDailyDigestPrune=()=>{};
+ c.chatDigestMigrationPending=()=>false;c.chatDigestReplyActive=()=>false;c.chatTrimBusy=false;c.chatTrimTransaction=null;
+ c.chatNightlyStatus={};c.chatSyncNightlyDigest=()=>{throw Error('unexpected network call')};
+ assert.equal(await c.chatStartCurrentModelDigest('trim'),false);assert.match(notices[0],/另一个模型/);
+ assert.equal(c.chatDigestSameModel({model:'opus'},{model:'claude-opus-4-6'}),true);
+});

@@ -1,7 +1,7 @@
 {
-  "version": "chat-v400-codex-scroll-controls",
+  "version": "chat-v401-memory-first-sync",
   "notes": [
-    "Codex 任务记录新增回顶、回底按钮。",
-    "右侧消息跳转按钮缩小，并统一靠右竖排。"
+    "点击截断总结后，先由当前聊天模型维护并复核主动记忆。",
+    "主动记忆完成后，再由总结模型处理；最后一起同步记忆、总结和截断结果。"
   ]
 }

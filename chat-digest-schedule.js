@@ -356,18 +356,30 @@ function chatMemoryModelRoute(cfg){
   }
   return selected;
 }
+function chatDigestSameModel(left,right){
+  var a=String(left.model||'').toLowerCase().replace(/\[1m\]$/,''),b=String(right.model||'').toLowerCase().replace(/\[1m\]$/,'');
+  return a===b||['sonnet','opus','haiku'].some(function(alias){
+    return a===alias&&b.startsWith('claude-'+alias+'-')||b===alias&&a.startsWith('claude-'+alias+'-');
+  });
+}
 var chatCurrentModelStarting=false;
 async function chatStartCurrentModelDigest(purpose){
   if(chatCurrentModelStarting)return false;
   var cfg=chatLoadConfig(),session=chatCurrentSession();
   chatDailyDigestPrune(session,null,cfg);
   if(chatDigestMigrationPending(session)){toast('请先完成旧总结的同步；当前注入原文会作为第 1 份保留。');return false;}
-  if(cfg.digestCurrentModel!==true||cfg.dailyDigestEnabled===false)return false;
+  if((cfg.digestCurrentModel!==true&&purpose!=='trim')||cfg.dailyDigestEnabled===false)return false;
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后手动启动总结');return false;}
   var running=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
   if(running&&['queued','running'].includes(running.state)){toast('本次手动总结正在进行；可取消后重新选择范围');return false;}
   var route,memoryRoute;try{route=chatManualModelRoute(cfg,'digest');memoryRoute=chatMemoryModelRoute(cfg)}catch(error){toast(error.message);return false;}
   var selected=route.selected;
+  if(chatDigestSameModel(selected,memoryRoute)){
+    toast('主动记忆使用当前聊天模型；截断总结请选择另一个模型');return false;
+  }
+  if(purpose==='trim'&&cfg.digestCurrentModel!==true){
+    cfg.digestCurrentModel=true;chatSaveConfigObject(cfg);
+  }
   if(selected.execution==='claude_code_subscription'&&cfg.digestModelPolicy!=='sonnet55-adaptive-high-v1'){
     cfg.digestManualModel=selected.model;cfg.digestModelPolicy='sonnet55-adaptive-high-v1';chatSaveConfigObject(cfg);
   }
@@ -385,7 +397,7 @@ async function chatStartCurrentModelDigest(purpose){
     chatSaveSessions();
     var ok=await chatSyncNightlyDigest(cfg,{session:session,force:true,modelRun:run});
     chatRenderNightlyStatus(session);
-    if(ok){toast('已开始准备；小克完成记忆维护并确认保存后才会截断');chatScheduleNightlySync(2000);}
+    if(ok){toast('已开始：先主动记忆，再截断总结，最后一起同步');chatScheduleNightlySync(2000);}
     else toast('启动状态尚未确认，请先同步查看；不会自动重新发起总结');
     return ok;
   }finally{chatCurrentModelStarting=false;}
