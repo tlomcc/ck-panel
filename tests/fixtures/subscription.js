@@ -78,6 +78,17 @@
  assert(opus.includes('不影响所选模型')&&opus.includes('官方已限额')&&opus.includes('百分比观测：'),'model scope, rejection and observation time remain visible');
  assert($('ck-sub-windows').lastChild.querySelector('strong').textContent==='2%','stale rejected window keeps the official percentage with its rejection');
  assert($('ck-sub-updated').textContent.includes('最近状态事件'),'status timestamp distinguished from percentage');
+ const sendDisabled=$('chat-send-btn').disabled;
+ for(const [kind,label] of [['remembering','小克正在记忆'],['yielding','正在让路'],['memory_paused','聊天优先']]){
+  state.activity={state:kind,background_purpose:'memory',chat_priority:true};
+  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-inline').textContent.includes(label)&&!$('ck-sub-refresh').disabled);
+  assert($('ck-sub-inline').textContent.includes('5h 13.8%'),'memory state keeps official quota visible');
+  assert($('chat-send-btn').disabled===sendDisabled,'background memory does not disable normal chat');
+ }
+ state.activity={state:'idle',background_purpose:''};state.memory={state:'needs_review',limit_exceeded:true};
+ $('ck-sub-refresh').click();await wait(()=>$('ck-sub-inline').textContent.includes('记忆内容超限')&&!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-inline').textContent.includes('可继续聊天'),'failed memory has an explicit independent wait state');
+ delete state.activity;delete state.memory;
  state.quota.windows[0].expired=false;state.quota.blocked=true;state.quota.level='paused';state.quota.reason='<img src=x onerror="window.pwned=true">';
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent.includes('暂停'));
  assert(!$('ck-sub-detail').querySelector('img')&&!window.pwned,'server text escaped');
@@ -137,5 +148,16 @@
   const geometry=dims();assert(geometry.card<=innerWidth&&geometry.scroll<=geometry.client+1,'quota state fits viewport '+mode);
   return {mode,inline:$('ck-sub-inline').textContent,geometry};
  };
- return {calls:calls.length,policySaved:true,remaining:true,replyRefresh:true,accountRace:true,unknown:true,expired:true,escaped:true,closeRace:true,lastKnown:true,failedRefreshRetained:true,minuteOldRetained:true,percentageTimes:true,boundaries:true,geometry:dims()};
+ window.__memoryPreview=async(mode)=>{
+  error=false;state.activity={state:mode,background_purpose:'memory',chat_priority:true};delete state.memory;
+  if(mode==='needs_review'){state.activity.state='idle';state.memory={state:'needs_review',limit_exceeded:true}}
+  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
+  if(mode==='unavailable'){state.activity.state='remembering';$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);error=true;$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-error').hidden)}
+  const text=$('ck-sub-inline').textContent;
+  assert(text.includes('小克')&&text.includes('5h 16%'),'memory status and quota are both visible');
+  assert(!$('chat-send-btn').disabled,'normal send remains available');
+  if(mode==='unavailable')assert(text.includes('状态暂不可用')&&!text.includes('正在记忆'),'lost connection does not show stale processing as live');
+  return {mode,text};
+ };
+ return {calls:calls.length,policySaved:true,remaining:true,replyRefresh:true,accountRace:true,unknown:true,expired:true,escaped:true,closeRace:true,lastKnown:true,failedRefreshRetained:true,minuteOldRetained:true,percentageTimes:true,boundaries:true,memoryStates:true,geometry:dims()};
 })();

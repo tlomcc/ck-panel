@@ -40,8 +40,15 @@ const server=http.createServer((req,res)=>{
   const inlineGeometry=await inline.evaluate(el=>({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,scroll:el.scrollWidth,client:el.clientWidth}));
   assert(inlineGeometry.left>=0&&inlineGeometry.right<=width&&inlineGeometry.scroll<=inlineGeometry.client+1,'inline quota fits the viewport');
   await page.locator('.chat-compose').screenshot({path:path.join(out,'quota-inline-'+width+'-'+dark+'.png')});
+  const memoryViews=[];
+  for(const mode of ['remembering','yielding','memory_paused','needs_review','unavailable']){
+   memoryViews.push(await page.evaluate(mode=>window.__memoryPreview(mode),mode));
+   const bounds=await inline.evaluate(el=>({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,scroll:el.scrollWidth,client:el.clientWidth}));
+   assert(bounds.left>=0&&bounds.right<=width&&bounds.scroll<=bounds.client+1,'memory status fits the viewport');
+   await page.locator('.chat-compose').screenshot({path:path.join(out,'memory-'+width+'-'+dark+'-'+mode+'.png')});
+  }
   assert.deepEqual(errors,[]);
-  results.push({width,dark,...result,views,inlineGeometry});console.log(width+' '+dark+': subscription quota browser checks PASS');
+  results.push({width,dark,...result,views,memoryViews,inlineGeometry});console.log(width+' '+dark+': subscription quota and memory status browser checks PASS');
   await page.close();
  }
  fs.writeFileSync(path.join(out,'results.json'),JSON.stringify(results,null,2));

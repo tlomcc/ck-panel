@@ -13,6 +13,18 @@
  function expired(w){return !!(w&&(w.expired||w.resets_at&&w.resets_at<=Date.now()/1000))}
  function observedAt(w){return w&&(typeof w.usage_observed_at==='number'&&isFinite(w.usage_observed_at)?w.usage_observed_at:w.updated_at)}
  function remaining(pct){return Number((100-pct).toFixed(1))+'%'}
+ function memoryText(value,unavailable){
+  var activity=value&&value.activity||{},memory=value&&value.memory;
+  if(unavailable)return activity.background_purpose==='memory'||memory&&memory.state!=='idle'?'小克记忆状态暂不可用':'';
+  if(activity.state==='remembering')return '小克正在记忆 · 发消息会暂停记忆';
+  if(activity.state==='yielding')return activity.background_purpose==='memory'?'小克记忆正在暂停 · 正在让路':'小克后台整理正在暂停 · 正在让路';
+  if(activity.state==='memory_paused')return '小克记忆已暂停 · 聊天优先';
+  if(activity.state==='summarizing')return '小克正在整理总结 · 聊天优先';
+  if(memory&&memory.state==='needs_review')return memory.limit_exceeded?'小克记忆内容超限，待处理 · 可继续聊天':'小克记忆待检查 · 可继续聊天';
+  if(memory&&memory.state==='paused_for_chat')return '小克记忆已暂停 · 聊天优先';
+  if(memory&&memory.state==='waiting_quota')return '小克记忆等待额度';
+  return '';
+ }
  function renderInline(value,unavailable){
   var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();
   if(typeof chatLayoutCompose==='function')requestAnimationFrame(function(){chatLayoutCompose({force:true})});
@@ -31,8 +43,12 @@
   if(five&&five.resets_at>Date.now()/1000)details.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
   if(!known)details.push('等待官方百分比');
   if(observations.length)details.push('观测 '+(observations.every(function(item){return item.time===observations[0].time})?observations[0].time:observations.map(function(item){return item.label+' '+item.time}).join(' / ')));
-  bar.replaceChildren(node('span','ck-sub-inline-summary',parts.join(' · ')));
-  if(details.length)bar.append(node('span','ck-sub-inline-detail',' · '+details.join(' · ')));
+  var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryText(value,unavailable);
+  quotaLine.append(node('span','ck-sub-inline-summary',parts.join(' · ')));
+  if(details.length)quotaLine.append(node('span','ck-sub-inline-detail',' · '+details.join(' · ')));
+  bar.replaceChildren();
+  if(memory)bar.append(node('span','ck-sub-inline-activity',memory));
+  bar.append(quotaLine);
   bar.dataset.level=q.level;
   bar.title=bar.textContent;
  }
@@ -75,7 +91,7 @@
   });
  }
  function close(){if(saving)return;generation++;if(controller)controller.abort();controller=null;dialog.classList.remove('show');dialog.setAttribute('aria-hidden','true');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();schedule()}
- function schedule(){clearTimeout(timer);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},opened()?15000:30000)}
+ function schedule(){clearTimeout(timer);var active=dataContext===context()&&memoryText(data,false);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
  function quotaCard(key,w,unavailable){
   var card=node('article','ck-sub-window'),ended=expired(w),pct=percent(w);
   card.append(node('span','ck-sub-window-label',labels[key]||'额度'));

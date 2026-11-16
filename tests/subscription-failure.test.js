@@ -27,6 +27,12 @@ test('old bridge account and gate text takes precedence over its synthetic 502',
   assert.equal(ctx.chatSubscriptionFailureInfo(Error('Upstream HTTP 502: '+text),cfg).code,code);
  }
 });
+test('memory handoff failure explains the occupied task and keeps a local retry action',()=>{
+ const info=ctx.chatSubscriptionFailureInfo({code:'subscription_memory_busy'},cfg);
+ assert.match(info.message,/小克正在记忆/);assert.match(info.message,/让路/);assert.equal(info.action,'retry');
+ assert.doesNotMatch(info.message,/另一条消息/);
+ assert.equal(ctx.chatSubscriptionFailureInfo(Error('小克正在记忆，正在保存进度并让路，请稍后发送。'),cfg).code,'subscription_memory_busy');
+});
 test('API route error behavior is unchanged',()=>{
  const error=Error('Upstream HTTP 401 POST https://api.vendor.invalid/v1/messages');
  assert.equal(ctx.chatSubscriptionFailureInfo(error,{chatApiSource:'provider'}),null);

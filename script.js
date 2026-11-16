@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v402-digest-cache-reliability';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v403-memory-chat-priority';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6602,13 +6602,15 @@ function chatSubscriptionFailureInfo(err,cfg){
     subscription_context:['对话超过上下文限制，请先整理历史。','请先整理对话历史','retry'],
     subscription_signature:['历史思考签名未被接受，请检查历史原生思考设置。','请检查历史思考设置','retry'],
     subscription_request:['本次请求的参数未被接受，请检查模型设置。','请检查模型设置','retry'],
-    subscription_busy:['订阅正在处理另一条消息，稍后可重试。','等待订阅空闲','retry']
+    subscription_busy:['订阅正在处理另一条消息，稍后可重试。','等待订阅空闲','retry'],
+    subscription_memory_busy:['小克正在记忆，正在保存进度并让路，请稍后发送。','小克记忆正在暂停','retry']
   };
   if(!Object.prototype.hasOwnProperty.call(entries,code)){
     var subscription=cfg&&cfg.chatApiSource==='claude_subscription'||err&&err.execution_backend==='claude_code_subscription'||
       /api\.anthropic\.com\/v1\/messages/.test(msg)&&/Claude Code/.test(msg);
     if(!subscription)return null;
     if(/固定.*(?:IP|出口)|出口.*(?:检查|验证)|egress_blocked/i.test(msg))code='subscription_egress';
+    else if(/小克正在记忆|后台整理正在收尾/.test(msg))code='subscription_memory_busy';
     else if(/正在处理其他消息|正在处理另一条消息/.test(msg))code='subscription_busy';
     else if(/(?:HTTP|status|API Error)\s*[:=]?\s*401\b|鉴权失败|登录.*(?:失效|过期|检查)|尚未登录|authentication|unauthorized/i.test(msg))code='subscription_auth';
     else if(/(?:HTTP|status|API Error)\s*[:=]?\s*403\b|订阅拒绝|官方未接受/i.test(msg))code='subscription_denied';
