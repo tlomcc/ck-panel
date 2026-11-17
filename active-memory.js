@@ -3,7 +3,7 @@ function ckActiveMemoryScope(cfg){return chatEndpoint(cfg)+'|'+cfg.panelKey}
 function ckActiveMemoryRender(){
   var data=ckActiveMemoryData,text=data?String(data.content||''):'',count=Array.from(text).length;
   var box=document.getElementById('ck-active-memory-content');if(box){if(box.value!==text)box.value=text;box.readOnly=true;box.disabled=!data}
-  var counter=document.getElementById('ck-active-memory-count');if(counter)counter.textContent=count+' / 5000 字';
+  var counter=document.getElementById('ck-active-memory-count');if(counter)counter.textContent=count+' 字';
   var lines=[];
   if(data){
     lines.push('仅小克可修改 · '+(data.enabled?'自主更新已开启':'自主更新已暂停')+' · 版本 '+data.revision);

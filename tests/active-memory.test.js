@@ -11,7 +11,7 @@ function setup(){
     setTimeout(fn,ms){const id=++seq;timers.set(id,{fn,ms});return id},clearTimeout:id=>timers.delete(id),
     fetch:async(url,options)=>{calls.push({url,options});throw Error('missing fixture')}};
   vm.createContext(c);vm.runInContext(source,c);
-  const data=(content='',revision=0,extra={})=>Object.assign({ok:true,content,revision,chars:Array.from(content).length,limit:5000,enabled:true,writable:true,stale:false,updated_at:0},extra);
+  const data=(content='',revision=0,extra={})=>Object.assign({ok:true,content,revision,chars:Array.from(content).length,limit:null,enabled:true,writable:true,stale:false,updated_at:0},extra);
   const response=(value,status=200)=>({ok:status>=200&&status<300,status,json:async()=>value});
   return {c,cfg,elements,calls,timers,data,response};
 }
@@ -21,7 +21,7 @@ test('saved memory is selectable but readonly and HTML is inert',async()=>{
   const box=elements.get('ck-active-memory-content');
   assert.equal(box.value,'我记得🙂 <img onerror=fixture>');
   assert.equal(box.readOnly,true);assert.equal(box.disabled,false);
-  assert.equal(elements.get('ck-active-memory-count').textContent,Array.from(box.value).length+' / 5000 字');
+  assert.equal(elements.get('ck-active-memory-count').textContent,Array.from(box.value).length+' 字');
   for(const name of ['save','merge','load']){assert.equal(elements.get('ck-active-memory-'+name).hidden,true);assert.equal(elements.get('ck-active-memory-'+name).disabled,true)}
 });
 test('manual save and forged save action make no network request',async()=>{
