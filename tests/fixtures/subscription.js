@@ -59,7 +59,8 @@
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-inline').textContent.includes('5h 13.8%')&&!$('ck-sub-inline').textContent.includes('待更新'),'one-minute age must not hide the last known balance');
  const olderTime=new Date((now-61)*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
- assert($('ck-sub-inline').textContent.includes('5h '+olderTime)&&$('ck-sub-windows').firstChild.textContent.includes('百分比观测：'+olderTime),'each window keeps its actual percentage observation time');
+ const olderDate=new Date((now-61)*1000),olderInline=olderDate.toDateString()===new Date().toDateString()?olderDate.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}):olderTime;
+ assert($('ck-sub-inline').textContent.includes('5h '+olderInline)&&$('ck-sub-windows').firstChild.textContent.includes('百分比观测：'+olderTime),'each window keeps its actual percentage observation time');
  assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='13.8%','one-minute-old card keeps its number');
  state.quota.windows[0].usage_observed_at=now;
  state.quota.windows[0].expired=true;
@@ -93,10 +94,10 @@
  state.activity={state:'idle',background_purpose:''};
  for(const [memory,label] of [[{state:'pending',active:true,completed_at:100},'小克记忆中'],[{state:'waiting_quota',active:true,completed_at:100},'小克记忆中 · 等待额度'],[{state:'paused_for_chat',active:true,completed_at:100},'小克记忆中 · 聊天优先']]){
   state.memory=memory;await reload();
-  assert($('ck-sub-inline').firstChild.textContent===label&&$('ck-sub-inline').firstChild.dataset.kind==='running','an existing memory task stays "记忆中": '+label);
+  assert($('ck-sub-inline').querySelector('.ck-sub-inline-activity').textContent===label&&$('ck-sub-inline').querySelector('.ck-sub-inline-activity').dataset.kind==='running','an existing memory task stays "记忆中": '+label);
  }
  state.memory={state:'idle',active:false,completed_at:200};await reload();
- assert($('ck-sub-inline').firstChild.textContent==='小克记忆完成'&&!inlineText().includes('未在记忆'),'finished memory is announced');
+ assert($('ck-sub-inline').querySelector('.ck-sub-inline-activity').textContent==='小克记忆完成'&&!inlineText().includes('未在记忆'),'finished memory is announced');
  await reload();assert(inlineText().includes('小克记忆完成'),'completion stays until the user sends a message');
  const input=$('chat-input'),switching=window.ckBackendSwitchBusy;
  window.ckBackendSwitchBusy=true;input.value='还没发出去';await window.chatSendMessage();await new Promise(r=>setTimeout(r,350));

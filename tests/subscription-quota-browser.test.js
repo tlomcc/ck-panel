@@ -11,6 +11,17 @@ const server=http.createServer((req,res)=>{
  if(name==='script.js')data=Buffer.from(data.toString().replace(/^init\(\);\s*$/m,''));
  res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.svg')?'image/svg+xml':name.endsWith('.png')?'image/png':'text/html');res.end(data);
 });
+// A piece of the one-row status is either fully visible or wrapped out of the fixed-height row, never cut.
+const pieces=el=>{const box=el.getBoundingClientRect();return {height:box.height,parts:[...el.querySelectorAll('.ck-sub-inline-activity,.ck-sub-inline-summary,.ck-sub-inline-detail')].map(n=>{const r=n.getBoundingClientRect();return {cls:n.className,text:n.textContent,whole:n.scrollWidth<=n.clientWidth+1&&r.left>=box.left-1&&r.right<=box.right+1&&r.bottom<=box.bottom+1,dropped:r.top>=box.bottom-1}})}};
+const assertPieces=(view,width,label)=>{
+ assert(view.height<=26,'status stays one row: '+label+' '+width);
+ for(const p of view.parts){
+  if(p.cls==='ck-sub-inline-summary')assert(p.whole,'both percentages stay whole: '+label+' '+width);
+  else if(p.cls==='ck-sub-inline-detail')assert(p.whole||p.dropped,'a detail is shown whole or not at all: '+label+' '+width+p.text);
+  else if(width>=390)assert(p.whole,'memory state stays whole: '+label+' '+width);
+ }
+ if(width>=390&&label==='quota'||width>=1280)assert(view.parts.every(p=>p.whole),'every piece is shown: '+label+' '+width);
+};
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const browser=await chromium.launch({args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -39,12 +50,14 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.evaluate(()=>document.getElementById('ck-sub-dialog').classList.contains('show')||document.activeElement===document.getElementById('ck-sub-inline')),false,'clicking the inline quota neither opens details nor takes focus');
   const inlineGeometry=await inline.evaluate(el=>({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,scroll:el.scrollWidth,client:el.clientWidth}));
   assert(inlineGeometry.left>=0&&inlineGeometry.right<=width&&inlineGeometry.scroll<=inlineGeometry.client+1,'inline quota fits the viewport');
+  assertPieces(await inline.evaluate(pieces),width,'quota');
   await page.locator('.chat-compose').screenshot({path:path.join(out,'quota-inline-'+width+'-'+dark+'.png')});
   const memoryViews=[];
   for(const mode of ['remembering','yielding','memory_paused','needs_review','unavailable']){
    memoryViews.push(await page.evaluate(mode=>window.__memoryPreview(mode),mode));
    const bounds=await inline.evaluate(el=>({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,scroll:el.scrollWidth,client:el.clientWidth}));
    assert(bounds.left>=0&&bounds.right<=width&&bounds.scroll<=bounds.client+1,'memory status fits the viewport');
+   assertPieces(await inline.evaluate(pieces),width,mode);
    await page.locator('.chat-compose').screenshot({path:path.join(out,'memory-'+width+'-'+dark+'-'+mode+'.png')});
   }
   assert.deepEqual(errors,[]);

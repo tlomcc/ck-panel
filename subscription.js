@@ -9,6 +9,7 @@
  function model(){return CKBackendRoute.current.subscriptionModel||'sonnet'}
  function context(){return CKBackendRoute.current.gateway+'\n'+model()+'\n'+(typeof storedPanelKey==='function'?storedPanelKey():'')}
  function timeText(value){return typeof value==='number'&&isFinite(value)?new Date(value*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'尚未提供'}
+ function inlineTime(value){var d=new Date(value*1000);return typeof value==='number'&&isFinite(value)&&d.toDateString()===new Date().toDateString()?d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}):timeText(value)}
  function percent(w){return w&&typeof w.used_percent==='number'&&isFinite(w.used_percent)&&w.used_percent>=0?Math.min(100,w.used_percent):null}
  function expired(w){return !!(w&&(w.expired||w.resets_at&&w.resets_at<=Date.now()/1000))}
  function observedAt(w){return w&&(typeof w.usage_observed_at==='number'&&isFinite(w.usage_observed_at)?w.usage_observed_at:w.updated_at)}
@@ -51,7 +52,7 @@
   q.windows.forEach(function(w){byKey[w.key]=w});
   [['five_hour','5h'],['seven_day','7天']].forEach(function(pair){
    var w=byKey[pair[0]],pct=percent(w);parts.push(pair[1]+' '+(pct===null?'—':(expired(w)?'上期 ':'')+remaining(pct)));
-   if(pct!==null){known=true;observations.push({label:pair[1],time:timeText(observedAt(w))})}
+   if(pct!==null){known=true;observations.push({label:pair[1],time:inlineTime(observedAt(w))})}
   });
   if(q.blocked)parts.push('已暂停');
   if(unavailable)details.push('连接中断，保留最近记录');
@@ -59,12 +60,12 @@
   if(five&&five.resets_at>Date.now()/1000)details.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
   if(!known)details.push('等待官方百分比');
   if(observations.length)details.push('观测 '+(observations.every(function(item){return item.time===observations[0].time})?observations[0].time:observations.map(function(item){return item.label+' '+item.time}).join(' / ')));
-  var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryView(value,unavailable);
-  quotaLine.append(node('span','ck-sub-inline-summary',parts.join(' · ')));
-  if(details.length)quotaLine.append(node('span','ck-sub-inline-detail',' · '+details.join(' · ')));
-  bar.replaceChildren();
-  if(memory.text){var chip=node('span','ck-sub-inline-activity',memory.text);chip.dataset.kind=memory.kind;bar.append(chip)}
-  bar.append(quotaLine);
+  var main=node('span','ck-sub-inline-main'),memory=memoryView(value,unavailable);
+  if(memory.text){var chip=node('span','ck-sub-inline-activity',memory.text);chip.dataset.kind=memory.kind;main.append(chip)}
+  main.append(node('span','ck-sub-inline-summary',parts.join(' · ')));
+  bar.replaceChildren(main);
+  // Memory state and both percentages always stay whole; each detail is its own piece so a narrow bar drops it entirely.
+  details.forEach(function(text){bar.append(node('span','ck-sub-inline-detail',' · '+text))});
   bar.dataset.level=q.level;
   bar.title=bar.textContent;
  }
