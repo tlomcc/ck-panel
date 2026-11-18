@@ -1,8 +1,8 @@
 #ck-sub-dialog{z-index:1210}
-.ck-sub-inline{display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;gap:8px 0;width:100%;min-width:0;height:calc(1.4em + 8px);overflow:hidden;padding:3px 2px 5px;border:0;background:transparent;color:var(--ck-muted,#71847d);font:inherit;font-size:11px;line-height:1.4;text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:default}
-/* One row: details that do not fit wrap below the fixed height whole, right to left, so no text is cut. */
-.ck-sub-inline-main{display:flex;flex:0 1 auto;align-items:baseline;gap:8px;min-width:0;max-width:100%}
-.ck-sub-inline-activity{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ck-text,#284f43)}
+.ck-sub-inline{display:flex;flex-direction:column;gap:1px;width:100%;min-width:0;padding:3px 2px 5px;border:0;background:transparent;color:var(--ck-muted,#71847d);font:inherit;font-size:11px;line-height:1.4;text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:default}
+/* Memory state has its own row. On the quota row, details that do not fit wrap below the fixed height whole, right to left, so no text is cut. */
+.ck-sub-inline-quota{display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;gap:8px 0;min-width:0;height:1.4em;overflow:hidden}
+.ck-sub-inline-activity{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ck-text,#284f43)}
 .ck-sub-inline-activity::before{content:'';display:inline-block;width:5px;height:5px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;opacity:.5}
 .ck-sub-inline-activity[data-kind=running]::before{opacity:1;animation:ck-sub-memory-pulse 1.4s ease-in-out infinite}
 .ck-sub-inline-activity[data-kind=done]{color:var(--ck-ui-jade,#357b70)}.ck-sub-inline-activity[data-kind=done]::before{opacity:1}

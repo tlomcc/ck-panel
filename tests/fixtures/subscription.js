@@ -59,8 +59,11 @@
  $('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled);
  assert($('ck-sub-inline').textContent.includes('5h 13.8%')&&!$('ck-sub-inline').textContent.includes('待更新'),'one-minute age must not hide the last known balance');
  const olderTime=new Date((now-61)*1000).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const olderDate=new Date((now-61)*1000),olderInline=olderDate.toDateString()===new Date().toDateString()?olderDate.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}):olderTime;
- assert($('ck-sub-inline').textContent.includes('5h '+olderInline)&&$('ck-sub-windows').firstChild.textContent.includes('百分比观测：'+olderTime),'each window keeps its actual percentage observation time');
+ const inlineAt=at=>{const d=new Date(at*1000);return d.toDateString()===new Date().toDateString()?d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}):d.toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})};
+ assert($('ck-sub-inline').textContent.includes('观测 '+inlineAt(now-61))&&!$('ck-sub-inline').textContent.includes(' / 7天 ')&&$('ck-sub-windows').firstChild.textContent.includes('百分比观测：'+olderTime),'windows read about a minute apart share the older time inline; each card keeps its own');
+ state.quota.windows[0].usage_observed_at=now-600;$('ck-sub-refresh').click();await wait(()=>$('ck-sub-inline').textContent.includes(' / 7天 ')&&!$('ck-sub-refresh').disabled);
+ assert($('ck-sub-inline').textContent.includes('观测 5h '+inlineAt(now-600)+' / 7天 '+inlineAt(now)),'windows read at different times keep their own observation time');
+ state.quota.windows[0].usage_observed_at=now-61;$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-inline').textContent.includes(' / 7天 ')&&!$('ck-sub-refresh').disabled);
  assert($('ck-sub-windows').firstChild.querySelector('strong').textContent==='13.8%','one-minute-old card keeps its number');
  state.quota.windows[0].usage_observed_at=now;
  state.quota.windows[0].expired=true;

@@ -11,16 +11,15 @@ const server=http.createServer((req,res)=>{
  if(name==='script.js')data=Buffer.from(data.toString().replace(/^init\(\);\s*$/m,''));
  res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.svg')?'image/svg+xml':name.endsWith('.png')?'image/png':'text/html');res.end(data);
 });
-// A piece of the one-row status is either fully visible or wrapped out of the fixed-height row, never cut.
-const pieces=el=>{const box=el.getBoundingClientRect();return {height:box.height,parts:[...el.querySelectorAll('.ck-sub-inline-activity,.ck-sub-inline-summary,.ck-sub-inline-detail')].map(n=>{const r=n.getBoundingClientRect();return {cls:n.className,text:n.textContent,whole:n.scrollWidth<=n.clientWidth+1&&r.left>=box.left-1&&r.right<=box.right+1&&r.bottom<=box.bottom+1,dropped:r.top>=box.bottom-1}})}};
+// A piece of the status is either fully visible or wrapped out of its fixed-height row, never cut.
+const pieces=el=>{const box=el.getBoundingClientRect(),row=(el.querySelector('.ck-sub-inline-quota')||el).getBoundingClientRect();return {height:box.height,parts:[...el.querySelectorAll('.ck-sub-inline-activity,.ck-sub-inline-summary,.ck-sub-inline-detail')].map(n=>{const r=n.getBoundingClientRect(),own=n.className==='ck-sub-inline-activity'?box:row;return {cls:n.className,text:n.textContent,top:r.top,bottom:r.bottom,whole:n.scrollWidth<=n.clientWidth+1&&r.left>=box.left-1&&r.right<=box.right+1&&r.bottom<=own.bottom+1,dropped:r.top>=row.bottom-1}})}};
 const assertPieces=(view,width,label)=>{
- assert(view.height<=26,'status stays one row: '+label+' '+width);
- for(const p of view.parts){
-  if(p.cls==='ck-sub-inline-summary')assert(p.whole,'both percentages stay whole: '+label+' '+width);
-  else if(p.cls==='ck-sub-inline-detail')assert(p.whole||p.dropped,'a detail is shown whole or not at all: '+label+' '+width+p.text);
-  else if(width>=390)assert(p.whole,'memory state stays whole: '+label+' '+width);
- }
- if(width>=390&&label==='quota'||width>=1280)assert(view.parts.every(p=>p.whole),'every piece is shown: '+label+' '+width);
+ const memory=view.parts.find(p=>p.cls==='ck-sub-inline-activity'),summary=view.parts.find(p=>p.cls==='ck-sub-inline-summary');
+ assert(view.height<=(memory?42:26),'quota is one row and memory adds one row: '+label+' '+width);
+ assert(summary.whole,'both percentages stay whole: '+label+' '+width);
+ if(memory)assert(memory.whole&&memory.bottom<=summary.top+1,'memory state is whole on its own row above quota: '+label+' '+width);
+ for(const p of view.parts)if(p.cls==='ck-sub-inline-detail')assert(p.whole||p.dropped,'a detail is shown whole or not at all: '+label+' '+width+p.text);
+ if(width>=390&&label!=='unavailable')assert(view.parts.every(p=>p.whole),'every piece is shown: '+label+' '+width);
 };
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
