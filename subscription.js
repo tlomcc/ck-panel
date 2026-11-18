@@ -15,7 +15,7 @@
  function remaining(pct){return Number((100-pct).toFixed(1))+'%'}
  function memoryText(value,unavailable){
   var activity=value&&value.activity||{},memory=value&&value.memory;
-  if(unavailable)return activity.background_purpose==='memory'||memory&&memory.state!=='idle'?'小克记忆状态暂不可用':'';
+  if(unavailable)return '小克记忆状态暂不可用';
   if(activity.state==='remembering')return '小克正在记忆 · 发消息会暂停记忆';
   if(activity.state==='yielding')return activity.background_purpose==='memory'?'小克记忆正在暂停 · 正在让路':'小克后台整理正在暂停 · 正在让路';
   if(activity.state==='memory_paused')return '小克记忆已暂停 · 聊天优先';
@@ -23,7 +23,9 @@
   if(memory&&memory.state==='needs_review')return memory.limit_exceeded?'小克记忆内容超限，待处理 · 可继续聊天':'小克记忆待检查 · 可继续聊天';
   if(memory&&memory.state==='paused_for_chat')return '小克记忆已暂停 · 聊天优先';
   if(memory&&memory.state==='waiting_quota')return '小克记忆等待额度';
-  return '';
+  if(memory&&memory.state==='pending')return '小克记忆等待检查';
+  if(memory&&memory.state==='idle'&&['idle','chatting','waking','background_paused'].indexOf(activity.state)!==-1)return '小克当前未在记忆';
+  return memory?'小克记忆状态暂不可用':'';
  }
  function renderInline(value,unavailable){
   var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();
@@ -91,7 +93,7 @@
   });
  }
  function close(){if(saving)return;generation++;if(controller)controller.abort();controller=null;dialog.classList.remove('show');dialog.setAttribute('aria-hidden','true');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();schedule()}
- function schedule(){clearTimeout(timer);var active=dataContext===context()&&memoryText(data,false);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
+ function schedule(){clearTimeout(timer);var activity=data&&data.activity||{},memory=data&&data.memory||{},active=dataContext===context()&&(['remembering','yielding','memory_paused','summarizing'].indexOf(activity.state)!==-1||['needs_review','paused_for_chat','waiting_quota'].indexOf(memory.state)!==-1);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
  function quotaCard(key,w,unavailable){
   var card=node('article','ck-sub-window'),ended=expired(w),pct=percent(w);
   card.append(node('span','ck-sub-window-label',labels[key]||'额度'));
