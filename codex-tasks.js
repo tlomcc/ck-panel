@@ -570,6 +570,45 @@
     if(item.kind==='request')el.append(button('前往回复',function(){focusQuestion(item.id);},'cx-reply-jump'));
     return el;
   }
+  function tableCells(line){
+    return line.trim().replace(/\x00/g,'').replace(/\\\|/g,'\x00').replace(/^\|/,'').replace(/\|$/,'').split('|').map(function(c){return c.replace(/\x00/g,'|').trim();});
+  }
+  function tableAligns(line){
+    if(line.indexOf('|')<0)return null;
+    var cells=tableCells(line);
+    return cells.every(function(c){return /^:?-+:?$/.test(c);})?cells.map(function(c){return c.slice(-1)!==':'?'':c[0]===':'?'center':'right';}):null;
+  }
+  function tableRow(tag,cells,aligns){
+    var tr=node('tr');
+    aligns.forEach(function(align,n){var cell=node(tag,'',cells[n]||'');if(align)cell.style.textAlign=align;tr.append(cell);});
+    return tr;
+  }
+  // Pipe tables become real tables; everything else stays as written.
+  function appendText(el,lines){
+    var start=0,fence='',afterTable=false;
+    function text(end,beforeTable){
+      var chunk=lines.slice(start,end);
+      // The table carries its own spacing, so blank lines next to it are dropped.
+      if(afterTable)while(chunk.length&&!chunk[0].trim())chunk.shift();
+      if(beforeTable)while(chunk.length&&!chunk[chunk.length-1].trim())chunk.pop();
+      if(chunk.length)el.append(node('div','cx-text',chunk.join('\n')));
+      afterTable=false;
+    }
+    for(var i=0;i<lines.length;i++){
+      var marker=/^\s{0,3}(`{3,}|~{3,})/.exec(lines[i]);
+      if(marker){if(!fence)fence=marker[1][0];else if(marker[1][0]===fence)fence='';continue;}
+      if(fence||lines[i].indexOf('|')<0||i+1>=lines.length)continue;
+      var aligns=tableAligns(lines[i+1]),header=tableCells(lines[i]);
+      if(!aligns||aligns.length!==header.length)continue;
+      text(i,true);
+      var wrap=node('div','cx-table-wrap'),table=node('table','cx-table'),head=node('thead'),body=node('tbody'),end=i+2;
+      head.append(tableRow('th',header,aligns));
+      while(end<lines.length&&lines[end].trim()&&lines[end].indexOf('|')>=0){body.append(tableRow('td',tableCells(lines[end]),aligns));end++;}
+      table.append(head,body);wrap.append(table);el.append(wrap);
+      start=end;afterTable=true;i=end-1;
+    }
+    text(lines.length,false);
+  }
   function appendAssistantText(el,text){
     var lines=text.split('\n'),start=0,fence='';
     var option=/^\s{0,3}(?:[-*+•]|\d+[.)、]|[A-Da-d][.)、]|[（(]\d+[）)])\s+(.+)$/;
@@ -587,13 +626,13 @@
         break;
       }
       if(options.length<2)continue;
-      if(i>start)el.append(node('div','cx-text',lines.slice(start,i).join('\n')));
+      if(i>start)appendText(el,lines.slice(start,i));
       var box=node('section','cx-text-question');box.tabIndex=-1;box.setAttribute('aria-label',engineName()+' 提问');
       box.append(node('strong','cx-text-question-label',engineName()+' 提问'),node('div','cx-text',lines[i]));
       options.forEach(function(text){var row=node('div','cx-choice-row');row.append(node('span','cx-option-text',text),copyButton(text,'复制选项：'+text));box.append(row);});
       el.append(box);el.classList.add('cx-item-text-question');start=end;i=end-1;
     }
-    if(start<lines.length)el.append(node('div','cx-text',lines.slice(start).join('\n')));
+    if(start<lines.length)appendText(el,lines.slice(start));
   }
   function questionItems(){return Array.from($('feed').querySelectorAll('.cx-item-question,.cx-item-text-question')).map(function(el){return items.get(el.dataset.itemId);}).filter(Boolean);}
   function userMessages(){return Array.from($('feed').querySelectorAll('.cx-item-userMessage'));}

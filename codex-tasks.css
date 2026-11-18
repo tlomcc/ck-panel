@@ -175,3 +175,10 @@ body.dark .cx-task-notices .cx-task-notice[data-tone=error],html.dark .cx-task-n
   .cx-head .btn{min-height:34px}
   .cx-head .cx-notice-tools .btn{min-height:32px}
 }
+.cx-table-wrap{max-width:100%;margin:8px 0;overflow-x:auto;border:1px solid var(--ck-line);border-radius:8px}
+.cx-table{width:100%;border-collapse:collapse;font-size:14px;line-height:1.6}
+.cx-table th,.cx-table td{min-width:5em;padding:7px 12px;border:solid var(--ck-line-soft);border-width:0 1px 1px 0;text-align:left;vertical-align:top}
+.cx-table th{background:var(--ck-surface-soft);font-weight:600}
+.cx-table th:last-child,.cx-table td:last-child{border-right-width:0}
+.cx-table tbody tr:last-child td{border-bottom-width:0}
+@media(max-width:640px){.cx-table{font-size:13px}.cx-table th,.cx-table td{padding:6px 9px}}
