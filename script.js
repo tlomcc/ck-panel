@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v412-codex-redesign';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v413-context-notice';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2256,6 +2256,14 @@ function chatUsageInputBillable(usage){
   if(looksOpenAi&&total>0)return Math.max(0,total-chatUsageCacheRead(usage)-chatUsageCacheCreate(usage));
   return input;
 }
+function chatUsageContextInput(done){
+  // 上下文大小只认最后一次上游请求的输入总量；done.usage 是多轮工具调用的累加值，
+  // 轮次多于一次又没有 last_usage 时宁可不报。
+  if(!done||typeof done!=='object')return 0;
+  var last=chatUsageInputTotal(done.last_usage||{});
+  if(last>0)return last;
+  return Number(done.upstream_rounds)===1?chatUsageInputTotal(done.usage||{}):0;
+}
 function chatUsageFlag(usage,key){
   var keys=Array.isArray(key)?key:[key];
   for(var i=0;i<keys.length;i++){
@@ -2479,6 +2487,9 @@ function chatAttachAssistantCost(msg,usage){
     msg.tkRead=cost.read;
     msg.tkCreate=cost.create;
   }
+  // 订阅每条消息都重读整段历史，这一项留给底部的上下文过长提醒。
+  var context=chatUsageNumber(usage,'context_input_tokens');
+  if(cost.status==='subscription'&&context>0)msg.tkCtx=context;
   return msg;
 }
 function chatAssistantCostLabel(msg){
@@ -7204,6 +7215,7 @@ async function chatDeleteSession(id,event){
   chatRenderMessages();
   chatRenderDailyDigest(cfg);
   chatUpdateRuntime(cfg);
+  if(typeof ckRefreshSubscription==='function')ckRefreshSubscription();
   var message=handoff?(handoff.groups?'已汇入「小克」的当日总结，原窗口已删除':'没有尚未总结的内容，原窗口已删除'):'对话已删除';
   chatSetStatus(message);toast(message);
   }catch(error){
@@ -7226,6 +7238,7 @@ function chatSelectSession(id){
   chatUpdateRuntime(cfg);
   chatSetStatus('已切换对话');
   chatToggleSessions(false,true);
+  if(typeof ckRefreshSubscription==='function')ckRefreshSubscription();
 }
 function chatLoadLocalMessages(){
   chatLoadSessions();
@@ -10652,6 +10665,7 @@ async function chatNewSession(){
   chatUpdateRuntime(cfg);
   chatSetStatus();
   toast('已创建新会话');
+  if(typeof ckRefreshSubscription==='function')ckRefreshSubscription();
   }finally{chatNewSessionPending=false}
 }
 async function chatRenameCurrent(){
@@ -11520,7 +11534,7 @@ async function chatSubmitPendingMessages(options){
             chatUpdateRuntime(cfg,data||{});
             userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data||{},null)});
           }
-          if(ev==='done'&&data&&data.usage)requestUsage=data.usage;
+          if(ev==='done'&&data&&data.usage){requestUsage=data.usage;chatUsagePayload(requestUsage).context_input_tokens=chatUsageContextInput(data);}
           if(ev==='done'){streamFinalMetadata=true;if(!streamMetadataReceivedAt)streamMetadataReceivedAt=Date.now();streamForceText=true;scheduleStreamRender();}
           if(ev==='done'&&data&&data.usage)chatUpdateRuntime(cfg,data.usage);
           if(ev==='done'&&data&&data.usage)userMessageIndexes.forEach(function(idx){chatApplyCacheTick(idx,data.usage,null)});

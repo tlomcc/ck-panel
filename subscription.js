@@ -38,6 +38,18 @@
   if(changed)saveNotice(n);
   return n.done?{text:'小克记忆完成',kind:'done'}:{text:'',kind:''};
  }
+ var CONTEXT_WARN=150000,CONTEXT_HIGH=190000;
+ function contextView(){
+  // Prompt size of the latest reply in this window; script.js stores it only for subscription replies.
+  var list=typeof chatMessages==='object'&&Array.isArray(chatMessages)?chatMessages:[];
+  for(var i=list.length-1;i>=0;i--){
+   var m=list[i];if(!m||m.role!=='assistant'||!m.apiCostStatus)continue;
+   var size=m.apiCostStatus==='subscription'?Number(m.tkCtx):0;
+   if(!(size>=CONTEXT_WARN))return null;
+   return {text:'上下文 '+Number((size/10000).toFixed(1))+' 万',hint:size>=CONTEXT_HIGH?'，接近上限':'，建议整理',level:size>=CONTEXT_HIGH?'high':'warn'};
+  }
+  return null;
+ }
  function acknowledgeMemory(){
   var n=notice();if(!n.done)return;
   n.done=false;saveNotice(n);if(selected())renderInline(dataContext===context()?data:null,lastUnavailable);
@@ -65,8 +77,10 @@
    var together=isFinite(oldest)&&Math.max.apply(null,ats)-oldest<=120||times.every(function(time){return time===times[0]});
    details.push('观测 '+(together?inlineTime(isFinite(oldest)?oldest:ats[0]):observations.map(function(item,i){return item.label+' '+times[i]}).join(' / ')));
   }
-  var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryView(value,unavailable);
+  var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryView(value,unavailable),size=contextView();
   quotaLine.append(node('span','ck-sub-inline-summary',parts.join(' · ')));
+  // The context reminder sits before the details, so a narrow bar drops those first; its advice is a piece of its own.
+  if(size)[' · '+size.text,size.hint].forEach(function(text,i){var tip=node('span','ck-sub-inline-context'+(i?' ck-sub-inline-context-hint':''),text);tip.dataset.level=size.level;quotaLine.append(tip)});
   // Both percentages always stay whole; each detail is its own piece so a narrow bar drops it entirely.
   details.forEach(function(text){quotaLine.append(node('span','ck-sub-inline-detail',' · '+text))});
   bar.replaceChildren();
