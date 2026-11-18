@@ -13,22 +13,36 @@
  function expired(w){return !!(w&&(w.expired||w.resets_at&&w.resets_at<=Date.now()/1000))}
  function observedAt(w){return w&&(typeof w.usage_observed_at==='number'&&isFinite(w.usage_observed_at)?w.usage_observed_at:w.updated_at)}
  function remaining(pct){return Number((100-pct).toFixed(1))+'%'}
- function memoryText(value,unavailable){
-  var activity=value&&value.activity||{},memory=value&&value.memory;
-  if(unavailable)return '小克记忆状态暂不可用';
-  if(activity.state==='remembering')return '小克正在记忆 · 发消息会暂停记忆';
-  if(activity.state==='yielding')return activity.background_purpose==='memory'?'小克记忆正在暂停 · 正在让路':'小克后台整理正在暂停 · 正在让路';
-  if(activity.state==='memory_paused')return '小克记忆已暂停 · 聊天优先';
-  if(activity.state==='summarizing')return '小克正在整理总结 · 聊天优先';
-  if(memory&&memory.state==='needs_review')return memory.limit_exceeded?'小克记忆内容超限，待处理 · 可继续聊天':'小克记忆待检查 · 可继续聊天';
-  if(memory&&memory.state==='paused_for_chat')return '小克记忆已暂停 · 聊天优先';
-  if(memory&&memory.state==='waiting_quota')return '小克记忆等待额度';
-  if(memory&&memory.state==='pending')return '小克记忆等待检查';
-  if(memory&&memory.state==='idle'&&['idle','chatting','waking','background_paused'].indexOf(activity.state)!==-1)return '小克当前未在记忆';
-  return memory?'小克记忆状态暂不可用':'';
+ var NOTICE_KEY='ck-memory-notice-v1',lastUnavailable=false;
+ function notice(){try{var v=JSON.parse(localStorage.getItem(NOTICE_KEY));return v&&typeof v==='object'?v:{}}catch(e){return {}}}
+ function saveNotice(v){try{localStorage.setItem(NOTICE_KEY,JSON.stringify(v))}catch(e){}}
+ function memoryView(value,unavailable){
+  var activity=value&&value.activity||{},memory=value&&value.memory,n=notice();
+  if(unavailable)return {text:'小克记忆状态暂不可用',kind:'unknown'};
+  if(memory&&memory.state==='needs_review')return {text:memory.limit_exceeded?'小克记忆内容超限，待处理 · 可继续聊天':'小克记忆待检查 · 可继续聊天',kind:'review'};
+  var own=activity.state==='remembering'||activity.state==='memory_paused'||activity.state==='yielding'&&activity.background_purpose==='memory';
+  if(own||memory&&(memory.active===true||memory.state==='paused_for_chat'||memory.state==='waiting_quota')){
+   // One steady label from the first claim to the saved result; pauses only add a short reason.
+   if(!n.running||n.done){n.running=true;n.done=false;saveNotice(n)}
+   var note=activity.state==='remembering'?'':activity.state==='yielding'||activity.state==='memory_paused'||memory&&memory.state==='paused_for_chat'?' · 聊天优先':memory&&memory.state==='waiting_quota'?' · 等待额度':'';
+   return {text:'小克记忆中'+note,kind:'running'};
+  }
+  if(activity.state==='yielding')return {text:'小克后台整理让路中',kind:'other'};
+  if(activity.state==='summarizing')return {text:'小克整理总结中 · 聊天优先',kind:'other'};
+  if(!memory)return {text:'',kind:''};
+  if(memory.state!=='idle'&&memory.state!=='pending')return {text:'小克记忆状态暂不可用',kind:'unknown'};
+  var completed=typeof memory.completed_at==='number'&&isFinite(memory.completed_at)?memory.completed_at:null,changed=false;
+  if(n.running){n.running=false;n.done=true;changed=true}
+  if(completed!==null&&completed!==n.seen){if(typeof n.seen==='number'&&completed>n.seen)n.done=true;n.seen=completed;changed=true}
+  if(changed)saveNotice(n);
+  return n.done?{text:'小克记忆完成',kind:'done'}:{text:'',kind:''};
+ }
+ function acknowledgeMemory(){
+  var n=notice();if(!n.done)return;
+  n.done=false;saveNotice(n);if(selected())renderInline(dataContext===context()?data:null,lastUnavailable);
  }
  function renderInline(value,unavailable){
-  var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();
+  var bar=$('ck-sub-inline');if(!bar)return;bar.hidden=!selected();lastUnavailable=!!unavailable;
   if(typeof chatLayoutCompose==='function')requestAnimationFrame(function(){chatLayoutCompose({force:true})});
   if(bar.hidden)return;
   var q=value&&value.quota,auth=value&&value.auth;
@@ -45,11 +59,11 @@
   if(five&&five.resets_at>Date.now()/1000)details.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
   if(!known)details.push('等待官方百分比');
   if(observations.length)details.push('观测 '+(observations.every(function(item){return item.time===observations[0].time})?observations[0].time:observations.map(function(item){return item.label+' '+item.time}).join(' / ')));
-  var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryText(value,unavailable);
+  var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryView(value,unavailable);
   quotaLine.append(node('span','ck-sub-inline-summary',parts.join(' · ')));
   if(details.length)quotaLine.append(node('span','ck-sub-inline-detail',' · '+details.join(' · ')));
   bar.replaceChildren();
-  if(memory)bar.append(node('span','ck-sub-inline-activity',memory));
+  if(memory.text){var chip=node('span','ck-sub-inline-activity',memory.text);chip.dataset.kind=memory.kind;bar.append(chip)}
   bar.append(quotaLine);
   bar.dataset.level=q.level;
   bar.title=bar.textContent;
@@ -93,7 +107,7 @@
   });
  }
  function close(){if(saving)return;generation++;if(controller)controller.abort();controller=null;dialog.classList.remove('show');dialog.setAttribute('aria-hidden','true');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();schedule()}
- function schedule(){clearTimeout(timer);var activity=data&&data.activity||{},memory=data&&data.memory||{},active=dataContext===context()&&(['remembering','yielding','memory_paused','summarizing'].indexOf(activity.state)!==-1||['needs_review','paused_for_chat','waiting_quota'].indexOf(memory.state)!==-1);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
+ function schedule(){clearTimeout(timer);var activity=data&&data.activity||{},memory=data&&data.memory||{},active=dataContext===context()&&(['remembering','yielding','memory_paused','summarizing'].indexOf(activity.state)!==-1||['needs_review','paused_for_chat','waiting_quota'].indexOf(memory.state)!==-1||memory.active===true);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
  function quotaCard(key,w,unavailable){
   var card=node('article','ck-sub-window'),ended=expired(w),pct=percent(w);
   card.append(node('span','ck-sub-window-label',labels[key]||'额度'));
@@ -177,5 +191,18 @@
  window.ckOpenSubscription=function(){make();previousFocus=document.activeElement;dialog.classList.add('show');dialog.setAttribute('aria-hidden','false');$('ck-sub-close').focus();refresh(false)};
  window.ckRefreshSubscription=function(){if(selected()&&!document.hidden){clearTimeout(roundTimer);roundTimer=setTimeout(function(){refresh(false)},800)}};
  document.addEventListener('visibilitychange',function(){if(document.hidden){clearTimeout(timer);clearTimeout(roundTimer);if(!saving){generation++;if(controller)controller.abort()}}else if(opened()||selected())refresh(false)});
- document.addEventListener('DOMContentLoaded',function(){renderInline(null,false);if(selected())refresh(false);else schedule()});
+ function watchSend(){
+  // script.js loads after this file, so wrap its send entry once the page is parsed.
+  var sendMessage=window.chatSendMessage;if(typeof sendMessage!=='function')return;
+  window.chatSendMessage=function(){
+   // The completion notice ends with the first message that actually leaves the input.
+   var input=$('chat-input'),before=input?input.value:'',result=sendMessage.apply(this,arguments);
+   if(before.trim()){
+    var check=function(){if(input.value!==before)acknowledgeMemory()};
+    check();[0,300,1500].forEach(function(ms){setTimeout(check,ms)});Promise.resolve(result).then(check,check);
+   }
+   return result;
+  };
+ }
+ document.addEventListener('DOMContentLoaded',function(){watchSend();renderInline(null,false);if(selected())refresh(false);else schedule()});
 })();

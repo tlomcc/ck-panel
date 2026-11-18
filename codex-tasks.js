@@ -467,18 +467,21 @@
       if(Number.isFinite(data.attempt))meta.push('第 '+data.attempt+(data.max_retries?' / '+data.max_retries:'')+' 次重试');
       if(data.retry_in_seconds>0)meta.push('约 '+data.retry_in_seconds+' 秒后再试');
     }
-    if(Number.isFinite(data.elapsed_seconds))meta.push('本轮已用时 '+elapsedText(data.elapsed_seconds));
+    if(Number.isFinite(data.elapsed_seconds))meta.push('已用 '+elapsedText(data.elapsed_seconds));
     var tools=report?Array.from(items.values()).filter(function(item){return claudeTool(item)&&item.created>=report.created;}):[];
     var recent=tools.reduce(function(last,item){return !last||Number(item.seq)>Number(last.seq)?item:last;},null);
-    var detail=recent?'最近工具回传：'+toolLabel(recent)+' · '+toolState(recent):report?report.text.split('\n')[0]:'尚未收到本轮工具记录';
-    if(stale)detail='正在核对连接；以下为上次收到的记录。 '+detail;
+    var detail=recent?toolLabel(recent)+' · '+toolState(recent):report?report.text.split('\n')[0]:'尚未收到工具记录';
+    if(stale)detail='正在核对连接，上次记录：'+detail;
     var signature=JSON.stringify([heading,meta,detail,w.updated]);if(box.dataset.signature===signature)return;
     box.dataset.signature=signature;box.dataset.state=stale?'stale':state||w.status;
-    var head=node('header','cx-live-progress-head');head.append(node('strong','',heading));
-    if(w.updated)head.append(node('time','','状态回传 '+new Date(w.updated*1000).toLocaleTimeString('zh-CN',{hour12:false})));
-    box.replaceChildren(head);
-    if(meta.length)box.append(node('p','cx-live-progress-meta',meta.join(' · ')));
-    box.append(node('p','cx-live-progress-detail',detail));
+    // One line by default; tapping it shows the full text.
+    box.replaceChildren(node('strong','',heading));
+    if(meta.length)box.append(node('span','cx-live-progress-meta',meta.join(' · ')));
+    box.append(node('span','cx-live-progress-detail',detail));
+    var at=w.updated?new Date(w.updated*1000).toLocaleTimeString('zh-CN',{hour12:false}):'';
+    if(at)box.append(node('time','',at));
+    box.title=(at?'状态回传 '+at+' · ':'')+'点按展开或收起';
+    if(!box.dataset.bound){box.dataset.bound='1';box.addEventListener('click',function(){box.classList.toggle('expanded');});}
   }
   function renderWindows(){
     renderTaskNotices();

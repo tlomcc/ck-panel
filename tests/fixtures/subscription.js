@@ -79,7 +79,7 @@
  assert($('ck-sub-windows').lastChild.querySelector('strong').textContent==='2%','stale rejected window keeps the official percentage with its rejection');
  assert($('ck-sub-updated').textContent.includes('最近状态事件'),'status timestamp distinguished from percentage');
  const sendDisabled=$('chat-send-btn').disabled;
- for(const [kind,label] of [['remembering','小克正在记忆'],['yielding','正在让路'],['memory_paused','聊天优先']]){
+ for(const [kind,label] of [['remembering','小克记忆中'],['yielding','小克记忆中 · 聊天优先'],['memory_paused','小克记忆中 · 聊天优先']]){
   state.activity={state:kind,background_purpose:'memory',chat_priority:true};
   $('ck-sub-refresh').click();await wait(()=>$('ck-sub-inline').textContent.includes(label)&&!$('ck-sub-refresh').disabled);
   assert($('ck-sub-inline').textContent.includes('5h 13.8%'),'memory state keeps official quota visible');
@@ -88,6 +88,25 @@
  state.activity={state:'idle',background_purpose:''};state.memory={state:'needs_review',limit_exceeded:true};
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-inline').textContent.includes('记忆内容超限')&&!$('ck-sub-refresh').disabled);
  assert($('ck-sub-inline').textContent.includes('可继续聊天'),'failed memory has an explicit independent wait state');
+ // One steady label for the whole task, then a completion notice until the next sent message.
+ const inlineText=()=>$('ck-sub-inline').textContent,reload=async()=>{$('ck-sub-refresh').click();await wait(()=>!$('ck-sub-refresh').disabled)};
+ state.activity={state:'idle',background_purpose:''};
+ for(const [memory,label] of [[{state:'pending',active:true,completed_at:100},'小克记忆中'],[{state:'waiting_quota',active:true,completed_at:100},'小克记忆中 · 等待额度'],[{state:'paused_for_chat',active:true,completed_at:100},'小克记忆中 · 聊天优先']]){
+  state.memory=memory;await reload();
+  assert($('ck-sub-inline').firstChild.textContent===label&&$('ck-sub-inline').firstChild.dataset.kind==='running','an existing memory task stays "记忆中": '+label);
+ }
+ state.memory={state:'idle',active:false,completed_at:200};await reload();
+ assert($('ck-sub-inline').firstChild.textContent==='小克记忆完成'&&!inlineText().includes('未在记忆'),'finished memory is announced');
+ await reload();assert(inlineText().includes('小克记忆完成'),'completion stays until the user sends a message');
+ const input=$('chat-input'),switching=window.ckBackendSwitchBusy;
+ window.ckBackendSwitchBusy=true;input.value='还没发出去';await window.chatSendMessage();await new Promise(r=>setTimeout(r,350));
+ assert(inlineText().includes('小克记忆完成'),'a message that did not leave the input keeps the notice');
+ window.chatSendMessage();input.value='';await wait(()=>!inlineText().includes('记忆'));
+ await reload();assert(!inlineText().includes('记忆')&&inlineText().includes('Claude 剩余'),'after the first sent message only quota remains');
+ state.memory={state:'idle',active:false,completed_at:300};await reload();
+ assert(inlineText().includes('小克记忆完成'),'a memory finished while the panel was not watching is still announced');
+ input.value='x';window.chatSendMessage.call(window,undefined);input.value='';await wait(()=>!inlineText().includes('记忆'));
+ window.ckBackendSwitchBusy=switching;
  delete state.activity;delete state.memory;
  state.quota.windows[0].expired=false;state.quota.blocked=true;state.quota.level='paused';state.quota.reason='<img src=x onerror="window.pwned=true">';
  $('ck-sub-refresh').click();await wait(()=>$('ck-sub-state').textContent.includes('暂停'));
@@ -156,7 +175,7 @@
   const text=$('ck-sub-inline').textContent;
   assert(text.includes('小克')&&text.includes('5h 16%'),'memory status and quota are both visible');
   assert(!$('chat-send-btn').disabled,'normal send remains available');
-  if(mode==='unavailable')assert(text.includes('状态暂不可用')&&!text.includes('正在记忆'),'lost connection does not show stale processing as live');
+  if(mode==='unavailable')assert(text.includes('状态暂不可用')&&!text.includes('记忆中'),'lost connection does not show stale processing as live');
   return {mode,text};
  };
  return {calls:calls.length,policySaved:true,remaining:true,replyRefresh:true,accountRace:true,unknown:true,expired:true,escaped:true,closeRace:true,lastKnown:true,failedRefreshRetained:true,minuteOldRetained:true,percentageTimes:true,boundaries:true,memoryStates:true,geometry:dims()};
