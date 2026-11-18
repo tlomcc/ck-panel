@@ -21,8 +21,8 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
     if(delayNext){delayNext=false;await new Promise(r=>setTimeout(r,800));}
     if(dropNext){dropNext=false;return route.abort('failed');}
     result={accepted:true};
-   }else if(url.pathname.endsWith('/threads'))result={windows};
-   else result={window:windows.find(w=>w.id===wid),items:[],cursor:0,schedules:scheduled.filter(s=>s.window_id===wid)};
+   }else if(url.pathname.endsWith('/threads'))result={windows:windows.map(w=>({seq:0,...w}))};
+   else result={window:{seq:0,...windows.find(w=>w.id===wid)},items:[],cursor:0,schedules:scheduled.filter(s=>s.window_id===wid)};
    await route.fulfill({json:result});
   });
   let page=await context.newPage();let errors=[];const observe=p=>p.on('pageerror',e=>errors.push(e.message));observe(page);
@@ -40,11 +40,11 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert.equal(posts.at(-1).action,'schedule');assert.equal(posts.at(-1).scheduled_for,Date.parse('2090-06-15T13:45:00+08:00')/1000);const firstId=posts.at(-1).request_id;
   assert((await page.locator('#cx-input').inputValue()).includes('窗口一草稿'));
   await page.reload();await ready();await page.locator('#cx-send').click();await page.waitForFunction(()=>document.getElementById('cx-input').value==='');assert.equal(posts.at(-1).request_id,firstId);assert.equal(scheduled.length,1);
-  await page.locator('.cx-scheduled summary').click();assert((await page.locator('#cx-schedules').innerText()).includes('2090/06/15 13:45'));await page.getByRole('button',{name:'取消定时任务',exact:true}).click();await page.waitForFunction(()=>document.getElementById('cx-input').value==='窗口一草稿\n保留换行与空格');
+  await page.locator('.cx-schedules-summary').click();await page.locator('.cx-scheduled summary').click();assert((await page.locator('#cx-schedules').innerText()).includes('2090/06/15 13:45'));await page.getByRole('button',{name:'取消定时任务',exact:true}).click();await page.waitForFunction(()=>document.getElementById('cx-input').value==='窗口一草稿\n保留换行与空格');
   assert(await page.locator('#cx-schedules').isHidden());assert.equal(await page.locator('#cx-schedule-time').inputValue(),'');
   await page.reload();await ready();assert.equal(await page.locator('#cx-input').inputValue(),'窗口一草稿\n保留换行与空格');assert(await page.locator('#cx-schedules').isHidden());
   const addSchedule=async(text,time='2092-03-04T05:06')=>{await page.locator('#cx-input').fill(text);await setTime(time);await page.locator('#cx-send').click();await page.waitForFunction(()=>document.getElementById('cx-input').value===''&&!document.getElementById('cx-send').disabled);};
-  const cancelFirst=async()=>{await page.locator('.cx-scheduled summary').first().click();await page.getByRole('button',{name:'取消定时任务',exact:true}).first().click();};
+  const cancelFirst=async()=>{if(await page.locator('#cx-schedules').getAttribute('data-open')!=='true')await page.locator('.cx-schedules-summary').click();await page.locator('.cx-scheduled summary').first().click();await page.getByRole('button',{name:'取消定时任务',exact:true}).first().click();};
   await addSchedule('保留另一项安排');await addSchedule('等待取消的任务');
   await page.locator('#cx-input').fill('原有草稿');rejectCancel=true;await cancelFirst();await page.waitForFunction(()=>!document.getElementById('cx-send').disabled);
   assert.equal(await page.locator('#cx-input').inputValue(),'原有草稿');assert.equal(await page.locator('.cx-scheduled').count(),2);assert((await page.locator('#cx-message').innerText()).includes('已开始'));

@@ -100,16 +100,29 @@
   }
   function renderSchedules(){
     var visible=schedules.filter(function(s){return s.state==='scheduled';});
-    var list=$('schedules');list.replaceChildren();list.hidden=!visible.length;
-    if(!visible.length)return;
-    list.append(node('h4','','定时任务 · 北京时间'));
+    var list=$('schedules');list.hidden=!visible.length;
+    if(!visible.length){list.replaceChildren();delete list.dataset.signature;delete list.dataset.open;return;}
+    var now=Date.now()/1000,open=list.dataset.open==='true';
+    // Redraw only when a row changes, so the summary key and any opened row stay put between polls.
+    var signature=JSON.stringify(visible.map(function(s){var provider=config.profiles.find(function(p){return p.id===s.profile;});return [s,s.scheduled_for<=now,provider?provider.name:''];}));
+    if(list.dataset.signature===signature)return;
+    list.dataset.signature=signature;
+    // One line by default: the list of scheduled tasks opens on demand instead of taking room above the input.
+    var heading=node('h4'),toggle=node('button','cx-schedules-summary',visible.length+' 个定时任务 · 北京时间'),rows=node('div','cx-schedules-list');
+    toggle.type='button';toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-controls','cx-schedules-list');rows.id='cx-schedules-list';rows.hidden=!open;
+    toggle.onclick=function(){
+      var next=list.dataset.open!=='true';
+      if(next)list.dataset.open='true';else delete list.dataset.open;
+      toggle.setAttribute('aria-expanded',String(next));rows.hidden=!next;
+    };
+    heading.append(toggle);list.replaceChildren(heading,rows);
     visible.forEach(function(s){
       var row=node('details','cx-scheduled'),summary=node('summary');
-      var status=s.scheduled_for<=Date.now()/1000?'到点，等待窗口空闲':'待执行';
+      var status=s.scheduled_for<=now?'到点，等待窗口空闲':'待执行';
       summary.append(node('span','',scheduleStamp(s.scheduled_for)),node('strong','',status));row.append(summary,node('p','cx-text',s.text));
       var provider=config.profiles.find(function(p){return p.id===s.profile;});if(provider)row.append(node('small','cx-muted','供应商：'+provider.name+' · 执行时使用该供应商的最新配置'));
       row.append(button('取消定时任务',function(){cancelSchedule(s);}));
-      list.append(row);
+      rows.append(row);
     });
   }
   function status(w){return w.status==='failed'?'failed':w.error?'error':w.status;}
@@ -211,6 +224,9 @@
       var label=stale?'连接异常 · 待同步':w.status==='completed'&&!completionSeen(w)?'已完成 · 未查看':statusLabel(w);
       if(w.scheduled_count)label+=' · '+w.scheduled_count+' 个定时任务';
       b.dataset.status=stale?'unknown':status(w);b.dataset.tone=bad?'error':'ok';
+      // A two-or-three character word fits the narrow bar; the full label stays in the span for screen readers and tests.
+      b.dataset.short=stale?'待同步':{running:'运行',queued:'启动',starting:'启动',opening:'启动',waiting:'待回复',failed:'异常',error:'异常',interrupted:'停止',completed:'完成',idle:'空闲'}[status(w)]||statusLabel(w);
+      if(w.scheduled_count)b.dataset.timed='true';else delete b.dataset.timed;
       markCurrentWindow(b,w);
       b.querySelector('strong').textContent=w.title;b.querySelector('span').textContent=label;
       b.title=w.title+' · '+label+(w.error?'：'+w.error:'');b.setAttribute('aria-label',b.title+(b.classList.contains('active')?'，当前窗口':'')+'，点击查看');
@@ -225,6 +241,7 @@
   function sidebarClose(){closeSidebar();}
   function dismiss(target){
     root.querySelectorAll('details[open]').forEach(function(el){if(!target||!el.contains(target))el.open=false;});
+    var live=$('live-progress');if(live&&live.dataset.open==='true'&&(!target||!live.contains(target)))toggleLiveProgress(false);
     if(!target||(!$('window-sidebar').contains(target)&&!$('window-toggle').contains(target)))sidebarClose();
   }
   function dismissDialog(dlg){
@@ -317,13 +334,13 @@
     if(root)return;
     root=node('div','cx-overlay');root.id='cx-root';root.hidden=true;
     root.innerHTML='<section class="cx-shell" role="dialog" aria-modal="true" aria-labelledby="cx-title">'+
-      '<header class="cx-head"><button type="button" id="cx-window-toggle" class="btn btn-outline btn-sm cx-window-toggle" aria-expanded="false" aria-controls="cx-window-sidebar">菜单</button><div id="cx-page-heading" class="cx-brand"><h2 id="cx-title">Codex</h2></div><div id="cx-window-toolbar" class="cx-window-toolbar"><div class="cx-window-heading"><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div></div><details class="cx-window-menu"><summary aria-label="窗口操作">···</summary><div class="cx-window-actions"><button id="cx-refresh" type="button" class="btn btn-outline btn-sm" aria-label="刷新当前页面">刷新</button><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button></div></details><span id="cx-connection" class="cx-badge">尚未连接</span><button id="cx-exit" type="button" class="btn btn-outline btn-sm">返回 CK</button></header>'+
+      '<header class="cx-head"><button type="button" id="cx-window-toggle" class="btn btn-outline btn-sm cx-window-toggle" aria-expanded="false" aria-controls="cx-window-sidebar">菜单</button><div id="cx-page-heading" class="cx-brand"><h2 id="cx-title">Codex</h2></div><div id="cx-window-toolbar" class="cx-window-toolbar"><div class="cx-window-heading"><h3 id="cx-window-title">选择或新建任务窗口</h3><p id="cx-window-meta"></p></div></div><details class="cx-window-menu"><summary aria-label="窗口操作">···</summary><div class="cx-window-actions"><button id="cx-refresh" type="button" class="btn btn-outline btn-sm" aria-label="刷新当前页面">刷新</button><button type="button" id="cx-rename" class="btn btn-outline btn-sm">改名</button><button type="button" id="cx-close-window" class="btn btn-outline btn-sm">关闭窗口</button><button type="button" id="cx-delete-window" class="btn btn-outline btn-sm">删除</button><span id="cx-usage" hidden></span></div></details><span id="cx-connection" class="cx-badge">尚未连接</span><button id="cx-exit" type="button" class="btn btn-outline btn-sm">返回<span class="cx-wide"> CK</span></button></header>'+
       '<p id="cx-message" class="cx-message" role="status" aria-live="polite"></p><div id="cx-body" class="cx-body"><button id="cx-sidebar-backdrop" class="cx-sidebar-backdrop" type="button" aria-label="收起 Codex 菜单" tabindex="-1"></button>'+
       '<aside id="cx-window-sidebar" class="cx-sidebar"><div class="cx-sidebar-brand"><span aria-hidden="true">&gt;_</span> Codex<small id="cx-status-sync" class="cx-status-sync" role="status">同步中</small></div><nav class="cx-navigation cx-navigation-top" aria-label="Codex 设置"><button id="cx-tab-api" type="button">API 配置</button><button id="cx-tab-info" type="button">工作资料</button></nav><div id="cx-task-list" class="cx-task-list"><div class="cx-sidebar-head"><h3>已关闭</h3></div><input id="cx-search" class="cx-search" type="search" placeholder="查找窗口" aria-label="查找任务窗口"><div id="cx-windows" class="cx-window-list"></div></div></aside>'+
       '<form id="cx-login" class="cx-login" hidden><h3>连接你的 Codex</h3><p>使用「VPS 管理 → Codex 任务中心 → 查看访问密钥」里的专用密钥。只需在这台设备填写一次。</p><label>服务地址<input id="cx-endpoint" type="url" required autocomplete="off"></label><label>任务中心访问密钥<input id="cx-access" type="password" required autocomplete="off"></label><button class="btn btn-blue" type="submit">连接</button><small>这是任务中心的访问密钥。模型 API 密钥在连接后单独配置。</small></form>'+
       '<div id="cx-tasks" class="cx-workspace" hidden><main class="cx-main">'+
       '<div id="cx-feed-area" class="cx-feed-area"><div id="cx-feed" class="cx-feed" aria-label="Codex 任务记录"><div class="cx-empty"><span aria-hidden="true">&gt;_</span><h3>从一个任务开始</h3><p>新窗口会创建独立会话。执行进展、命令输出和修改结果都会留在这里。</p></div></div><nav id="cx-user-nav" class="cx-user-nav" aria-label="任务记录导航" hidden><button id="cx-feed-top" class="cx-feed-edge" type="button" aria-label="回顶" title="回到任务记录顶部" aria-controls="cx-feed">回顶</button><button id="cx-user-prev" type="button" aria-label="上一条用户消息" title="上一条用户消息" aria-controls="cx-feed">↑</button><span id="cx-user-position" role="status" aria-live="polite">用户</span><button id="cx-user-next" type="button" aria-label="下一条用户消息" title="下一条用户消息" aria-controls="cx-feed">↓</button><button id="cx-feed-bottom" class="cx-feed-edge" type="button" aria-label="回底" title="回到任务记录底部" aria-controls="cx-feed">回底</button></nav></div>'+
-      '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><section id="cx-live-progress" class="cx-live-progress" role="status" aria-live="polite" aria-atomic="true" hidden></section><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="1" aria-describedby="cx-compose-hint" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><div class="cx-compose-settings"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span></div><div class="cx-compose-meta"><details id="cx-schedule-options" class="cx-schedule-options"><summary id="cx-schedule-summary" title="安排一次性定时任务">定时</summary><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间（北京时间）</label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div></details><span id="cx-usage"></span></div><div class="cx-compose-actions"><span class="cx-stop-slot"><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button></span><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
+      '<section id="cx-schedules" class="cx-schedules" aria-label="定时任务" hidden></section><div id="cx-pending" class="cx-pending" role="region" aria-label="需要你回复的问题" aria-live="polite"></div><section id="cx-live-progress" class="cx-live-progress" role="status" aria-live="polite" aria-atomic="true" hidden></section><form id="cx-compose" class="cx-compose"><label class="cx-visually-hidden" for="cx-input">任务或补充指令</label><textarea id="cx-input" rows="1" aria-describedby="cx-compose-hint" placeholder="输入任务，或在执行中补充指令…"></textarea><div class="cx-compose-bar"><div class="cx-compose-settings"><label><span class="cx-visually-hidden">供应商</span><select id="cx-profile" aria-label="供应商与模型"></select></label><span id="cx-effort" class="cx-effort"></span></div><div class="cx-compose-meta"><details id="cx-schedule-options" class="cx-schedule-options"><summary id="cx-schedule-summary" title="安排一次性定时任务">定时</summary><div class="cx-schedule-bar"><label for="cx-schedule-time">执行时间（北京时间）</label><input id="cx-schedule-time" type="datetime-local" step="60" aria-label="执行时间（北京时间，可不选）"><button id="cx-schedule-clear" type="button" class="btn btn-outline btn-sm" hidden>清除时间</button><small id="cx-draft-status" role="status"></small></div></details></div><div class="cx-compose-actions"><span class="cx-stop-slot"><button type="button" id="cx-stop" class="btn btn-outline btn-sm" hidden>停止任务</button></span><button type="submit" id="cx-send" class="btn btn-blue btn-sm">开始执行</button></div></div><small id="cx-compose-hint">关闭页面不影响执行。不同窗口可以同时执行任务。</small></form></main></div>'+
       '<section id="cx-api" class="cx-api" hidden><div class="cx-section-heading"><div><h3>Codex API 配置</h3><p>每个供应商单独保存，下次任务生效。密钥加密保存，无需设置密码。</p></div><button id="cx-add-profile" type="button" class="btn btn-outline btn-sm">添加供应商</button></div><div id="cx-profiles"></div><p id="cx-api-state" class="cx-muted" role="status"></p></section>'+
       '<section id="cx-info" class="cx-info" hidden><h3>工作资料与维护</h3><div id="cx-info-content"></div><button id="cx-reconnect" type="button" class="btn btn-outline btn-sm">任务中心连接设置</button></section>'+
       '</div></section>';
@@ -335,6 +352,7 @@
     $('body').prepend(rail);
     root.querySelector('.cx-head').insertBefore($('notice-tools'),$('page-heading'));
     $('exit').onclick=close;
+    $('message').onclick=function(){message('');}; // A notice that stays, such as a failure, goes away on a tap.
     ['tasks','api','info'].forEach(function(name){$('tab-'+name).onclick=function(){showTab(name);closeSidebar();};});
     $('refresh').onclick=async function(){var b=$('refresh');feedback(b,'刷新中…','busy');var ok=await refresh(true);feedback(b,ok===undefined?'刷新':ok?'已刷新':'刷新失败',ok===false?'error':'ok');if(ok===true)message('已刷新');};
     $('new').onclick=createWindow;
@@ -384,7 +402,7 @@
     root.addEventListener('keydown',function(e){
       e.stopPropagation(); // CK gateway authentication remains pending behind this independent view.
       if(root.querySelector('dialog[open]'))return;
-      if(e.key==='Escape'){e.preventDefault();if(root.querySelector('details[open]')||$('body').classList.contains('cx-sidebar-open'))dismiss();else close();}
+      if(e.key==='Escape'){e.preventDefault();if(root.querySelector('details[open]')||$('body').classList.contains('cx-sidebar-open')||$('live-progress').dataset.open==='true')dismiss();else close();}
       if(e.key==='Tab'){
         var nodes=Array.from(root.querySelectorAll('button,input,select,textarea,a,summary')).filter(function(n){return !n.disabled&&n.getClientRects().length;});
         if(!nodes.length)return;var first=nodes[0],last=nodes[nodes.length-1];
@@ -451,37 +469,80 @@
     var path=file(input.file_path||input.notebook_path);return label+(path?'：'+path:'');
   }
   function toolState(item){return {running:'执行中',inProgress:'执行中',completed:'已完成',failed:'这一步报错'}[(item.data||{}).status]||'收到工具状态';}
+  function stepReason(output){
+    // Keep only the first non-empty line of a failed tool result; the result body itself never enters items.
+    var line=(typeof output==='string'?output:'').replace(/<\/?tool_use_error>/g,'').split('\n').map(function(part){return part.trim();}).filter(Boolean)[0]||'';
+    return line.slice(0,120);
+  }
+  function reasonText(reason){
+    reason=String(reason||'');
+    var known=[
+      [/^file does not exist/i,'文件不存在'],
+      [/^no files found/i,'没有找到文件'],
+      [/^no matches found/i,'没有找到匹配内容'],
+      [/^string to replace not found/i,'没有找到要替换的文字'],
+      [/^file has not been read yet/i,'需要先读取文件，才能修改'],
+      [/^file has been (unexpectedly )?modified/i,'文件在读取后有改动，需要重新读取'],
+      [/^file content .*exceeds maximum allowed/i,'文件太大，超出单次读取上限'],
+      [/^(the user doesn't want to proceed|claude requested permissions|permission to use .* has been denied)/i,'这一步没有获得执行许可'],
+      [/^inputvalidationerror/i,'工具参数不符合要求']
+    ];
+    for(var i=0;i<known.length;i++)if(known[i][0].test(reason))return known[i][1];
+    return reason;
+  }
   function elapsedText(seconds){
     seconds=Math.floor(seconds);var hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
     return (hours?hours+' 小时 ':'')+(minutes?minutes+' 分 ':'')+(seconds%60)+' 秒';
   }
+  function toggleLiveProgress(open){
+    var box=$('live-progress');if(!box||box.hidden)return;
+    if(open===undefined)open=box.dataset.open!=='true';
+    if(open)box.dataset.open='true';else delete box.dataset.open;
+    renderLiveProgress();
+  }
   function renderLiveProgress(){
     var box=$('live-progress'),w=current();if(!box)return;
     box.hidden=engine!=='claude'||!w||!['queued','starting','running','waiting'].includes(w.status);
-    if(box.hidden){box.replaceChildren();delete box.dataset.signature;return;}
+    if(box.hidden){box.replaceChildren();delete box.dataset.signature;delete box.dataset.open;delete box.dataset.owner;return;}
+    if(box.dataset.owner!==w.id){box.dataset.owner=w.id;delete box.dataset.open;}
     var report=claudeFeedback(w),data=report&&report.data||{},stale=Date.now()-(confirmedAt.get(w.id)||0)>5000;
     var heading=stale?'状态待同步':w.status==='waiting'?'等待你回复':w.status==='queued'?'任务排队中':claudePhase(data.state||w.status);
-    var meta=[],state=data.state;
+    var retry=[],state=data.state;
     if(state==='retrying'){
-      if(data.http_status)meta.push('HTTP '+data.http_status);
-      if(Number.isFinite(data.attempt))meta.push('第 '+data.attempt+(data.max_retries?' / '+data.max_retries:'')+' 次重试');
-      if(data.retry_in_seconds>0)meta.push('约 '+data.retry_in_seconds+' 秒后再试');
+      if(data.http_status)retry.push('HTTP '+data.http_status);
+      if(Number.isFinite(data.attempt))retry.push('第 '+data.attempt+(data.max_retries?' / '+data.max_retries:'')+' 次重试');
+      if(data.retry_in_seconds>0)retry.push('约 '+data.retry_in_seconds+' 秒后再试');
     }
-    if(Number.isFinite(data.elapsed_seconds))meta.push('已用 '+elapsedText(data.elapsed_seconds));
+    var elapsed=Number.isFinite(data.elapsed_seconds)?elapsedText(data.elapsed_seconds):'';
     var tools=report?Array.from(items.values()).filter(function(item){return claudeTool(item)&&item.created>=report.created;}):[];
     var recent=tools.reduce(function(last,item){return !last||Number(item.seq)>Number(last.seq)?item:last;},null);
-    var detail=recent?toolLabel(recent)+' · '+toolState(recent):report?report.text.split('\n')[0]:'尚未收到工具记录';
-    if(stale)detail='正在核对连接，上次记录：'+detail;
-    var signature=JSON.stringify([heading,meta,detail,w.updated]);if(box.dataset.signature===signature)return;
+    var step=recent?toolLabel(recent)+' · '+toolState(recent):'',note=report?report.text.split('\n')[0]:'';
+    var open=box.dataset.open==='true';
+    var signature=JSON.stringify([heading,retry,elapsed,step,note,stale,w.updated,open]);if(box.dataset.signature===signature)return;
     box.dataset.signature=signature;box.dataset.state=stale?'stale':state||w.status;
-    // One line by default; tapping it shows the full text.
-    box.replaceChildren(node('strong','',heading));
-    if(meta.length)box.append(node('span','cx-live-progress-meta',meta.join(' · ')));
-    box.append(node('span','cx-live-progress-detail',detail));
-    var at=w.updated?new Date(w.updated*1000).toLocaleTimeString('zh-CN',{hour12:false}):'';
-    if(at)box.append(node('time','',at));
-    box.title=(at?'状态回传 '+at+' · ':'')+'点按展开或收起';
-    if(!box.dataset.bound){box.dataset.bound='1';box.addEventListener('click',function(){box.classList.toggle('expanded');});}
+    // The bar keeps its nodes between polls: a press or keyboard focus on it survives every status update.
+    var head=box.querySelector('.cx-live-progress-head'),more=box.querySelector('.cx-live-progress-more');
+    if(!head||!more){
+      head=node('button','cx-live-progress-head');head.type='button';head.setAttribute('aria-controls','cx-live-progress-more');head.onclick=function(){toggleLiveProgress();};
+      var dot=node('span','cx-live-progress-dot'),arrow=node('span','cx-live-progress-arrow');dot.setAttribute('aria-hidden','true');arrow.setAttribute('aria-hidden','true');
+      head.append(dot,node('strong'),node('span','cx-live-progress-detail'),node('time'),arrow);
+      more=node('div','cx-live-progress-more');more.id='cx-live-progress-more';box.replaceChildren(head,more);
+    }
+    head.querySelector('strong').textContent=heading;
+    // A retry matters more than the last step, so it takes the one line when both exist.
+    head.querySelector('.cx-live-progress-detail').textContent=retry.length?retry.join(' · '):step||note||'尚未收到本轮工具记录';
+    var clock=head.querySelector('time');clock.textContent=elapsed;
+    if(elapsed)clock.setAttribute('aria-label','本轮已用时 '+elapsed);else clock.removeAttribute('aria-label');
+    head.setAttribute('aria-expanded',String(open));more.hidden=!open;
+    var rows=[['阶段',heading]];
+    if(elapsed)rows.push(['本轮已用时',elapsed,'cx-live-progress-meta']);
+    if(w.updated)rows.push(['状态回传',new Date(w.updated*1000).toLocaleTimeString('zh-CN',{hour12:false})]);
+    if(retry.length)rows.push(['重试信息',retry.join(' · '),'cx-live-progress-meta']);
+    rows.push(['最近工具回传',step||'尚未收到本轮工具记录']);
+    if(note)rows.push(['状态说明',note]);
+    rows.push(['连接状态',stale?'正在核对连接；以下为上次收到的记录。':'正常']);
+    // Each value is a bare text node beside its label, so no second element repeats the phase text of the bar.
+    more.replaceChildren.apply(more,rows.map(function(row){var line=node('p','cx-live-progress-row'+(row[2]?' '+row[2]:''));line.append(node('span','',row[0]),document.createTextNode(row[1]));return line;}));
   }
   function renderWindows(){
     renderTaskNotices();
@@ -522,8 +583,9 @@
     $('profile').value=chosen;
     var profile=config.profiles.find(function(p){return p.id===chosen;});$('effort').textContent=profile?profile.effort:'';
     var usage={};try{usage=JSON.parse(w&&w.usage||'{}');}catch(_){}
-    var total=usage.total||{};$('usage').textContent=total.totalTokens?Number(total.totalTokens).toLocaleString()+' tokens':'';
+    var total=usage.total||{};$('usage').textContent=total.totalTokens?Number(total.totalTokens).toLocaleString()+' tokens':'';$('usage').hidden=!total.totalTokens;
     renderTaskNotices();
+    $('compose-hint').dataset.kind=timed?'timed':w&&w.status==='closed'?'closed':running?'running':'idle';
     $('compose-hint').textContent=timed?'按北京时间执行，退出页面仍有效；窗口忙碌时等待空闲。':w&&w.status==='closed'?'窗口已关闭，记录保留。点击「重新打开」继续。':w&&w.status==='queued'?'任务已提交，正在启动。':w&&w.status==='running'?'正在服务器执行。可以补充指令，或选择时间安排下一任务。':'不选时间即刻执行。Ctrl / ⌘ + Enter 发送；关闭页面不影响执行。';
     if(!timed&&w&&w.status==='running'&&config.steer_mode==='after_response')$('compose-hint').textContent='正在国内 VPS 执行。补充指令将在当前回复结束后，沿用本会话继续处理。';
   }
@@ -544,12 +606,18 @@
   function card(item){
     if(['request','resolved'].includes(item.kind)&&item.data.method)return questionCard(item);
     if(claudeTool(item)){
-      var progress=node('article','cx-item cx-item-tool-progress'),head=node('header','cx-item-head');progress.dataset.itemId=item.id;progress.dataset.state=(item.data||{}).status||'';
-      head.append(node('strong','',toolState(item)),node('time','',stamp(item.created)));
-      progress.append(head,node('div','cx-text',toolLabel(item)));return progress;
+      var progress=node('article','cx-item cx-item-tool-progress'),head=node('header','cx-item-head'),step=item.data||{};progress.dataset.itemId=item.id;progress.dataset.state=step.status||'';
+      // One quiet line per step: what it did, then how it went. Only general tools explain a failure; command and file bodies stay out.
+      head.append(node('span','cx-step-state',toolState(item)),node('time','',stamp(item.created)));
+      progress.append(node('div','cx-text',toolLabel(item)),head);
+      var why=step.status!=='failed'?'':item.kind==='tool'?reasonText(step.reason):'命令输出不在这里显示';
+      if(why)progress.append(node('div','cx-step-reason',why));
+      return progress;
     }
     var titles={userMessage:'你的任务',agentMessage:item.data.phase==='final_answer'?'完成回复':engineName(),warning:'运行提示',error:'运行出错',resolved:'已处理',diary:'VPS 日记'};
-    var el=node('article','cx-item cx-item-'+item.kind);el.dataset.itemId=item.id;
+    var el=node('article','cx-item cx-item-'+item.kind),statusNote=String(item.id).indexOf('cc-status:')===0;el.dataset.itemId=item.id;
+    if(item.kind==='agentMessage'&&item.data.phase==='final_answer')el.classList.add('cx-item-final');
+    if(statusNote)el.classList.add('cx-item-status');
     if(item.kind==='diary'){
       var details=node('details','cx-detail'), summary=node('summary');
       summary.textContent='VPS 日记 · '+(item.data.date||'');
@@ -557,7 +625,7 @@
     }else{
       var head=node('header','cx-item-head');head.append(node('strong','',titles[item.kind]),node('time','',stamp(item.created)));
       if(item.text)head.append(copyButton(item.text));
-      el.append(head);
+      if(!statusNote)el.append(head); // A status record is a single quiet line, not a titled card.
       if(item.kind==='agentMessage'&&item.text)appendAssistantText(el,item.text);
       else el.append(node('div','cx-text',item.text||'正在处理…'));
     }
@@ -657,7 +725,9 @@
   function userMessageTarget(direction,messages,anchor){
     if(anchor)return messages[messages.indexOf(anchor)+direction];
     var top=$('feed').getBoundingClientRect().top+parseFloat(getComputedStyle($('feed')).paddingTop);
-    return direction<0?messages.slice().reverse().find(function(el){return el.getBoundingClientRect().top<=top+2;}):messages.find(function(el){return el.getBoundingClientRect().top>=top-2;});
+    // A message resting at the start of a feed that cannot scroll sits one top margin below the reading line; it still counts as reached.
+    var slack=messages.length?parseFloat(getComputedStyle(messages[0]).marginTop)||0:0;
+    return direction<0?messages.slice().reverse().find(function(el){return el.getBoundingClientRect().top<=top+2+slack;}):messages.find(function(el){return el.getBoundingClientRect().top>=top-2;});
   }
   function positionUserMessage(el){
     var feed=$('feed');
@@ -665,13 +735,18 @@
     feed.scrollTop+=el.getBoundingClientRect().top-feed.getBoundingClientRect().top-parseFloat(getComputedStyle(feed).paddingTop);
     userJump={id:el.dataset.itemId,scroll:feed.scrollTop};
   }
+  var userNavHeights={};
   function renderUserNavigation(){
     var feed=$('feed'),messages=userMessages(),anchor=activeUserMessage();if(!anchor)userJump=null;
-    $('user-nav').hidden=!feed.querySelector('.cx-item');
-    $('user-nav').classList.toggle('cx-user-nav-tight',feed.clientHeight<180);
+    var nav=$('user-nav'),navKind=messages.length?'full':'edge';
+    nav.hidden=!feed.querySelector('.cx-item');
+    $('user-prev').hidden=$('user-next').hidden=$('user-position').hidden=!messages.length;
+    // Lay the keys out in a row whenever the feed cannot hold the whole column. The column height is measured only
+    // while the column is showing, so the row layout (which changes feed padding) is never toggled just to measure.
+    if(!nav.hidden&&!nav.classList.contains('cx-user-nav-tight')&&nav.offsetHeight)userNavHeights[navKind]=nav.offsetHeight;
+    nav.classList.toggle('cx-user-nav-tight',feed.clientHeight<(userNavHeights[navKind]||(navKind==='full'?212:92))+16);
     $('feed-top').disabled=feed.scrollTop<=1;
     $('feed-bottom').disabled=feed.scrollHeight-feed.scrollTop-feed.clientHeight<=1;
-    $('user-prev').hidden=$('user-next').hidden=$('user-position').hidden=!messages.length;
     $('user-prev').disabled=!userMessageTarget(-1,messages,anchor);
     $('user-next').disabled=!userMessageTarget(1,messages,anchor);
     messages.forEach(function(el){el.classList.toggle('cx-user-highlight',el===anchor);});
@@ -710,17 +785,47 @@
     await openTaskNotice(w.id);
     jumpQuestion(0);var q=questionItems().find(function(i){return i.kind==='request';});if(q)focusQuestion(q.id);
   }
+  function setSteps(group,open){
+    if(open)group.dataset.open='true';else delete group.dataset.open;
+    group.querySelector('.cx-steps-summary').setAttribute('aria-expanded',String(open));
+    group.querySelectorAll('.cx-item-tool-progress').forEach(function(row){row.hidden=!open;});
+  }
+  function stepGroup(feed){
+    // Consecutive steps share one container, so a finished run can fold into a single line.
+    var last=feed.lastElementChild;if(last&&last.classList.contains('cx-steps'))return last;
+    var group=node('section','cx-steps'),summary=node('button','cx-steps-summary');
+    summary.type='button';summary.hidden=true;summary.setAttribute('aria-expanded','true');
+    summary.onclick=function(){setSteps(group,group.dataset.open!=='true');renderUserNavigation();};
+    group.dataset.open='true';group.append(summary);feed.append(group);return group;
+  }
+  function groupSteps(feed,settle){
+    Array.from(feed.querySelectorAll('.cx-steps')).forEach(function(group){
+      var rows=group.querySelectorAll('.cx-item-tool-progress'),summary=group.querySelector('.cx-steps-summary');
+      if(!rows.length){group.remove();return;}
+      var failed=group.querySelectorAll('.cx-item-tool-progress[data-state=failed]').length,mark=failed?String(failed):'',open=group.dataset.open==='true';
+      var text='过程记录 · '+rows.length+' 步'+(failed?' · '+failed+' 步报错':'');
+      if(summary.textContent!==text)summary.textContent=text;
+      if((group.dataset.failed||'')!==mark){if(mark)group.dataset.failed=mark;else delete group.dataset.failed;}
+      // A run of four or more steps folds once something follows it, and only while the feed is pinned to its end,
+      // so nothing moves under a reader who has scrolled up. After that the reader's own choice stands.
+      // The run still in progress always shows every step.
+      var foldable=rows.length>=4&&group!==feed.lastElementChild;
+      if(!foldable){if(!summary.hidden)summary.hidden=true;open=true;}
+      else if(summary.hidden&&settle){summary.hidden=false;open=false;}
+      if(open!==(group.dataset.open==='true')||Array.prototype.some.call(rows,function(row){return row.hidden===open;}))setSteps(group,open);
+    });
+  }
   function renderFeed(changed, reset){
     var feed=$('feed'),nearEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<100,anchor=activeUserMessage();
     if(reset){feed.replaceChildren();userJump=null;anchor=null;}
-    var existing=new Map(Array.from(feed.children).map(function(el){return [el.dataset.itemId,el];}));
+    var existing=new Map(Array.from(feed.querySelectorAll('[data-item-id]')).map(function(el){return [el.dataset.itemId,el];}));
     changed.forEach(function(item){
       if(!['userMessage','agentMessage','request','resolved','warning','error','diary'].includes(item.kind)&&!claudeTool(item)){
         items.delete(item.id);var hidden=existing.get(item.id);if(hidden)hidden.remove();return;
       }
       if(claudeTool(item)){
         var data=item.data||{},input=data.input||{};
-        item=Object.assign({},item,{text:'',data:{status:data.status,name:data.name,input:{file_path:input.file_path,notebook_path:input.notebook_path},changes:Array.isArray(data.changes)?data.changes.map(function(change){return {path:change.path};}):[]}});
+        item=Object.assign({},item,{text:'',data:{status:data.status,name:data.name,input:{file_path:input.file_path,notebook_path:input.notebook_path},changes:Array.isArray(data.changes)?data.changes.map(function(change){return {path:change.path};}):[],reason:item.kind==='tool'&&data.status==='failed'?stepReason(data.output):undefined}});
       }
       var previous=items.get(item.id);if(item.kind==='resolved'&&!item.data.method&&previous&&previous.data.method)item=Object.assign({},item,{data:previous.data});
       items.set(item.id,item);
@@ -732,8 +837,9 @@
         var openedDetail=old.querySelector('details[open]');if(openedDetail&&el.querySelector('details'))el.querySelector('details').open=true;
         var copies=el.querySelectorAll('.cx-copy');old.querySelectorAll('.cx-copy').forEach(function(b,i){if(b.dataset.feedback&&copies[i]){var next=copies[i];next.feedbackState=b.feedbackState;b.feedbackState.button=next;next.textContent=b.textContent;next.dataset.feedback=b.dataset.feedback;next.disabled=b.disabled;next.setAttribute('aria-busy',b.getAttribute('aria-busy'));}});
         var focused=document.activeElement===old;old.replaceWith(el);if(focused)el.focus({preventScroll:true});
-      }else feed.append(el);
+      }else if(claudeTool(item))stepGroup(feed).append(el);else feed.append(el);
     });
+    groupSteps(feed,reset||nearEnd&&!anchor);
     if(!feed.childElementCount){var empty=node('div','cx-empty');empty.append(node('span','','>_'),node('h3','','窗口已准备好'),node('p','','输入任务后，Codex 会在美国 VPS 上开始执行。'));feed.append(empty);}
     if(changed.length&&feed.querySelector('.cx-empty')&&feed.childElementCount>1)feed.querySelector('.cx-empty').remove();
     renderPending();renderLiveProgress();
@@ -776,9 +882,9 @@
     raisedMessageId='';
     var cached=windowCache.get(id),feed=$('feed');selected=id;cursor=cached?cached.cursor:0;diaryCursor=cached?cached.diaryCursor||'':'';items=cached?cached.items:new Map();userJump=cached?cached.userJump:null;
     feed.replaceChildren();$('pending').replaceChildren();delete $('pending').dataset.signature;
-    if(cached){cached.nodes.forEach(function(n){if(n.classList&&n.classList.contains('cx-item'))applyMessageLayer(n);feed.append(n);});cached.pending.forEach(function(n){$('pending').append(n);});if(cached.signature)$('pending').dataset.signature=cached.signature;feed.scrollTop=cached.scroll;}
+    if(cached){cached.nodes.forEach(function(n){feed.append(n);});feed.querySelectorAll('.cx-item').forEach(applyMessageLayer);cached.pending.forEach(function(n){$('pending').append(n);});if(cached.signature)$('pending').dataset.signature=cached.signature;feed.scrollTop=cached.scroll;}
     else if(id){var loadingNote=node('div','cx-empty');loadingNote.append(node('p','','正在读取窗口记录…'));feed.append(loadingNote);}
-    restoreDraft(id);schedules=cached?cached.schedules:[];renderSchedules();$('schedule-options').open=false;questionIndex=cached?cached.questionIndex:-1;var questions=questionItems();$('question-nav').hidden=!questions.length;if(questions.length)$('question-nav').querySelector('span').textContent=questions.length+' 处提问';
+    restoreDraft(id);schedules=cached?cached.schedules:[];delete $('schedules').dataset.open;delete $('schedules').dataset.signature;renderSchedules();$('schedule-options').open=false;questionIndex=cached?cached.questionIndex:-1;var questions=questionItems();$('question-nav').hidden=!questions.length;if(questions.length)$('question-nav').querySelector('span').textContent=questions.length+' 处提问';
     renderUserNavigation();
   }
   async function select(id){

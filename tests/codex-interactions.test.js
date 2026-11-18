@@ -24,7 +24,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await page.goto('http://127.0.0.1:'+server.address().port+'/#codex-tasks');await page.locator('.cx-item-agentMessage').waitFor();
   const refresh=async()=>{if(!await page.locator('.cx-window-menu').evaluate(e=>e.open))await page.locator('.cx-window-menu summary').click();await page.locator('#cx-refresh').click();await page.waitForFunction(()=>document.getElementById('cx-refresh').textContent==='已刷新');};
   assert.equal(await page.locator('.cx-task-status').textContent(),'正常运行');
-  for(const dark of [false,true]){await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);assert.equal(await page.locator('.cx-task-status').evaluate(e=>getComputedStyle(e).color),await page.locator('#cx-root').evaluate(e=>getComputedStyle(e).getPropertyValue('--ck-accent-strong').trim()).then(hex=>{const n=parseInt(hex.slice(1),16);return `rgb(${n>>16}, ${(n>>8)&255}, ${n&255})`;}));}
+  for(const dark of [false,true]){await page.evaluate(d=>document.body.classList.toggle('dark',d),dark);assert.equal(await page.locator('.cx-task-status').evaluate(e=>getComputedStyle(e).color),await page.locator('#cx-root.cx-overlay').evaluate(e=>getComputedStyle(e).getPropertyValue('--cx-accent-ink').trim()).then(hex=>{assert.match(hex,/^#[0-9a-f]{6}$/i,'--cx-accent-ink '+hex);const n=parseInt(hex.slice(1),16);return `rgb(${n>>16}, ${(n>>8)&255}, ${n&255})`;}));}
   // Each message kind keeps its existing padding; both must remain inside the feed.
   assert(await page.locator('#cx-feed').evaluate(feed=>{
     const box=feed.getBoundingClientRect();
