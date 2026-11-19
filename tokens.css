@@ -74,6 +74,25 @@
   --ck-ease:cubic-bezier(.2,.8,.2,1);
   --ck-motion-fast:140ms;
   --ck-motion-medium:220ms;
+
+  /* chat-redesign 2026-11-19: size, tap and state tokens (design/SYSTEM.md 2.2). Added only; nothing above changes. */
+  --ck-fz-xs:12px;
+  --ck-fz-sm:13px;
+  --ck-fz-md:15px;
+  --ck-fz-lg:16px;
+  --ck-fz-xl:20px;
+  --ck-tap:44px;
+  --ck-ctl:44px;
+  --ck-field:44px;
+  --ck-fz-field:var(--ck-fz-lg);
+  --ck-head-h:48px;
+  --ck-pad:var(--ck-space-4);
+  --ck-danger-ink:#983d3d;
+  --ck-danger-wash:#fff1f1;
+  --ck-on-danger:#ffffff;
+  --ck-warn-ink:#7d5416;
+  --ck-scrim:rgba(0,0,0,.4);
+  --ck-scrim-dialog:rgba(0,0,0,.45);
 }
 
 body.dark,
@@ -120,4 +139,13 @@ html.dark{
   --ck-shadow-sm:0 7px 20px rgba(0,0,0,.19);
   --ck-shadow-md:0 18px 42px rgba(0,0,0,.28);
   --ck-shadow-overlay:0 30px 80px rgba(0,0,0,.48);
+
+  --ck-danger-ink:#f3a0a0;
+  --ck-danger-wash:#352020;
+  --ck-on-danger:#2a1414;
+  --ck-warn-ink:#d2a05b;
 }
+
+/* chat-redesign 2026-11-19: the only responsive token overrides. */
+@media (min-width:641px){:root{--ck-ctl:36px;--ck-head-h:52px;--ck-pad:var(--ck-space-5)}}
+@media (min-width:1100px){:root{--ck-field:40px;--ck-fz-field:var(--ck-fz-md)}}

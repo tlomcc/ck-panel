@@ -1,0 +1,442 @@
+/* ============================================================
+   chat-addons.css -- things opened from the chat page (settings, session
+   drawer, search, dialogs, selects, side navigation, subscription card),
+   2026-11-19 redesign. Loaded last. Each package writes only between its
+   own BEGIN/END markers and scopes every rule to its own root.
+   ============================================================ */
+
+/* ==== B1a BEGIN ==== */
+/* B1a 设置骨架：头部、导航位置、面板、面板头、分组（组标题在卡片上方）、行、开关、卡片、说明。
+   不改 DOM：section.chat-setting-group 自己是卡片，h3 绝对定位到卡片上方当组标题。 */
+/* 头部 */
+#tab-chat #chat-settings .chat-settings-head{flex:0 0 var(--ck-head-h)!important;height:var(--ck-head-h)!important;min-height:var(--ck-head-h)!important;padding:0 52px 0 var(--ck-pad)!important}
+#tab-chat #chat-settings .chat-settings-head:has(#chat-debug-theme-toggle:not([hidden])){padding-right:94px!important}
+#tab-chat #chat-settings .chat-settings-title{display:flex;align-items:center;gap:8px;min-width:0}
+#tab-chat #chat-settings .chat-settings-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ck-text)!important;font-size:var(--ck-fz-lg)!important;font-weight:600!important;line-height:1.4}
+#tab-chat #chat-settings .chat-settings-head .chat-icon-btn:not(#chat-debug-theme-toggle){top:calc((var(--ck-head-h) - 44px)/2)!important;right:4px!important;width:44px!important;height:44px!important;min-width:44px;border-radius:8px!important;background:transparent!important;color:var(--ck-text-soft)!important}
+#tab-chat #chat-settings .chat-settings-head .chat-debug-version{position:relative;flex:none;font-size:var(--ck-fz-xs)!important;line-height:1.4}
+#tab-chat #chat-settings .chat-settings-head .chat-debug-version::after{content:"";position:absolute;left:-6px;right:-6px;top:50%;height:44px;transform:translateY(-50%)}
+/* 第一级导航：只管位置 */
+#tab-chat #chat-settings .chat-settings-nav{padding:12px var(--ck-pad)!important;gap:12px!important}
+/* 面板与面板头 */
+#tab-chat #chat-settings .chat-side-panel{padding:16px var(--ck-pad) calc(24px + env(safe-area-inset-bottom))!important;gap:12px!important}
+#tab-chat #chat-settings .ck-notebook-heading{gap:12px;margin:0 0 4px;padding:0}
+#tab-chat #chat-settings .ck-notebook-heading h2{font-size:var(--ck-fz-xl);font-weight:600;line-height:1.4;letter-spacing:0}
+#tab-chat #chat-settings .ck-notebook-heading p{margin:4px 0 0;color:var(--ck-text-soft);font-size:var(--ck-fz-xs);line-height:1.4}
+#tab-chat #chat-settings .ck-notebook-heading>.chat-scope-badge{align-self:flex-start;margin:4px 0 0 auto;padding:4px 8px!important;border-radius:999px!important;font-size:var(--ck-fz-xs)!important;line-height:1.4}
+/* 卡片 */
+#tab-chat #chat-settings .chat-memory-card{padding:16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important;box-shadow:none!important}
+#tab-chat #chat-settings :is(.chat-memory-card>b,.chat-memory-card>summary b){color:var(--ck-text)!important;font-size:var(--ck-fz-lg)!important;font-weight:600!important;line-height:1.4}
+#tab-chat #chat-settings .chat-memory-card>p{margin:4px 0 0;color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-memory-card .chat-memory-card{padding:12px!important;border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important}
+#tab-chat #chat-settings .chat-side-panel>label:not(.chat-switch){padding:12px 16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important}
+/* 分组 = 组标题 + 一张卡片 + 行 */
+#tab-chat #chat-settings section.chat-setting-group{position:relative;gap:0!important;margin:12px 0 0;padding:0 16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important;box-shadow:none!important;overflow:visible}
+#tab-chat #chat-settings section.chat-setting-group:has(>h3:first-child){margin-top:38px}
+#tab-chat #chat-settings .ck-notebook-heading+section.chat-setting-group{margin-top:0}
+#tab-chat #chat-settings .ck-notebook-heading+section.chat-setting-group:has(>h3:first-child){margin-top:26px}
+#tab-chat #chat-settings section.chat-setting-group>h3{margin:0!important;padding:12px 0 0!important;border:0!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important;letter-spacing:0}
+#tab-chat #chat-settings section.chat-setting-group>h3:first-child{position:absolute;left:16px;right:16px;bottom:100%;margin:0 0 8px!important;padding:0!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 行：label、details、嵌在分组里的卡片是行；其它直接子节点（按钮、输入等）只给上下间距 */
+#tab-chat #chat-settings section.chat-setting-group>:not(h3,label,details,.chat-memory-card,.chat-field-hint){margin-top:12px!important;margin-bottom:0!important}
+#tab-chat #chat-settings section.chat-setting-group>:not(h3,label,details,.chat-memory-card,.chat-field-hint):last-child{margin-bottom:12px!important}
+#tab-chat #chat-settings section.chat-setting-group>:is(label,details,.chat-memory-card){margin:0!important;padding:12px 0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+#tab-chat #chat-settings section.chat-setting-group>label{min-height:48px;box-sizing:border-box}
+#tab-chat #chat-settings section.chat-setting-group>details{padding:0!important}
+#tab-chat #chat-settings section.chat-setting-group>*+:is(label,details,.chat-memory-card){border-top:1px solid var(--ck-line-soft)!important}
+#tab-chat #chat-settings section.chat-setting-group>h3:first-child+*{border-top:0!important}
+#tab-chat #chat-settings section.chat-setting-group>.chat-memory-card>b{font-size:var(--ck-fz-md)!important}
+/* 开关行：文字 15px 在左，44×24 开关在右，整行可点 */
+#tab-chat #chat-settings .chat-switch{min-height:48px!important;padding:12px 0!important;gap:12px!important;border:0!important;border-radius:0!important;background:transparent!important;cursor:pointer}
+#tab-chat #chat-settings .chat-side-panel>.chat-switch{padding:12px 16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important}
+#tab-chat #chat-settings .chat-switch span{min-height:24px!important;gap:12px!important;color:var(--ck-text)!important;font-size:var(--ck-fz-md)!important;font-weight:400!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-switch span::after{box-sizing:border-box;width:44px!important;height:24px!important;flex:0 0 44px!important;border:1.5px solid var(--ck-muted);border-radius:999px!important;background:var(--ck-surface)!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-switch span::before{left:calc(100% - 41px)!important;width:18px!important;height:18px!important;background:var(--ck-muted)!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-switch input:checked+span::after{border-color:var(--ck-action-fill);background:var(--ck-action-fill)!important}
+#tab-chat #chat-settings .chat-switch input:checked+span::before{left:calc(100% - 21px)!important;background:var(--ck-action-ink)!important}
+#tab-chat #chat-settings .chat-switch:has(input:focus-visible){outline:2px solid var(--ck-accent-strong);outline-offset:2px}
+#tab-chat #chat-settings .chat-switch:has(input:disabled){opacity:.45;cursor:default}
+/* 说明文字与“说明与用法” */
+#tab-chat #chat-settings .chat-field-hint{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-side-panel>.chat-field-hint{color:var(--ck-text-soft)!important}
+#tab-chat #chat-settings section.chat-setting-group>.chat-field-hint{margin:0!important;padding:0 0 12px!important}
+#tab-chat #chat-settings section.chat-setting-group>:not(h3)+.chat-field-hint{margin-top:-8px!important}
+#tab-chat #chat-settings section.chat-setting-group>h3:first-child+.chat-field-hint{padding-top:12px!important}
+#tab-chat #chat-settings .chat-setting-help{margin:8px 0 0;border-top:1px solid var(--ck-line-soft)}
+#tab-chat #chat-settings .chat-setting-help summary{box-sizing:border-box;min-height:44px;padding:13px 0;color:var(--ck-text-soft);font-size:var(--ck-fz-sm);font-weight:400;line-height:1.4;cursor:pointer}
+#tab-chat #chat-settings .chat-setting-help[open] summary{color:var(--ck-accent-strong)}
+#tab-chat #chat-settings .chat-setting-help p{margin:0 0 12px;color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-side-panel>.chat-setting-help{border-top:0}
+#tab-chat #chat-settings .chat-side-panel>.chat-setting-help :is(summary,p){color:var(--ck-text-soft)!important}
+/* ==== B1a END ==== */
+
+/* ==== B1b BEGIN ==== */
+/* B1b 设置里的表单、按钮、保存状态、页签。在 B1a 骨架上做：不给分组里的行加外边距（B1a 管）。
+   输入框高度固定 44（--ck-tap），不跟 --ck-field 在 ≥1100 降到 40：点按盒不低于 44，与 B2a 搜索框一致；字号仍跟 --ck-fz-field。 */
+/* 字段标签：13px/600，在控件上方，间距 4。开关、单选/勾选行、导航下拉不在此列 */
+#tab-chat #chat-settings label:not(.chat-switch,.chat-settings-nav,.chat-recall-recent,:has(>input:is([type=checkbox],[type=radio]))){gap:4px!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important;letter-spacing:0}
+#tab-chat #chat-settings .chat-field-count{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;font-weight:400!important;line-height:1.4!important;font-variant-numeric:tabular-nums}
+/* 输入框、原生下拉、多行输入 */
+#tab-chat #chat-settings :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden],[type=color]),textarea,select:not(#chat-settings-nav)){box-sizing:border-box!important;border:1px solid var(--ck-line-strong)!important;border-radius:8px!important;background-color:var(--ck-surface)!important;box-shadow:none!important;color:var(--ck-text)!important;font-size:var(--ck-fz-field)!important;font-weight:400!important;line-height:1.5!important;letter-spacing:0}
+#tab-chat #chat-settings :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden],[type=color]),select:not(#chat-settings-nav)){height:var(--ck-tap)!important;min-height:var(--ck-tap)!important;padding:8px 12px!important}
+#tab-chat #chat-settings select:not(#chat-settings-nav){padding-right:32px!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tab-chat #chat-settings textarea{min-height:160px!important;max-height:50dvh!important;padding:8px 12px!important;overflow:auto}
+#tab-chat #chat-settings :is(input,textarea)::placeholder{color:var(--ck-muted)!important;opacity:1}
+#tab-chat #chat-settings :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden],[type=color]),textarea,select:not(#chat-settings-nav)):focus{border-color:var(--ck-accent-strong)!important}
+#tab-chat #chat-settings :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden],[type=color]),textarea,select:not(#chat-settings-nav)):focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:2px}
+#tab-chat #chat-settings :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden],[type=color]),textarea)[readonly]{background-color:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important}
+#tab-chat #chat-settings :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden],[type=color]),textarea,select:not(#chat-settings-nav)):disabled{background-color:var(--ck-surface-soft)!important;color:var(--ck-muted)!important;opacity:1}
+/* 按钮（共用）：13px/600，高 --ck-ctl（≤760 为 44，≥761 为 36），最小宽 44，圆角 8 */
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red){box-sizing:border-box!important;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--ck-ctl)!important;min-height:var(--ck-ctl)!important;min-width:var(--ck-tap)!important;padding:0 12px!important;border-radius:8px!important;box-shadow:none!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1!important;letter-spacing:0;white-space:nowrap;cursor:pointer;transition:transform var(--ck-motion-fast) var(--ck-ease)}
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red)[hidden]{display:none!important}
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red):active:not(:disabled){transform:scale(.98)}
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red):disabled{opacity:.45!important;cursor:default}
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red)[aria-busy=true]{pointer-events:none}
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red):focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:2px}
+#tab-chat #chat-settings .chat-cache-save-btn{min-width:88px!important}
+#tab-chat #chat-settings .chat-wide-btn{display:flex;width:100%!important}
+/* 主：保存类按钮统一一个样子 */
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn:not(.chat-btn-secondary),.btn-primary,.btn-blue){border:1px solid var(--ck-action-fill)!important;background:var(--ck-action-fill)!important;color:var(--ck-action-ink)!important}
+/* 次与危险：描边不加深 */
+#tab-chat #chat-settings :is(.btn-outline,.btn-red,.chat-wide-btn.chat-btn-secondary){border:1px solid var(--ck-line-strong)!important;background:var(--ck-surface)!important;color:var(--ck-text)!important}
+#tab-chat #chat-settings .btn-red{color:var(--ck-danger-ink)!important}
+@media (hover:hover){
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn:not(.chat-btn-secondary),.btn-primary,.btn-blue):hover:not(:disabled){filter:brightness(.94)}
+#tab-chat #chat-settings :is(.btn-outline,.btn-red,.chat-wide-btn.chat-btn-secondary):hover:not(:disabled){background:var(--ck-surface-soft)!important}
+}
+/* 保存状态文字：12px；成功不靠绿色小字（浅色 --ck-accent-strong 对比不够），出错用危险色 */
+#tab-chat #chat-settings .chat-cache-save-status{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;font-weight:400!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-cache-save-status.ok{color:var(--ck-text-soft)!important}
+#tab-chat #chat-settings .chat-cache-save-status.error{color:var(--ck-danger-ink)!important}
+/* 页签：每项高 44、15px/600，选中底部 2px，放不下横向滚动；底色与吸顶保持现状 */
+#tab-chat #chat-settings .ck-settings-tabs{gap:4px;padding:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;border-bottom:1px solid var(--ck-line)}
+#tab-chat #chat-settings .ck-settings-tabs::-webkit-scrollbar{display:none}
+#tab-chat #chat-settings .ck-settings-tabs button{box-sizing:border-box;flex:0 0 auto;height:44px;min-height:44px;min-width:44px;padding:0 12px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--ck-text-soft);font-size:var(--ck-fz-md);font-weight:600;line-height:1;white-space:nowrap}
+#tab-chat #chat-settings .ck-settings-tabs button[aria-selected=true]{background:transparent;box-shadow:inset 0 -2px var(--ck-accent-strong);color:var(--ck-text)}
+#tab-chat #chat-settings .ck-settings-tabs button:focus-visible{outline:2px solid var(--ck-accent-strong);outline-offset:-2px}
+@media (max-width:760px){
+#tab-chat #chat-settings textarea{resize:none}
+}
+@media (prefers-reduced-motion:reduce){
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red){transition:none}
+#tab-chat #chat-settings :is(.chat-cache-save-btn,.chat-wide-btn,.btn-primary,.btn-blue,.btn-outline,.btn-red):active:not(:disabled){transform:none}
+}
+/* ==== B1b END ==== */
+
+/* ==== B1c BEGIN ==== */
+/* B1c 设置里的专项面板：调试、世界书、缓存策略、召回模式、计费说明与默认价格、当前思考。
+   只写这些面板自己的块；按钮、输入框、下拉、页签归 B1b。外层卡片沿用 B1a 的 .chat-memory-card 和分组，
+   卡片里的内层块一律 surface-soft 底、圆角 8、无边。 */
+/* 折叠块：调试“设置与操作”、世界书“注入设置与说明”各是一张卡片；summary 是不低于 44 的行 */
+#tab-chat #chat-settings :is(.chat-debug-controls,.chat-worldbook-options){margin:0!important;padding:0 16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important;box-shadow:none!important}
+#tab-chat #chat-settings :is(.chat-debug-controls,.chat-worldbook-options)[open]{padding-bottom:16px!important}
+#tab-chat #chat-settings :is(.chat-debug-controls,.chat-worldbook-options,.chat-cost-card,.chat-cache-diagnostic-fold)>summary{box-sizing:border-box;min-height:48px!important;margin:0!important;padding:13px 0!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important;cursor:pointer}
+#tab-chat #chat-settings :is(.chat-debug-controls,.chat-worldbook-options,.chat-cost-card,.chat-cache-diagnostic-fold)>summary:focus-visible{outline:2px solid var(--ck-accent-strong);outline-offset:2px;border-radius:8px}
+#tab-chat #chat-settings :is(.chat-cost-card,.chat-cache-diagnostic-fold)>summary>span{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;font-weight:400!important;line-height:1.4!important}
+/* 调试 */
+#tab-chat #chat-settings .chat-debug-saved-card{margin:0!important;padding:12px!important;border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-debug-saved-card>b{display:block;color:var(--ck-text)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-debug-cache-mode{margin-top:4px;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-debug-toolbar{display:flex;flex-wrap:wrap;gap:8px!important;margin:12px 0 0!important;padding:0!important}
+#tab-chat #chat-settings .chat-debug{font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+#tab-chat #chat-settings .chat-debug-empty{padding:12px 0!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-debug-record{border-radius:12px!important;box-shadow:none!important}
+#tab-chat #chat-settings :is(.chat-debug-time,.chat-debug-topic){font-size:var(--ck-fz-xs)!important;line-height:1.4!important;font-variant-numeric:tabular-nums}
+#tab-chat #chat-settings :is(.chat-debug-body,.chat-debug-body pre){max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+#tab-chat #chat-settings .chat-debug-sheet{border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important;box-shadow:none!important;font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+#tab-chat #chat-settings .chat-debug-sheet-section{border:0!important;box-shadow:none!important}
+#tab-chat #chat-settings :is(.chat-debug-sheet-head,.chat-debug-sheet-note,.chat-debug-sheet-section-title,.chat-debug-sheet-chip,.chat-debug-sheet-token){font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-debug-sheet-table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#tab-chat #chat-settings .chat-debug-sheet-table,#tab-chat #chat-settings .chat-debug-sheet-table :is(th,td),#tab-chat #chat-settings .chat-debug-sheet-table td::before{font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+/* 世界书 */
+#tab-chat #chat-settings .chat-worldbook-intro{gap:12px!important;margin:0 0 4px!important;padding:0!important}
+#tab-chat #chat-settings .chat-worldbook-intro h2{font-size:var(--ck-fz-xl)!important;font-weight:600!important;line-height:1.4!important;letter-spacing:0}
+#tab-chat #chat-settings .chat-worldbook-intro p{margin:4px 0 0!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-worldbook-catalog{margin:0!important;padding:16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-worldbook-head{display:flex;align-items:center;justify-content:space-between;gap:8px!important;margin:0!important;padding:0!important;border:0!important}
+#tab-chat #chat-settings .chat-worldbook-head>b{min-width:0;color:var(--ck-text)!important;font-size:var(--ck-fz-md)!important;font-weight:600!important;line-height:1.4!important;font-variant-numeric:tabular-nums}
+#tab-chat #chat-settings .chat-worldbook-list{margin:12px 0 0!important;padding:0!important}
+#tab-chat #chat-settings .chat-worldbook-empty{margin:0!important;padding:12px!important;border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-worldbook-select-row{gap:8px!important;font-size:var(--ck-fz-sm)!important;line-height:1.4!important}
+#tab-chat #chat-settings :is(.chat-worldbook-select-row>label,.chat-worldbook-row){color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-worldbook-options>:is(label,p){margin:0 0 12px!important;font-size:var(--ck-fz-sm)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-worldbook-options>p{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important}
+#tab-chat #chat-settings .chat-worldbook-options>:last-child{margin-bottom:0!important}
+#tab-chat #chat-settings .chat-worldbook-editor{margin:0!important;padding:16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-worldbook-editor-heading{gap:8px!important}
+#tab-chat #chat-settings .chat-worldbook-editor-heading>b{color:var(--ck-text)!important;font-size:var(--ck-fz-lg)!important;font-weight:600!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-worldbook-editor-heading>span{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important;font-variant-numeric:tabular-nums}
+#tab-chat #chat-settings .chat-worldbook-properties{gap:12px!important}
+#tab-chat #chat-settings :is(.chat-worldbook-priority,.chat-worldbook-copy){color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-worldbook-footer{gap:8px!important}
+/* 缓存策略、召回模式（外层是 B1a 的卡片） */
+#tab-chat #chat-settings .chat-cache-saved{margin:12px 0 0!important;padding:8px 12px!important;border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-cache-strategy-select-row{gap:8px!important;margin-top:12px!important}
+#tab-chat #chat-settings :is(.chat-cache-strategy-select-row>label,.chat-recall-mode-label,.chat-recall-recent){color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:400!important;line-height:1.4!important}
+#tab-chat #chat-settings :is(.chat-cache-mode-detail,.chat-recall-mode-detail){color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+#tab-chat #chat-settings .chat-cache-mode-actions{gap:8px 12px!important;margin-top:12px!important}
+#tab-chat #chat-settings .chat-cache-save-status{font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings .chat-recall-mode-label{margin:12px 0 4px!important}
+#tab-chat #chat-settings .chat-recall-mode-detail{margin:8px 0 0!important}
+#tab-chat #chat-settings .chat-recall-recent>small{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+/* 计费：两张说明折叠卡、默认价格 */
+#tab-chat #chat-settings .chat-side-panel>.chat-cost-card>summary{margin:-12px 0!important}
+#tab-chat #chat-settings section.chat-setting-group>details.chat-cost-card[open]{padding-bottom:12px!important}
+#tab-chat #chat-settings .chat-cost-card>div{color:var(--ck-text-soft);font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+#tab-chat #chat-settings :is(.chat-cost-grid,.chat-cost-mode-hint,.chat-cost-default-count){color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important;font-variant-numeric:tabular-nums}
+#tab-chat #chat-settings .chat-cost-defaults{margin-top:12px!important}
+#tab-chat #chat-settings :is(.chat-cost-default-empty,.chat-cost-default-editor){padding:12px!important;border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-cost-default-empty{color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings :is(.chat-cost-default-picker,.chat-cost-default-editor,.chat-cost-default-editor label){color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;line-height:1.4!important}
+#tab-chat #chat-settings :is(.chat-cost-default-head,.chat-cost-default-grid){gap:12px 8px!important}
+#tab-chat #chat-settings .chat-cost-defaults-actions{gap:8px!important;margin-top:12px!important}
+/* 当前思考：一张卡片，里面的原文是内层块，等宽 12px/1.5，可横向滚动 */
+#tab-chat #chat-settings #chat-current-thinking{margin:0!important;padding:16px!important;border:1px solid var(--ck-line)!important;border-radius:12px!important;background:var(--ck-surface)!important;box-shadow:none!important}
+#tab-chat #chat-settings #chat-current-thinking>header{gap:8px!important}
+#tab-chat #chat-settings #chat-current-thinking>header b{color:var(--ck-text)!important;font-size:var(--ck-fz-lg)!important;font-weight:600!important;line-height:1.4!important}
+#tab-chat #chat-settings #chat-current-thinking>header span{color:var(--ck-muted)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat #chat-settings #chat-current-thinking-text{max-width:100%;margin:12px 0 0!important;padding:12px!important;border:0!important;border-radius:8px!important;background:var(--ck-surface-soft)!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.5!important;overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* FIXB1 */
+/* FIXB1-1 分组里开关行紧跟说明（计费页“开启用量统计”）：B1a 的 :not(h3)+.chat-field-hint{margin-top:-8px} 把说明拉进开关行的下内边距，
+   开关行盖住说明顶部。改成两者不相交：这种开关行下内边距 12→8（行高 44，仍整行可点），说明不再上提。 */
+#tab-chat #chat-settings section.chat-setting-group>.chat-switch:has(+.chat-field-hint){min-height:44px!important;padding-bottom:8px!important}
+#tab-chat #chat-settings section.chat-setting-group>.chat-switch+.chat-field-hint{margin-top:0!important}
+/* FIXB1b */
+/* FIXB1b-1 点按目标：文字按钮 ≤760 固定 44（≥761 仍跟 B1b 的 --ck-ctl=36）；输入类任何宽度 44；头部主题键 44×44，紧挨关闭键不重叠。 */
+@media (max-width:760px){
+#tab-chat #chat-settings :is(.chat-worldbook-add-btn.chat-worldbook-add-btn,.chat-cache-save-btn.chat-cache-save-btn,.chat-wide-btn.chat-wide-btn){box-sizing:border-box!important;height:var(--ck-tap)!important;min-height:var(--ck-tap)!important}
+}
+#tab-chat #chat-settings .chat-recall-recent.chat-recall-recent input{box-sizing:border-box!important;height:var(--ck-tap)!important;min-height:var(--ck-tap)!important;min-width:var(--ck-tap)!important}
+#tab-chat #chat-settings .chat-settings-head #chat-debug-theme-toggle{box-sizing:border-box!important;top:calc((var(--ck-head-h) - 44px)/2)!important;right:48px!important;width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;border-radius:8px!important}
+/* 调试复制键外观保持 26×26，点按盒用 ::after 扩到 44×44（上、右各 8，正好到所在块的边） */
+#tab-chat #chat-settings .chat-debug-copy{overflow:visible!important}
+#tab-chat #chat-settings .chat-debug-copy::after{content:"";position:absolute;top:-8px;right:-8px;bottom:-10px;left:-10px}
+/* FIXB1b-2 思考预算不可用说明 11→12 */
+#tab-chat #chat-settings #chat-thinking-budget-unavailable{font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+/* FIXB1b-3 召回模式分段：一排等宽次按钮（间距 4），每项高 44、13px/600；选中态同 B1b 页签（--ck-text 字 + 底部 2px --ck-accent-strong），不改字重 */
+#tab-chat #chat-settings .chat-recall-mode-segment{gap:4px!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+#tab-chat #chat-settings .chat-recall-mode-segment>label>span{box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;min-height:var(--ck-tap)!important;padding:4px 12px!important;border:1px solid var(--ck-line-strong)!important;border-radius:8px!important;background:var(--ck-surface)!important;box-shadow:none!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important;letter-spacing:0!important;text-align:center}
+#tab-chat #chat-settings .chat-recall-mode-segment>label>input:checked+span{border-color:var(--ck-accent-strong)!important;background:var(--ck-surface)!important;box-shadow:inset 0 -2px var(--ck-accent-strong)!important;color:var(--ck-text)!important}
+#tab-chat #chat-settings .chat-recall-mode-segment>label>input:focus-visible+span{outline:2px solid var(--ck-accent-strong)!important;outline-offset:2px}
+/* FIXB1b-4 导航下拉按 B1b 输入框取值；“最近 N 轮”行、带单选/勾选的 label 按 B1b 标签取值（分组里的行高仍归 B1a 的 48） */
+#tab-chat #chat-settings select#chat-settings-nav{box-sizing:border-box!important;height:var(--ck-tap)!important;min-height:var(--ck-tap)!important;padding:8px 32px 8px 12px!important;border:1px solid var(--ck-line-strong)!important;border-radius:8px!important;background-color:var(--ck-surface)!important;box-shadow:none!important;color:var(--ck-text)!important;font-size:var(--ck-fz-field)!important;font-weight:400!important;line-height:1.5!important;letter-spacing:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tab-chat #chat-settings select#chat-settings-nav:focus{border-color:var(--ck-accent-strong)!important}
+#tab-chat #chat-settings select#chat-settings-nav:focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:2px!important}
+#tab-chat #chat-settings .chat-recall-recent{box-sizing:border-box!important;min-height:var(--ck-tap)!important;gap:8px!important;margin:8px 0 12px!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important;letter-spacing:0!important}
+#tab-chat #chat-settings label:has(>input:is([type=checkbox],[type=radio])):not(.chat-switch,.chat-recall-mode-segment>label){gap:8px!important;align-items:center!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-sm)!important;font-weight:400!important;line-height:1.4!important;letter-spacing:0!important;cursor:pointer}
+#tab-chat #chat-settings label:has(>input:is([type=checkbox],[type=radio])):not(.chat-switch,.chat-recall-mode-segment>label,section.chat-setting-group>label){box-sizing:border-box!important;min-height:var(--ck-tap)!important}
+#tab-chat #chat-settings label:has(>input:is([type=checkbox],[type=radio])):not(.chat-switch,.chat-recall-mode-segment>label)>input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--ck-accent-strong)}
+/* FIXB1b-5 范围角标文字对比度：底色不动，字换 --ck-text-soft（SYSTEM §3.6） */
+#tab-chat #chat-settings .chat-scope-badge{color:var(--ck-text-soft)!important}
+/* ==== B1c END ==== */
+
+/* ==== B2a BEGIN ==== */
+/* 窗口抽屉。前缀 #tab-chat .chat-drawer；只有旧生效声明带 !important 的属性才带 !important（旧规则在 notebook.css:269-293、chat.css:3088-3161、chat-ui.css:69-72）。 */
+#tab-chat .chat-drawer .chat-icon-btn{width:var(--ck-tap) !important;height:var(--ck-tap) !important;min-width:var(--ck-tap);min-height:var(--ck-tap)}
+#tab-chat .chat-drawer .chat-drawer-new{min-height:var(--ck-tap);font-size:var(--ck-fz-sm);font-weight:600;border-radius:8px}
+#tab-chat .chat-drawer .chat-drawer-folder{width:var(--ck-tap);height:var(--ck-tap);min-height:var(--ck-tap);border-radius:8px}
+#tab-chat .chat-drawer .chat-session-tools input{height:var(--ck-tap) !important;font-size:var(--ck-fz-field) !important;border-radius:8px !important}
+#tab-chat .chat-drawer .chat-session-tools input:focus-visible{border-color:var(--ck-accent-strong)}
+#tab-chat .chat-drawer .chat-session-row{grid-template-columns:minmax(0,1fr) var(--ck-tap) !important;min-height:56px !important}
+#tab-chat .chat-drawer .chat-session-row.active{background:var(--ck-accent-wash) !important;box-shadow:inset 3px 0 var(--ck-accent-strong) !important}
+#tab-chat .chat-drawer .chat-session-item{min-height:56px !important;padding:12px 4px 12px 16px !important;row-gap:4px !important}
+#tab-chat .chat-drawer .chat-session-item .chat-session-title{font-size:var(--ck-fz-md) !important;font-weight:600 !important;line-height:1.4 !important}
+#tab-chat .chat-drawer .chat-session-item :is(.chat-session-preview,.chat-session-meta){font-size:var(--ck-fz-xs) !important;line-height:1.4 !important}
+#tab-chat .chat-drawer .chat-session-item .chat-session-meta{font-variant-numeric:tabular-nums}
+#tab-chat .chat-drawer .chat-session-row.active .chat-session-item :is(.chat-session-preview,.chat-session-meta,.chat-session-folder-label){color:var(--ck-text-soft) !important}
+#tab-chat .chat-drawer .chat-session-more{width:var(--ck-tap);height:var(--ck-tap);margin:0;align-self:center;border-radius:8px}
+#tab-chat .chat-drawer .chat-folder-head{grid-template-columns:minmax(0,1fr) var(--ck-tap) !important;gap:4px !important;margin:0 0 4px}
+#tab-chat .chat-drawer .chat-folder-head>button:first-child{min-height:var(--ck-tap);padding:4px 8px !important}
+#tab-chat .chat-drawer .chat-folder-head b{font-size:var(--ck-fz-sm);font-weight:600}
+#tab-chat .chat-drawer .chat-folder-head small{font-size:var(--ck-fz-xs);font-variant-numeric:tabular-nums}
+#tab-chat .chat-drawer .chat-folder-menu{width:var(--ck-tap);height:var(--ck-tap);border-radius:8px}
+#tab-chat .chat-drawer :is(.chat-folder-empty,.chat-session-search-empty){font-size:var(--ck-fz-sm);line-height:1.4;text-align:center;padding:16px}
+#tab-chat .chat-drawer :is(.chat-icon-btn,.chat-drawer-new,.chat-drawer-folder):focus-visible{outline:2px solid var(--ck-accent-strong);outline-offset:2px}
+#tab-chat .chat-drawer :is(.chat-session-item,.chat-session-more,.chat-folder-menu,.chat-folder-head>button:first-child):focus-visible{outline:2px solid var(--ck-accent-strong);outline-offset:-2px}
+#tab-chat .chat-drawer .chat-drawer-head{padding:16px 16px 12px !important;min-height:0 !important}
+#tab-chat .chat-drawer .chat-drawer-heading b{font-size:var(--ck-fz-xl) !important}
+#tab-chat .chat-drawer .chat-drawer-actions{padding:0 16px !important;gap:8px !important}
+#tab-chat .chat-drawer .chat-session-tools{margin:12px 16px !important}
+#tab-chat .chat-drawer .chat-session-list{padding:0 16px 16px !important}
+#tab-chat .chat-drawer-mask{background:var(--ck-scrim) !important}
+#tab-chat .chat-drawer .chat-folder-divider small{color:var(--ck-text-soft)}
+/* ==== B2a END ==== */
+
+/* ==== B2b BEGIN ==== */
+/* 对话内搜索。前缀 #tab-chat #chat-search（两个 id，盖过 chat-ui.css:165-195 的 body.chat-active / body.dark 规则和 notebook.css:418）；只有旧生效声明带 !important 的属性才带 !important。底色、下边线、最大高度、猫脸图标保持现状；面板在消息区上方的文档流里，不盖顶栏。 */
+#tab-chat #chat-search{gap:8px !important;padding:8px 12px !important}
+#tab-chat #chat-search .chat-search-heading{gap:8px;min-height:32px}
+#tab-chat #chat-search .chat-search-heading b{font-size:var(--ck-fz-sm);font-weight:600;letter-spacing:0;line-height:1.4;color:var(--ck-text)}
+#tab-chat #chat-search .chat-search-heading>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--ck-fz-xs);line-height:1.4;color:var(--ck-text-soft)}
+/* 关闭键 44×44；上下各 -6 让标题行只占 32 高，点按盒伸进面板内边距和行间距，不与输入框重叠 */
+#tab-chat #chat-search .chat-search-close{display:grid;place-items:center;flex:none;width:var(--ck-tap);height:var(--ck-tap);min-width:var(--ck-tap);min-height:var(--ck-tap);margin:-6px -4px -6px auto;padding:0;border-radius:8px;color:var(--ck-text-soft);font-size:20px;line-height:1}
+/* 输入框自己带边框（与抽屉搜索框 B2a 同值：44 高、--ck-fz-field、圆角 8），外层 .chat-search-field 只负责排布 */
+#tab-chat #chat-search .chat-search-field{gap:8px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+#tab-chat #chat-search .chat-search-field:focus-within{outline:0}
+#tab-chat #chat-search input{box-sizing:border-box;height:var(--ck-tap) !important;padding:8px 12px !important;border:1px solid var(--ck-line-strong) !important;border-radius:8px !important;background:var(--ck-surface) !important;color:var(--ck-text) !important;font-size:var(--ck-fz-field) !important}
+#tab-chat #chat-search input::placeholder{color:var(--ck-muted);opacity:1}
+#tab-chat #chat-search input:focus-visible{border-color:var(--ck-accent-strong) !important}
+/* “清空”和上一条/下一条：次按钮 */
+#tab-chat #chat-search :is(.chat-search-field>button,.chat-search-navigation button){flex:none;min-width:var(--ck-tap);min-height:var(--ck-tap);padding:0 12px;border:1px solid var(--ck-line-strong);border-radius:8px;background:var(--ck-surface);color:var(--ck-text);font-size:var(--ck-fz-sm);font-weight:600;line-height:1;white-space:nowrap}
+#tab-chat #chat-search .chat-search-navigation button{color:var(--ck-text) !important;font-size:var(--ck-fz-sm) !important}
+#tab-chat #chat-search :is(.chat-search-field>button,.chat-search-navigation button):not(:disabled):hover{background:var(--ck-surface-soft)}
+#tab-chat #chat-search button:disabled{opacity:.45;cursor:default}
+#tab-chat #chat-search .chat-search-navigation{gap:8px;font-size:var(--ck-fz-xs);line-height:1.4;color:var(--ck-text-soft)}
+#tab-chat #chat-search .chat-search-navigation>span{min-width:0;font-variant-numeric:tabular-nums}
+#tab-chat #chat-search .chat-search-navigation>div{flex:none;gap:8px}
+/* 结果行 */
+#tab-chat #chat-search .chat-search-results{gap:4px}
+#tab-chat #chat-search .chat-search-result{justify-content:center;gap:4px;min-height:48px;padding:8px 12px;border-radius:8px;background:transparent;color:var(--ck-text)}
+#tab-chat #chat-search .chat-search-result:hover{background:var(--ck-surface-soft)}
+#tab-chat #chat-search .chat-search-result.is-current{background:var(--ck-surface);border-color:var(--ck-line);box-shadow:inset 3px 0 var(--ck-accent-strong)}
+#tab-chat #chat-search .chat-search-result-meta{gap:8px;font-size:var(--ck-fz-xs);line-height:1.4;color:var(--ck-text-soft);font-variant-numeric:tabular-nums}
+#tab-chat #chat-search .chat-search-result-meta b{font-size:var(--ck-fz-xs);font-weight:600;color:var(--ck-text-soft)}
+#tab-chat #chat-search .chat-search-result-copy{font-size:var(--ck-fz-sm);line-height:1.4;color:var(--ck-text)}
+#tab-chat #chat-search mark{border-radius:4px;background:var(--ck-accent-soft);color:var(--ck-text);font-weight:600}
+#tab-chat #chat-search .chat-search-empty{padding:4px 0;font-size:var(--ck-fz-sm);line-height:1.4;color:var(--ck-text-soft)}
+/* 焦点环朝内，避免被面板和结果列表的 overflow 裁掉 */
+#tab-chat #chat-search button:focus-visible{outline:2px solid var(--ck-accent-strong);outline-offset:-2px}
+@media (max-width:760px){#tab-chat #chat-search .chat-search-heading>span{display:none}}
+@media (min-width:761px){#tab-chat #chat-search{padding:12px 16px !important}}
+/* ==== B2b END ==== */
+
+/* ==== B3a BEGIN ==== */
+/* 通用弹窗 #ckActionModal（登录门是它加 .panel-auth-gate）、连接网关 #ck-backend-dialog、版本说明 .panel-version-notes。
+   前两个是 body 的直接子节点，在 #tab-chat 外：断点跟全局变量（640/641）。
+   带 !important 的声明，都是因为 wechat.css / notebook.css 里生效的旧声明带 !important。 */
+#ckActionModal,#ck-backend-dialog{padding-left:var(--ck-space-4);padding-right:var(--ck-space-4)}
+#ckActionModal:not(.panel-auth-gate),#ck-backend-dialog{background-color:var(--ck-scrim-dialog)}
+
+/* 卡片 */
+#ckActionModal .ck-action-dialog{width:min(440px,calc(100vw - 32px))!important;padding:20px!important;border-radius:var(--ck-radius-lg)!important;gap:var(--ck-space-3)!important}
+#ckActionModal .ck-action-dialog #ck-action-title{font-size:var(--ck-fz-lg)!important;font-weight:600;line-height:1.4!important}
+#ckActionModal .ck-action-dialog .ck-action-message{margin:-4px 0 0!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-md)!important;line-height:1.6!important}
+#ckActionModal .ck-action-dialog #ck-action-input{min-height:var(--ck-field);margin-bottom:0!important;border-radius:var(--ck-radius-sm);font-size:var(--ck-fz-field)}
+
+/* 选项列表：搜索框在滚动区外面（flex:none），列表自己滚 */
+#ckActionModal .ck-action-dialog #ck-choice-search{min-height:var(--ck-field);padding:8px 12px!important;border-radius:var(--ck-radius-sm)!important;font-size:var(--ck-fz-field)}
+#ckActionModal .ck-action-dialog .ck-action-choices{margin:0!important;gap:var(--ck-space-2)!important}
+#ckActionModal:not(.ck-provider-picker) .ck-action-dialog .ck-action-choices{max-height:60dvh!important}
+#ckActionModal .ck-action-dialog .ck-action-choice{min-height:48px!important;padding:12px 40px 12px 16px!important;border-radius:var(--ck-radius-md)!important}
+#ckActionModal .ck-action-dialog .ck-action-choice-label{font-size:var(--ck-fz-md)!important}
+#ckActionModal .ck-action-dialog .ck-action-choice small{color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#ckActionModal .ck-action-dialog .ck-action-choice.active{background-color:var(--ck-accent-wash)!important}
+#ckActionModal .ck-action-dialog .ck-action-choice.danger{color:var(--ck-danger-ink)!important}
+#ckActionModal .ck-action-dialog .ck-action-choice.danger:hover{background-color:var(--ck-danger-wash)!important}
+
+/* 按钮行：右对齐、间距 8；手机上等宽，放不下时换行 */
+#ckActionModal .modal-btns,#ck-backend-dialog .modal-btns{gap:var(--ck-space-2);justify-content:flex-end}
+#ckActionModal .ck-action-dialog .modal-btns{margin-top:var(--ck-space-2)!important}
+#ckActionModal .modal-btns .btn,#ck-backend-dialog .modal-btns .btn{min-width:var(--ck-tap);min-height:var(--ck-ctl);font-size:var(--ck-fz-sm);font-weight:600}
+#ckActionModal.panel-auth-gate .modal-btns .btn-blue{min-width:96px}
+@media (max-width:640px){
+  #ckActionModal .modal-btns,#ck-backend-dialog .modal-btns{flex-wrap:wrap}
+  #ckActionModal .modal-btns .btn,#ck-backend-dialog .modal-btns .btn,#ckActionModal.panel-auth-gate .modal-btns .btn-blue{flex:1 1 0;min-width:auto;white-space:nowrap}
+}
+
+/* 登录门：两个附加键左右对齐，顶部绿线跟内边距对齐 */
+#ckActionModal.panel-auth-gate .ck-auth-backend,#ckActionModal.panel-auth-gate .ck-auth-codex{margin:0;min-height:var(--ck-tap)}
+#ckActionModal.panel-auth-gate .ck-action-dialog::before{left:20px}
+
+/* 连接网关：3 个下拉保持原生，只调尺寸 */
+#ck-backend-dialog .ck-backend-card{width:min(440px,calc(100vw - 32px));padding:20px;border-radius:var(--ck-radius-lg)!important}
+#ck-backend-dialog .ck-backend-card h3{font-size:var(--ck-fz-lg);font-weight:600;line-height:1.4}
+#ck-backend-dialog .ck-backend-card p{margin:var(--ck-space-2) 0 0;color:var(--ck-text-soft);font-size:var(--ck-fz-md);line-height:1.6}
+#ck-backend-dialog .ck-backend-card small{margin:var(--ck-space-1) 0 0;color:var(--ck-text-soft);font-size:var(--ck-fz-xs);line-height:1.4;opacity:1}
+#ck-backend-dialog .ck-backend-card label{margin:var(--ck-space-3) 0 var(--ck-space-1);color:var(--ck-text-soft);font-size:var(--ck-fz-sm);font-weight:600;line-height:1.4}
+#ck-backend-dialog .ck-backend-card select,#ck-backend-dialog .ck-backend-card input{min-height:var(--ck-field);padding:8px 12px;font-size:var(--ck-fz-field);line-height:1.5}
+#ck-backend-dialog .ck-backend-card .modal-btns{margin-top:20px}
+
+/* 版本说明气泡（没有测量状态，按“菜单/浮层”取值） */
+.panel-version-notes.panel-version-notes{padding:var(--ck-space-4);border-radius:var(--ck-radius-md)!important;box-shadow:var(--ck-shadow-md);font-size:var(--ck-fz-sm);line-height:1.6}
+.panel-version-notes.panel-version-notes>b{font-size:var(--ck-fz-lg);font-weight:600}
+/* Merge decision: keep the gateway dialog short enough on phones that its buttons need no scrolling. */
+@media (max-width:640px){#ck-backend-dialog .ck-backend-card p{font-size:var(--ck-fz-sm)}}
+/* ==== B3a END ==== */
+
+/* ==== B3b BEGIN ==== */
+/* 自定义下拉：select-ui.js 在原生 select 后面插入的 button.ck-select-button（span 文字 + svg 箭头）。
+   只管 #tab-chat 里的；其它标签页、任务中心（.cx-overlay 自有一套）、连接网关（data-ck-native 原生 select，属 B3a）都不碰。
+   取值与 B1b 的输入框一致：高 44（--ck-tap，≥1100 也不降）、字 --ck-fz-field/400/1.5、1px --ck-line-strong、圆角 8、--ck-surface 底；
+   文字单行省略，右端 16 的箭头；文字右侧留白 32 = 右内边距 8 + 箭头 16 + 间距 8（箭头是 flex 子项，不是背景图）。
+   旧规则 notebook.css:190-202 `body .ck-select-button`（0,1,1）的内边距、圆角、间距、边、底、字色、字体、悬停、焦点环带 !important，这里对应属性同样带。 */
+#tab-chat .ck-select-button{box-sizing:border-box;height:var(--ck-tap);min-height:var(--ck-tap);padding:8px 8px 8px 12px!important;gap:8px!important;border:1px solid var(--ck-line-strong)!important;border-radius:8px!important;background:var(--ck-surface)!important;box-shadow:none;color:var(--ck-text)!important;font-size:var(--ck-fz-field)!important;font-weight:400!important;line-height:1.5!important;letter-spacing:0}
+#tab-chat .ck-select-button span{display:block;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;overflow-wrap:normal}
+#tab-chat .ck-select-button svg{width:16px;height:16px;flex:none;color:var(--ck-muted)}
+#tab-chat .ck-select-button:hover{border-color:var(--ck-line-strong)!important;background:var(--ck-surface-soft)!important}
+#tab-chat .ck-select-button:is(:focus-visible,[aria-expanded=true]){border-color:var(--ck-accent-strong)!important}
+#tab-chat .ck-select-button:focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:2px}
+#tab-chat .ck-select-button:disabled{background:var(--ck-surface-soft)!important;color:var(--ck-muted)!important;opacity:1;cursor:default}
+/* ==== B3b END ==== */
+
+/* ==== B4 BEGIN ==== */
+/* 侧边导航，全站共用，在 #tab-chat 之外（已核实）：前缀 #side-drawer，不写宽度断点。只有旧生效声明带 !important 的属性才带 !important（旧规则在 notebook.css:108、109、333）。抽屉宽度、底色、圆角、层级，分组标题和订阅小字的颜色保持现状。 */
+#side-drawer .side-drawer-head{padding:0 var(--ck-space-2) 0 var(--ck-space-5)}
+#side-drawer .side-drawer-head b{font-weight:600}
+#side-drawer .side-drawer-head span{font-size:var(--ck-fz-xs)}
+#side-drawer .side-drawer-head button{flex:0 0 auto;width:var(--ck-tap);height:var(--ck-tap)}
+#side-drawer .side-drawer-head button svg{width:20px;height:20px}
+#side-drawer .side-nav{padding:var(--ck-space-2) var(--ck-space-2) calc(var(--ck-space-2) + env(safe-area-inset-bottom))}
+/* 分组标题上距用 8 不用 16：实测用 16 时 390×844 下 14 项加 4 个标题共 868 高，一屏放不下，最后一项被底边截掉 */
+#side-drawer .side-nav-label{margin:var(--ck-space-2) var(--ck-space-4) var(--ck-space-1);font-size:var(--ck-fz-xs);font-weight:600;line-height:1.4}
+#side-drawer .side-nav-label:first-child{margin-top:0}
+#side-drawer .side-nav-item{gap:var(--ck-space-2);min-height:48px;margin-block:0;padding:var(--ck-space-3) var(--ck-space-4);font-size:var(--ck-fz-md) !important;font-weight:400}
+#side-drawer .side-nav-item > span{line-height:1.4}
+#side-drawer .side-nav-item .side-nav-icon{width:20px;height:20px;flex:0 0 20px}
+/* 当前页：底色保持现状（深色下 --ck-accent-wash 比抽屉底还暗，不换）；浅色旧文字色在该底上只有 4.35:1，换 --ck-text；左侧 2px 竖条保留 */
+#side-drawer .side-nav-item.active{color:var(--ck-text) !important;font-weight:600}
+#side-drawer #ck-sub-nav-state{flex:0 0 auto;font-size:var(--ck-fz-xs);line-height:1.4;white-space:nowrap}
+/* ==== B4 END ==== */
+
+/* ==== B5 BEGIN ==== */
+/* 订阅详情卡片 #ck-sub-dialog（subscription.js 生成，body 的直接子节点，在 #tab-chat 外：断点跟全局变量 640/641）。
+   只调尺寸、间距、层次和出错配色，不改 DOM/JS；不含底部 #ck-sub-inline*（A3b）和侧栏 #ck-sub-nav-state（B4）。
+   字号只升不降（D1“订阅弹窗字号保持”）：标题 23px、额度数字 32/27px 保持现状，没有按方案降到 16/20。
+   !important 只有卡片圆角一处：生效的旧声明 notebook.css:157 带 !important。 */
+#ck-sub-dialog{padding-left:var(--ck-space-4);padding-right:var(--ck-space-4);background-color:var(--ck-scrim-dialog)}
+#ck-sub-dialog .ck-sub-card{padding:20px;border-radius:var(--ck-radius-lg)!important}
+
+/* 标题区与分组标题 */
+#ck-sub-dialog .ck-sub-card .ck-sub-heading{margin-bottom:var(--ck-space-4)}
+#ck-sub-dialog .ck-sub-card .ck-sub-kicker{font-size:var(--ck-fz-xs);letter-spacing:0}
+#ck-sub-dialog .ck-sub-card h3{margin-top:var(--ck-space-1)}
+#ck-sub-dialog .ck-sub-card h4{margin:var(--ck-space-5) 0 var(--ck-space-3);font-size:var(--ck-fz-lg);line-height:1.4}
+
+/* 按钮：与 B3a 的弹窗按钮同值（手机 44，≥641 为 36） */
+#ck-sub-dialog .ck-sub-card .btn{min-width:var(--ck-tap);min-height:var(--ck-ctl);font-size:var(--ck-fz-sm);font-weight:600}
+
+/* 状态摘要、说明文字、连接行：各块间距 12，说明行高统一 1.6 */
+#ck-sub-dialog .ck-sub-card .ck-sub-summary{gap:var(--ck-space-3);padding-left:var(--ck-space-3)}
+#ck-sub-dialog .ck-sub-card .ck-sub-summary p{margin-top:var(--ck-space-1);line-height:1.6}
+#ck-sub-dialog .ck-sub-card .ck-sub-muted{margin-top:var(--ck-space-2);line-height:1.6}
+#ck-sub-dialog .ck-sub-card>.ck-sub-muted{margin-top:var(--ck-space-3)}
+#ck-sub-dialog .ck-sub-card .ck-sub-route{gap:var(--ck-space-2) var(--ck-space-3);margin-top:var(--ck-space-3)}
+#ck-sub-dialog .ck-sub-card .ck-sub-footnote{margin-top:var(--ck-space-3);font-size:var(--ck-fz-xs);line-height:1.6}
+
+/* 出错提示与被拒额度窗：危险色走变量（特异性要盖过旧的 body.dark 规则 (1,2,1)）。不写 display，保留 [hidden] */
+#ck-sub-dialog .ck-sub-card p.ck-sub-error{margin-top:var(--ck-space-3);padding:var(--ck-space-2) var(--ck-space-3);border:0;border-radius:var(--ck-radius-sm);background-color:var(--ck-danger-wash);color:var(--ck-danger-ink);font-size:var(--ck-fz-sm);line-height:1.4}
+#ck-sub-dialog .ck-sub-card .ck-sub-window[data-level=paused]{color:var(--ck-danger-ink)}
+
+/* 额度窗 */
+#ck-sub-dialog .ck-sub-card .ck-sub-number{margin:var(--ck-space-1) 0 var(--ck-space-2);font-weight:600}
+#ck-sub-dialog .ck-sub-card .ck-sub-reset{margin-top:var(--ck-space-1);font-size:var(--ck-fz-xs);line-height:1.6}
+
+/* 用量保护表单：勾选行和输入框 44，勾选框 20 */
+#ck-sub-dialog .ck-sub-card fieldset{margin-top:var(--ck-space-3)}
+#ck-sub-dialog .ck-sub-card .ck-sub-check{gap:var(--ck-space-2);min-height:var(--ck-tap);margin:0}
+#ck-sub-dialog .ck-sub-card .ck-sub-check input[type=checkbox]{width:20px;height:20px;min-height:0}
+#ck-sub-dialog .ck-sub-card .ck-sub-thresholds{gap:var(--ck-space-2);margin:var(--ck-space-2) 0}
+#ck-sub-dialog .ck-sub-card .ck-sub-thresholds label{gap:var(--ck-space-1);color:var(--ck-text-soft);font-size:var(--ck-fz-sm);font-weight:600;line-height:1.4}
+#ck-sub-dialog .ck-sub-card .ck-sub-thresholds span{color:var(--ck-muted);font-weight:400}
+#ck-sub-dialog .ck-sub-card .ck-sub-thresholds input{min-height:var(--ck-tap);padding:var(--ck-space-2) var(--ck-space-3);border-color:var(--ck-line-strong);border-radius:var(--ck-radius-sm)}
+#ck-sub-dialog .ck-sub-card .ck-sub-save{gap:var(--ck-space-2) var(--ck-space-3);margin-top:var(--ck-space-3)}
+
+/* 登录维护说明：展开行点按盒 44 */
+#ck-sub-dialog .ck-sub-card .ck-sub-help{padding-top:var(--ck-space-1);line-height:1.6}
+#ck-sub-dialog .ck-sub-card .ck-sub-help summary{padding:var(--ck-space-3) 0;font-size:var(--ck-fz-sm);line-height:20px}
+
+@media (max-width:640px){
+  #ck-sub-dialog .ck-sub-card{padding:var(--ck-space-4)}
+  #ck-sub-dialog .ck-sub-card .ck-sub-save>.btn{flex:1 1 100%}
+}
+/* ==== B5 END ==== */

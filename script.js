@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v419-auto-digest-60';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v420-chat-redesign';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -9196,7 +9196,7 @@ function chatAutosizeInput(input){
   if(isNaN(paddingTop))paddingTop=0;
   if(isNaN(paddingBottom))paddingBottom=0;
   var min=window.matchMedia&&window.matchMedia('(max-width: 640px)').matches?34:36;
-  var max=Math.ceil(lineHeight*3+paddingTop+paddingBottom);
+  var max=Math.ceil(lineHeight*6+paddingTop+paddingBottom);
   // Measure outside the flex layout: resetting the live textarea to auto makes
   // every keystroke lay out the entire visible conversation twice.
   if(!chatInputMeasure){

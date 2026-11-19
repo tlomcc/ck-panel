@@ -1,0 +1,448 @@
+/* ============================================================
+   chat-page.css -- chat tab (#tab-chat) page layout, 2026-11-19 redesign.
+   Loaded after every older stylesheet. Each package writes only between
+   its own BEGIN/END markers; every rule is scoped under #tab-chat.
+   ============================================================ */
+
+/* ==== ROOT BEGIN ==== */
+#tab-chat{--ck-chat-fz:16px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%}
+@media (min-width:641px) and (max-width:760px){#tab-chat{--ck-ctl:44px;--ck-head-h:48px;--ck-pad:var(--ck-space-4)}}
+@media (min-width:761px){#tab-chat{--ck-chat-fz:15px;--ck-chat-bubble-max:min(80%,640px)}}
+/* ==== ROOT END ==== */
+
+/* ==== A1 BEGIN ==== */
+/* A1 顶栏与提示条。旧规则多为 body.chat-active …（0,2,1~0,4,1）且带 !important，这里用 #tab-chat 前缀盖过；
+   只有旧生效声明带 !important 的属性才写 !important。 */
+/* 顶栏高度统一：手机 48、≥761 为 52（--ck-head-h，641–760 已由 ROOT 拉回 48） */
+#tab-chat .chat-head,
+#tab-chat .chat-head .chat-titlebar{height:var(--ck-head-h)!important;min-height:var(--ck-head-h)!important}
+/* .chat-head 是 .chat-main 纵向 flex 的子项，旧规则用 flex-basis 定高，这里一并改 */
+#tab-chat .chat-head{flex:0 0 var(--ck-head-h)!important}
+/* 左右内边距 8；三列网格（左右等宽弹性列 + 中间标题）不动（D8） */
+#tab-chat .chat-head .chat-titlebar{padding:0 var(--ck-space-2)!important}
+/* 标题 16/600 单行省略（省略由旧规则给出）；状态小字 12 */
+#tab-chat .chat-head .chat-titlebar h2{font-size:var(--ck-fz-lg)!important;font-weight:600!important;line-height:1.3}
+#tab-chat .chat-head .chat-titlebar p{font-size:var(--ck-fz-xs)!important;line-height:1.4}
+#tab-chat #chat-head-progress{font-size:var(--ck-fz-xs)!important}
+/* 两侧按键组改成可收缩的一行：放得下时每个键 44×44，放不下（390 宽且左侧四键或唤醒键出现）时等比收窄，不挤标题 */
+#tab-chat .chat-head :is(.chat-left-actions,.chat-head-actions){display:flex!important;align-items:center;min-width:0;max-width:100%;gap:var(--ck-space-1)!important}
+#tab-chat .chat-head .chat-left-actions{justify-content:flex-start}
+#tab-chat .chat-head .chat-head-actions{justify-content:flex-end}
+#tab-chat .chat-head .chat-icon-btn{flex:0 1 var(--ck-tap);width:var(--ck-tap)!important;min-width:28px!important;height:var(--ck-tap)!important}
+/* 召回：图标键与小箭头只用透明区域补点按盒（D9），图标 20/21、箭头 12 与无底无边的外观由旧规则保持 */
+#tab-chat .chat-head .chat-quick-fact-control{flex:0 1 auto;min-width:0}
+#tab-chat .chat-head .chat-quick-fact-menu-toggle{flex:0 1 32px;width:32px;min-width:24px;height:var(--ck-tap);justify-items:start;padding-left:6px}
+/* 唤醒倒计时：键变高后仍贴在图标下方、留在顶栏内 */
+#tab-chat .chat-head #chat-wake-countdown{top:calc(50% + 11px);font-size:var(--ck-fz-xs);line-height:1}
+@media (min-width:761px){#tab-chat .chat-head #chat-wake-countdown{top:calc(50% + 12px)}}
+/* 召回小菜单：按“菜单”取值；B 绿 C 蓝和字母标记不动（D10） */
+#tab-chat .chat-head .chat-quick-fact-menu{width:200px;max-width:min(320px,calc(100vw - 32px));padding:var(--ck-space-1) 0;border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);background:var(--ck-surface);box-shadow:var(--ck-shadow-md)}
+#tab-chat .chat-head .chat-quick-fact-menu button{min-height:var(--ck-tap);padding:0 var(--ck-space-4);gap:var(--ck-space-3);border-radius:0;font-size:var(--ck-fz-md);font-weight:400;line-height:1.4}
+#tab-chat .chat-head .chat-quick-fact-menu button[aria-checked="true"]{font-weight:600}
+/* 返回游戏条：贴顶栏的通栏提示条，13px，内边距 8 12，整条可点（高 44） */
+#tab-chat .chat-game-return{min-height:var(--ck-tap);padding:var(--ck-space-2) var(--ck-space-3);border-bottom-color:var(--ck-line);font-size:var(--ck-fz-sm);line-height:1.4}
+/* 等待操作条：13px、圆角 8、内边距 8 12；键可见高 32，::after 把点按盒补到 44 */
+#tab-chat .chat-wait-actions{margin:var(--ck-space-2) var(--ck-space-3);padding:var(--ck-space-2) var(--ck-space-3);border-radius:var(--ck-radius-sm);font-size:var(--ck-fz-sm);line-height:1.4}
+#tab-chat .chat-wait-actions>div{gap:var(--ck-space-2);margin-top:var(--ck-space-2)}
+#tab-chat .chat-wait-actions button{position:relative;min-width:var(--ck-tap);min-height:32px;padding:0 var(--ck-space-3);border-radius:var(--ck-radius-sm);line-height:1}
+#tab-chat .chat-wait-actions button::after{content:"";position:absolute;left:0;right:0;top:-6px;bottom:-6px}
+/* ==== A1 END ==== */
+
+/* ==== A2a BEGIN ==== */
+/* A2a: message column, bubbles and message body text. Old winners are
+   body.chat-active rules, (0,2,1)-(0,4,1) with !important, so the same
+   properties carry !important here. No border-radius and no colours (D12);
+   .chat-md p margins and .chat-prose-break are left alone (D11). */
+#tab-chat .chat-messages{gap:var(--ck-space-1)!important;padding-left:var(--ck-pad)!important;padding-right:var(--ck-pad)!important}
+@media (min-width:761px){
+  #tab-chat .chat-messages{padding-left:max(var(--ck-pad),calc((100% - var(--ck-chat-col))/2))!important;padding-right:max(var(--ck-pad),calc((100% - var(--ck-chat-col))/2))!important}
+}
+/* 4 between consecutive messages of one side, 16 everywhere else */
+#tab-chat .chat-messages > * + *{margin-top:var(--ck-space-3)}
+#tab-chat .chat-messages > .chat-msg-row.user + .chat-msg-row.user,
+#tab-chat .chat-messages > .chat-msg-row.assistant + .chat-msg-row.assistant{margin-top:0}
+
+#tab-chat .chat-messages .chat-bubble{font-size:var(--ck-chat-fz)!important;line-height:var(--ck-chat-lh)!important;padding:var(--ck-space-2) var(--ck-space-3)!important;max-width:var(--ck-chat-bubble-max)!important}
+#tab-chat .chat-messages .chat-bubble:has(.chat-md > :is(h1,h2,h3,h4,h5,h6,ul,ol,.cb,pre,table,blockquote)){padding:var(--ck-space-3) var(--ck-space-4)!important}
+@media (max-width:760px){
+  #tab-chat .chat-messages .chat-bubble:has(.chat-md > :is(.cb,pre,table)){max-width:100%!important}
+}
+#tab-chat .chat-messages .chat-md,
+#tab-chat .chat-messages .chat-user-text{font-size:inherit;line-height:inherit;overflow-wrap:anywhere}
+
+/* Markdown inside a bubble */
+#tab-chat .chat-messages .chat-md :is(h1,h2,h3,h4,h5,h6){font-size:1em;font-weight:600;line-height:1.4;margin:var(--ck-space-4) 0 var(--ck-space-2)}
+#tab-chat .chat-messages .chat-md h1{font-size:1.125em}
+#tab-chat .chat-messages .chat-md h2{font-size:1.0625em}
+#tab-chat .chat-messages .chat-md :is(ul,ol){margin:var(--ck-space-2) 0!important;padding-left:20px!important}
+#tab-chat .chat-messages .chat-md li :is(ul,ol){margin:var(--ck-space-1) 0!important}
+#tab-chat .chat-messages .chat-md li{margin:0!important}
+#tab-chat .chat-messages .chat-md li + li{margin-top:var(--ck-space-1)!important}
+#tab-chat .chat-messages .chat-md :not(pre) > code{font-size:var(--ck-fz-sm);padding:1px 4px;border-radius:4px}
+#tab-chat .chat-messages .chat-md .cb{margin:var(--ck-space-2) 0!important}
+#tab-chat .chat-messages .chat-md .cb,
+#tab-chat .chat-messages .chat-md pre{border-radius:var(--ck-radius-sm)!important}
+#tab-chat .chat-messages .chat-md .cb-head{min-height:32px;padding:0 var(--ck-space-1) 0 var(--ck-space-3)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4}
+#tab-chat .chat-messages .chat-md .cb-copy{position:relative;min-height:32px;padding:0 var(--ck-space-2);font-size:var(--ck-fz-xs)}
+#tab-chat .chat-messages .chat-md .cb-copy::after{content:"";position:absolute;inset:0 -2px -12px}
+#tab-chat .chat-messages .chat-md pre{font-size:var(--ck-fz-sm);line-height:1.5}
+#tab-chat .chat-messages .chat-md .cb pre{padding:var(--ck-space-3)!important}
+#tab-chat .chat-messages .chat-md .cb code{font-size:var(--ck-fz-sm)!important;line-height:1.5!important}
+#tab-chat .chat-messages .chat-md table{font-size:var(--ck-fz-sm);line-height:1.4;margin:var(--ck-space-2) 0}
+#tab-chat .chat-messages .chat-md :is(th,td){padding:var(--ck-space-2) var(--ck-space-3)}
+#tab-chat .chat-messages .chat-md th{font-weight:600}
+#tab-chat .chat-messages .chat-md blockquote{margin:var(--ck-space-2) 0;padding:var(--ck-space-1) var(--ck-space-3)}
+#tab-chat .chat-messages .chat-md hr{margin:var(--ck-space-4) 0}
+#tab-chat .chat-messages .chat-md img{max-width:100%;height:auto;border-radius:var(--ck-radius-sm)}
+@media (max-width:760px){
+  #tab-chat .chat-messages .chat-md img{max-height:320px;object-fit:contain}
+}
+/* first/last child stay flush; needed again because the list and code-block margins above are !important */
+#tab-chat .chat-messages .chat-md > :first-child{margin-top:0!important}
+#tab-chat .chat-messages .chat-md > :last-child{margin-bottom:0!important}
+/* Merge decision: the assistant bubble keeps its 92% width on phones (visual-overrides.css:515). */
+@media (max-width:760px){#tab-chat .chat-messages .chat-bubble.assistant{max-width:92%!important}}
+/* ==== A2a END ==== */
+
+/* ==== A2b BEGIN ==== */
+/* 消息下方的信息与操作：时间·等待·价格一行、用量行、复制/重新生成/版本翻页/重试键。
+   这些节点是 .chat-msg-row 的直接子元素，落在对话列纸面（--ck-bg）上，小字用 --ck-text-soft（--ck-muted 在此底上 4.42 不达标）。
+   不写 display：操作低/中/高三档由 JS 决定渲染，状态勾、价格由 body 类开关。旧规则几乎全带 !important，所以这里对应属性也带。 */
+#tab-chat .chat-messages .chat-msg-time,
+#tab-chat .chat-messages .chat-msg-meta{
+  height:auto!important;
+  padding:0 4px!important;
+  color:var(--ck-text-soft)!important;
+  font-size:var(--ck-fz-xs)!important;
+  line-height:1.4!important;
+  letter-spacing:0!important;
+  font-variant-numeric:tabular-nums;
+}
+#tab-chat .chat-messages .chat-msg-row>.chat-msg-time,
+#tab-chat .chat-messages .chat-msg-row>.chat-msg-usage,
+#tab-chat .chat-messages .chat-msg-row>.chat-msg-tools,
+#tab-chat .chat-messages .chat-msg-row>.chat-version-nav{margin-top:1px!important} /* .chat-msg-row 自带 gap 3px（chat.css:278），合计 4 */
+#tab-chat .chat-messages .chat-msg-meta-time,
+#tab-chat .chat-messages .chat-msg-separator,
+#tab-chat .chat-messages .chat-msg-meta-pending{
+  font-size:var(--ck-fz-xs)!important;
+  line-height:1.4!important;
+}
+#tab-chat .chat-messages .chat-msg-wait{
+  height:auto!important;
+  padding:0 4px!important;
+  color:var(--ck-text-soft)!important;
+  font-size:var(--ck-fz-xs)!important;
+  line-height:1.4!important;
+}
+#tab-chat .chat-messages .chat-msg-cost{
+  color:var(--ck-text-soft)!important;
+  font-size:var(--ck-fz-xs)!important;
+  line-height:1.4!important;
+}
+#tab-chat .chat-messages .chat-msg-row.pending .chat-msg-meta-pending{color:var(--ck-text-soft)!important}
+/* 失败 / 已停止：时间和前面的小标签 */
+#tab-chat .chat-messages .chat-msg-row.state-error .chat-msg-time,
+#tab-chat .chat-messages .chat-msg-row.state-stopped .chat-msg-time{color:var(--ck-danger-ink)!important}
+#tab-chat .chat-messages .chat-msg-row.state-error .chat-msg-time::before,
+#tab-chat .chat-messages .chat-msg-row.state-stopped .chat-msg-time::before{
+  height:auto;
+  padding:0 4px;
+  font-size:var(--ck-fz-xs);
+  font-weight:600;
+  line-height:1.4;
+}
+#tab-chat .chat-messages .chat-msg-row.state-error .chat-msg-time::before{
+  background:var(--ck-danger-wash)!important;
+  color:var(--ck-danger-ink)!important;
+}
+#tab-chat .chat-messages .chat-msg-row.state-stopped .chat-msg-time::before{
+  background:var(--ck-surface-soft)!important;
+  color:var(--ck-text-soft)!important;
+}
+/* 用量行：12px，390 下放不下就换行，不横向滚动 */
+#tab-chat .chat-messages .chat-msg-usage{
+  gap:4px 8px!important;
+  font-size:var(--ck-fz-xs)!important;
+  line-height:1.4!important;
+  white-space:normal!important;
+  font-variant-numeric:tabular-nums;
+}
+/* 操作键：看起来 28 高，::after 上下各补 8 到 44，最小宽 44，键之间留 8 所以点按盒不重叠 */
+#tab-chat .chat-messages .chat-msg-tools{
+  gap:8px!important;
+  opacity:1!important;
+}
+#tab-chat .chat-messages .chat-msg-row.user>.chat-msg-tools{margin-right:8px!important}
+#tab-chat .chat-messages .chat-msg-row.assistant>.chat-msg-tools{margin-left:8px!important}
+#tab-chat .chat-messages .chat-msg-tools .chat-msg-act,
+#tab-chat .chat-messages .chat-msg-tools .chat-user-regen{
+  position:relative!important;
+  width:auto!important;
+  min-width:var(--ck-tap)!important;
+  height:28px!important;
+  padding:0 8px!important;
+  font-size:var(--ck-fz-xs)!important;
+  line-height:1!important;
+}
+#tab-chat .chat-messages .chat-msg-tools svg{width:16px;height:16px}
+#tab-chat .chat-messages .chat-version-nav{
+  height:28px!important;
+  gap:4px!important;
+  font-size:var(--ck-fz-xs)!important;
+}
+#tab-chat .chat-messages .chat-version-btn{
+  position:relative!important;
+  width:28px!important;
+  height:28px!important;
+  min-width:28px!important;
+  min-height:28px!important;
+  font-size:var(--ck-fz-xs)!important;
+}
+#tab-chat .chat-messages .chat-msg-row>.chat-user-retry{
+  position:relative;
+  min-width:var(--ck-tap);
+  min-height:28px;
+  margin-top:1px;
+  color:var(--ck-danger-ink);
+  font-size:var(--ck-fz-xs);
+  line-height:1.4;
+}
+#tab-chat .chat-messages .chat-msg-tools .chat-msg-act::after,
+#tab-chat .chat-messages .chat-msg-tools .chat-user-regen::after,
+#tab-chat .chat-messages .chat-msg-row>.chat-user-retry::after{content:"";position:absolute;inset:-8px 0}
+#tab-chat .chat-messages .chat-version-btn::after{content:"";position:absolute;inset:-8px}
+#tab-chat .chat-messages .chat-msg-tools button:focus-visible,
+#tab-chat .chat-messages .chat-version-btn:focus-visible,
+#tab-chat .chat-messages .chat-msg-row>.chat-user-retry:focus-visible{outline:2px solid var(--ck-accent-strong);outline-offset:2px}
+/* ==== A2b END ==== */
+
+/* ==== A2c BEGIN ==== */
+/* A2c: thinking / recall cards, tool card, file card and in-column notices.
+   Old winners are body.chat-active rules, (0,2,1)-(0,5,1), nearly all with
+   !important, so the same properties carry !important here. No display or
+   height is set on anything that opens and closes. Card heads are 36 high
+   from 761 up and 44 at 760 and below (--ck-ctl): the cards clip their
+   children, so the tap box cannot be widened with a pseudo-element. */
+#tab-chat .chat-messages :is(.chat-thinking,.chat-recall){border-radius:var(--ck-radius-sm)!important}
+#tab-chat .chat-messages :is(.chat-thinking-head,.chat-recall-head){min-height:var(--ck-ctl)!important;padding:var(--ck-space-2) var(--ck-space-3)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important}
+#tab-chat .chat-messages :is(.chat-thinking-body,.chat-recall-body){padding:0 var(--ck-space-3) var(--ck-space-3)!important;font-size:var(--ck-fz-sm)!important;line-height:1.5!important;color:var(--ck-text-soft)!important;overflow-wrap:anywhere}
+#tab-chat .chat-messages .chat-thinking-actions{margin-top:var(--ck-space-2)!important}
+#tab-chat .chat-messages .chat-thinking-copy{position:relative;min-height:32px;padding:0 var(--ck-space-2)!important;border-radius:var(--ck-radius-sm)!important;font-size:var(--ck-fz-xs)!important;line-height:1!important}
+#tab-chat .chat-messages .chat-thinking-copy::after{content:"";position:absolute;inset:-6px -4px}
+
+/* Tool card */
+#tab-chat .chat-messages .chat-tool-card{border-radius:var(--ck-radius-sm)!important}
+#tab-chat .chat-messages .chat-tool-card summary{min-height:var(--ck-ctl)!important;padding:var(--ck-space-1) var(--ck-space-3)!important}
+#tab-chat .chat-messages .chat-tool-main b{font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important}
+#tab-chat .chat-messages .chat-tool-main small{font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat .chat-messages .chat-tool-status{height:20px!important;padding:0 var(--ck-space-2)!important;font-size:var(--ck-fz-xs)!important}
+#tab-chat .chat-messages .chat-tool-body{gap:var(--ck-space-2)!important;padding:0 var(--ck-space-3) var(--ck-space-3)!important}
+#tab-chat .chat-messages .chat-tool-section{padding-top:var(--ck-space-2)!important}
+#tab-chat .chat-messages .chat-tool-section b,
+#tab-chat .chat-messages .chat-tool-empty{font-size:var(--ck-fz-xs)!important}
+#tab-chat .chat-messages .chat-tool-section pre{padding:var(--ck-space-2)!important;border-radius:4px!important;font-size:var(--ck-fz-xs)!important;line-height:1.5!important}
+
+/* File card: the 46-high head and the 44/48-wide copy key stay */
+#tab-chat .chat-messages .chat-file-card{border-radius:var(--ck-radius-sm)!important}
+#tab-chat .chat-messages .chat-file-main b{font-size:var(--ck-fz-sm)!important;font-weight:600!important}
+#tab-chat .chat-messages .chat-file-main small,
+#tab-chat .chat-messages .chat-file-copy{font-size:var(--ck-fz-xs)!important}
+
+/* Notices inside the message column */
+#tab-chat .chat-messages .chat-welcome{padding:32px var(--ck-space-5)!important;color:var(--ck-text-soft)!important}
+#tab-chat .chat-messages .chat-welcome b{margin-bottom:var(--ck-space-1)!important;font-size:var(--ck-fz-lg)!important;font-weight:600!important;line-height:1.4;letter-spacing:0!important}
+#tab-chat .chat-messages .chat-welcome p{font-size:var(--ck-fz-sm)!important;line-height:1.4;color:var(--ck-text-soft)!important}
+/* 12 here plus the column gap of 4 gives 16 above and below */
+#tab-chat .chat-messages .chat-cache-expired-tip{margin:var(--ck-space-3) auto 0!important;padding:var(--ck-space-1) var(--ck-space-3)!important;color:var(--ck-text-soft)!important;font-size:var(--ck-fz-xs)!important;line-height:1.4!important}
+#tab-chat .chat-messages .chat-subscription-notice{margin:var(--ck-space-1) 0 0;padding:var(--ck-space-2) var(--ck-space-3);border-radius:var(--ck-radius-sm);background:var(--ck-danger-wash);color:var(--ck-danger-ink);font-size:var(--ck-fz-sm);line-height:1.5}
+#tab-chat .chat-messages .chat-subscription-notice .chat-user-retry{color:var(--ck-danger-ink);font-size:var(--ck-fz-sm)}
+
+/* Failed and stopped replies; border colours stay with the old rules */
+#tab-chat .chat-messages .chat-msg-row.state-error .chat-bubble.assistant{--wx-bubble-bg:var(--ck-danger-wash);background:var(--ck-danger-wash)!important;color:var(--ck-danger-ink)!important}
+#tab-chat .chat-messages .chat-msg-row.state-stopped .chat-bubble.assistant{--wx-bubble-bg:var(--ck-surface);background:var(--ck-surface)!important;border-color:var(--ck-line)!important;color:var(--ck-text-soft)!important}
+
+/* Search hit: a wash behind the whole row, the bubble keeps its outline */
+#tab-chat .chat-messages .chat-msg-row.chat-search-match{border-radius:var(--ck-radius-sm);background:var(--ck-accent-wash);box-shadow:0 0 0 4px var(--ck-accent-wash)}
+#tab-chat .chat-messages .chat-msg-row.chat-search-match .chat-bubble{outline-color:var(--ck-accent)!important}
+/* ==== A2c END ==== */
+
+/* ==== A3a BEGIN ==== */
+/* 输入框一行：外框画在 #chat-input 自身（不加节点）。脚本 chatAutosizeInput 按
+   scrollHeight（含内边距、不含边框）写行内高度，所以外框用内描边，不占边框宽度：
+   单行 24+10+10=44，多行每行 24，高度与脚本算出的值完全一致。 */
+body.chat-active #tab-chat .chat-compose{
+  padding-top:8px!important;
+  padding-bottom:calc(8px + env(safe-area-inset-bottom))!important;
+}
+@media (max-width:760px){
+  body.chat-active #tab-chat .chat-compose{padding-inline:12px!important}
+}
+body.chat-active #tab-chat .chat-compose-row{
+  grid-template-columns:var(--ck-tap) minmax(0,1fr) auto!important;
+  gap:8px!important;
+  align-items:end!important;
+}
+body.chat-active #tab-chat #chat-input{
+  min-height:var(--ck-tap)!important;
+  max-height:calc(1.5em * 6 + 20px)!important;
+  padding:10px 12px!important;
+  border:0!important;
+  border-radius:12px!important;
+  box-shadow:inset 0 0 0 1px var(--ck-line-strong)!important;
+  outline:0!important;
+  font-size:var(--ck-fz-lg)!important;
+  line-height:1.5!important;
+  -webkit-appearance:none;
+  appearance:none;
+}
+body.chat-active #tab-chat #chat-input:focus{
+  box-shadow:inset 0 0 0 1px var(--ck-accent-strong)!important;
+}
+body.chat-active #tab-chat .chat-plus-btn{
+  width:var(--ck-tap)!important;
+  min-width:var(--ck-tap)!important;
+  height:var(--ck-tap)!important;
+  min-height:var(--ck-tap)!important;
+}
+body.chat-active #tab-chat .chat-send{
+  width:auto!important;
+  min-width:56px!important;
+  height:var(--ck-tap)!important;
+  min-height:var(--ck-tap)!important;
+  padding:0 12px!important;
+  font-size:var(--ck-fz-sm)!important;
+  font-weight:600!important;
+  line-height:1!important;
+}
+body.chat-active #tab-chat .chat-send.chat-stop-btn,
+body.chat-active #tab-chat .chat-send.chat-stop-btn:not(:disabled):hover{
+  background:var(--ck-danger-ink)!important;
+  color:var(--ck-on-danger)!important;
+}
+body.chat-active #tab-chat .chat-plus-btn:focus-visible,
+body.chat-active #tab-chat .chat-send:focus-visible{
+  outline:2px solid var(--ck-accent-strong)!important;
+  outline-offset:2px!important;
+}
+body.chat-active #tab-chat #chat-pending-bar:empty{display:none!important}
+/* ==== A3a END ==== */
+
+/* ==== A3b BEGIN ==== */
+/* 输入区周边与浮动键。.ck-sub-inline*（记忆/额度/上下文行）本节不写任何规则（D1–D7）。
+   点按盒一律用“透明内边距 + background-clip:content-box”或 ::before 补到 44，不加节点。 */
+/* 浮动跳转键：点按盒 44，可见 32 的圆画在 ::before；整体 20% 不透明度、位置逻辑、z-index 不动 */
+body.chat-active #tab-chat .chat-scroll-jumps{
+  right:max(4px,env(safe-area-inset-right))!important;
+  width:var(--ck-tap)!important;
+  gap:0!important;
+}
+body.chat-active #tab-chat .chat-scroll-jumps>button{
+  position:relative!important;
+  isolation:isolate;
+  width:var(--ck-tap)!important;
+  height:var(--ck-tap)!important;
+  min-width:var(--ck-tap)!important;
+  min-height:var(--ck-tap)!important;
+  border-radius:999px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--ck-text-soft)!important;
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+body.chat-active #tab-chat .chat-scroll-jumps>button::before{
+  content:"";
+  position:absolute;
+  inset:6px;
+  z-index:-1;
+  border:1px solid var(--ck-line);
+  border-radius:999px;
+  background:var(--ck-surface);
+  box-shadow:var(--ck-shadow-xs);
+}
+body.chat-active #tab-chat .chat-scroll-jumps>button:focus-visible{
+  outline:2px solid var(--ck-accent-strong)!important;
+  outline-offset:-6px!important;
+}
+/* 新消息提示：保持 44×44，距输入区上沿 8 */
+body.chat-active #tab-chat .chat-new-message-tip{
+  bottom:calc(var(--ck-chat-compose-height,64px) + 8px)!important;
+}
+/* 待发送图片：缩略图 56×56、圆角 8；删除键点按盒 44（整盒在缩略图内），可见仍是右上角 22 的圆 */
+body.chat-active #tab-chat .chat-compose .chat-draft-images{
+  flex-basis:68px!important;
+  max-height:68px!important;
+}
+body.chat-active #tab-chat .chat-compose .chat-draft-images .chat-image-grid{max-height:68px!important}
+body.chat-active #tab-chat .chat-compose .chat-draft-images .chat-image-thumb{
+  flex:0 0 56px!important;
+  width:56px!important;
+  height:56px!important;
+  max-height:56px!important;
+  border-radius:8px!important;
+  overflow:hidden!important;
+}
+body.chat-active #tab-chat .chat-compose .chat-draft-images .chat-image-thumb img{max-height:56px!important}
+body.chat-active #tab-chat .chat-compose .chat-draft-image-remove{
+  top:0!important;
+  right:0!important;
+  box-sizing:border-box!important;
+  width:var(--ck-tap)!important;
+  height:var(--ck-tap)!important;
+  min-width:var(--ck-tap)!important;
+  min-height:var(--ck-tap)!important;
+  padding:4px 4px 18px 18px!important;
+  border-radius:29px 15px 15px 29px / 15px 15px 29px 29px!important;
+  background-clip:content-box!important;
+}
+/* 待发送文件：删除键点按盒 44，可见仍是 22 的圆、距右 6；说明文字升到 12 */
+body.chat-active #tab-chat .chat-draft-file-remove,
+body.chat-active #tab-chat .chat-draft-file-remove:hover,
+body.chat-active #tab-chat .chat-draft-file-remove:focus-visible{
+  right:0!important;
+  box-sizing:border-box!important;
+  width:var(--ck-tap)!important;
+  height:var(--ck-tap)!important;
+  min-width:var(--ck-tap)!important;
+  min-height:var(--ck-tap)!important;
+  padding:11px 6px 11px 16px!important;
+  border-radius:27px 17px 17px 27px / 22px!important;
+  background-clip:content-box!important;
+}
+body.chat-active #tab-chat .chat-draft-file-main small{font-size:var(--ck-fz-xs)!important}
+body.chat-active #tab-chat .chat-draft-file:not(.is-oversized) .chat-draft-file-main small{color:var(--ck-text-soft)!important}
+/* 加号面板：格子文字 12、按下底圆角 12；格子尺寸仍由 --ck-plus-* 和旧规则决定 */
+body.chat-active #tab-chat .chat-plus-grid > button{border-radius:12px!important}
+body.chat-active #tab-chat .chat-plus-grid > button b{font-size:var(--ck-fz-xs)!important}
+/* ==== A3b END ==== */
+
+/* ==== A4 BEGIN ==== */
+/* 主干 v414 新增的自动截断状态条（.chat-auto-digest-bar，chat.css:1215–1251）与改版后的输入区对齐。
+   A3a/A3b 没有给待发送条写尺寸（它恒为空，被 :empty 隐藏），所以按 SYSTEM §4“提示条”和 A1 的
+   .chat-wait-actions 取值：圆角 8、13px/1.4、文字一侧内边距 12、与输入行相距 8。
+   按钮是实高 44 的文字键（tests/auto-digest-window-browser 断言按钮矩形 ≥44，任何宽度都不降到 36，
+   也不用 ::after 补点按盒）；竖向内边距 4 由 44 推出，按钮上、右、下各留 4。
+   只调尺寸和间距：颜色、[hidden] 的显示逻辑、DOM、脚本都不动，本节不写 display 和颜色；
+   深色沿用旧的 body.dark 颜色规则，尺寸与浅色相同。 */
+body.chat-active #tab-chat .chat-compose .chat-auto-digest-bar{
+  margin:0 0 var(--ck-space-2)!important;
+  padding:var(--ck-space-1) var(--ck-space-1) var(--ck-space-1) var(--ck-space-3)!important;
+  border-radius:var(--ck-radius-sm)!important;
+  font-size:var(--ck-fz-sm)!important;
+  line-height:1.4!important;
+}
+body.chat-active #tab-chat .chat-compose .chat-auto-digest-bar span{font-weight:600!important}
+body.chat-active #tab-chat .chat-compose .chat-auto-digest-bar button{
+  min-height:var(--ck-tap)!important;
+  padding:0 var(--ck-space-3)!important;
+  border-radius:var(--ck-radius-sm)!important;
+  font-size:var(--ck-fz-sm)!important;
+  font-weight:600!important;
+  line-height:1;
+}
+body.chat-active #tab-chat .chat-compose .chat-auto-digest-bar button:focus-visible{
+  outline:2px solid var(--ck-accent-strong)!important;
+  outline-offset:2px!important;
+}
+/* ==== A4 END ==== */
