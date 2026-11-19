@@ -48,9 +48,9 @@ const fixture=async()=>{
  assert(tipText()===' · 上下文 15 万，建议整理'&&tip.length===2&&tip.every(n=>n.dataset.level==='warn'),'150000 reminds');
  tip=await show([user,reply(sub({input_tokens:300,cache_read_input_tokens:500000}),{upstream_rounds:4,last_usage:{input_tokens:300,cache_read_input_tokens:152000}})]);
  assert(tipText()===' · 上下文 15.2 万，建议整理','tool rounds report the last request only');
- // On the quota row after both percentages and before the details, so a narrow bar drops the details first.
+ // On the quota row after the 5h reset time and before the other details, so a narrow bar drops those first and the reset time last.
  const row=bar.querySelector('.ck-sub-inline-quota');
- assert([...row.children].map(n=>n.className).join('|').startsWith('ck-sub-inline-summary|ck-sub-inline-context|ck-sub-inline-context ck-sub-inline-context-hint|ck-sub-inline-detail')&&tip.every(n=>n.parentNode===row),'reminder order on the quota row');
+ assert([...row.children].map(n=>n.className).join('|').startsWith('ck-sub-inline-summary|ck-sub-inline-detail|ck-sub-inline-context|ck-sub-inline-context ck-sub-inline-context-hint|ck-sub-inline-detail')&&/^ · 5h \d\d:\d\d 重置$/.test(row.children[1].textContent)&&tip.every(n=>n.parentNode===row),'reminder order on the quota row');
  assert(row.firstChild.textContent==='Claude 剩余 · 5h 86.2% · 7天 60%'&&bar.title===bar.textContent&&bar.title.includes('建议整理'),'quota is unchanged and the tooltip keeps the full reminder');
  assert(!(await show([user,reply(sub({input_tokens:300,cache_read_input_tokens:500000}),{upstream_rounds:4})])).length,'a summed total alone shows nothing');
  tip=await show([user,reply(sub({cache_read_input_tokens:189999}),{upstream_rounds:1})]);
@@ -115,6 +115,8 @@ const fixture=async()=>{
    for(const p of view.parts)if(p!==summary&&p!==memory)assert(p.hidden||p.whole||p.dropped,'a piece is shown whole or not at all: '+label+p.text);
    if(mode==='quiet')continue;
    if(width>=390)assert(size.whole,'a phone shows the size itself: '+label);
+   const reset=view.parts.find(p=>p.text.endsWith(' 重置'));
+   assert(reset&&reset.whole,'the 5h reset time stays next to the percentages: '+label);
    // Phones drop the plain advice to leave room; the stronger wording is kept when it fits.
    assert.equal(hint.hidden,mode==='warn'&&width<=600,'advice follows the screen width: '+label);
    if(width>=1280)assert(view.parts.every(p=>p.whole),'a wide screen shows every piece: '+label);

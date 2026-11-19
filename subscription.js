@@ -68,8 +68,7 @@
   });
   if(q.blocked)parts.push('已暂停');
   if(unavailable)details.push('连接中断，保留最近记录');
-  var five=byKey.five_hour;
-  if(five&&five.resets_at>Date.now()/1000)details.push('5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置');
+  var five=byKey.five_hour,reset=five&&five.resets_at>Date.now()/1000?'5h '+new Date(five.resets_at*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})+' 重置':'';
   if(!known)details.push('等待官方百分比');
   if(observations.length){
    // Both windows are read by the same exchange a few seconds apart; one time, the older, covers them.
@@ -78,11 +77,14 @@
    details.push('观测 '+(together?inlineTime(isFinite(oldest)?oldest:ats[0]):observations.map(function(item,i){return item.label+' '+times[i]}).join(' / ')));
   }
   var quotaLine=node('span','ck-sub-inline-quota'),memory=memoryView(value,unavailable),size=contextView();
+  var detail=function(text){quotaLine.append(node('span','ck-sub-inline-detail',' · '+text))};
   quotaLine.append(node('span','ck-sub-inline-summary',parts.join(' · ')));
-  // The context reminder sits before the details, so a narrow bar drops those first; its advice is a piece of its own.
+  // The 5h reset time follows the percentages, so a narrow bar keeps it and drops the pieces after it first.
+  if(reset)detail(reset);
+  // The context reminder sits before the other details; its advice is a piece of its own.
   if(size)[' · '+size.text,size.hint].forEach(function(text,i){var tip=node('span','ck-sub-inline-context'+(i?' ck-sub-inline-context-hint':''),text);tip.dataset.level=size.level;quotaLine.append(tip)});
   // Both percentages always stay whole; each detail is its own piece so a narrow bar drops it entirely.
-  details.forEach(function(text){quotaLine.append(node('span','ck-sub-inline-detail',' · '+text))});
+  details.forEach(detail);
   bar.replaceChildren();
   if(memory.text){var chip=node('span','ck-sub-inline-activity',memory.text);chip.dataset.kind=memory.kind;bar.append(chip)}
   bar.append(quotaLine);
