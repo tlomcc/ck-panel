@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v427-thinking-width-follow';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v428-memory-every-200-rounds';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -11958,7 +11958,7 @@ var API_TABS=[
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。也可以勾「随机模式」不按顺序、每次在队列里摇一个用。只影响聊天、Fact 和召回配置。'},
   {key:'memory',label:'记忆',info:'这一栏管 Fact 提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'chat_digest',label:'截断总结',info:'截断前总结新增对话，并将上一份详细总结压成简版。主动记忆独立按每100轮检查。保留次数 Z 在「截断总结」设置，默认 3；更早简版直接复用，跨天不重写。未启用当前聊天线路时，生成与校对使用这一组 API。'}
+    {key:'chat_digest',label:'截断总结',info:'截断前总结新增对话，并将上一份详细总结压成简版。主动记忆独立按每200轮检查。保留次数 Z 在「截断总结」设置，默认 3；更早简版直接复用，跨天不重写。未启用当前聊天线路时，生成与校对使用这一组 API。'}
   ]},
   {key:'topics',label:'事件整理 API',info:'事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[
