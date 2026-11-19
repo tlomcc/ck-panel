@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v413-context-notice';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v414-auto-digest-window';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2576,6 +2576,7 @@ function chatDefaultConfig(){
     worldbookInjectionPosition:'system_tail',
     dailyDigestEnabled:true,
     digestCurrentModel:false,
+    digestAutoWindow:true,
     digestCycleCount:3,
     newSessionDigestSyncEnabled:true,
     costPricing:chatDefaultCostPricing(),
@@ -4580,6 +4581,8 @@ function chatNormalizeSession(s){
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
     digestModelRun:s.digestModelRun||null,
+    digestAutoArm:s.digestAutoArm||null,
+    digestAutoArmTry:s.digestAutoArmTry||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestLastSync:s.digestLastSync||null,
     digestRecoveryCancelled:s.digestRecoveryCancelled||null,
@@ -4847,6 +4850,7 @@ function chatReadForm(){
     worldbookInjectionPosition:chatNormalizeInjectionPosition(chatFieldValue('chat-worldbook-injection-position',saved.worldbookInjectionPosition),'system_tail'),
     dailyDigestEnabled:chatFieldChecked('chat-daily-digest-enabled',saved.dailyDigestEnabled!==false),
     digestCurrentModel:saved.digestCurrentModel===true,
+    digestAutoWindow:saved.digestAutoWindow!==false,
     digestManualModel:saved.digestManualModel,
     digestModelPolicy:saved.digestModelPolicy,
     digestCycleCount:chatDigestOptions(saved).z,
@@ -6935,6 +6939,8 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestStaged:s.digestStaged||null,
     digestManualTrim:s.digestManualTrim||null,
     digestModelRun:s.digestModelRun||null,
+    digestAutoArm:s.digestAutoArm||null,
+    digestAutoArmTry:s.digestAutoArmTry||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestLastSync:s.digestLastSync||null,
     digestRecoveryCancelled:s.digestRecoveryCancelled||null,
@@ -10810,6 +10816,7 @@ async function chatSendMessage(){
     toast('正在截断，请完成后再发送');
     return;
   }
+  if(typeof chatAutoDigestBlockSend==='function'&&chatAutoDigestBlockSend())return;
   if(chatEditingIndex>=0){
     chatSaveEditedMessage();
     return;
@@ -11649,9 +11656,11 @@ async function chatSubmitPendingMessages(options){
           delete chatMessages[idx].inFlightTurnId;
         }
       });
-      var failure=chatMarkSubscriptionFailure(userMessageIndexes.map(function(idx){return chatMessages[idx]}),e,cfg);
-      chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus(failure?failure.status:'请求失败');
-      if(!failure)toast(chatFriendlyError(e),5000,{type:'error',closable:true,pauseOnHover:true});
+      // 自动整理期间网关拒收：这一轮按普通发送失败保留，提示改为锁定说明并刷新状态。
+      var autoLocked=typeof chatAutoDigestLockedError==='function'&&chatAutoDigestLockedError(e);
+      var failure=autoLocked?null:chatMarkSubscriptionFailure(userMessageIndexes.map(function(idx){return chatMessages[idx]}),e,cfg);
+      chatSaveLocalMessages();chatRenderMessages({respectUserScroll:true,newMessage:true});chatSetStatus(failure?failure.status:autoLocked?'自动整理中，暂不能发送':'请求失败');
+      if(!failure&&!autoLocked)toast(chatFriendlyError(e),5000,{type:'error',closable:true,pauseOnHover:true});
     }
   }finally{
     stopStreamRender();
@@ -11667,6 +11676,7 @@ async function chatSubmitPendingMessages(options){
     if(requestCompleted){
       if(releasedSendingUi)chatSendQueuedResponse(requestState);
       if(typeof chatScheduleNightlySync==='function')chatScheduleNightlySync();
+      if(typeof chatAutoDigestSchedule==='function')chatAutoDigestSchedule();
       if(latencyTrace.metadata_to_footer_ms!==undefined)chatDebug('completion_render',{metadata_to_footer_ms:latencyTrace.metadata_to_footer_ms,debug_id:latencyTrace.debug_id});
       // 第 y 轮回复刚落定时立刻复核轮数上限，不必等待 15 秒定时器。
       // forceCheck 只跳过 30 秒节流，函数内部仍会检查是否真的达到上限。

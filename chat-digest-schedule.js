@@ -147,6 +147,7 @@ function chatDigestSyncView(session,cfg,remote){
     else if(local&&run.id===local.id&&(run.state==='queued'||run.state==='running')){view.status='手动总结进行中';view.note='使用 '+local.label+' 整理和校对；原文保留。';}
     else if(ready&&!preparing){view.note='结果已准备，可立刻同步；不会因缓存到期自动截断。';}
   }
+  if(typeof chatAutoDigestViewNote==='function')chatAutoDigestViewNote(session,cfg,view);
   return view;
 }
 function chatDigestManualStatus(session,cfg){
@@ -165,6 +166,7 @@ function chatRenderNightlyStatus(session){
   var prepare=document.getElementById('chat-digest-prepare');if(prepare){prepare.hidden=false;prepare.disabled=!!(chatTrimBusy||chatTrimTransaction);prepare.textContent=session.digestManualTrim?'更新截断范围':'立即截断';}
   var text='本次截断 '+view.rounds+' 轮 · '+view.status+'。'+view.note;
   ['chat-digest-schedule-status','chat-trim-next'].forEach(function(id){var node=document.getElementById(id);if(node)node.textContent=text});
+  if(typeof chatAutoDigestRenderBar==='function')chatAutoDigestRenderBar(session);
 }
 function chatScheduleNightlySync(delay){
   delay=delay===undefined?800:Math.max(0,Number(delay)||0);var next=Date.now()+delay;
@@ -185,6 +187,24 @@ function chatMemoryCadenceSnapshot(cfg,session,rows,purpose){
   }
   return {policy:'fifty-rounds-v1',route:chatMemoryModelRoute(cfg),rounds:rounds,selected_rounds:selected};
 }
+// One upload body for ordinary syncs, manual starts and the automatic arm.
+function chatNightlySyncBody(cfg,session,options,context){
+  var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
+  chatDigestCandidateGroups(session,cfg,context.rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
+  var body={session_id:String(session.id),title:session.title,revision:context.remote.revision||0,base_stamp:context.baseStamp,base:context.base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===context.scope,settings_override:session.digestSettingsPending===context.scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
+  body.auto=context.auto;
+  body.memory_cadence=chatMemoryCadenceSnapshot(cfg,session,context.rows,options.modelRun&&options.modelRun.purpose);
+  if(options.modelRun){
+    body.model_run=options.modelRun;
+    if(options.modelRun.purpose==='daily'){
+      var dailyGroups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
+      chatDigestMessageGroups(context.rows.filter(function(m){return !m.inFlight&&m.role!=='pending_user'})).forEach(function(g){dailyGroups.set(g.key,g)});
+      body.groups=Array.from(dailyGroups.values()).map(function(g){return Object.assign({},g,{candidate:false})});
+    }
+  }
+  if(options.cancelModelRun)body.cancel_model_run=true;
+  return body;
+}
 function chatSyncNightlyDigest(cfg,options){
   cfg=cfg||chatLoadConfig();options=options||{};var session=options.session||chatCurrentSession();
   if(session&&session.gameWindow)return Promise.resolve(false);
@@ -197,6 +217,7 @@ function chatSyncNightlyDigest(cfg,options){
     options=Object.assign({},options,{readOnly:true});
   }
   if(chatTrimBusy||chatTrimTransaction){chatScheduleNightlySync(1500);return Promise.resolve(false);}
+  if(typeof chatAutoDigestSyncOptions==='function')options=chatAutoDigestSyncOptions(cfg,session,options);
   if(!options.readOnly&&cfg.digestCurrentModel!==true)chatDigestRefreshManualSources(session,cfg);
   var scope=chatNightlyScope(cfg),configStamp=chatDigestConfigStamp(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
@@ -216,20 +237,9 @@ function chatSyncNightlyDigest(cfg,options){
   // the whole source again; a read never acknowledges an uncertain upload.
   var recovering=!options.readOnly&&previous.readBack,body=null;
   if((!unchanged||options.modelRun||options.cancelModelRun)&&!options.readOnly&&!recovering){
-    var groups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
-    chatDigestCandidateGroups(session,cfg,rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
-    body={session_id:String(session.id),title:session.title,revision:remote.revision||0,base_stamp:baseStamp,base:base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===scope,settings_override:session.digestSettingsPending===scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
-    body.auto=auto;
-    body.memory_cadence=chatMemoryCadenceSnapshot(cfg,session,rows,options.modelRun&&options.modelRun.purpose);
-    if(options.modelRun){
-      body.model_run=options.modelRun;
-      if(options.modelRun.purpose==='daily'){
-        var dailyGroups=new Map(chatNightlyPending(session).map(function(g){return [g.key,g]}));
-        chatDigestMessageGroups(rows.filter(function(m){return !m.inFlight&&m.role!=='pending_user'})).forEach(function(g){dailyGroups.set(g.key,g)});
-        body.groups=Array.from(dailyGroups.values()).map(function(g){return Object.assign({},g,{candidate:false})});
-      }
-    }
-    if(options.cancelModelRun)body.cancel_model_run=true;
+    body=chatNightlySyncBody(cfg,session,options,{scope:scope,remote:remote,rows:rows,auto:auto,baseStamp:baseStamp,base:base});
+    // An armed automatic run may have started: confirm before any upload can touch it.
+    if(!options.autoGate&&typeof chatAutoDigestGate==='function'&&chatAutoDigestLocal(session))return chatAutoDigestGate(cfg,session,options);
   }
   // The send path has its own 2.5s wait budget. Keep this background download
   // alive afterwards so a slower phone can still receive the saved snapshot.
@@ -278,6 +288,7 @@ function chatSyncNightlyDigest(cfg,options){
       }
       if(body&&body.settings_override&&matchingConfig&&JSON.stringify(chatNightlyConfig(chatLoadConfig()))===JSON.stringify(body.config))delete session.digestSettingsPending;
       session.digestSchedule={scope:scope,model_run:data.model_run,quota_wait:data.quota_wait,status:data.status,pending_groups:data.pending_groups,last_error:data.last_error||'',last_error_code:data.last_error_code||'',progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
+      if(typeof chatAutoDigestReconcile==='function')chatAutoDigestReconcile(cfg,session,data);
       chatSaveSessions({sessionIds:[session.id]});
       if(session===chatCurrentSession()&&!chatSending&&data.auto&&data.auto.due)setTimeout(function(){chatMaybeAutoTrimAtIdleBoundary({forceCheck:true})},0);
       var pollDelay=chatDigestNextPollingDelay(cfg);if(pollDelay)chatScheduleNightlySync(pollDelay);
@@ -399,6 +410,8 @@ async function chatStartCurrentModelDigest(purpose){
   }
   chatCurrentModelStarting=true;
   try{
+    // A manual start replaces any armed automatic run.
+    if(typeof chatAutoDigestDisarm==='function')await chatAutoDigestDisarm(cfg,session,{force:true});
     // First acknowledge pending settings/baseline; no model is started by sync.
     if(!await chatSyncNightlyDigest(cfg,{session:session,force:true}))return false;
     if(session!==chatCurrentSession()||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig()))return false;
@@ -422,6 +435,8 @@ function chatDigestNeedsPolling(session,cfg){
 }
 function chatDigestPollingDelay(session,cfg){
   if(chatDigestPendingSync(session,cfg))return 30000;
+  var autoDelay=typeof chatAutoDigestPollingDelay==='function'?chatAutoDigestPollingDelay(session,cfg):0;
+  if(autoDelay)return autoDelay;
   if(cfg.digestCurrentModel!==true)return session.digestManualTrim||session.digestSettingsRequest?2000:0;
   var local=session.digestModelRun,remote=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
   if(!local||!remote||local.id!==remote.id)return 0;

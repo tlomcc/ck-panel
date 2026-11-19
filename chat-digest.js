@@ -264,6 +264,7 @@ function chatRenderDailyDigest(cfg){
   if(state.changed)chatSaveSessions({sessionIds:[session.id]});
   chatSetFieldChecked('chat-daily-digest-enabled',cfg.dailyDigestEnabled!==false);
   chatSetFieldChecked('chat-digest-current-model',cfg.digestCurrentModel===true);
+  chatSetFieldChecked('chat-digest-auto-window',cfg.digestAutoWindow!==false);
   if(!chatDigestSettingsDirty)chatSetFieldValue('chat-digest-cycle-count',chatDigestOptions(cfg).z);
   ['detail','today'].forEach(function(kind){if(!chatDigestEditors[session.id+':'+kind])chatSetFieldValue('chat-digest-'+kind,chatDigestEditorValue(kind,cfg,session))});
   chatSetFieldValue('chat-daily-digest-pack',chatDailyDigestPack(cfg,session));
