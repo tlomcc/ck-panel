@@ -236,6 +236,7 @@ body.cx-open{position:fixed!important;inset:0;width:100%;height:100%}
 .cx-item-tool-progress::before{content:"";flex:none;width:8px;height:8px;border-radius:var(--cx-r-pill);background:var(--ck-line-strong)}
 .cx-item-tool-progress:is([data-state=inProgress],[data-state=in_progress],[data-state=running])::before{background:var(--ck-accent);animation:cx-breathe 1.6s ease-in-out infinite}
 .cx-item-tool-progress:is([data-state=failed],[data-state=error])::before{border-radius:0;background:var(--cx-cross);color:var(--cx-danger-ink)}
+.cx-item-tool-progress[data-state=failed][data-nonzero]::before{border-radius:var(--cx-r-pill);background:var(--cx-warn-ink)}
 .cx-item-tool-progress .cx-text{order:1;flex:1;min-width:0;overflow:hidden;color:inherit;font-size:inherit;line-height:inherit;white-space:nowrap;text-overflow:ellipsis}
 .cx-item-tool-progress .cx-item-head{order:2;flex:none;min-height:0}
 .cx-item-tool-progress .cx-item-head strong,.cx-step-state{font-size:var(--cx-fz-xs);font-weight:400}

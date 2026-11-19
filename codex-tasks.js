@@ -468,11 +468,40 @@
     var label={Read:'读取文件',Grep:'查找代码',Glob:'查找文件',WebSearch:'检索网上资料',WebFetch:'读取网页',AskUserQuestion:'等待你的回答',Task:'执行分配的任务',Agent:'执行分配的任务',TodoWrite:'更新任务清单'}[name]||('执行工具'+(name?'：'+name:''));
     var path=file(input.file_path||input.notebook_path);return label+(path?'：'+path:'');
   }
-  function toolState(item){return {running:'执行中',inProgress:'执行中',completed:'已完成',failed:'这一步报错'}[(item.data||{}).status]||'收到工具状态';}
+  function toolState(item){
+    var data=item.data||{};
+    if(item.kind==='commandExecution'&&data.status==='failed')return commandFailure(data.reason).state;
+    return {running:'执行中',inProgress:'执行中',completed:'已完成',failed:'这一步报错'}[data.status]||'收到工具状态';
+  }
   function stepReason(output){
     // Keep only the first non-empty line of a failed tool result; the result body itself never enters items.
     var line=(typeof output==='string'?output:'').replace(/<\/?tool_use_error>/g,'').split('\n').map(function(part){return part.trim();}).filter(Boolean)[0]||'';
     return line.slice(0,120);
+  }
+  function commandReason(output){
+    // A failed command is reduced to how it ended: timeout, refused connection or exit code. What it printed never enters items.
+    output=typeof output==='string'?output:'';
+    var timed=/^(?:Exit code \d+\n)?Command timed out after ([0-9a-z. ]{1,24})(?:\n|$)/.exec(output);
+    if(timed)return 'timeout:'+timed[1].trim();
+    var ssh=/(?:^|\n)ssh: connect to host \S+ port \d+: ([A-Za-z ]{1,40})(?:\r?\n|$)/.exec(output);
+    if(ssh)return 'ssh:'+ssh[1].trim().toLowerCase();
+    var code=/^Exit code ([1-9]\d{0,2})(?:\n|$)/.exec(output);
+    return code?'exit:'+Number(code[1]):'';
+  }
+  function commandFailure(reason){
+    // Exit codes below 126 are the command's own answer, such as nothing found or files differ; they are kept apart from real faults.
+    var parts=String(reason||'').split(':'),value=parts.slice(1).join(':');
+    if(parts[0]==='timeout'){
+      var time=/^(?:(\d+)h ?)?(?:(\d+)m ?)?(?:(\d+)s)?$/.exec(value)||[];
+      var limit=[[time[1],' 小时'],[time[2],' 分钟'],[time[3],' 秒']].filter(function(part){return Number(part[0]);}).map(function(part){return part[0]+part[1];}).join(' ');
+      return {state:'超时',why:'超过'+(limit?' '+limit+'的':'')+'等待上限，命令被中止'};
+    }
+    if(parts[0]==='ssh')return value==='connection refused'?{state:'SSH 被拒',why:'SSH 连接被拒绝，远端命令没有执行'}:{state:'SSH 连不上',why:'SSH 连接没有建立，远端命令没有执行'};
+    if(parts[0]==='exit'){
+      var code=Number(value),known={1:'常见于没搜到内容或文件不存在，不一定是故障',2:'常见于要看的文件不存在，或命令用法有误',124:'常见于命令自设的限时到了',126:'命令没有执行权限',127:'命令不存在',130:'命令被中断',137:'进程被强制结束',143:'进程被终止',255:'常见于 SSH 连接或远端命令出错'};
+      return {state:'退出码 '+code,why:known[code]||(code<126?'命令返回了非零状态，含义由命令自己定义':'进程异常终止'),soft:code<126};
+    }
+    return {state:'这一步报错',why:'命令输出不在这里显示'};
   }
   function reasonText(reason){
     reason=String(reason||'');
@@ -607,10 +636,12 @@
     if(['request','resolved'].includes(item.kind)&&item.data.method)return questionCard(item);
     if(claudeTool(item)){
       var progress=node('article','cx-item cx-item-tool-progress'),head=node('header','cx-item-head'),step=item.data||{};progress.dataset.itemId=item.id;progress.dataset.state=step.status||'';
-      // One quiet line per step: what it did, then how it went. Only general tools explain a failure; command and file bodies stay out.
+      // One quiet line per step: what it did, then how it went. A general tool explains its failure, a command says how it ended; command and file bodies stay out.
       head.append(node('span','cx-step-state',toolState(item)),node('time','',stamp(item.created)));
       progress.append(node('div','cx-text',toolLabel(item)),head);
-      var why=step.status!=='failed'?'':item.kind==='tool'?reasonText(step.reason):'命令输出不在这里显示';
+      var ended=step.status==='failed'&&item.kind==='commandExecution'?commandFailure(step.reason):null;
+      var why=step.status!=='failed'?'':item.kind==='tool'?reasonText(step.reason):ended?ended.why:'命令输出不在这里显示';
+      if(ended&&ended.soft)progress.dataset.nonzero='true';
       if(why)progress.append(node('div','cx-step-reason',why));
       return progress;
     }
@@ -802,8 +833,9 @@
     Array.from(feed.querySelectorAll('.cx-steps')).forEach(function(group){
       var rows=group.querySelectorAll('.cx-item-tool-progress'),summary=group.querySelector('.cx-steps-summary');
       if(!rows.length){group.remove();return;}
-      var failed=group.querySelectorAll('.cx-item-tool-progress[data-state=failed]').length,mark=failed?String(failed):'',open=group.dataset.open==='true';
-      var text='过程记录 · '+rows.length+' 步'+(failed?' · '+failed+' 步报错':'');
+      // A plain non-zero exit code is counted on its own; only the other failures mark the group as failed.
+      var nonzero=group.querySelectorAll('.cx-item-tool-progress[data-nonzero]').length,failed=group.querySelectorAll('.cx-item-tool-progress[data-state=failed]').length-nonzero,mark=failed?String(failed):'',open=group.dataset.open==='true';
+      var text='过程记录 · '+rows.length+' 步'+(failed?' · '+failed+' 步报错':'')+(nonzero?' · '+nonzero+' 步退出码非零':'');
       if(summary.textContent!==text)summary.textContent=text;
       if((group.dataset.failed||'')!==mark){if(mark)group.dataset.failed=mark;else delete group.dataset.failed;}
       // A run of four or more steps folds once something follows it, and only while the feed is pinned to its end,
@@ -825,7 +857,7 @@
       }
       if(claudeTool(item)){
         var data=item.data||{},input=data.input||{};
-        item=Object.assign({},item,{text:'',data:{status:data.status,name:data.name,input:{file_path:input.file_path,notebook_path:input.notebook_path},changes:Array.isArray(data.changes)?data.changes.map(function(change){return {path:change.path};}):[],reason:item.kind==='tool'&&data.status==='failed'?stepReason(data.output):undefined}});
+        item=Object.assign({},item,{text:'',data:{status:data.status,name:data.name,input:{file_path:input.file_path,notebook_path:input.notebook_path},changes:Array.isArray(data.changes)?data.changes.map(function(change){return {path:change.path};}):[],reason:data.status!=='failed'?undefined:item.kind==='tool'?stepReason(data.output):item.kind==='commandExecution'?commandReason(data.aggregatedOutput):undefined}});
       }
       var previous=items.get(item.id);if(item.kind==='resolved'&&!item.data.method&&previous&&previous.data.method)item=Object.assign({},item,{data:previous.data});
       items.set(item.id,item);
