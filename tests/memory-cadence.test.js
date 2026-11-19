@@ -22,10 +22,10 @@ function fill(x,n){
       {role:'assistant',text:'answer '+i,ts:1794800000001+i*2});
   }
 }
-test('835 actual rounds retain their full evidence and explicit truncation boundary',()=>{
+test('835 actual rounds retain their evidence without selecting extra memory at truncation',()=>{
   const x=setup();fill(x,835);x.session.digestManualTrim={dropRounds:835};
   const before=JSON.stringify(x.session.transportMessages),packet=x.c.chatMemoryCadenceSnapshot(x.cfg,x.session,x.session.messages,'trim');
-  assert.equal(packet.rounds.length,835);assert.equal(packet.selected_rounds,835);
+  assert.equal(packet.rounds.length,835);assert.equal(packet.selected_rounds,0);
   assert.equal(packet.route.model,'claude-opus-4-6');assert.equal(packet.route.output_config.effort,'high');
   assert.equal(JSON.stringify(x.session.transportMessages),before);
 });
@@ -36,14 +36,14 @@ test('tool loops and split reply bubbles stay within one real human round',()=>{
     {role:'assistant',content:'first bubble'},{role:'assistant',content:'second bubble'},
     {role:'user',content:'pending question'}];
   const packet=x.c.chatMemoryCadenceSnapshot(x.cfg,x.session,[],'daily');
-  assert.equal(packet.rounds.length,1);assert.equal(packet.selected_rounds,1);
+  assert.equal(packet.rounds.length,1);assert.equal(packet.selected_rounds,0);
   assert.match(JSON.stringify(packet.rounds),/工具结果/);assert.match(JSON.stringify(packet.rounds),/second bubble/);
   assert.doesNotMatch(JSON.stringify(packet.rounds),/private|signed|pending question/);
 });
-test('automatic cuts use the same actual retained-round boundary',()=>{
+test('automatic cuts never select the incomplete memory remainder',()=>{
   const x=setup();fill(x,85);x.c.chatWindowTrimConfigFromSession=()=>({enabled:true,keep:50});
   const packet=x.c.chatMemoryCadenceSnapshot(x.cfg,x.session,x.session.messages);
-  assert.equal(packet.rounds.length,85);assert.equal(packet.selected_rounds,35);
+  assert.equal(packet.rounds.length,85);assert.equal(packet.selected_rounds,0);
 });
 test('already-decided KEEP receipts allow a covered cut without a new memory save',()=>{
   const x=setup();

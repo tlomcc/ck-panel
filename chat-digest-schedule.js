@@ -179,13 +179,7 @@ function chatMemoryCadenceSnapshot(cfg,session,rows,purpose){
   var turns=CKChatHistory.transportTurnGroups(session.transportMessages||[]);
   var rounds=(turns.length?chatDigestTransportSources(session,complete,[],turns.length):chatDigestMessageGroups(complete))||[];
   rounds=rounds.filter(function(g){return g.messages.some(function(m){return m.role==='assistant'})});
-  var selected=purpose==='daily'?rounds.length:session.digestManualTrim?Math.min(rounds.length,Number(session.digestManualTrim.dropRounds)||0):0;
-  if(!purpose&&!session.digestManualTrim){
-    var trim=typeof chatWindowTrimConfigFromSession==='function'&&chatWindowTrimConfigFromSession(session);
-    if(!trim&&typeof chatAutoTrimConfigFrom==='function')trim=chatAutoTrimConfigFrom(Object.assign({},cfg,{windowTrimOverride:false}));
-    if(trim&&(trim.enabled||trim.roundLimitEnabled))selected=Math.max(0,rounds.length-trim.keep);
-  }
-  return {policy:'fifty-rounds-v1',route:chatMemoryModelRoute(cfg),rounds:rounds,selected_rounds:selected};
+  return {policy:'fifty-rounds-v1',route:chatMemoryModelRoute(cfg),rounds:rounds,selected_rounds:0};
 }
 // One upload body for ordinary syncs, manual starts and the automatic arm.
 function chatNightlySyncBody(cfg,session,options,context){
@@ -193,7 +187,8 @@ function chatNightlySyncBody(cfg,session,options,context){
   chatDigestCandidateGroups(session,cfg,context.rows).forEach(function(g){if(!groups.has(g.key))groups.set(g.key,g)});
   var body={session_id:String(session.id),title:session.title,revision:context.remote.revision||0,base_stamp:context.baseStamp,base:context.base,config:chatNightlyConfig(cfg),groups:Array.from(groups.values()),candidate_keys:Array.from(groups.values()).filter(function(g){return g.candidate}).map(function(g){return g.key}),manual_request:session.digestManualTrim?String(session.digestManualTrim.requestedAt):'',manual_override:session.digestManualPending===context.scope,settings_override:session.digestSettingsPending===context.scope,settings_request:session.digestSettingsRequest&&session.digestSettingsRequest.id||''};
   body.auto=context.auto;
-  body.memory_cadence=chatMemoryCadenceSnapshot(cfg,session,context.rows,options.modelRun&&options.modelRun.purpose);
+  // Catch up source records without asking the summary to decide memory.
+  try{body.memory_cadence=chatMemoryCadenceSnapshot(cfg,session,context.rows)}catch(error){}
   if(options.modelRun){
     body.model_run=options.modelRun;
     if(options.modelRun.purpose==='daily'){
@@ -397,11 +392,8 @@ async function chatStartCurrentModelDigest(purpose){
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast('请等当前回复结束后手动启动总结');return false;}
   var running=(chatNightlyStatus[session.id]||session.digestSchedule||{}).model_run;
   if(running&&['queued','running'].includes(running.state)){toast('本次手动总结正在进行；可取消后重新选择范围');return false;}
-  var route,memoryRoute;try{route=chatManualModelRoute(cfg,'digest');memoryRoute=chatMemoryModelRoute(cfg)}catch(error){toast(error.message);return false;}
+  var route;try{route=chatManualModelRoute(cfg,'digest')}catch(error){toast(error.message);return false;}
   var selected=route.selected;
-  if(chatDigestSameModel(selected,memoryRoute)){
-    toast('主动记忆使用当前聊天模型；截断总结请选择另一个模型');return false;
-  }
   if(purpose==='trim'&&cfg.digestCurrentModel!==true){
     cfg.digestCurrentModel=true;chatSaveConfigObject(cfg);
   }
@@ -419,12 +411,12 @@ async function chatStartCurrentModelDigest(purpose){
     if(purpose==='daily')delete session.digestManualTrim;
     if(purpose==='trim'&&!await chatRequestManualDigestTrim({currentModel:true}))return false;
     var run={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:purpose,route:selected,
-      memory_route:memoryRoute,auto_resume_quota:selected.execution==='claude_code_subscription'};
+      auto_resume_quota:selected.execution==='claude_code_subscription'};
     session.digestModelRun={id:run.id,purpose:purpose,label:route.label};
     chatSaveSessions();
     var ok=await chatSyncNightlyDigest(cfg,{session:session,force:true,modelRun:run});
     chatRenderNightlyStatus(session);
-    if(ok){toast('已开始：先判断尚未处理的记忆余量，再总结、截断并同步');chatScheduleNightlySync(2000);}
+    if(ok){toast('已开始：生成和复核总结，完成后截断并同步');chatScheduleNightlySync(2000);}
     else toast('启动状态尚未确认，请先同步查看；不会自动重新发起总结');
     return ok;
   }finally{chatCurrentModelStarting=false;}

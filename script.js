@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v417-trim-start-40';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v418-memory-independent';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -6246,7 +6246,7 @@ function chatFormatDigestDiagnostic(ev,data){
   if(ev==='trim_result')return (data.ok?'✂️ 截断完成':'⚠️ 截断未完成')+'｜'+trigger+'｜'+(data.before||0)+' → '+(data.after||0)+' 轮｜'+(data.ok?'移除 '+(data.dropped||0)+' 轮，保留 '+(data.after||0)+' 轮':'原历史已保留｜'+(data.error||'总结未完成'))+(data.request_id?'｜关联请求 '+data.request_id:'');
   if(ev==='digest_result')return (data.ok?'✅ 总结已保存':'⚠️ 总结未保存')+'｜'+trigger+(data.ok?'｜现有 '+(data.entries||0)+' 个日期的总结':'｜'+(data.error||'校验未通过')+'｜原内容已保留')+(data.request_id?'｜关联请求 '+data.request_id:'');
   var phases={started:'开始',generated:'生成成功（尚待保存）',checkpoint:'批次进度已保存',reused:'复用已完成批次（未调用模型）',failed:'失败',cancelled:'已取消',server:'服务器生成成功（保存/截断结果以本地记录为准）'};
-  var stage=data.mode==='cycle_final'?'本次总结、上一份简版与截断前补记':data.mode==='cycle_part'?'本次总结分批处理':data.mode==='daily_part'?'对话总结':'历史总结记录';
+  var stage=data.mode==='cycle_final'?'本次总结与上一份简版':data.mode==='cycle_part'?'本次总结分批处理':data.mode==='daily_part'?'对话总结':'历史总结记录';
   var lines=[(data.ok===false?'❌ ':'🗂 ')+'截断总结｜'+(data.phase==='server'&&data.ok===false?'服务器生成失败':phases[data.phase]||'批次结果')+'｜'+stage+'｜'+(data.day_key||data.start_day||'-')+'｜'+trigger];
   if(data.batch)lines.push('批次 '+data.batch+'/'+(data.batches||data.batch)+'｜输入 '+(data.input_messages||0)+' 条 / '+(data.input_chars||data.source_chars||0)+' 字');
   else lines.push('输入 '+(data.input_messages||0)+' 条 / '+(data.input_chars||data.source_chars||0)+' 字');
@@ -11957,7 +11957,7 @@ var API_TABS=[
   {key:'polling',label:'聊天轮询',kind:'polling',info:'给聊天排一队备用 API：你自己从供应商库里挑几个加进来，排好顺序，哪个报错就自动换下一个，全程不打扰你。没加进来的供应商完全不参与轮询。每条可以单独换模型，模型直接从这个供应商已拉取的列表里选，不用再填一遍 Key 和地址。也可以勾「随机模式」不按顺序、每次在队列里摇一个用。只影响聊天、Fact 和召回配置。'},
   {key:'memory',label:'记忆',info:'这一栏管 Fact 提取和截断总结。每日 Fact 任务直接读取原始聊天记录。',groups:[
     {key:'fact_extract',label:'Fact 提取',info:'直接读取原始聊天记录，提取独立 Fact，并判断重复印证、内容更新或全新事实。'},
-    {key:'chat_digest',label:'截断总结',info:'截断前只总结新增对话，同时将上一份详细总结压成简版并集中补记主动记忆。保留次数 Z 在「截断总结」设置，默认 3；更早简版直接复用，跨天不重写。未启用当前聊天线路时，生成与校对使用这一组 API。'}
+    {key:'chat_digest',label:'截断总结',info:'截断前总结新增对话，并将上一份详细总结压成简版。主动记忆独立按每100轮检查。保留次数 Z 在「截断总结」设置，默认 3；更早简版直接复用，跨天不重写。未启用当前聊天线路时，生成与校对使用这一组 API。'}
   ]},
   {key:'topics',label:'事件整理 API',info:'事件整理与独立证据审核。',groups:[{key:'topic_materials',label:'事件整理',info:'整理供应商与模型；保留现有配置。'},{key:'topic_materials_fallback',label:'事件整理 · 备选',info:'主供应商限流或暂不可用时使用。'},{key:'event_audit',label:'事件证据审核',info:'独立选择审核供应商和模型，不再使用召回审核配置。未配置时等待，不重复消耗整理请求。'},{key:'event_audit_fallback',label:'事件证据审核 · 备选',info:'独立审核的备选供应商，留空可不启用。'}]},
   {key:'recall',label:'召回',info:'这一栏管“想起以前的事”：你一提到什么，系统就能从记忆里翻出相关内容递给 AI。',groups:[

@@ -34,35 +34,31 @@
     var v={title:'截断进度',stage:'尚未开始',detail:'手动开始后，这里会显示执行阶段和等待时间。',
       step:-1,tone:'neutral',running:running||queued,stale:stale,elapsed:'—',elapsedLabel:'已用时',
       eta:'开始后估算',etaNote:'',batch:'',percent:null,model:'',phase:phase};
-    var labels=['主动记忆','截断总结','统一保存','截断同步'];v.steps=labels;
+    var labels=['截断总结','保存结果','截断同步'];v.steps=labels;
     var execution=run.route&&run.route.execution;
     v.model=awaiting?(localRun.label||'所选整理模型'):
       [execution==='claude_code_subscription'?'Claude 订阅':execution?'当前聊天线路':'',run.route&&run.route.model].filter(Boolean).join(' · ');
-    var memoryPending=!!p.memory_pending||remote.stage==='cycle_memory';
-    if(memoryPending&&run.memory_route)v.model='小克正常聊天模型 · '+run.memory_route.model;
-    if(complete){v.stage='截断并同步完成';v.step=4;v.tone='success';v.detail=sync.note||'下一条消息使用当前总结。';v.eta='已完成';v.elapsedLabel='本次用时';}
+    if(complete){v.stage='截断并同步完成';v.step=3;v.tone='success';v.detail=sync.note||'下一条消息使用当前总结。';v.eta='已完成';v.elapsedLabel='本次用时';}
     else if(stopped&&!sync.ready){
       v.stage=remote.enabled===false?'总结已暂停':sync.tone==='attention'?sync.status:
         state==='retry'?'等待后台重试':['cancelled','manual_only'].includes(state)?'已停止':'等待手动处理';
       v.detail=remote.last_error||sync.note||'原文与已保存的进度仍保留。';
       v.tone='attention';v.running=false;v.eta='暂停期间不估算';v.elapsedLabel='停止前用时';
-      v.step=phase==='saved'?2:phase?1:0;
+      v.step=phase==='saved'?1:0;
       var wait=remote.quota_wait||{};
       if(wait.state==='waiting_reset'&&wait.run_id===run.id&&remote.enabled!==false){
         v.stage='等待额度刷新后自动继续';v.eta='等待官方刷新确认';
-        v.detail=memoryPending?'等待小克先完成主动记忆，之后才开始总结；完成前不截断。':'原文与成功批次已保留，刷新确认后从断点继续。';
+        v.detail='原文与成功批次已保留，刷新确认后从断点继续。';
         if(wait.reset_at)v.detail+=' 官方预计刷新：'+new Date(wait.reset_at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})+'（北京时间）。';
       }
     }else if(sync.ready||state==='succeeded'||phase==='saved'){
-      v.step=3;v.stage=sync.status==='等待当前回复'?'等待当前回复结束':sync.ready?'总结就绪，等待截断同步':'总结已保存，等待本机接收';
+      v.step=2;v.stage=sync.status==='等待当前回复'?'等待当前回复结束':sync.ready?'总结就绪，等待截断同步':'总结已保存，等待本机接收';
       v.detail=sync.note||'总结准备完成后才会截断原对话。';v.eta=sync.status==='等待当前回复'?'当前回复结束后继续':'等待本机完成同步';v.elapsedLabel='总结用时';v.running=false;
     }else if(running){
-      v.step=1;v.tone='live';v.stage=phases[phase]||'正在整理总结';
+      v.step=0;v.tone='live';v.stage=phases[phase]||'正在整理总结';
       if(phase==='preparing'&&!p.batch_index){v.step=0;v.stage='正在准备材料';}
       if(execution&&execution!=='claude_code_subscription')v.stage=v.stage.replace('Claude','模型');
       v.detail=remote.stage==='cycle_final'?'正在核对本次总结与上一份简版。':'正在整理本次选中的新增对话。';
-      if(p.memory_prepared_at)v.detail='主动记忆已完成并复核；'+v.detail+' 最后一起同步。';
-      if(memoryPending){v.step=0;v.stage=phase==='review'?'小克正在复核记忆':'小克正在维护记忆';v.detail='先使用当前聊天模型完成主动记忆，之后才开始总结；最后一起同步，才允许截断。';}
       if(p.day)v.detail+=' 处理日期 '+p.day+'。';
       v.eta='首批计时中，暂未形成估算';
       v.etaNote='每次模型请求最多等待 '+(execution==='claude_code_subscription'?'6':'3')+' 分钟；整批还包含复核。';
@@ -75,14 +71,12 @@
       v.elapsed=duration(Math.max(0,end-elapsedStart));
     }
     var done=number(p.completed_batches),total=number(p.planned_batches),reused=number(p.reused_batches);
-    if(memoryPending){done=number(p.memory_completed_batches);total=number(p.memory_planned_batches);reused=0;}
     if(total||p.batch_index||done||(!awaiting&&remote.checkpoint_batches)){
       v.batch=(running&&p.batch_index?'正在处理第 '+number(p.batch_index)+' 批 · ':'')+'已完成 '+done+' 批';
       if(total)v.batch+=' / '+(p.plan_estimated?'计划约 ':'共 ')+total+' 批';
       if(reused)v.batch+='（复用 '+reused+' 批）';
       if(!done&&number(remote.checkpoint_batches))v.batch+='；已有 '+number(remote.checkpoint_batches)+' 批成功断点';
       if(total)v.percent=Math.min(100,done/total*100);
-      if(memoryPending)v.batch='主动记忆 · '+v.batch;
     }
     var samples=number(p.measured_batches),spent=number(p.measured_seconds);
     if(running&&samples&&spent&&total>done){
@@ -91,8 +85,7 @@
       var low=average*remaining*.65-inBatch,high=average*remaining*1.8-inBatch;
       if(high<=0){v.eta='已超出本轮估算，仍在处理';v.etaNote='等待下一批完成后更新，未将等待超时当作成功。';}
       else{var a=rough(Math.max(10,low)),b=rough(Math.max(10,high));v.eta='约 '+a+(a===b?'':'–'+b);v.etaNote='按本次已完成 '+samples+' 批耗时估算；新增批次或复核会延长。';}
-    }else if(running&&memoryPending){v.eta='等待记忆维护完成';v.etaNote='主动记忆复核完成后才开始总结。';}
-    else if(running&&total&&done>=total){v.eta='批次已完成，等待最终保存';v.etaNote='记忆未完成或保存失败时，不会截断。';}
+    }else if(running&&total&&done>=total){v.eta='批次已完成，等待最终保存';v.etaNote='总结未完成或保存失败时，不会截断。';}
     if(stale){v.stage='上次状态：'+v.stage;v.tone='attention';v.eta='连接恢复后重新估算';v.etaNote='状态更新中断，保留最后一次读到的进度。';v.running=false;}
     return v;
   }

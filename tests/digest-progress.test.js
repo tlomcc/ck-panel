@@ -4,7 +4,7 @@ const now=1800000000000;
 function fixture(){return {local:{digestModelRun:{id:'manual-new'}},remote:{status:'running',observed_at:now/1000,model_run:{id:'manual-new',state:'running',route:{execution:'claude_code_subscription',model:'sonnet'}},progress:{run_id:'manual-new',phase:'review',started_at:now/1000-100,phase_started_at:now/1000-20,batch_started_at:now/1000-20,batch_index:2,completed_batches:1,planned_batches:3,plan_estimated:true,measured_batches:1,measured_seconds:60}},sync:{prepare:true}}}
 function make(f,options={}){return view(f.local,f.remote,f.sync,{now,receivedAt:now,...options})}
 test('shows real review phase, batches and a bounded estimate from completed work',()=>{
- const v=make(fixture());assert.equal(v.stage,'Claude 正在复核总结');assert.equal(v.elapsed,'1 分 40 秒');assert.match(v.batch,/第 2 批/);assert.match(v.batch,/已完成 1 批/);assert.match(v.eta,/约 /);assert(Math.abs(v.percent-100/3)<1e-9);assert.equal(v.step,1);
+ const v=make(fixture());assert.equal(v.stage,'Claude 正在复核总结');assert.equal(v.elapsed,'1 分 40 秒');assert.match(v.batch,/第 2 批/);assert.match(v.batch,/已完成 1 批/);assert.match(v.eta,/约 /);assert(Math.abs(v.percent-100/3)<1e-9);assert.equal(v.step,0);
 });
 test('first batch has no made-up countdown and saved summaries are not a completed cut',()=>{
  const f=fixture();f.remote.progress.measured_batches=0;assert.match(make(f).eta,/暂未形成估算/);
@@ -33,13 +33,13 @@ test('estimated range expires into honest waiting and never a false zero',()=>{
 });
 test('actual synchronization completes the final step and freezes elapsed time',()=>{
  const f=fixture();f.remote.model_run.state='succeeded';f.remote.progress.phase='saved';f.remote.progress.finished_at=now/1000-10;
- f.sync={status:'同步完成',prepare:false};const v=make(f);assert.equal(v.stage,'截断并同步完成');assert.equal(v.eta,'已完成');assert.equal(v.step,4);assert.equal(v.elapsed,'1 分 30 秒');
+ f.sync={status:'同步完成',prepare:false};const v=make(f);assert.equal(v.stage,'截断并同步完成');assert.equal(v.eta,'已完成');assert.equal(v.step,3);assert.equal(v.elapsed,'1 分 30 秒');
 });
 test('a prepared cut can await explicit sync while an unrelated compaction remains blocked',()=>{
  const f=fixture();f.remote.model_run.state='blocked';f.remote.progress.completed_batches=2;
  f.remote.progress.finished_at=now/1000-10;f.remote.last_error='旧摘要压缩超时';
  f.sync={ready:true,prepare:true,status:'待同步',note:'本次截断总结已准备；旧摘要仍待处理。'};
- const v=make(f);assert.equal(v.stage,'总结就绪，等待截断同步');assert.equal(v.step,3);
+ const v=make(f);assert.equal(v.stage,'总结就绪，等待截断同步');assert.equal(v.step,2);
  assert.match(v.batch,/已完成 2 批/);assert.match(v.detail,/旧摘要仍待处理/);assert.notEqual(v.eta,'已完成');
  f.sync={status:'同步完成',prepare:false,note:'本机与网关已同步；旧摘要仍待处理。'};
  assert.equal(make(f).stage,'截断并同步完成');assert.match(make(f).detail,/旧摘要仍待处理/);

@@ -1,7 +1,7 @@
 /* Quota-window automatic digest: arm after a subscription reply, adopt the run once the
    server starts it, and keep the composer locked while it works. The arm lives beside the
    job on the server; until it is adopted this window behaves as if nothing was armed. */
-var CHAT_AUTO_DIGEST_MIN_CONTEXT=200000,CHAT_AUTO_DIGEST_LOCK_TEXT='小克正在自动整理记忆与总结，暂时不能发送';
+var CHAT_AUTO_DIGEST_MIN_CONTEXT=200000,CHAT_AUTO_DIGEST_LOCK_TEXT='小克正在自动生成和复核截断总结，暂时不能发送';
 var chatAutoDigestTasks=new Map(),chatAutoDigestTimer=0,chatAutoDigestStopAsked={},chatAutoDigestStopBusy=false;
 function chatAutoDigestSubscription(){return !!(window.CKBackendRoute&&CKBackendRoute.current&&CKBackendRoute.current.execution==='claude_code_subscription');}
 function chatAutoDigestWindow(session){
@@ -81,8 +81,8 @@ async function chatAutoDigestRun(cfg,session){
   if(session!==chatCurrentSession()||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig()))return false;
   var synced=chatNightlySynced[chatNightlyScope(cfg)+':'+session.id];
   if(synced&&synced.readBack||busy()||!chatAutoDigestWanted(cfg,session)||!chatAutoDigestReady(cfg,session))return false;
-  var route,memoryRoute;try{route=chatManualModelRoute(cfg,'digest');memoryRoute=chatMemoryModelRoute(cfg)}catch(e){return false}
-  if(route.selected.execution!=='claude_code_subscription'||chatDigestSameModel(route.selected,memoryRoute))return false;
+  var route;try{route=chatManualModelRoute(cfg,'digest')}catch(e){return false}
+  if(route.selected.execution!=='claude_code_subscription')return false;
   var plan=chatPlanAutoTrimForPendingBatch(cfg,[],{force:true,trigger:'manual_trim'});
   if(!plan.trimmed)return chatAutoDigestLocal(session)?chatAutoDigestDisarm(cfg,session):false;
   var groups=chatDigestMessageGroups(plan.droppedMessages||[]);
@@ -93,7 +93,7 @@ async function chatAutoDigestRun(cfg,session){
   var trim={scope:chatDigestActiveScope(cfg),keys:keys,keep:plan.keep,dropRounds:plan.dropped,immediate:true,
     requestedAt:Math.max(Date.now(),Number(previous&&previous.trim&&previous.trim.requestedAt||0)+1)};
   var run={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:'trim',route:route.selected,
-    memory_route:memoryRoute,auto_resume_quota:true,auto_window:true};
+    auto_resume_quota:true,auto_window:true};
   var body=chatAutoDigestArmBody(cfg,session,trim,run);
   if(!body)return false;
   body.action='auto_window_arm';body.auto_window={context_tokens:context};
@@ -197,7 +197,7 @@ function chatAutoDigestPollingDelay(session,cfg){
 function chatAutoDigestViewNote(session,cfg,view){
   var auto=chatAutoDigestWindow(session);
   if(auto&&auto.state==='paused')view.note+='自动整理已暂停（额度保留/已中止），条件合适时自动继续。';
-  else if(auto&&(auto.state==='running'||auto.locked===true)){view.status='自动整理进行中';view.note='小克正在自动整理（先记忆，后总结截断），完成前暂不能发送；原文保留。';}
+  else if(auto&&(auto.state==='running'||auto.locked===true)){view.status='自动整理进行中';view.note='小克正在自动生成和复核截断总结，完成前暂不能发送；原文保留。';}
   else if(session.digestAutoArm&&(!auto||auto.state==='armed'))view.note+='已预约自动整理：额度快刷新时闲置 15 分钟、刚刷新后闲置 30 分钟才开始。';
 }
 function chatAutoDigestRenderBar(session){
@@ -208,7 +208,7 @@ function chatAutoDigestRenderBar(session){
   if(!locked)delete chatAutoDigestStopAsked[session.id];
   var asked=locked&&(view.stop_requested===true||chatAutoDigestStopAsked[session.id]===true),changed=bar.hidden===locked;
   bar.hidden=!locked;
-  text.textContent=asked?'已请求中止：等当前这一步跑完后解锁':'小克正在自动整理（先记忆，后总结截断），暂不能发送';
+  text.textContent=asked?'已请求中止：等当前这一步跑完后解锁':'小克正在自动生成和复核截断总结，暂不能发送';
   button.disabled=!!(asked||chatAutoDigestStopBusy);
   if(changed&&typeof chatLayoutCompose==='function')chatLayoutCompose();
 }

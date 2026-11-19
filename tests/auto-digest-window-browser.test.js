@@ -24,7 +24,7 @@ const fixture=async()=>{
  chatMaybeAutoTrimAtIdleBoundary=()=>{};chatMaybeAutoClean=()=>{};chatMaybeRollDigestAtDayBoundary=()=>{};chatRefreshPreparedDigest=async()=>false;
  chatScheduleNightlySync=()=>{};chatAutoDigestSchedule=()=>{};chatStartReplyWatch=()=>()=>{};chatEnsureSessionsReady=()=>Promise.resolve();
  const notices=[];toast=text=>notices.push(String(text));
- const lockText='小克正在自动整理记忆与总结，暂时不能发送';
+ const lockText='小克正在自动生成和复核截断总结，暂时不能发送';
 
  // Gateway double: the queue endpoint with the auto-window actions, and a chat endpoint that can refuse.
  const requests=[],srv={window:{state:'none',locked:false,run_id:'',stop_requested:false},run:null,chat:'locked',fail:false};
@@ -134,7 +134,7 @@ const fixture=async()=>{
 
  // E. Locked: the composer keeps the text and nothing is posted.
  const bar=$('chat-auto-digest-bar'),stop=$('chat-auto-digest-stop'),input=$('chat-input');
- assert(!bar.hidden&&$('chat-auto-digest-text').textContent==='小克正在自动整理（先记忆，后总结截断），暂不能发送'&&stop.textContent==='中止并解锁'&&!stop.disabled,'lock bar');
+ assert(!bar.hidden&&$('chat-auto-digest-text').textContent==='小克正在自动生成和复核截断总结，暂不能发送'&&stop.textContent==='中止并解锁'&&!stop.disabled,'lock bar');
  requests.length=0;notices.length=0;input.value='先别发';const count=chatMessages.length;
  await chatSendMessage();
  assert(input.value==='先别发'&&chatMessages.length===count&&!requests.some(r=>r.kind==='chat')&&notices.includes(lockText),'send is held and the text stays: '+kinds());
