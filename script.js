@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v422-compact-chat';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v423-compact-thinking-meta';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -10373,7 +10373,7 @@ function chatUserMessageMetaHtml(m,showTimestamp){
 var CHAT_USAGE_SYMBOL_ROWS=[
   ['↑','输入（未命中缓存）','这一轮真正重新计算的输入 token，按输入单价计费。'],
   ['↓','输出','这一轮模型生成的 token，按输出单价计费。'],
-  ['⚡','缓存命中','从缓存里直接读到的输入 token，单价最便宜，越大越省钱。'],
+  ['\u26a1\ufe0e','缓存命中','从缓存里直接读到的输入 token，单价最便宜，越大越省钱。'],
   ['✚','缓存创建','这一轮新写进缓存的 token，比普通输入贵一点，下一轮才能读。'],
   ['◎','缓存命中率','缓存命中 ÷ 输入总量（输入＋命中＋创建），越高越好。']
 ];

@@ -5,7 +5,8 @@
    ============================================================ */
 
 /* ==== ROOT BEGIN ==== */
-#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:12px;--ck-thinking-max-width:min(520px,72%);--ck-thinking-head-h:30px;--ck-thinking-max-height:min(220px,28vh)}
+#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:11px;--ck-thinking-max-width:min(360px,64%);--ck-thinking-head-h:22px;--ck-thinking-max-height:min(140px,20vh);--ck-chat-meta-fz:10px;--ck-chat-meta-ink:rgba(94,114,102,.64);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body.dark #tab-chat,body.theme-dark #tab-chat{--ck-chat-meta-ink:rgba(173,192,180,.55)}
 @media (min-width:641px) and (max-width:760px){#tab-chat{--ck-ctl:44px;--ck-head-h:48px;--ck-pad:var(--ck-space-4)}}
 @media (min-width:761px){#tab-chat{--ck-chat-bubble-max:min(80%,640px)}}
 /* ==== ROOT END ==== */
@@ -106,15 +107,16 @@
 
 /* ==== A2b BEGIN ==== */
 /* 消息下方的信息与操作：时间·等待·价格一行、用量行、复制/重新生成/版本翻页/重试键。
-   这些节点是 .chat-msg-row 的直接子元素，落在对话列纸面（--ck-bg）上，小字用 --ck-text-soft（--ck-muted 在此底上 4.42 不达标）。
+   这些节点是 .chat-msg-row 的直接子元素。按用户要求，时间、等待、价格和用量统一10px淡灰色，降低视觉占比。
    不写 display：操作低/中/高三档由 JS 决定渲染，状态勾、价格由 body 类开关。旧规则几乎全带 !important，所以这里对应属性也带。 */
 #tab-chat .chat-messages .chat-msg-time,
 #tab-chat .chat-messages .chat-msg-meta{
   height:auto!important;
   padding:0 4px!important;
-  color:var(--ck-text-soft)!important;
-  font-size:var(--ck-fz-xs)!important;
-  line-height:1.4!important;
+  color:var(--ck-chat-meta-ink)!important;
+  font-size:var(--ck-chat-meta-fz)!important;
+  font-weight:400!important;
+  line-height:1.25!important;
   letter-spacing:0!important;
   font-variant-numeric:tabular-nums;
 }
@@ -125,22 +127,29 @@
 #tab-chat .chat-messages .chat-msg-meta-time,
 #tab-chat .chat-messages .chat-msg-separator,
 #tab-chat .chat-messages .chat-msg-meta-pending{
-  font-size:var(--ck-fz-xs)!important;
-  line-height:1.4!important;
+  color:inherit!important;
+  font-size:var(--ck-chat-meta-fz)!important;
+  font-weight:400!important;
+  line-height:1.25!important;
 }
 #tab-chat .chat-messages .chat-msg-wait{
   height:auto!important;
-  padding:0 4px!important;
-  color:var(--ck-text-soft)!important;
-  font-size:var(--ck-fz-xs)!important;
-  line-height:1.4!important;
+  padding:0 2px!important;
+  background:transparent!important;
+  color:inherit!important;
+  font-size:var(--ck-chat-meta-fz)!important;
+  font-weight:400!important;
+  line-height:1.25!important;
 }
 #tab-chat .chat-messages .chat-msg-cost{
-  color:var(--ck-text-soft)!important;
-  font-size:var(--ck-fz-xs)!important;
-  line-height:1.4!important;
+  color:inherit!important;
+  font-size:var(--ck-chat-meta-fz)!important;
+  font-weight:400!important;
+  line-height:1.25!important;
 }
-#tab-chat .chat-messages .chat-msg-row.pending .chat-msg-meta-pending{color:var(--ck-text-soft)!important}
+#tab-chat .chat-messages .chat-msg-row.pending .chat-msg-meta-pending{color:inherit!important}
+#tab-chat .chat-messages .chat-msg-time .chat-cache-tick{width:12px!important;height:9px!important;transform:none!important;opacity:.6!important}
+#tab-chat .chat-messages .chat-msg-time .chat-cache-tick.hit{width:15px!important}
 /* 失败 / 已停止：时间和前面的小标签 */
 #tab-chat .chat-messages .chat-msg-row.state-error .chat-msg-time,
 #tab-chat .chat-messages .chat-msg-row.state-stopped .chat-msg-time{color:var(--ck-danger-ink)!important}
@@ -148,9 +157,9 @@
 #tab-chat .chat-messages .chat-msg-row.state-stopped .chat-msg-time::before{
   height:auto;
   padding:0 4px;
-  font-size:var(--ck-fz-xs);
+  font-size:var(--ck-chat-meta-fz);
   font-weight:600;
-  line-height:1.4;
+  line-height:1.25;
 }
 #tab-chat .chat-messages .chat-msg-row.state-error .chat-msg-time::before{
   background:var(--ck-danger-wash)!important;
@@ -160,14 +169,18 @@
   background:var(--ck-surface-soft)!important;
   color:var(--ck-text-soft)!important;
 }
-/* 用量行：12px，390 下放不下就换行，不横向滚动 */
+/* 用量数字及符号一起缩小、淡化，窄屏放不下就换行。 */
 #tab-chat .chat-messages .chat-msg-usage{
-  gap:4px 8px!important;
-  font-size:var(--ck-fz-xs)!important;
-  line-height:1.4!important;
+  gap:2px 6px!important;
+  color:var(--ck-chat-meta-ink)!important;
+  font-size:var(--ck-chat-meta-fz)!important;
+  font-weight:400!important;
+  line-height:1.25!important;
+  letter-spacing:0!important;
   white-space:normal!important;
   font-variant-numeric:tabular-nums;
 }
+#tab-chat .chat-messages .chat-msg-usage :is(span,i){color:inherit!important;font-size:inherit!important;font-weight:400!important;line-height:inherit!important;opacity:1!important}
 /* 操作键：看起来 28 高，::after 上下各补 8 到 44，最小宽 44，键之间留 8 所以点按盒不重叠 */
 #tab-chat .chat-messages .chat-msg-tools{
   gap:8px!important;
@@ -232,11 +245,13 @@
 #tab-chat .chat-messages .chat-thinking-copy::after{content:"";position:absolute;inset:-6px -4px}
 
 /* Compact thinking: a small collapsed frame, with long text scrolling inside it. */
-#tab-chat .chat-messages .chat-thinking{flex:0 1 auto;width:fit-content!important;max-width:var(--ck-thinking-max-width)!important;margin-bottom:var(--ck-space-1)!important;border-radius:6px!important;font-size:var(--ck-thinking-fz)!important}
-#tab-chat .chat-messages .chat-thinking-head{min-height:var(--ck-thinking-head-h)!important;padding:var(--ck-space-1) var(--ck-space-2)!important;font-size:var(--ck-thinking-fz)!important}
-#tab-chat .chat-messages .chat-thinking-body{max-height:var(--ck-thinking-max-height);padding:0 var(--ck-space-2) 6px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.45!important;overflow:auto;overscroll-behavior:contain}
-#tab-chat .chat-messages .chat-thinking-actions{margin-top:var(--ck-space-1)!important}
-#tab-chat .chat-messages .chat-thinking-copy{min-height:24px;padding:0 6px!important;border-radius:6px!important;font-size:11px!important}
+#tab-chat .chat-messages .chat-thinking{flex:0 1 auto;width:fit-content!important;max-width:var(--ck-thinking-max-width)!important;margin-bottom:2px!important;border-left-width:2px!important;border-radius:4px!important;font-size:var(--ck-thinking-fz)!important}
+#tab-chat .chat-messages .chat-thinking-head{min-height:var(--ck-thinking-head-h)!important;gap:4px!important;padding:2px 6px!important;font-size:var(--ck-thinking-fz)!important;font-weight:500!important;line-height:1.35!important}
+#tab-chat .chat-messages .chat-thinking-head:focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:-2px!important}
+#tab-chat .chat-messages .chat-thinking-head .chev{font-size:9px!important}
+#tab-chat .chat-messages .chat-thinking-body{max-height:var(--ck-thinking-max-height);padding:0 6px 4px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.4!important;overflow:auto;overscroll-behavior:contain}
+#tab-chat .chat-messages .chat-thinking-actions{margin-top:2px!important}
+#tab-chat .chat-messages .chat-thinking-copy{min-height:20px;padding:0 4px!important;border-radius:4px!important;font-size:10px!important}
 
 /* Tool card */
 #tab-chat .chat-messages .chat-tool-card{border-radius:var(--ck-radius-sm)!important}
