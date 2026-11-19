@@ -306,6 +306,10 @@ body.chat-active #tab-chat .chat-compose-row{
   gap:8px!important;
   align-items:end!important;
 }
+/* Editing hides the plus/send controls; the input uses the whole row. */
+body.chat-active.chat-editing #tab-chat .chat-compose-row{
+  grid-template-columns:minmax(0,1fr)!important;
+}
 body.chat-active #tab-chat #chat-input{
   min-height:var(--ck-tap)!important;
   max-height:calc(1.5em * 6 + 20px)!important;

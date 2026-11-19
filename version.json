@@ -1,6 +1,6 @@
 {
-  "version": "chat-v424-thinking-no-scrollbar",
+  "version": "chat-v425-edit-fullwidth",
   "notes": [
-    "隐藏思考内容框右侧滚动条，保留滑动、滚轮浏览和全文复制。"
+    "修复双击编辑消息时输入框过窄，恢复整行宽度。"
   ]
 }
