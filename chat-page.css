@@ -5,9 +5,9 @@
    ============================================================ */
 
 /* ==== ROOT BEGIN ==== */
-#tab-chat{--ck-chat-fz:16px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%}
+#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:12px;--ck-thinking-max-width:min(520px,72%);--ck-thinking-head-h:30px;--ck-thinking-max-height:min(220px,28vh)}
 @media (min-width:641px) and (max-width:760px){#tab-chat{--ck-ctl:44px;--ck-head-h:48px;--ck-pad:var(--ck-space-4)}}
-@media (min-width:761px){#tab-chat{--ck-chat-fz:15px;--ck-chat-bubble-max:min(80%,640px)}}
+@media (min-width:761px){#tab-chat{--ck-chat-bubble-max:min(80%,640px)}}
 /* ==== ROOT END ==== */
 
 /* ==== A1 BEGIN ==== */
@@ -220,16 +220,23 @@
 /* ==== A2c BEGIN ==== */
 /* A2c: thinking / recall cards, tool card, file card and in-column notices.
    Old winners are body.chat-active rules, (0,2,1)-(0,5,1), nearly all with
-   !important, so the same properties carry !important here. No display or
-   height is set on anything that opens and closes. Card heads are 36 high
-   from 761 up and 44 at 760 and below (--ck-ctl): the cards clip their
-   children, so the tap box cannot be widened with a pseudo-element. */
+   !important, so the same properties carry !important here. Recall card heads
+   are 36 high from 761 up and 44 at 760 and below (--ck-ctl). Thinking uses
+   the compact geometry below. Cards clip their children, so the tap box
+   cannot be widened with a pseudo-element. */
 #tab-chat .chat-messages :is(.chat-thinking,.chat-recall){border-radius:var(--ck-radius-sm)!important}
 #tab-chat .chat-messages :is(.chat-thinking-head,.chat-recall-head){min-height:var(--ck-ctl)!important;padding:var(--ck-space-2) var(--ck-space-3)!important;font-size:var(--ck-fz-sm)!important;font-weight:600!important;line-height:1.4!important}
 #tab-chat .chat-messages :is(.chat-thinking-body,.chat-recall-body){padding:0 var(--ck-space-3) var(--ck-space-3)!important;font-size:var(--ck-fz-sm)!important;line-height:1.5!important;color:var(--ck-text-soft)!important;overflow-wrap:anywhere}
 #tab-chat .chat-messages .chat-thinking-actions{margin-top:var(--ck-space-2)!important}
 #tab-chat .chat-messages .chat-thinking-copy{position:relative;min-height:32px;padding:0 var(--ck-space-2)!important;border-radius:var(--ck-radius-sm)!important;font-size:var(--ck-fz-xs)!important;line-height:1!important}
 #tab-chat .chat-messages .chat-thinking-copy::after{content:"";position:absolute;inset:-6px -4px}
+
+/* Compact thinking: a small collapsed frame, with long text scrolling inside it. */
+#tab-chat .chat-messages .chat-thinking{flex:0 1 auto;width:fit-content!important;max-width:var(--ck-thinking-max-width)!important;margin-bottom:var(--ck-space-1)!important;border-radius:6px!important;font-size:var(--ck-thinking-fz)!important}
+#tab-chat .chat-messages .chat-thinking-head{min-height:var(--ck-thinking-head-h)!important;padding:var(--ck-space-1) var(--ck-space-2)!important;font-size:var(--ck-thinking-fz)!important}
+#tab-chat .chat-messages .chat-thinking-body{max-height:var(--ck-thinking-max-height);padding:0 var(--ck-space-2) 6px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.45!important;overflow:auto;overscroll-behavior:contain}
+#tab-chat .chat-messages .chat-thinking-actions{margin-top:var(--ck-space-1)!important}
+#tab-chat .chat-messages .chat-thinking-copy{min-height:24px;padding:0 6px!important;border-radius:6px!important;font-size:11px!important}
 
 /* Tool card */
 #tab-chat .chat-messages .chat-tool-card{border-radius:var(--ck-radius-sm)!important}
