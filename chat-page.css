@@ -5,7 +5,7 @@
    ============================================================ */
 
 /* ==== ROOT BEGIN ==== */
-#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:11px;--ck-thinking-max-width:min(360px,64%);--ck-thinking-head-h:22px;--ck-thinking-max-height:min(140px,20vh);--ck-chat-meta-fz:10px;--ck-chat-meta-ink:rgba(94,114,102,.64);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:11px;--ck-thinking-max-width:min(360px,64%);--ck-thinking-head-h:22px;--ck-chat-meta-fz:10px;--ck-chat-meta-ink:rgba(94,114,102,.64);-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body.dark #tab-chat,body.theme-dark #tab-chat{--ck-chat-meta-ink:rgba(173,192,180,.55)}
 @media (min-width:641px) and (max-width:760px){#tab-chat{--ck-ctl:44px;--ck-head-h:48px;--ck-pad:var(--ck-space-4)}}
 @media (min-width:761px){#tab-chat{--ck-chat-bubble-max:min(80%,640px)}}
@@ -244,13 +244,12 @@ body.dark #tab-chat,body.theme-dark #tab-chat{--ck-chat-meta-ink:rgba(173,192,18
 #tab-chat .chat-messages .chat-thinking-copy{position:relative;min-height:32px;padding:0 var(--ck-space-2)!important;border-radius:var(--ck-radius-sm)!important;font-size:var(--ck-fz-xs)!important;line-height:1!important}
 #tab-chat .chat-messages .chat-thinking-copy::after{content:"";position:absolute;inset:-6px -4px}
 
-/* Compact thinking: a small collapsed frame, with long text scrolling inside it. */
+/* Compact thinking: a small collapsed frame that expands to show the full text. */
 #tab-chat .chat-messages .chat-thinking{flex:0 1 auto;width:fit-content!important;max-width:var(--ck-thinking-max-width)!important;margin-bottom:2px!important;border-left-width:2px!important;border-radius:4px!important;font-size:var(--ck-thinking-fz)!important}
 #tab-chat .chat-messages .chat-thinking-head{min-height:var(--ck-thinking-head-h)!important;gap:4px!important;padding:2px 6px!important;font-size:var(--ck-thinking-fz)!important;font-weight:500!important;line-height:1.35!important}
 #tab-chat .chat-messages .chat-thinking-head:focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:-2px!important}
 #tab-chat .chat-messages .chat-thinking-head .chev{font-size:9px!important}
-#tab-chat .chat-messages .chat-thinking-body{max-height:var(--ck-thinking-max-height);padding:0 6px 4px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.4!important;overflow:auto;overscroll-behavior:contain;scrollbar-width:none;-ms-overflow-style:none}
-#tab-chat .chat-messages .chat-thinking-body::-webkit-scrollbar{display:none;width:0;height:0}
+#tab-chat .chat-messages .chat-thinking-body{max-height:none;padding:0 6px 4px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.4!important;overflow:visible}
 #tab-chat .chat-messages .chat-thinking-actions{margin-top:2px!important}
 #tab-chat .chat-messages .chat-thinking-copy{min-height:20px;padding:0 4px!important;border-radius:4px!important;font-size:10px!important}
 

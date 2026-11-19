@@ -1,6 +1,6 @@
 {
-  "version": "chat-v425-edit-fullwidth",
+  "version": "chat-v426-thinking-full-expand",
   "notes": [
-    "修复双击编辑消息时输入框过窄，恢复整行宽度。"
+    "思考框点击展开即显示全文，取消框内限高和滚动。"
   ]
 }
