@@ -249,7 +249,8 @@ body.dark #tab-chat,body.theme-dark #tab-chat{--ck-chat-meta-ink:rgba(173,192,18
 #tab-chat .chat-messages .chat-thinking-head{min-height:var(--ck-thinking-head-h)!important;gap:4px!important;padding:2px 6px!important;font-size:var(--ck-thinking-fz)!important;font-weight:500!important;line-height:1.35!important}
 #tab-chat .chat-messages .chat-thinking-head:focus-visible{outline:2px solid var(--ck-accent-strong)!important;outline-offset:-2px!important}
 #tab-chat .chat-messages .chat-thinking-head .chev{font-size:9px!important}
-#tab-chat .chat-messages .chat-thinking-body{max-height:var(--ck-thinking-max-height);padding:0 6px 4px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.4!important;overflow:auto;overscroll-behavior:contain}
+#tab-chat .chat-messages .chat-thinking-body{max-height:var(--ck-thinking-max-height);padding:0 6px 4px!important;font-size:var(--ck-thinking-fz)!important;line-height:1.4!important;overflow:auto;overscroll-behavior:contain;scrollbar-width:none;-ms-overflow-style:none}
+#tab-chat .chat-messages .chat-thinking-body::-webkit-scrollbar{display:none;width:0;height:0}
 #tab-chat .chat-messages .chat-thinking-actions{margin-top:2px!important}
 #tab-chat .chat-messages .chat-thinking-copy{min-height:20px;padding:0 4px!important;border-radius:4px!important;font-size:10px!important}
 
