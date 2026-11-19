@@ -124,6 +124,9 @@
 .ck-maintenance .mm-digest-result{padding:20px 0;border-bottom:1px solid var(--ck-line)}
 .ck-maintenance .mm-digest-result:first-child{padding-top:0}
 .ck-maintenance .mm-digest-progress{margin-top:16px;padding:18px;background:var(--ck-surface-soft);border-radius:12px;min-width:0}
+.ck-maintenance .mm-digest-control{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0}
+.ck-maintenance .mm-digest-control>button{min-height:44px;flex:0 0 auto}
+.ck-maintenance .mm-digest-control>.mm-current-note{flex:1 1 180px;margin:0;overflow-wrap:anywhere}
 .ck-maintenance .mm-progress-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ck-maintenance .mm-progress-heading h4{margin:0;font:600 14px/1.6 var(--ck-font-body)}
 .ck-maintenance .mm-progress-heading span,.ck-maintenance .mm-digest-estimate{font:12px/1.7 var(--ck-font-body);color:var(--ck-text-soft);overflow-wrap:anywhere}

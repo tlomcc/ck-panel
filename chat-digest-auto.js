@@ -3,6 +3,7 @@
    job on the server; until it is adopted this window behaves as if nothing was armed. */
 var CHAT_AUTO_DIGEST_MIN_CONTEXT=200000,CHAT_AUTO_DIGEST_LOCK_TEXT='小克正在自动生成和复核截断总结，暂时不能发送';
 var chatAutoDigestTasks=new Map(),chatAutoDigestTimer=0,chatAutoDigestStopAsked={},chatAutoDigestStopBusy=false;
+var chatAutoDigestControls=new Map();
 function chatAutoDigestSubscription(){return !!(window.CKBackendRoute&&CKBackendRoute.current&&CKBackendRoute.current.execution==='claude_code_subscription');}
 function chatAutoDigestWindow(session){
   var status=session&&chatNightlyStatus[session.id];
@@ -241,6 +242,28 @@ async function chatAutoDigestStop(){
     chatAutoDigestSetWindow(cfg,session,result.data.auto_window);
     chatScheduleNightlySync(0);return true;
   }finally{chatAutoDigestStopBusy=false;chatAutoDigestRenderBar(session);chatRenderNightlyStatus(session);}
+}
+function chatAutoDigestControlBusy(cfg,session){return chatAutoDigestControls.has(chatNightlyScope(cfg)+':'+session.id);}
+async function chatAutoDigestControl(session,action,runId){
+  var cfg=chatLoadConfig(),scope=chatNightlyScope(cfg),key=scope+':'+session.id;
+  if(!runId||!['pause','resume'].includes(action)||chatAutoDigestControls.has(key))return false;
+  chatAutoDigestControls.set(key,action);
+  var body={action:action==='resume'?'auto_window_resume':'auto_window_stop',session_id:String(session.id),run_id:String(runId)};
+  if(action==='resume')body.request_id='resume-'+(typeof crypto.randomUUID==='function'?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+  try{
+    var result=await chatAutoDigestPost(cfg,body);
+    if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return result.ok;
+    if(result.data&&result.data.auto_window)chatAutoDigestSetWindow(cfg,session,result.data.auto_window);
+    if(!result.ok){toast(result.data&&result.data.error||'请求未确认，请刷新状态后再试');return false;}
+    if(action==='resume')toast(result.data.resumed?'已提交继续总结，沿用原进度':'总结状态已更新');
+    else toast(result.data.auto_window&&result.data.auto_window.stop_requested?'已请求暂停，当前这步结束后解锁':'总结已暂停，聊天已解锁');
+    // Read progress only. Continuing never uploads a new cut or starts a new run.
+    await chatAutoDigestProbe(cfg,session);
+    return true;
+  }finally{
+    chatAutoDigestControls.delete(key);
+    chatAutoDigestRenderBar(chatCurrentSession());
+  }
 }
 function chatAutoDigestSaveSetting(){
   var cfg=chatLoadConfig();

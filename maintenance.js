@@ -1,9 +1,14 @@
 /* Readable maintenance monitoring: current state, durable history, explicit controls. */
 var ckStatusTab='fact';
-async function ckRunDigestAction(id,action){
+async function ckRunDigestAction(id,action,runId){
   await chatEnsureSessionsReady();
   var session=chatSessions.find(function(s){return String(s.id)===String(id)});
   if(!session){toast('该窗口已删除');return false;}
+  if(action==='pause'||action==='resume'){
+    try{return await chatAutoDigestControl(session,action,runId);}
+    catch(e){toast('请求未确认，请刷新状态后再试');return false;}
+    finally{ckRefreshMaintenance(false);}
+  }
   if(chatCurrentSession()!==session){
     if(chatSending||chatTrimTransaction){toast('当前回复结束后可操作其他窗口');return false;}
     chatSelectSession(session.id);
@@ -36,16 +41,29 @@ async function ckRunDigestAction(id,action){
     if(root(section).__mmBound)return;root(section).__mmBound=true;
     root(section).addEventListener('click',function(e){
       var action=e.target.closest('[data-mm-digest-action]');
-      if(action){ckRunDigestAction(action.dataset.mmSession,action.dataset.mmDigestAction);return;}
+      if(action){
+        if(action.disabled)return;
+        if(['pause','resume'].includes(action.dataset.mmDigestAction))action.disabled=true;
+        ckRunDigestAction(action.dataset.mmSession,action.dataset.mmDigestAction,action.dataset.mmRun);return;
+      }
       if(e.target.closest('.mm-more'))ckRefreshMaintenance(false,true);
     });
+  }
+  function windowControl(local,remote,cfg){
+    var view=remote&&remote.auto_window;
+    if(!view||!view.run_id||!['running','paused','failed'].includes(view.state))return '';
+    var running=view.state==='running',pending=chatAutoDigestControlBusy(cfg,local),waiting=running&&view.stop_requested;
+    var disabled=pending||waiting||(!running&&view.can_resume!==true);
+    var text=waiting?'等待暂停…':pending?'提交中…':running?'暂停总结':'继续总结';
+    var note=running?'暂停会在当前这步结束后生效，并解除聊天锁。':view.can_resume===true?'继续会沿用已完成的批次和当前进度。':view.resume_problem||'请先处理上次失败，再继续总结。';
+    return '<div class="mm-digest-control"><button class="btn '+(running?'btn-outline':'btn-primary')+' btn-sm" type="button" data-mm-digest-action="'+(running?'pause':'resume')+'" data-mm-session="'+attr(local.id)+'" data-mm-run="'+attr(view.run_id)+'"'+(disabled?' disabled':'')+'>'+text+'</button><p class="mm-current-note">'+escape(note)+'</p></div>';
   }
   function manualCards(sessions){
     var current=chatCurrentSession(),locals=(typeof chatSessions!=='undefined'?chatSessions:[]).filter(function(s){return s===current||chatDigestHasContent(s)}),cfg=chatLoadConfig();
     function card(local){
       var remote=sessions.find(function(s){return s.session_id===String(local.id)}),v=chatDigestSyncView(local,cfg,remote);
       var busy=chatDigestReplyActive(local)||chatTrimBusy||chatTrimTransaction;
-      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div>'+progressCard(local,remote,v)+'<div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):busy?'当前回复结束后可同步':v.ready?'可立刻同步':'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(busy?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
+      return '<section class="mm-digest-result" aria-label="'+attr(local.title||'当前对话')+'的截断结果"><div class="mm-summary-line"><h3>'+escape(local.title||'当前对话')+'</h3>'+(local===current?'<small>当前对话</small>':'')+'</div>'+progressCard(local,remote,v)+windowControl(local,remote,cfg)+'<div class="mm-digest-metrics">'+statistic('本次截断',num(v.rounds)+' 轮',v.cutNote)+statistic('同步状态',v.status,v.at?'操作时间 '+clock(v.at):busy?'当前回复结束后可同步':v.ready?'可立刻同步':'准备完成后再同步')+'</div><p class="mm-current-note mm-digest-'+attr(v.tone||'neutral')+'">'+escape(v.note)+'</p><div class="chat-actions"><button class="btn btn-outline btn-sm" type="button" data-mm-digest-action="prepare" data-mm-session="'+attr(local.id)+'">'+(local.digestManualTrim?'更新准备范围':'后台准备截断')+'</button><button class="btn btn-primary btn-sm" type="button" data-mm-digest-action="sync" data-mm-session="'+attr(local.id)+'"'+(busy?' disabled':'')+'>'+(v.retry?'重试同步':'立刻同步')+'</button></div></section>';
     }
     var others=locals.filter(function(s){return s!==current});
     return (current?card(current):'')+(others.length?'<details class="mm-current-details" data-session="other-results"><summary>其他对话 · '+others.length+' 个</summary>'+others.map(card).join('')+'</details>':'');
@@ -170,6 +188,7 @@ async function ckRunDigestAction(id,action){
         // deriving button readiness; merely visiting status never starts a run.
         for(var remote of data.sessions){
           var local=chatSessions.find(function(session){return String(session.id)===String(remote.session_id)});
+          if(local&&remote.auto_window)chatAutoDigestSetWindow(cfg,local,remote.auto_window,remote.model_run);
           var staged=local&&chatDigestStage(local,cfg);
           if(local&&(local.digestManualTrim||local.digestSettingsRequest||local.digestModelRun&&local.digestModelRun.purpose==='daily')&&
             (remote.ready_trim_groups>0||remote.status==='succeeded')&&(!staged||Number(remote.revision)>Number(staged.revision))){
@@ -178,6 +197,7 @@ async function ckRunDigestAction(id,action){
           }
           if(local===chatCurrentSession())await chatDigestFinishManualTrim(cfg,local);
         }
+        chatAutoDigestRenderBar(chatCurrentSession());
       }
       s.data=data;s.receivedAt=Date.now();s.refreshFailed=false;
       var rows=data.history&&data.history.items||[];
