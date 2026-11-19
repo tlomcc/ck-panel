@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v426-thinking-full-expand';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v427-thinking-width-follow';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -9818,7 +9818,7 @@ function chatIsMessagesNearBottom(threshold){
   return gap<=((typeof threshold==='number')?threshold:CHAT_BOTTOM_THRESHOLD);
 }
 function chatShouldFollowMessages(){
-  return !chatMessagesFollowPaused&&chatIsMessagesAtLatest();
+  return !chatMessagesFollowPaused&&chatIsMessagesNearBottom()&&chatHistoryRange().end===chatMessages.length;
 }
 function chatIsMessagesAtLatest(){return chatIsMessagesNearBottom(4)&&chatHistoryRange().end===chatMessages.length;}
 function chatPauseMessagesFollow(){
@@ -9843,8 +9843,9 @@ function chatHandleMessagesScroll(){
   if(box){
     var previous=box.__ckLastScrollTop;
     var atBottom=chatIsMessagesAtLatest();
+    var nearBottom=chatIsMessagesNearBottom()&&chatHistoryRange().end===chatMessages.length;
     if(typeof previous==='number'&&box.scrollTop<previous-1&&!atBottom)chatPauseMessagesFollow();
-    if(atBottom&&typeof previous==='number'&&box.scrollTop>previous&&chatHasScrollJumpManualIntent())chatMessagesFollowPaused=false;
+    if(nearBottom&&typeof previous==='number'&&box.scrollTop>previous&&chatHasScrollJumpManualIntent())chatMessagesFollowPaused=false;
     box.__ckLastScrollTop=box.scrollTop;
   }
   if(box&&chatHasScrollJumpManualIntent()){

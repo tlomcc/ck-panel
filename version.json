@@ -1,6 +1,7 @@
 {
-  "version": "chat-v426-thinking-full-expand",
+  "version": "chat-v427-thinking-width-follow",
   "notes": [
-    "思考框点击展开即显示全文，取消框内限高和滚动。"
+    "展开的思考框略窄于消息框，点击展示全部内容。",
+    "底部附近自动跟随新消息和流式回复。"
   ]
 }

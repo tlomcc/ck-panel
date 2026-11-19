@@ -23,7 +23,7 @@
  await pause(1250);stream.text('过了旧的手势超时仍继续输出\n');await pause(100);
  check(Math.abs(box.scrollTop-first)<=2,'follow pause expired while reading');
  check(!document.getElementById('chat-new-message-tip').hidden,'new reply hint missing');
- // Follow may resume only after manually reaching the actual bottom.
+ // Returning to the bottom resumes follow.
  wheel(100);box.scrollTop=box.scrollHeight;await pause(80);
  check(!chatMessagesFollowPaused,'manual return to bottom did not resume');
  stream.text('回到底部以后跟随\n'.repeat(10));await pause(500);
@@ -66,5 +66,30 @@
  check(!document.getElementById('chat-new-message-tip').hidden,'a historical page bottom hid the latest hint');
  chatJumpToLatest();await pause(80);
  check(document.getElementById('chat-new-message-tip').hidden,'latest jump left a stale hint');
- return {wheel:true,touch:true,keyboard:true,scrollbar:true,queuedFrameCancelled:true,pauseSurvivesTimeout:true,manualResume:true,completion:true,incoming:true,bottomHint:true};
+ // A layout change can leave the reader close to the bottom without a manual pause.
+ const nearByLayout=async()=>{
+  chatJumpToLatest();await pause(80);
+  box.scrollTop=box.scrollHeight-box.clientHeight-60;
+  box.__ckLastScrollTop=box.scrollTop;chatMessagesFollowPaused=false;chatScrollJumpManualUntil=0;
+  await pause(60);
+ };
+ await nearByLayout();
+ const incoming=chatAddBubble('assistant','底部附近的新消息\n'.repeat(20),false);await pause(100);
+ check(box.scrollHeight-box.scrollTop-box.clientHeight<=2,'near-bottom incoming message did not move above the composer');
+ check(incoming.getBoundingClientRect().bottom<=document.querySelector('.chat-compose').getBoundingClientRect().top,'incoming message is covered by the composer');
+ const nearOut=chatAddBubble('assistant','',false),nearStream=factory({sessionId:chatActiveSessionId,splitAssistantReplies:false},nearOut,'scroll-near',{});
+ await nearByLayout();nearStream.text('底部附近流式新增内容\n'.repeat(20));await pause(220);
+ check(box.scrollHeight-box.scrollTop-box.clientHeight<=2,'near-bottom streaming reply did not follow');
+ // Resume when scrolling down into the bottom zone, without requiring an exact last pixel.
+ wheel(-300);box.scrollTop-=300;await pause(60);
+ wheel(240);box.scrollTop=box.scrollHeight-box.clientHeight-60;await pause(80);
+ check(!chatMessagesFollowPaused,'manual return near bottom did not resume follow');
+ nearStream.text('回到底部附近后继续输出\n'.repeat(10));await pause(200);
+ check(box.scrollHeight-box.scrollTop-box.clientHeight<=2,'resumed near-bottom stream did not follow');
+ nearStream.stop();
+ chatHistoryView.follow=false;chatHistoryView.end=chatMessages.length-2;
+ box.scrollTop=box.scrollHeight;box.__ckLastScrollTop=box.scrollTop;chatMessagesFollowPaused=false;
+ check(!chatShouldFollowMessages(),'a historical page was treated as the latest bottom zone');
+ chatJumpToLatest();await pause(60);
+ return {wheel:true,touch:true,keyboard:true,scrollbar:true,queuedFrameCancelled:true,pauseSurvivesTimeout:true,manualResume:true,completion:true,incoming:true,bottomHint:true,nearIncoming:true,nearStreaming:true,nearResume:true,historyPageProtected:true};
 })()
