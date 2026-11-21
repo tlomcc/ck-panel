@@ -20,6 +20,7 @@
  function memoryView(value,unavailable){
   var activity=value&&value.activity||{},memory=value&&value.memory,n=notice();
   if(unavailable)return {text:'小克记忆状态暂不可用',kind:'unknown'};
+  if(activity.state==='waiting_background')return {text:activity.background_purpose==='memory'?'等待本次记忆结束':'等待本次整理结束',kind:'waiting'};
   if(memory&&memory.state==='needs_review')return {text:memory.limit_exceeded?'小克记忆内容超限，待处理 · 可继续聊天':'小克记忆待检查 · 可继续聊天',kind:'review'};
   var own=activity.state==='remembering'||activity.state==='memory_paused'||activity.state==='yielding'&&activity.background_purpose==='memory';
   if(own||memory&&(memory.active===true||memory.state==='paused_for_chat'||memory.state==='waiting_quota')){
@@ -130,7 +131,7 @@
   });
  }
  function close(){if(saving)return;generation++;if(controller)controller.abort();controller=null;dialog.classList.remove('show');dialog.setAttribute('aria-hidden','true');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();schedule()}
- function schedule(){clearTimeout(timer);var activity=data&&data.activity||{},memory=data&&data.memory||{},active=dataContext===context()&&(['remembering','yielding','memory_paused','summarizing'].indexOf(activity.state)!==-1||['needs_review','paused_for_chat','waiting_quota'].indexOf(memory.state)!==-1||memory.active===true);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
+ function schedule(){clearTimeout(timer);var activity=data&&data.activity||{},memory=data&&data.memory||{},active=dataContext===context()&&(['remembering','waiting_background','yielding','memory_paused','summarizing'].indexOf(activity.state)!==-1||['needs_review','paused_for_chat','waiting_quota'].indexOf(memory.state)!==-1||memory.active===true);if(!document.hidden&&(opened()||selected()))timer=setTimeout(function(){refresh(false)},active?10000:opened()?15000:30000)}
  function quotaCard(key,w,unavailable){
   var card=node('article','ck-sub-window'),ended=expired(w),pct=percent(w);
   card.append(node('span','ck-sub-window-label',labels[key]||'额度'));

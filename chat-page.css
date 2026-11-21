@@ -473,3 +473,5 @@ body.chat-active #tab-chat .chat-compose .chat-auto-digest-bar button:focus-visi
   outline-offset:2px!important;
 }
 /* ==== A4 END ==== */
+#tab-chat .chat-background-wait{margin:0;padding:8px 14px;color:var(--ck-text);background:var(--ck-surface);font:14px/1.6 var(--ck-font-body);overflow-wrap:anywhere}
+#tab-chat .chat-background-wait[hidden]{display:none!important}

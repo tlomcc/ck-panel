@@ -5373,12 +5373,29 @@ function chatStreamProgressText(){
   return chatStreamProgress.stage+' '+seconds+'s';
 }
 function chatStreamProgressRender(){
+  var wait=document.getElementById('chat-background-wait');
+  if(wait){wait.textContent=chatStreamProgress&&chatStreamProgress.backgroundWait||'';wait.hidden=!wait.textContent;}
   var el=document.getElementById('chat-head-progress');
   if(!el)return;
   var detail=chatStreamProgressText();
   el.textContent=detail;
   if(detail)el.removeAttribute('hidden');
   else el.setAttribute('hidden','');
+}
+function chatBackgroundWaitState(value){
+  if(!chatStreamProgress)return;
+  value=value||{};
+  if(value.state==='waiting'){
+    var name=value.purpose==='memory'?'记忆':value.purpose==='digest'?'总结':'后台';
+    chatStreamProgress.backgroundWait='正在等待本次'+name+'调用结束，随后发送你的消息。';
+    chatStreamProgressSet('等待'+name+'结束');
+    chatSetStatus('等待本次'+name+'调用结束');
+  }else if(value.state==='ready'){
+    delete chatStreamProgress.backgroundWait;
+    chatStreamProgressSet('正在请求');
+    chatSetStatus('正在请求网关');
+  }
+  chatStreamProgressRender();
 }
 function chatSetStatus(text){
   if(typeof chatUpdateWaitActions==='function')chatUpdateWaitActions(text);
@@ -5389,7 +5406,7 @@ function chatSetStatus(text){
   }else if(!chatSending&&chatStreamProgress&&['补收中','同步回复'].includes(chatStreamProgress.stage))chatStreamProgressStop();
   var el=document.getElementById('chat-status');
   if(!el)return;
-  if(/^(?:稍等重试|暂未回复|请检查订阅|等待订阅|订阅出口检查未通过|请先整理对话历史|请检查历史思考设置|请检查模型设置)/.test(String(text||''))){el.textContent=String(text);return}
+  if(/^(?:等待本次.*调用结束|稍等重试|暂未回复|请检查订阅|等待订阅|订阅出口检查未通过|请先整理对话历史|请检查历史思考设置|请检查模型设置)/.test(String(text||''))){el.textContent=String(text);return}
   var waiting=/请求网关|正在请求|对方正在输入|等待回复|发送中/.test(String(text||''));
   el.innerHTML=waiting?'对方正在输入...':'<span class="chat-online-dot"></span>在线';
 }
@@ -11469,6 +11486,13 @@ async function chatSubmitPendingMessages(options){
           var retryIndex=Math.max(1,Math.min(2,Number(data&&data.retry_index)||1));
           var retryStatus='稍等重试 '+retryIndex+'/2';
           chatSetStatus(retryStatus);chatStreamProgressSet(retryStatus);
+          return;
+        }
+        if(ev==='background_wait'){
+          // The VPS has accepted this request. A lost connection must recover
+          // it instead of silently dispatching another copy while it waits.
+          attemptState.receivedValidContent=true;
+          chatBackgroundWaitState(data);
           return;
         }
         if(ev==='reply_complete'){

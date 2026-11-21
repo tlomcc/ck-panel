@@ -36,3 +36,9 @@ body .ck-records-page>.ck-notebook-heading p{color:var(--nb-muted)!important;fon
 .ck-records-box header{background:var(--nb-sage);border-color:var(--nb-line)}
 .ck-records-edit-state{font-size:13px;color:var(--nb-muted);font-variant-numeric:tabular-nums}
 .ck-records-actions{gap:10px;margin-top:16px}
+.ck-records-help{margin:24px 0 0;padding:14px 16px;border:1px solid var(--ck-line);border-radius:8px;color:var(--ck-text);font:14px/1.8 var(--ck-font-body)}
+.ck-records-help summary{min-height:44px;display:list-item;align-content:center;cursor:pointer;font-weight:600}
+.ck-records-help summary:focus-visible{outline:2px solid var(--ck-accent);outline-offset:4px}
+.ck-records-help h4{margin:18px 0 6px;font-size:14px}.ck-records-help p{margin:8px 0;max-width:760px;overflow-wrap:anywhere}
+.ck-flow-help{margin-top:24px;overflow-wrap:anywhere}.ck-flow-help>summary{min-height:44px;align-content:center;cursor:pointer}.ck-flow-help ol{margin:10px 0;padding-inline-start:22px}.ck-flow-help li+li{margin-top:8px}
+.ck-flow-help table{width:100%;max-width:600px;margin:12px 0;border-collapse:collapse;color:inherit;font:inherit}.ck-flow-help th,.ck-flow-help td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--ck-line)}.ck-flow-help th{font-weight:600}
