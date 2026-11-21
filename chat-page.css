@@ -5,10 +5,10 @@
    ============================================================ */
 
 /* ==== ROOT BEGIN ==== */
-#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:11px;--ck-thinking-max-width:calc(92% - 12px);--ck-thinking-head-h:22px;--ck-chat-meta-fz:10px;--ck-chat-meta-ink:rgba(94,114,102,.64);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+#tab-chat{--ck-chat-fz:14px;--ck-chat-lh:1.6;--ck-chat-col:860px;--ck-chat-bubble-max:86%;--ck-thinking-fz:11px;--ck-thinking-max-width:min(66.6667vw,100%);--ck-thinking-head-h:22px;--ck-chat-meta-fz:10px;--ck-chat-meta-ink:rgba(94,114,102,.64);-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body.dark #tab-chat,body.theme-dark #tab-chat{--ck-chat-meta-ink:rgba(173,192,180,.55)}
 @media (min-width:641px) and (max-width:760px){#tab-chat{--ck-ctl:44px;--ck-head-h:48px;--ck-pad:var(--ck-space-4)}}
-@media (min-width:761px){#tab-chat{--ck-chat-bubble-max:min(80%,640px);--ck-thinking-max-width:calc(var(--ck-chat-bubble-max) - 12px)}}
+@media (min-width:761px){#tab-chat{--ck-chat-bubble-max:min(80%,640px);--ck-thinking-max-width:66.6667%}}
 /* ==== ROOT END ==== */
 
 /* ==== A1 BEGIN ==== */

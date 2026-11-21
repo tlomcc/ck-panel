@@ -1,7 +1,7 @@
 {
-  "version": "chat-v429-auto-summary-150k",
+  "version": "chat-v430-thinking-two-thirds",
   "notes": [
-    "自动截断总结的上下文门槛从20万降为15万 token。",
-    "原空闲时间、额度保护和每200轮主动记忆规则保持。"
+    "思考框展开宽度缩小到约三分之二。",
+    "点开仍直接展示全文，可收起或复制。"
   ]
 }
