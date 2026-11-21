@@ -2,7 +2,8 @@
 var chatRecoveryTimer=0,chatRecoveryReceiptTimer=0,chatRecoveryProgress={};
 function chatUpdateWaitActions(message){
   var box=document.getElementById('chat-wait-actions');if(!box)return;
-  var show=/补收|后台仍在生成|后台正在保存|正在确认这一轮|长时间没有/.test(String(message||''));
+  var text=String(message||'');
+  var show=!/^(?:已补收完整回复|已停止等待)/.test(text)&&/补收|后台仍在生成|后台请求|等待本次|后台正在保存|正在确认这一轮|长时间没有/.test(text);
   box.hidden=!show;
   if(show)document.getElementById('chat-wait-note').textContent=message;
 }
@@ -151,7 +152,16 @@ function chatRecoveryStatus(reply,turnId,networkError){
   var seconds=Math.max(0,Math.floor((Date.now()-state.started)/1000));
   if(networkError)return '补收连接未连通 · 已重试 '+state.attempts+' 次 · 已等待 '+seconds+'秒，将自动续收';
   if(reply&&reply.state==='finalizing')return '回复已生成，后台正在保存 · 已等待 '+seconds+'秒';
-  if(reply&&reply.pending){var chars=Array.from(reply.assistant_text||'').length,thinking=Array.from(reply.assistant_thinking||'').length;return '后台仍在生成 · 已收到正文 '+chars+' 字'+(thinking?' / 思考 '+thinking+' 字':'');}
+  if(reply&&reply.pending){
+    var wait=reply.background_wait,chars=Array.from(reply.assistant_text||'').length,thinking=Array.from(reply.assistant_thinking||'').length;
+    if(reply.phase==='waiting_background'&&wait){
+      var name=wait.purpose==='memory'?'记忆':wait.purpose==='digest'?'总结':wait.purpose==='wake'?'缓存唤醒':'后台';
+      var elapsed=Math.max(Number(wait.waited_seconds)||0,typeof wait.started_at==='number'?(Date.now()/1000-wait.started_at):0);
+      return '等待本次'+name+'调用结束 · 你的消息尚未发送 · 已等待 '+Math.max(0,Math.floor(elapsed))+'秒';
+    }
+    if(!chars&&!thinking&&reply.phase!=='generating')return '后台请求尚未返回正文 · 已等待 '+seconds+'秒，正在检查状态';
+    return '后台仍在生成 · 已收到正文 '+chars+' 字'+(thinking?' / 思考 '+thinking+' 字':'');
+  }
   return '正在确认这一轮回执 · 已检查 '+state.attempts+' 次';
 }
 async function chatReadStreamChunk(reader,signal){

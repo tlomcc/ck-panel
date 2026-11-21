@@ -27,6 +27,48 @@ async function run(name,fn){
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
     browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+    await run('reopened waiting receipt shows the actual phase and completes without a model POST',async()=>{
+      const {context,page}=await boot();try{
+        await page.evaluate(()=>{
+          const turn='fixture-memory-wait',session=chatCurrentSession(),now=Date.now();
+          chatMessages.push({role:'user',text:'等记忆结束后回复我',turnId:turn,ts:now-180000,inFlight:true,inFlightAt:now-180000,inFlightTurnId:turn});
+          sessionStorage.setItem('__gomoku_receipt_'+turn,JSON.stringify({ok:true,found:false,pending:true,state:'running',phase:'waiting_background',turn_id:turn,assistant_text:'',background_wait:{purpose:'memory',started_at:now/1000-180,waited_seconds:180}}));
+          chatSaveLocalMessages();
+        });
+        await page.reload();await page.waitForFunction(()=>chatSessionsReady&&chatInitialized);
+        await page.waitForFunction(()=>document.getElementById('chat-wait-note').textContent.includes('等待本次记忆调用结束'));
+        const waiting=await page.locator('#chat-wait-note').textContent();
+        assert.match(waiting,/你的消息尚未发送/);assert.doesNotMatch(waiting,/仍在生成|正文 0 字/);
+        assert(await page.locator('#chat-wait-actions').isVisible());
+        await page.screenshot({path:path.join(out,'reopened-memory-wait.png')});
+        await page.evaluate(()=>{
+          const turn='fixture-memory-wait',key='__gomoku_receipt_'+turn,value=JSON.parse(sessionStorage.getItem(key));
+          value.phase='requesting';delete value.background_wait;sessionStorage.setItem(key,JSON.stringify(value));
+        });
+        await page.locator('#chat-wait-actions button').first().click();
+        await page.waitForFunction(()=>document.getElementById('chat-wait-note').textContent.includes('后台请求尚未返回正文'));
+        await page.evaluate(()=>{
+          const turn='fixture-memory-wait',key='__gomoku_receipt_'+turn,value=JSON.parse(sessionStorage.getItem(key));
+          value.phase='generating';value.assistant_text='我在';sessionStorage.setItem(key,JSON.stringify(value));
+        });
+        await page.locator('#chat-wait-actions button').first().click();
+        await page.waitForFunction(()=>document.getElementById('chat-wait-note').textContent.includes('正文 2 字'));
+        await page.evaluate(()=>{
+          const turn='fixture-memory-wait',key='__gomoku_receipt_'+turn,value=JSON.parse(sessionStorage.getItem(key));
+          Object.assign(value,{found:true,pending:false,state:'complete',phase:'complete',turn_matched:true,assistant_text:'我在，已经完成。',created_at:Date.now()/1000});
+          sessionStorage.setItem(key,JSON.stringify(value));
+        });
+        await page.locator('#chat-wait-actions button').first().click();
+        await page.waitForFunction(()=>!chatInterruptedInFlightMessages().length&&!chatRecoverInFlightBusy);
+        const evidence=await page.evaluate(()=>({posts:__fixtureRequests.filter(r=>r.method==='POST'&&r.path.endsWith('/chat')).length,
+          completeOnce:chatMessages.filter(m=>m.role==='assistant'&&m.turnId==='fixture-memory-wait').length===1,
+          waitingCleared:document.getElementById('chat-wait-actions').hidden,errors:__fixtureErrors,
+          status:document.getElementById('chat-wait-note').textContent,messages:chatMessages.map(m=>({role:m.role,text:m.text,turnId:m.turnId}))}));
+        fs.writeFileSync(path.join(out,'reopened-evidence.json'),JSON.stringify(evidence,null,2));
+        assert.equal(evidence.posts,0);assert(evidence.completeOnce&&evidence.waitingCleared,JSON.stringify(evidence));assert.deepEqual(evidence.errors,[]);
+        return {...evidence,waiting};
+      }finally{await context.close()}
+    });
     await run('foreground reply keeps receiving a fragmented 2 MB history without recovery or replay',async()=>{
       const {context,page}=await boot();try{
         await page.evaluate(()=>{
