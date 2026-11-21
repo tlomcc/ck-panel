@@ -15,52 +15,39 @@ body.chat-active .chat-turn-heading .chat-thinking{min-width:0;flex:1;max-width:
 .chat-action-levels button[aria-checked="true"]{background:var(--ck-ui-mist);border-color:var(--ck-ui-jade);color:var(--ck-ui-jade)}
 .chat-action-levels svg{width:28px;height:24px;stroke:currentColor;stroke-width:3.5;stroke-linecap:round;fill:none}
 #chat-action-mode-hint{width:100%;font-size:12px;color:#71847d}
-/* Small icons with generous hit areas; only the glyph carries toggle state. */
-.chat-quick-fact-control{position:relative;display:flex;align-items:center;align-self:center;border:0;border-radius:0;background:transparent;box-shadow:none;--quick-fact-ink:#357b70;--quick-fact-tint:#e3efe9}
-body.chat-active .chat-head-actions :is(#chat-wake-shortcut,#chat-quick-fact-toggle,#chat-quick-fact-menu-toggle){border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:none!important;filter:none!important;transform:none!important;transition:none!important;opacity:1!important;-webkit-tap-highlight-color:transparent}
-body.chat-active .chat-head-actions :is(#chat-wake-shortcut,#chat-quick-fact-toggle) svg{width:21px!important;height:21px!important;transform:none!important;transition:none!important}
-body.chat-active .chat-head-actions .chat-quick-fact-toggle{display:grid!important;place-items:center!important;align-self:center!important;padding:0!important;touch-action:manipulation;user-select:none;-webkit-user-select:none}
-body.chat-active .chat-quick-fact-menu-toggle{display:grid;place-items:center;width:24px;min-width:24px;height:36px;padding:0;color:#718c80;cursor:pointer;touch-action:manipulation}
-body.chat-active .chat-quick-fact-menu-toggle svg{width:12px!important;height:12px!important;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-body.chat-active .chat-quick-fact-menu-toggle[aria-expanded="true"]{color:var(--quick-fact-ink)}
-/* Keyboard focus strengthens the icon instead of drawing a surrounding box. */
-body.chat-active .chat-head-actions :is(#chat-wake-shortcut,#chat-quick-fact-toggle,#chat-quick-fact-menu-toggle):focus-visible svg{stroke-width:2.6!important}
-body.dark.chat-active .chat-quick-fact-menu-toggle{color:#a2b9ad}
-@media(max-width:760px){
-  body.chat-active .chat-quick-fact-menu-toggle{height:34px}
-  body.chat-active .chat-head-actions :is(#chat-wake-shortcut,#chat-quick-fact-toggle) svg{width:20px!important;height:20px!important}
-}
-body.chat-active .chat-head-actions .chat-quick-fact-toggle svg{stroke-width:1.8!important}
-body.chat-active .chat-quick-fact-toggle .chat-recall-letter{fill:currentColor!important;stroke:none!important;font:700 15px "Trebuchet MS",system-ui,sans-serif}
-body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]{color:var(--ck-ui-jade)!important}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .chat-recall-bookmark{fill:#c3ded1}
-body.chat-active .chat-head-actions .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"]{color:#28659a!important}
-body.chat-active .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"] .chat-recall-bookmark{fill:#c4dcf0}
-body.dark.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]{color:#a2ceba!important}
-body.dark.chat-active .chat-quick-fact-toggle[aria-pressed="true"] .chat-recall-bookmark{fill:#426453}
-body.dark.chat-active .chat-head-actions .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"]{color:#a6cff0!important}
-body.dark.chat-active .chat-quick-fact-toggle[data-fact-mode="c"][aria-pressed="true"] .chat-recall-bookmark{fill:#365875}
-/* Pointer focus and sticky touch hover must never resemble an enabled toggle. */
-body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"],
-body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="false"]:is(:hover,:focus,:active){color:var(--quick-fact-muted,#718c80)!important}
-body.chat-active .chat-quick-fact-toggle[data-fact-mode="c"]{--quick-fact-muted:#6a87a1}
-body.dark.chat-active .chat-quick-fact-toggle{--quick-fact-muted:#a2b9ad}
-body.dark.chat-active .chat-quick-fact-toggle[data-fact-mode="c"]{--quick-fact-muted:#9fb8cf}
-body.chat-active .chat-quick-fact-toggle[aria-pressed="false"] .chat-recall-bookmark{fill:none!important}
-.chat-quick-fact-menu{position:absolute;z-index:30;top:calc(100% + 9px);right:0;width:166px;padding:6px;border:1px solid var(--ck-ui-line);border-radius:12px;background:#fff;box-shadow:0 8px 24px #25494324}
+/* Wake keeps its existing icon and transparent hit area. */
+body.chat-active .chat-head-actions #chat-wake-shortcut{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:none!important;filter:none!important;transform:none!important;transition:none!important;opacity:1!important;-webkit-tap-highlight-color:transparent}
+body.chat-active .chat-head-actions #chat-wake-shortcut svg{width:21px!important;height:21px!important;transform:none!important;transition:none!important}
+body.chat-active .chat-head-actions #chat-wake-shortcut:focus-visible svg{stroke-width:2.6!important}
+@media(max-width:760px){body.chat-active .chat-head-actions #chat-wake-shortcut svg{width:20px!important;height:20px!important}}
+/* Recall split button: one 32px visual frame, two independent 44px hit areas. */
+.chat-quick-fact-control{position:relative;display:flex;align-items:center;align-self:center;gap:0;height:var(--ck-tap,44px);border:0;background:transparent;--quick-fact-ink:color-mix(in srgb,var(--ck-ui-jade) 90%,black 10%);--quick-fact-tint:color-mix(in srgb,var(--ck-surface) 90%,var(--quick-fact-ink) 10%);--quick-fact-stroke:var(--ck-line)}
+body.dark .chat-quick-fact-control{--quick-fact-ink:var(--ck-accent-strong)}
+.chat-quick-fact-control::before{content:"";position:absolute;inset:6px 0;border:1px solid var(--quick-fact-stroke);border-radius:var(--ck-radius-sm);background:var(--ck-surface-soft);pointer-events:none;transition:background var(--ck-motion-fast) var(--ck-ease),border-color var(--ck-motion-fast) var(--ck-ease)}
+.chat-quick-fact-control.is-on{--quick-fact-stroke:color-mix(in srgb,var(--ck-line) 75%,var(--quick-fact-ink) 25%)}
+.chat-quick-fact-control.is-on::before{background:var(--quick-fact-tint)}
+body.chat-active .chat-head-actions :is(.chat-quick-fact-toggle,.chat-quick-fact-menu-toggle){position:relative;display:grid;place-items:center;height:var(--ck-tap,44px);margin:0;padding:0;border:0!important;background:transparent!important;box-shadow:none!important;outline:none!important;color:var(--ck-muted)!important;font:600 14px/1 var(--ck-font-body);cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle{flex:1 1 39px;min-width:32px;border-radius:var(--ck-radius-sm) 0 0 var(--ck-radius-sm)}
+body.chat-active .chat-head-actions .chat-quick-fact-toggle[aria-pressed="true"]{color:var(--quick-fact-ink)!important}
+.chat-quick-fact-letter{position:relative;z-index:1}
+.chat-quick-fact-divider{position:relative;flex:none;width:1px;height:14px;background:var(--quick-fact-stroke);pointer-events:none}
+body.chat-active .chat-head-actions .chat-quick-fact-menu-toggle{flex:0 1 28px;width:28px;min-width:24px;border-radius:0 var(--ck-radius-sm) var(--ck-radius-sm) 0}
+body.chat-active .chat-quick-fact-menu-toggle svg{position:relative;z-index:1;width:12px!important;height:12px!important;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;transition:transform var(--ck-motion-fast) var(--ck-ease)}
+body.chat-active .chat-head-actions .chat-quick-fact-menu-toggle[aria-expanded="true"]{color:var(--quick-fact-ink)!important}
+body.chat-active .chat-quick-fact-menu-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+body.chat-active .chat-head-actions :is(.chat-quick-fact-toggle,.chat-quick-fact-menu-toggle)::before{content:"";position:absolute;inset:7px 1px;border-radius:inherit;pointer-events:none}
+@media(hover:hover){body.chat-active .chat-head-actions :is(.chat-quick-fact-toggle,.chat-quick-fact-menu-toggle):hover::before{background:color-mix(in srgb,var(--ck-text) 5%,transparent)}}
+body.chat-active .chat-head-actions :is(.chat-quick-fact-toggle,.chat-quick-fact-menu-toggle):active::before{background:color-mix(in srgb,var(--ck-text) 8%,transparent)}
+body.chat-active .chat-head-actions :is(.chat-quick-fact-toggle,.chat-quick-fact-menu-toggle):focus-visible::after{content:"";position:absolute;inset:6px 0;border:2px solid var(--quick-fact-ink);border-radius:inherit;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.chat-quick-fact-control::before,body.chat-active .chat-quick-fact-menu-toggle svg{transition:none}}
+.chat-quick-fact-menu{position:absolute;z-index:30;top:calc(100% + 2px);right:0;width:184px;padding:4px;border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);background:var(--ck-surface);box-shadow:var(--ck-shadow-md)}
 .chat-quick-fact-menu[hidden]{display:none!important}
-body.chat-active .chat-quick-fact-menu button{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:7px 10px;border:0;border-radius:7px;background:transparent;color:#38534a;font:500 13px/1.4 "Microsoft YaHei UI",system-ui,sans-serif;text-align:left;white-space:nowrap;cursor:pointer;touch-action:manipulation}
-.chat-quick-fact-menu button[data-fact-mode="c"]{--quick-fact-ink:#28659a;--quick-fact-tint:#e2edf8}
+body.chat-active .chat-quick-fact-menu button{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 12px;border:0;border-radius:var(--ck-radius-sm);background:transparent;color:var(--ck-text-soft);font:400 15px/1.4 var(--ck-font-body);text-align:left;white-space:nowrap;cursor:pointer;touch-action:manipulation}
 body.chat-active .chat-quick-fact-menu button:is(:hover,:focus-visible){background:var(--quick-fact-tint);outline:none}
-body.chat-active .chat-quick-fact-menu button[aria-checked="true"]{color:var(--quick-fact-ink);font-weight:600}
-.chat-quick-fact-mark{display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:6px;background:var(--quick-fact-tint);color:var(--quick-fact-ink);font:700 15px/1 "Trebuchet MS",system-ui,sans-serif}
-.chat-quick-fact-menu button[data-fact-mode="c"] .chat-quick-fact-mark{border-radius:50%}
+body.chat-active .chat-quick-fact-menu button[aria-checked="true"]{background:var(--quick-fact-tint);color:var(--quick-fact-ink);font-weight:600}
+.chat-quick-fact-mark{display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:6px;background:var(--quick-fact-tint);color:var(--quick-fact-ink);font:600 13px/1 var(--ck-font-body)}
 .chat-quick-fact-check{width:16px;height:16px;margin-left:auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;visibility:hidden}
 .chat-quick-fact-menu [aria-checked="true"] .chat-quick-fact-check{visibility:visible}
-body.dark .chat-quick-fact-menu{background:#26332f;border-color:#3d5248}
-body.dark .chat-quick-fact-control{--quick-fact-ink:#a2ceba;--quick-fact-tint:#304a3f}
-body.dark.chat-active .chat-quick-fact-menu button{color:#d4e1d9}
-body.dark .chat-quick-fact-menu button[data-fact-mode="c"]{--quick-fact-ink:#a6cff0;--quick-fact-tint:#283f54}
 body.chat-active .chat-msg-usage .chat-usage-read{color:#267eaa!important;font-weight:600!important}
 body.chat-active .chat-msg-usage .chat-usage-create{color:#9a752f!important}
 body.dark.chat-active .chat-msg-usage .chat-usage-read{color:#7fc2e2!important}

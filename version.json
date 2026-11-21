@@ -1,7 +1,7 @@
 {
-  "version": "chat-v430-thinking-two-thirds",
+  "version": "chat-v431-recall-split-button",
   "notes": [
-    "思考框展开宽度缩小到约三分之二。",
-    "点开仍直接展示全文，可收起或复制。"
+    "顶栏召回合并为一体式按钮。",
+    "左侧开启或关闭，右侧选择 A/B/C。"
   ]
 }

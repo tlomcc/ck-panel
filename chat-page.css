@@ -30,15 +30,15 @@ body.dark #tab-chat,body.theme-dark #tab-chat{--ck-chat-meta-ink:rgba(173,192,18
 #tab-chat .chat-head .chat-left-actions{justify-content:flex-start}
 #tab-chat .chat-head .chat-head-actions{justify-content:flex-end}
 #tab-chat .chat-head .chat-icon-btn{flex:0 1 var(--ck-tap);width:var(--ck-tap)!important;min-width:28px!important;height:var(--ck-tap)!important}
-/* 召回：图标键与小箭头只用透明区域补点按盒（D9），图标 20/21、箭头 12 与无底无边的外观由旧规则保持 */
-#tab-chat .chat-head .chat-quick-fact-control{flex:0 1 auto;min-width:0}
-#tab-chat .chat-head .chat-quick-fact-menu-toggle{flex:0 1 32px;width:32px;min-width:24px;height:var(--ck-tap);justify-items:start;padding-left:6px}
+/* 召回 split button：32px 的统一外框，44px 点按高度；字母与箭头之间无间隙。 */
+#tab-chat .chat-head .chat-quick-fact-control{flex:0 1 68px;width:68px;min-width:57px}
+#tab-chat .chat-head .chat-quick-fact-menu-toggle{flex:0 1 28px;width:28px;min-width:24px;height:var(--ck-tap);justify-items:center;padding:0}
 /* 唤醒倒计时：键变高后仍贴在图标下方、留在顶栏内 */
 #tab-chat .chat-head #chat-wake-countdown{top:calc(50% + 11px);font-size:var(--ck-fz-xs);line-height:1}
 @media (min-width:761px){#tab-chat .chat-head #chat-wake-countdown{top:calc(50% + 12px)}}
-/* 召回小菜单：按“菜单”取值；B 绿 C 蓝和字母标记不动（D10） */
-#tab-chat .chat-head .chat-quick-fact-menu{width:200px;max-width:min(320px,calc(100vw - 32px));padding:var(--ck-space-1) 0;border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);background:var(--ck-surface);box-shadow:var(--ck-shadow-md)}
-#tab-chat .chat-head .chat-quick-fact-menu button{min-height:var(--ck-tap);padding:0 var(--ck-space-4);gap:var(--ck-space-3);border-radius:0;font-size:var(--ck-fz-md);font-weight:400;line-height:1.4}
+/* 召回小菜单沿用现役浮层 tokens，留出内边距与当前选项的绿色高亮。 */
+#tab-chat .chat-head .chat-quick-fact-menu{width:184px;max-width:min(320px,calc(100vw - 32px));padding:var(--ck-space-1);border:1px solid var(--ck-line);border-radius:var(--ck-radius-md);background:var(--ck-surface);box-shadow:var(--ck-shadow-md)}
+#tab-chat .chat-head .chat-quick-fact-menu button{min-height:var(--ck-tap);padding:0 var(--ck-space-3);gap:var(--ck-space-3);border-radius:var(--ck-radius-sm);font-size:var(--ck-fz-md);font-weight:400;line-height:1.4}
 #tab-chat .chat-head .chat-quick-fact-menu button[aria-checked="true"]{font-weight:600}
 /* 返回游戏条：贴顶栏的通栏提示条，13px，内边距 8 12，整条可点（高 44） */
 #tab-chat .chat-game-return{min-height:var(--ck-tap);padding:var(--ck-space-2) var(--ck-space-3);border-bottom-color:var(--ck-line);font-size:var(--ck-fz-sm);line-height:1.4}

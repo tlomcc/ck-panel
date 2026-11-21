@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v430-thinking-two-thirds';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v431-recall-split-button';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2907,16 +2907,17 @@ function chatStoreSessionRecall(sessionId,recall,userTs,turnId){
   if(sessionId===chatActiveSessionId)chatRenderSessionRecall();
 }
 function chatQuickFactMode(cfg){
-  return chatNormalizeFactRecallMode((cfg||{}).factRecallMode)==='c'?'c':'b';
+  return chatNormalizeFactRecallMode((cfg||{}).factRecallMode);
 }
 function chatRenderQuickRecallControls(cfg){
   cfg=cfg||chatLoadConfig()||{};
   var recall=cfg.recall!==false;
-  var factMode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   var factButton=document.getElementById('chat-quick-fact-toggle');
   var quickMode=chatQuickFactMode(cfg);
-  var factOn=recall&&factMode===quickMode;
+  var factOn=recall;
   var quickLabel=quickMode.toUpperCase();
+  var control=document.querySelector('.chat-quick-fact-control');
+  if(control)control.classList.toggle('is-on',factOn);
   if(factButton){
     factButton.classList.toggle('is-on',factOn);
     factButton.classList.toggle('is-off',!factOn);
@@ -2978,7 +2979,7 @@ function chatQuickFactKeydown(event){
 }
 function chatChooseQuickFactMode(value,event){
   if(event){event.preventDefault();event.stopPropagation()}
-  if(value!=='b'&&value!=='c')return;
+  if(['a','b','c'].indexOf(value)<0)return;
   var recallInput=document.getElementById('chat-recall-enabled');
   if(recallInput)recallInput.checked=true;
   chatSetFactRecallModeField(value);
@@ -2995,9 +2996,8 @@ document.addEventListener('focusin',function(event){
 function chatQuickToggleFactMode(){
   chatCloseQuickFactMenu(false);
   var cfg=chatLoadConfig()||{};
-  var mode=chatNormalizeFactRecallMode(cfg.factRecallMode);
   var quickMode=chatQuickFactMode(cfg);
-  var factOn=cfg.recall!==false&&mode===quickMode;
+  var factOn=cfg.recall!==false;
   var recallInput=document.getElementById('chat-recall-enabled');
   if(recallInput)recallInput.checked=!factOn;
   chatSetFactRecallModeField(quickMode);
