@@ -1,7 +1,7 @@
 /* Quota-window automatic digest: arm after a subscription reply, adopt the run once the
    server starts it, and keep the composer locked while it works. The arm lives beside the
    job on the server; until it is adopted this window behaves as if nothing was armed. */
-var CHAT_AUTO_DIGEST_MIN_CONTEXT=200000,CHAT_AUTO_DIGEST_LOCK_TEXT='小克正在自动生成和复核截断总结，暂时不能发送';
+var CHAT_AUTO_DIGEST_MIN_CONTEXT=150000,CHAT_AUTO_DIGEST_LOCK_TEXT='小克正在自动生成和复核截断总结，暂时不能发送';
 var chatAutoDigestTasks=new Map(),chatAutoDigestTimer=0,chatAutoDigestStopAsked={},chatAutoDigestStopBusy=false;
 var chatAutoDigestControls=new Map();
 function chatAutoDigestSubscription(){return !!(window.CKBackendRoute&&CKBackendRoute.current&&CKBackendRoute.current.execution==='claude_code_subscription');}

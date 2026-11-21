@@ -54,7 +54,7 @@ const fixture=async()=>{
 
  const turn=(i,extra)=>[{role:'user',text:'第 '+i+' 轮提问',ts:1700000000000+i*60000,turnId:'t'+i},Object.assign({role:'assistant',text:'第 '+i+' 轮回答',ts:1700000000000+i*60000+1000,turnId:'t'+i},extra||{})];
  const last=size=>({apiCostStatus:'subscription',tkCtx:size});
- chatMessages=[].concat(turn(1),turn(2),turn(3),turn(4),turn(5,last(150000)));
+ chatMessages=[].concat(turn(1),turn(2),turn(3),turn(4),turn(5,last(100000)));
  const session={id:'auto-1',title:'auto',messages:chatMessages,transportMessages:[],firstUserText:'',firstUserTs:0,created:Date.now(),updated:Date.now(),
   trimOverrideEnabled:true,trimConfig:{enabled:false,keep:2,minimum:1,roundLimitEnabled:false}};
  chatSessions=[session];chatActiveSessionId='auto-1';
@@ -66,19 +66,19 @@ const fixture=async()=>{
  const kinds=()=>requests.map(r=>r.kind).join(',');
  const sync=options=>chatSyncNightlyDigest(cfg(),Object.assign({session,force:true},options));
 
- // A. Below 200k nothing is sent at all.
- assert(await chatAutoDigestEvaluate()===false&&requests.length===0&&!session.digestAutoArm,'150k does not arm or even ask');
- chatMessages[chatMessages.length-1].tkCtx=199999;
- assert(await chatAutoDigestEvaluate()===false&&requests.length===0,'199999 does not arm');
+ // A. Below 150k nothing is sent at all.
+ assert(await chatAutoDigestEvaluate()===false&&requests.length===0&&!session.digestAutoArm,'100k does not arm or even ask');
+ chatMessages[chatMessages.length-1].tkCtx=149999;
+ assert(await chatAutoDigestEvaluate()===false&&requests.length===0,'149999 does not arm');
 
- // B. At 200k the arm carries a complete manual-start body and leaves no local request behind.
- chatMessages[chatMessages.length-1].tkCtx=200000;
- assert(await chatAutoDigestEvaluate()===true,'200k arms: '+kinds()+' '+notices.join('|'));
+ // B. At 150k the arm carries a complete manual-start body and leaves no local request behind.
+ chatMessages[chatMessages.length-1].tkCtx=150000;
+ assert(await chatAutoDigestEvaluate()===true,'150k arms: '+kinds()+' '+notices.join('|'));
  assert(requests[requests.length-1].kind==='auto_window_arm'&&requests.slice(0,-1).every(r=>r.kind==='sync'||r.kind==='read'),'baseline first, then the arm: '+kinds());
  const armBody=requests[requests.length-1].body,arm=session.digestAutoArm;
- assert(arm&&arm.runId===armBody.model_run.id&&arm.contextTokens===200000&&arm.trim.immediate===true&&arm.trim.dropRounds===3&&arm.trim.keys.length===3,'the confirmed arm is stored');
+ assert(arm&&arm.runId===armBody.model_run.id&&arm.contextTokens===150000&&arm.trim.immediate===true&&arm.trim.dropRounds===3&&arm.trim.keys.length===3,'the confirmed arm is stored');
  assert(!session.digestManualTrim&&!session.digestModelRun&&!session.digestAutoArmTry,'no manual request or run is left on the window');
- assert(armBody.auto_window.context_tokens===200000&&armBody.model_run.auto_window===true&&armBody.model_run.purpose==='trim'&&armBody.model_run.auto_resume_quota===true,'arm marks the run');
+ assert(armBody.auto_window.context_tokens===150000&&armBody.model_run.auto_window===true&&armBody.model_run.purpose==='trim'&&armBody.model_run.auto_resume_quota===true,'arm marks the run');
  assert(armBody.manual_request===String(arm.trim.requestedAt)&&same(armBody.candidate_keys,arm.trim.keys)&&armBody.session_id==='auto-1'&&armBody.memory_cadence&&armBody.base&&armBody.config.current_model===true,'arm body is the manual start body');
  assert(notices.length===0,'arming is silent: '+notices.join('|'));
  assert(chatDigestSyncView(session,cfg()).note.includes('已预约自动整理：额度快刷新时闲置 15 分钟、刚刷新后闲置 30 分钟才开始'),'armed note');
