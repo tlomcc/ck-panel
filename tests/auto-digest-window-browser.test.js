@@ -46,7 +46,7 @@ const fixture=async()=>{
    return json({ok:true,accepted_keys:[],status:'idle',auto_window:srv.window,model_run:srv.run});
   }
   if(init.method==='POST'&&url===chatEndpoint(chatLoadConfig())){
-   requests.push({kind:'chat'});
+   requests.push({kind:'chat',body:JSON.parse(init.body)});
    return json({error:'自动整理进行中',code:'auto_digest_locked'},409);
   }
   return json({ok:true,enabled:false,ready:true});
@@ -70,6 +70,34 @@ const fixture=async()=>{
  assert(await chatAutoDigestEvaluate()===false&&requests.length===0&&!session.digestAutoArm,'100k does not arm or even ask');
  chatMessages[chatMessages.length-1].tkCtx=149999;
  assert(await chatAutoDigestEvaluate()===false&&requests.length===0,'149999 does not arm');
+
+ // A2. Prepare the cut before an incoming reply crosses the context threshold.
+ // The arriving turn occupies the final retained slot, so the cut is exactly
+ // what a manual trim would choose after that turn finishes.
+ const prepared=chatAutoDigestPrepareChat(cfg(),session,[]);
+ assert(prepared&&prepared.seed.enabled&&prepared.attempt.trim.keep===2&&prepared.attempt.trim.dropRounds===4,'pre-chat cut reserves the incoming retained turn');
+ assert(prepared.seed.body.model_run.id===prepared.attempt.runId&&!prepared.seed.body.memory_cadence&&!prepared.seed.body.auto_window,'chat handoff carries the cut without overriding independent memory or claiming context');
+ const beforeReply=chatMessages.slice();chatMessages.push(...turn(6,last(150000)));
+ const afterReply=chatPlanAutoTrimForPendingBatch(cfg(),[],{force:true,trigger:'manual_trim'});
+ assert(same(prepared.attempt.trim.keys,chatDigestMessageGroups(afterReply.droppedMessages).map(g=>g.key)),'pre-chat and completed-reply cuts retain exactly the same two turns');
+ chatMessages=beforeReply;session.messages=chatMessages;
+ const toTransport=m=>({role:m.role,content:[{type:'text',text:m.text}]});
+ session.transportMessages=beforeReply.map(toTransport);
+ const transportPrepared=chatAutoDigestPrepareChat(cfg(),session,[]);
+ const incoming=turn(6,last(150000));chatMessages.push(...incoming);session.transportMessages.push(...incoming.map(toTransport));
+ const transportAfterReply=chatPlanAutoTrimForPendingBatch(cfg(),[],{force:true,trigger:'manual_trim'});
+ assert(transportPrepared&&transportPrepared.attempt.trim.dropRounds===4&&transportAfterReply.canonicalTransport&&transportAfterReply.transportDropped===4&&
+   same(transportPrepared.attempt.trim.keys,chatDigestMessageGroups(transportAfterReply.droppedMessages).map(g=>g.key)),'canonical transport and local sources retain the same two completed turns');
+ chatMessages=beforeReply.slice(0,-2);session.messages=chatMessages;session.transportMessages=[];
+ const originalBusy=chatDigestReplyActive;chatDigestReplyActive=()=>true;
+ session.digestAutoArmTry=prepared.attempt;
+ assert(await chatAutoDigestEvaluate()===false&&requests.length===0&&session.digestAutoArmTry===prepared.attempt,'in-flight first-threshold reply does not revoke its pre-chat handoff');
+ assert(chatAutoDigestReconcile(cfg(),session,{auto_window:{state:'none'}})===false&&session.digestAutoArmTry===prepared.attempt,'status reads preserve an in-flight handoff');
+ chatDigestReplyActive=originalBusy;delete session.digestAutoArmTry;
+ const recovered={role:'assistant',text:'recovered',apiCostStatus:'subscription'};
+ chatAttachAssistantCost(recovered,{input_tokens_total:150000,context_input_tokens:150000,execution_backend:'claude_code_subscription',billing_status:'subscription'});
+ assert(recovered.tkCtx===150000,'offline receipt retains the actual context for automatic admission');
+ assert(chatUsageContextInput({usage:{input_tokens_total:300000,context_input_tokens:150000},upstream_rounds:2})===150000,'replayed receipt preserves the verified last request instead of aggregate tool input');
 
  // B. At 150k the arm carries a complete manual-start body and leaves no local request behind.
  chatMessages[chatMessages.length-1].tkCtx=150000;
@@ -162,6 +190,10 @@ const fixture=async()=>{
  await chatSendMessage();await wait(()=>notices.includes(lockText)&&!chatSending,'409 notice: '+notices.join('|')+' '+kinds());
  const kept=chatMessages.filter(m=>m.text==='被网关拦下的话');
  assert(requests.filter(r=>r.kind==='chat').length===1&&kept.length===1&&kept[0].role==='user'&&kept[0].sendFailed===true,'the refused text is kept as a failed turn');
+ const posted=requests.find(r=>r.kind==='chat').body;
+ assert(posted.auto_digest_seed&&posted.auto_digest_seed.enabled===true&&posted.auto_digest_seed.body.session_id===session.id&&
+   posted.auto_digest_seed.body.model_run.id.startsWith('auto-chat-')&&posted.auto_digest_seed.body.candidate_keys.length>0,'ordinary send carries the full handoff through chatLockGatewayBody');
+ assert(!posted.messages&&!posted.history&&!posted.auto_digest_seed.body.memory_cadence,'ordinary chat retains its cache restrictions and independent memory settings');
  await wait(()=>requests.some(r=>r.kind==='read')&&!bar.hidden,'status refresh after 409');
  assert(chatCurrentSession()===session&&chatAutoDigestLocked(session)&&requests.every(r=>r.kind!=='sync'),'the lock is shown and nothing is uploaded over the job: '+kinds());
  await sync({readOnly:true});requests.length=0;session.title='another name';await sync();

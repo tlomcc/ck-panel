@@ -26,9 +26,37 @@ function chatAutoDigestContext(session){
   return 0;
 }
 // Wanted: the user-visible conditions. When these stop holding an existing arm is withdrawn.
+function chatAutoDigestConfigured(cfg){
+  return cfg.digestAutoWindow!==false&&cfg.digestCurrentModel===true&&cfg.dailyDigestEnabled!==false&&chatAutoDigestSubscription();
+}
 function chatAutoDigestWanted(cfg,session){
-  return cfg.digestAutoWindow!==false&&cfg.digestCurrentModel===true&&cfg.dailyDigestEnabled!==false&&chatAutoDigestSubscription()&&
+  return chatAutoDigestConfigured(cfg)&&
     chatAutoDigestContext(session)>=CHAT_AUTO_DIGEST_MIN_CONTEXT;
+}
+// Hand the cut to the gateway before the phone can leave the completed reply.
+// Reserve one retained turn for the incoming reply; source keys stay identical
+// to a normal trim prepared after that reply. This payload never enters Claude.
+function chatAutoDigestPrepareChat(cfg,session,pending){
+  if(!chatAutoDigestSubscription()||!session||session.gameWindow)return null;
+  if(!chatAutoDigestConfigured(cfg))return {seed:{enabled:false}};
+  if(session.digestManualTrim||session.digestModelRun||session.digestManualPending||session.digestSettingsPending||
+     chatDigestMigrationPending(session)||chatDigestPendingSync(session,cfg))return null;
+  if(session.digestManualCompleted&&session.digestManualCompleted.cleanupState==='pending')return null;
+  var view=chatAutoDigestWindow(session),remote=chatNightlyStatus[session.id]||{};
+  if(view&&['running','paused'].includes(view.state)||remote.manual_review_required||
+     remote.model_run&&['queued','running'].includes(remote.model_run.state))return null;
+  var keep=chatAutoTrimConfigFrom(cfg).keep;if(keep<1)return null;
+  var plan=chatPlanAutoTrimForPendingBatch(cfg,pending,{force:true,trigger:'manual_trim',reserveRounds:1});
+  if(!plan.trimmed||!chatDigestPlanSources(session,plan).length)return null;
+  var route;try{route=chatManualModelRoute(cfg,'digest')}catch(e){return null}
+  if(route.selected.execution!=='claude_code_subscription')return null;
+  var keys=chatDigestMessageGroups(plan.droppedMessages||[]).map(function(g){return g.key});
+  var trim={scope:chatDigestActiveScope(cfg),keys:keys,keep:keep,dropRounds:plan.dropped,immediate:true,requestedAt:Date.now()};
+  var run={id:'auto-chat-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:'trim',route:route.selected,
+    auto_resume_quota:true,auto_window:true};
+  var body=chatAutoDigestArmBody(cfg,session,trim,run);if(!body)return null;
+  delete body.memory_cadence;
+  return {seed:{enabled:true,body:body},attempt:{runId:run.id,trim:trim,label:route.label,source:'chat_receipt',at:Date.now()}};
 }
 // Ready: nothing else owns the digest state right now. Not ready only means "do not arm yet".
 function chatAutoDigestReady(cfg,session){
@@ -74,6 +102,7 @@ function chatAutoDigestEvaluate(){
   chatAutoDigestTasks.set(session.id,task);return task;
 }
 async function chatAutoDigestRun(cfg,session){
+  if(chatDigestReplyActive(session)&&session.digestAutoArmTry&&session.digestAutoArmTry.source==='chat_receipt'&&chatAutoDigestConfigured(cfg))return false;
   if(!chatAutoDigestWanted(cfg,session))return chatAutoDigestLocal(session)?chatAutoDigestDisarm(cfg,session):false;
   function busy(){return chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||chatCurrentModelStarting;}
   if(busy())return false;
@@ -152,7 +181,7 @@ function chatAutoDigestReconcile(cfg,session,data){
   }
   if(view.state==='none'&&!match){
     // An attempt still in flight has not reached the server yet.
-    var pending=attempt&&chatAutoDigestTasks.has(session.id);
+    var pending=attempt&&(chatAutoDigestTasks.has(session.id)||attempt.source==='chat_receipt'&&chatDigestReplyActive(session));
     if(!arm&&pending)return false;
     delete session.digestAutoArm;if(!pending)delete session.digestAutoArmTry;
     return true;
@@ -199,7 +228,11 @@ function chatAutoDigestViewNote(session,cfg,view){
   var auto=chatAutoDigestWindow(session);
   if(auto&&auto.state==='paused')view.note+='自动整理已暂停（额度保留/已中止），条件合适时自动继续。';
   else if(auto&&(auto.state==='running'||auto.locked===true)){view.status='自动整理进行中';view.note='小克正在自动生成和复核截断总结，完成前暂不能发送；原文保留。';}
-  else if(session.digestAutoArm&&(!auto||auto.state==='armed'))view.note+='已预约自动整理：额度快刷新时闲置 15 分钟、刚刷新后闲置 30 分钟才开始。';
+  else if(session.digestAutoArm&&(!auto||auto.state==='armed')){
+    view.note+='已预约自动整理：额度快刷新时闲置 15 分钟、刚刷新后闲置 30 分钟才开始。';
+    if(auto&&auto.reason==='quota_window')view.note+='当前额度尚未满足启动窗口。';
+    if(auto&&auto.reason==='idle_after_reset')view.note+='正在等待满 30 分钟空闲。';
+  }
 }
 function chatAutoDigestRenderBar(session){
   session=session||chatCurrentSession();

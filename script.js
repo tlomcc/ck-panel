@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v434-memory-every-300-rounds';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v435-auto-summary-chat-handoff';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -2262,6 +2262,8 @@ function chatUsageContextInput(done){
   if(!done||typeof done!=='object')return 0;
   var last=chatUsageInputTotal(done.last_usage||{});
   if(last>0)return last;
+  var receipt=chatUsageNumber(done.usage||{},'context_input_tokens');
+  if(receipt>0)return receipt;
   return Number(done.upstream_rounds)===1?chatUsageInputTotal(done.usage||{}):0;
 }
 function chatUsageFlag(usage,key){
@@ -7513,6 +7515,7 @@ function chatPlanAutoTrimForPendingBatch(cfg,submittedPending,opts){
   var deferredSet=new Set(deferred);
   var working=deferred.length?chatMessages.filter(function(message){return !deferredSet.has(message)}):chatMessages.slice();
   var trim=chatAutoTrimConfigFrom(cfg||chatLoadConfig());
+  if(opts.reserveRounds)trim.keep=Math.max(0,trim.keep-Math.max(0,Math.floor(Number(opts.reserveRounds)||0)));
   var session=chatCurrentSession();
   var localPlan=CHAT_HISTORY_TOOLS
     ?CHAT_HISTORY_TOOLS.trimLocalTurns(working,trim.keep,{excluded:selected})
@@ -11266,6 +11269,15 @@ async function chatSubmitPendingMessages(options){
   if(!transportForRequest.length)body.window_messages=windowMessagesForRequest;
   if(typeof chatDigestQueueForReply==='function')body.digest_queue=chatDigestQueueForReply(cfg,currentSession);
   if(gameWindow)body=window.CKGameWindow.body(body,currentSession);
+  if(!gameWindow&&!regenerateRequest&&typeof chatAutoDigestPrepareChat==='function'){
+    try{
+      var autoDigestChat=chatAutoDigestPrepareChat(cfg,currentSession,pending);
+      if(autoDigestChat){
+        body.auto_digest_seed=autoDigestChat.seed;
+        if(autoDigestChat.attempt){currentSession.digestAutoArmTry=autoDigestChat.attempt;chatSaveSessions({sessionIds:[currentSession.id]});}
+      }
+    }catch(autoDigestError){}
+  }
   body=chatLockGatewayBody(body);
   var requestBodyText=JSON.stringify(body);
   var assistantText='',nativeThinkingText='',recallInfo=null,toolEvents=[],requestUsage=null,requestCompleted=false;
