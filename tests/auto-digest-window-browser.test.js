@@ -312,6 +312,44 @@ const fixture=async()=>{
  assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2&&!session.digestManualTrim&&!session.digestModelRun,'the covered older request retires after the merged source is removed');
  assert(session.transportMessages.every(m=>m.content.every(b=>!['image','thinking'].includes(b.type))),'receipt adoption preserves existing image and thinking expiry');
  assert(chatAutoDigestApplyServerTrim(cfg(),session,mergedSnapshot)==='current','a cleaned merged receipt remains idempotent');
+ // The phone may retain an older image after the server cleaned its copy.
+ // Recognition must leave the retained local image and original text intact.
+ const phoneImageTransport=mergedCanonical.map(m=>Object.assign({},m,{content:m.content.filter(b=>b.type!=='thinking')}));
+ const phoneImageRows=chatDigestTransportRows(phoneImageTransport).map((m,i)=>Object.assign({ts:1700000000000+i*1000},m));
+ const cleanedImageSnapshot=Object.assign({},mergedSnapshot,{server_trim:Object.assign({},mergedSnapshot.server_trim,{transport_messages:cleanedCanonical.slice(prefixEnd)})});
+ chatMessages=phoneImageRows;session.messages=chatMessages;session.transportMessages=phoneImageTransport;
+ delete session.digestServerTrim;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,cleanedImageSnapshot)==='applied','a retained phone image does not block an otherwise proven server cut');
+ assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2&&session.transportMessages[0].content.includes(oldImage),'the retained phone image survives boundary recognition');
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,cleanedImageSnapshot)==='current','a retained phone image remains idempotent after the cut');
+ chatMessages=phoneImageRows.map(m=>Object.assign({},m));session.messages=chatMessages;
+ const editedImageTransport=phoneImageTransport.map(m=>Object.assign({},m,{content:m.content.map(b=>Object.assign({},b))}));
+ editedImageTransport[prefixEnd].content[0].text='保留区的新编辑';session.transportMessages=editedImageTransport;
+ const editedImageRows=chatMessages.slice(),editedImagePending=localStorage.getItem(chatNightlyOutboxKey(session));
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,cleanedImageSnapshot)==='conflict'&&same(chatMessages,editedImageRows)&&localStorage.getItem(chatNightlyOutboxKey(session))===editedImagePending,'image cleanup cannot hide edited retained text or consume its durable sources');
+ const sourceImageTransport=phoneImageTransport.map(m=>Object.assign({},m,{content:m.content.slice()}));
+ sourceImageTransport[0].content.push(oldImage);session.transportMessages=sourceImageTransport;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,cleanedImageSnapshot)==='conflict'&&same(chatMessages,editedImageRows),'retained-image recognition does not relax original source prefix fingerprints');
+ // Recovery can already have replaced the hidden history with the retained
+ // tail. The removed source manifest still proves the older visible merge.
+ const manifestRows=chatDigestTransportRows(cleanedCanonical.slice(0,prefixEnd));
+ const displayManifest=[{role:'user',first:0,last:1,stamp:chatDigestStamp({role:'user',text:manifestRows[0].text+'\n\n'+manifestRows[1].text})},
+   {role:'assistant',first:1,last:1,stamp:chatDigestStamp(manifestRows[2])}].concat(manifestRows.slice(3).map((m,i)=>({role:m.role,first:2+Math.floor(i/2),last:2+Math.floor(i/2),stamp:chatDigestStamp(m)})));
+ const manifestSnapshot=Object.assign({},cleanedImageSnapshot,{server_trim:Object.assign({},cleanedImageSnapshot.server_trim,{display_source:displayManifest})});
+ chatMessages=mergedRows.slice();session.messages=chatMessages;session.transportMessages=cleanedCanonical.slice(prefixEnd);
+ session.digestManualTrim={scope:chatNightlyScope(cfg()),keys:chatDigestMessageGroups(visibleSource).map(g=>g.key),keep:2,dropRounds:3,requestedAt:manifestSnapshot.server_trim.completed_at*1000-1000};
+ session.digestModelRun={id:'legacy-visible-merge',purpose:'trim'};delete session.digestServerTrim;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,manifestSnapshot)==='applied'&&session.digestServerTrimCheck.source_manifest_used,'source fingerprints align an old visible merge after hidden history recovery');
+ assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2&&!session.digestManualTrim&&!session.digestModelRun,'source manifest retires only the proven old visible request');
+ chatMessages=mergedRows.map(m=>Object.assign({},m));chatMessages[0].text='旧记录中的新编辑';session.messages=chatMessages;
+ const manifestEdited=chatMessages.slice();
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,manifestSnapshot)==='conflict'&&same(chatMessages,manifestEdited),'an old source manifest cannot remove newly edited visible text');
+ const repeatedTransport=originalTransport.map(m=>Object.assign({},m,{content:m.content.map(b=>Object.assign({},b))}));
+ repeatedTransport[6].content[0].text=repeatedTransport[0].content[0].text;repeatedTransport[7].content[0].text=repeatedTransport[1].content[0].text;
+ const repeatedRows=chatDigestTransportRows(repeatedTransport.slice(6)).map((m,i)=>Object.assign({ts:1700009990000+i*1000,turnId:'retained-'+Math.floor(i/2)},m));
+ chatMessages=repeatedRows;session.messages=chatMessages;session.transportMessages=repeatedTransport.slice(6);delete session.digestServerTrim;
+ const repeatedSnapshot=Object.assign({},snapshot,{server_trim:Object.assign({},snapshot.server_trim,{transport_messages:repeatedTransport.slice(6)})});
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,repeatedSnapshot)==='applied'&&same(chatMessages,repeatedRows)&&session.digestServerTrimCheck.local_drop===0,'retained repeated text is not mistaken for an old covered source');
  session.digestServerTrim={id:snapshot.server_trim.id,scope:chatNightlyScope(cfg()),at:snapshot.server_trim.completed_at*1000,localKeys:sourceKeys};
  session.dailyDigests=snapshot.base.entries;
  chatMessages=originalRows.map(m=>Object.assign({},m));chatMessages[0].text='恢复后编辑的原问题';session.messages=chatMessages;

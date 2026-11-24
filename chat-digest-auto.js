@@ -168,7 +168,10 @@ async function chatAutoDigestDisarm(cfg,session,options){
 function chatAutoDigestRetainedTurnMatches(current,saved){
   if(chatDigestStamp(chatDigestTransportRows(current))===chatDigestStamp(chatDigestTransportRows(saved)))return true;
   function images(messages){return messages.reduce(function(n,m){return n+(Array.isArray(m.content)?m.content.filter(function(b){return b&&b.type==='image'}).length:0)},0)}
-  if(images(current)||!images(saved))return false;
+  // Either side may already have applied the established image cleanup.
+  // This only recognizes the retained boundary; the local retained blocks
+  // stay in place and the source prefix still requires its original stamps.
+  if(!!images(current)===!!images(saved))return false;
   function withoutImages(messages){return messages.map(function(m){return Object.assign({},m,{content:Array.isArray(m.content)?m.content.filter(function(b){return !b||b.type!=='image'}):m.content})})}
   return chatDigestStamp(chatDigestTransportRows(withoutImages(current)))===chatDigestStamp(chatDigestTransportRows(withoutImages(saved)));
 }
@@ -228,24 +231,55 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   var after=savedStamps.length&&stamps.length>=savedStamps.length&&retainedMatches(0);
   check.boundary_before=!!before;check.boundary_after=!!after;
   var groups=CKChatHistory.localTurnGroups(rows),keys=new Set(receipt.keys),localDrop=0,lastSource=-1;
-  function displayStamp(messages){
+  function displayRows(messages){
     var merged=[];
     var visible=messages.map(function(m){return {role:m.role,content:Array.isArray(m.content)?m.content.filter(function(b){return typeof b==='string'||b&&['text','image','document'].includes(b.type)}):m.content}});
     chatDigestTransportRows(visible).forEach(function(m){
       if(merged.length&&merged[merged.length-1].role===m.role)merged[merged.length-1].text+='\n\n'+m.text;
       else merged.push({role:m.role,text:m.text});
     });
-    return chatDigestStamp(merged);
+    return merged;
   }
-  var signatures=groups.map(function(g){return displayStamp(chatDailyDigestRequestMessages(rows.slice(g.startIndex,g.endIndex)).map(function(m){return {role:m.role,content:m.text}}))});
+  function displayStamp(messages){return chatDigestStamp(displayRows(messages));}
+  function localProtocol(messages){return chatDailyDigestRequestMessages(messages).map(function(m){return {role:m.role,content:m.text}});}
+  function rowStamps(messages){return displayRows(messages).map(function(m){return chatDigestStamp(m)});}
+  function positions(source,pattern){
+    var found=[];if(!pattern.length)return found;
+    for(var i=0;i+pattern.length<=source.length;i++)if(pattern.every(function(s,j){return source[i+j]===s}))found.push(i);
+    return found;
+  }
+  function imageFree(messages){
+    function text(value){return String(value||'').replace(/\[发送了 \d+ 张图片，文字记录不包含图片内容\]/g,'').replace(/\n{3,}/g,'\n\n').trim();}
+    return messages.map(function(m){
+      var content=m.content;
+      if(typeof content==='string')content=text(content);
+      else if(Array.isArray(content))content=content.filter(function(b){return !b||b.type!=='image'}).map(function(b){
+        return typeof b==='string'?text(b):b&&b.type==='text'?Object.assign({},b,{text:text(b.text)}):b;
+      });
+      return {role:m.role,content:content};
+    });
+  }
+  var localParts=groups.map(function(g){return localProtocol(rows.slice(g.startIndex,g.endIndex))});
+  var signatures=localParts.map(displayStamp);
   check.local_rounds=groups.length;check.local_stamps=signatures.slice(0,700);
   check.local_keys=groups.slice(0,700).map(function(g){return (chatDigestMessageGroups(rows.slice(g.startIndex,g.endIndex))[0]||{}).key||''});
   if(transport.length&&!before&&!after)return conflict('transport_boundary');
+  var sourceManifest=receipt.display_source||[];
+  if(!Array.isArray(sourceManifest)||sourceManifest.length>20000||sourceManifest.some(function(m,i){
+    return !m||!['user','assistant'].includes(m.role)||!/^\d{1,9}:[a-z0-9]{1,10}:[a-z0-9]{1,10}$/.test(m.stamp||'')||
+      !Number.isInteger(m.first)||!Number.isInteger(m.last)||m.first<0||m.last<m.first||m.last>=drop||
+      i>0&&sourceManifest[i-1].last>m.first;
+  }))return conflict('invalid_receipt');
+  check.source_manifest_rows=sourceManifest.length;check.source_manifest_used=false;
+  var retainedProtocol=before?transport.slice(transportGroups[drop].startIndex):transport.length?transport:receipt.transport_messages;
+  var retainedRows=rowStamps(retainedProtocol),retainedWithoutImages=rowStamps(imageFree(retainedProtocol));
+  var manifestStamps=sourceManifest.map(function(m){return m.stamp});
+  function alreadyRetained(part){return positions(retainedRows,rowStamps(part)).length||positions(retainedWithoutImages,rowStamps(imageFree(part))).length;}
   var sourceCounts={},localCounts={};receipt.local_turn_stamps.forEach(function(s){sourceCounts[s]=(sourceCounts[s]||0)+1});signatures.forEach(function(s){localCounts[s]=(localCounts[s]||0)+1});
   while(localDrop<groups.length){
     var group=chatDigestMessageGroups(rows.slice(groups[localDrop].startIndex,groups[localDrop].endIndex))[0],sig=signatures[localDrop];
     var index=group?receipt.keys.indexOf(group.key):-1;
-    if(index<0&&sourceCounts[sig]===1&&localCounts[sig]===1)index=receipt.local_turn_stamps.indexOf(sig);
+    if(index<0&&sourceCounts[sig]===1&&localCounts[sig]===1&&(before||!alreadyRetained(localParts[localDrop])))index=receipt.local_turn_stamps.indexOf(sig);
     var rangeMatched=false;
     if(before&&(index<0||receipt.local_turn_stamps[index]!==sig)){
       // The complete canonical prefix proves order even when an older display
@@ -255,6 +289,15 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
         var joined=displayStamp(transport.slice(start.startIndex,tail.endIndex));
         if(joined===sig){index=end;rangeMatched=true;break;}
         if(Number(joined.split(':')[0])>Number(sig.split(':')[0]))break;
+      }
+    }
+    if(!rangeMatched&&(index<0||receipt.local_turn_stamps[index]!==sig)&&localCounts[sig]===1&&sourceManifest.length&&(before||!alreadyRetained(localParts[localDrop]))){
+      var pattern=rowStamps(localParts[localDrop]),matches=positions(manifestStamps,pattern).filter(function(start){
+        var first=sourceManifest[start],end=start+pattern.length-1,last=sourceManifest[end],next=sourceManifest[end+1];
+        return first.role==='user'&&(start===0||sourceManifest[start-1].last<first.first)&&(!next||next.first>last.last);
+      });
+      if(matches.length===1&&sourceManifest[matches[0]].first>lastSource){
+        index=sourceManifest[matches[0]+pattern.length-1].last;rangeMatched=true;check.source_manifest_used=true;
       }
     }
     if(index<0)break;
@@ -272,10 +315,9 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   var cut=localDrop?(localDrop===groups.length?rows.length:groups[localDrop].startIndex):0;
   var dropped=rows.slice(0,cut),droppedKeys=chatDigestMessageGroups(dropped).map(function(g){return g.key});
   var transportCut=before?transportGroups[drop].startIndex:0;
-  var retainedProtocol=before?transport.slice(transportCut):transport.length?transport:receipt.transport_messages;
-  var retainedDisplay=CKChatHistory.transportTurnGroups(retainedProtocol).map(function(t){return displayStamp(retainedProtocol.slice(t.startIndex,t.endIndex))});
-  var remaining=signatures.slice(localDrop).filter(function(s){return s!==chatDigestStamp([])});
-  if(remaining.length&&!retainedDisplay.some(function(s,i){return i+remaining.length<=retainedDisplay.length&&remaining.every(function(r,j){return retainedDisplay[i+j]===r})}))return conflict('display_retained_alignment');
+  var remainingProtocol=localProtocol(rows.slice(cut)),remaining=rowStamps(remainingProtocol),remainingWithoutImages=rowStamps(imageFree(remainingProtocol));
+  check.local_retained_rows=remaining.length;check.retained_visible_rows=retainedRows.length;
+  if(remaining.length&&!positions(retainedRows,remaining).length&&!positions(retainedWithoutImages,remainingWithoutImages).length)return conflict('display_retained_alignment');
   var prepared={entries:chatDigestRetainCycles(snapshot.base.entries,cfg),rollup:snapshot.base.rollup,used:[],
     activePack:{scope:scope,config:chatDigestConfigStamp(cfg),text:chatDailyDigestBuildPack(cfg,Object.assign({},session,{dailyDigests:snapshot.base.entries})),at:Date.now()}};
   if(!chatDigestPackReady(cfg,Object.assign({},session,{dailyDigests:prepared.entries})))return conflict('summary_pack');
