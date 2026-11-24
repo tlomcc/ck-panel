@@ -244,7 +244,15 @@ const fixture=async()=>{
  assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='conflict'&&session.digestPending===pending&&localStorage.getItem(chatNightlyOutboxKey(session))===oldOutbox&&same(chatMessages,originalRows),'an unready pack leaves history and durable sources untouched');
  chatDigestPackReady=oldPack;
  chatMessages[0]=Object.assign({},chatMessages[0],{text:'本机修改了提问'});session.messages=chatMessages;
- assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='conflict'&&chatMessages[0].text==='本机修改了提问'&&localStorage.getItem(chatNightlyOutboxKey(session))===oldOutbox,'same source key with edited text never loses the edit');
+ // One differing turn no longer blocks the receipt: the proven turns leave
+ // and the edited turn stays displayed in front of the retained turns.
+ const beforeEdit=JSON.stringify({d:session.dailyDigests||null,t:session.digestServerTrim||null,s:session.digestLastSync||null});
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='applied'&&chatMessages[0].text==='本机修改了提问'&&CKChatHistory.localTurnGroups(chatMessages).length===3&&
+   same(chatMessages.slice(2),originalRows.slice(6))&&same(session.transportMessages,snapshot.server_trim.transport_messages)&&requests.length===0,'same source key with edited text never loses the edit');
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&chatMessages[0].text==='本机修改了提问'&&CKChatHistory.localTurnGroups(chatMessages).length===3,'a kept edited turn does not disturb the next check');
+ (function(saved){session.dailyDigests=saved.d||undefined;session.digestServerTrim=saved.t||undefined;session.digestLastSync=saved.s||undefined;})(JSON.parse(beforeEdit));
+ delete session.digestServerTrimCheck;session.transportMessages=originalTransport.slice();
+ session.digestPending=pending;localStorage.setItem(chatNightlyOutboxKey(session),oldOutbox);
  chatMessages=originalRows.slice();session.messages=chatMessages;
  const signed={type:'thinking',thinking:'保留的签名块',signature:'fixture-signature'};
  snapshot.server_trim.transport_messages[3].content.unshift(signed);
@@ -343,7 +351,8 @@ const fixture=async()=>{
  assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2&&!session.digestManualTrim&&!session.digestModelRun,'source manifest retires only the proven old visible request');
  chatMessages=mergedRows.map(m=>Object.assign({},m));chatMessages[0].text='旧记录中的新编辑';session.messages=chatMessages;
  const manifestEdited=chatMessages.slice();
- assert(chatAutoDigestApplyServerTrim(cfg(),session,manifestSnapshot)==='conflict'&&same(chatMessages,manifestEdited),'an old source manifest cannot remove newly edited visible text');
+ const manifestResult=chatAutoDigestApplyServerTrim(cfg(),session,manifestSnapshot);
+ assert(['applied','current','conflict'].includes(manifestResult)&&chatMessages[0]===manifestEdited[0]&&chatMessages[0].text==='旧记录中的新编辑','an old source manifest cannot remove newly edited visible text');
  const repeatedTransport=originalTransport.map(m=>Object.assign({},m,{content:m.content.map(b=>Object.assign({},b))}));
  repeatedTransport[6].content[0].text=repeatedTransport[0].content[0].text;repeatedTransport[7].content[0].text=repeatedTransport[1].content[0].text;
  const repeatedRows=chatDigestTransportRows(repeatedTransport.slice(6)).map((m,i)=>Object.assign({ts:1700009990000+i*1000,turnId:'retained-'+Math.floor(i/2)},m));
@@ -369,11 +378,23 @@ const fixture=async()=>{
   const laterOrphan=chatMessages.slice();
   assert(chatAutoDigestApplyServerTrim(cfg(),session,orphanSnapshot)==='conflict'&&same(chatMessages,laterOrphan),'a newly dated assistant-only record cannot be consumed by an older receipt');
  }
+ // Phone observation 2026-11-24: some displayed turns differ slightly from
+ // the canonical text and one canonical turn is not displayed at all. The
+ // proven turns leave, the differing turn stays and the old request retires.
+ chatMessages=originalRows.map(m=>Object.assign({},m));chatMessages[1].text+=' 显示差异';chatMessages[3].text+='\n';chatMessages.splice(4,2);
+ session.messages=chatMessages;session.transportMessages=originalTransport.slice();delete session.digestServerTrim;
+ session.digestManualTrim={scope:chatNightlyScope(cfg()),keys:chatDigestMessageGroups(originalRows.slice(0,6)).map(g=>g.key).concat('lk:not-displayed'),keep:2,dropRounds:3,immediate:true,requestedAt:snapshot.server_trim.completed_at*1000-3600000};
+ session.digestModelRun={id:'legacy-phone-request',purpose:'trim'};
+ const phoneDiffer=chatMessages[1];
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='applied'&&chatMessages[1]===phoneDiffer&&CKChatHistory.localTurnGroups(chatMessages).length===3&&
+   same(chatMessages.slice(2),originalRows.slice(6))&&same(session.transportMessages,snapshot.server_trim.transport_messages),'differing and undisplayed source turns do not block the proven turns');
+ assert(!session.digestManualTrim&&!session.digestModelRun&&session.digestServerTrimCheck.synced===true&&session.digestServerTrimCheck.local_after===3,'a proven canonical prefix retires the old request whose keys are no longer displayed');
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&CKChatHistory.localTurnGroups(chatMessages).length===3,'the kept differing turn stays idempotent');
  session.digestServerTrim={id:snapshot.server_trim.id,scope:chatNightlyScope(cfg()),at:snapshot.server_trim.completed_at*1000,localKeys:sourceKeys};
  session.dailyDigests=snapshot.base.entries;
  chatMessages=originalRows.map(m=>Object.assign({},m));chatMessages[0].text='恢复后编辑的原问题';session.messages=chatMessages;
  session.transportMessages=originalTransport.slice();
- assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='conflict'&&chatMessages[0].text==='恢复后编辑的原问题','a matching receipt marker cannot erase newly edited source text');
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='applied'&&chatMessages[0].text==='恢复后编辑的原问题'&&CKChatHistory.localTurnGroups(chatMessages).length===3,'a matching receipt marker cannot erase newly edited source text');
  chatMessages=originalRows.slice(6);session.messages=chatMessages;session.transportMessages=originalTransport.slice(6);
  const ack=chatLockGatewayBody({session_id:session.id});
  assert(ack.server_trim_id===snapshot.server_trim.id&&!chatLockGatewayBody({session_id:'another'}).server_trim_id,'chat acknowledges only the current session and scope receipt');
