@@ -35,6 +35,7 @@ const fixture=async()=>{
    const body=init.body?JSON.parse(init.body):null;requests.push({kind:body?(body.action||'sync'):'read',body});
    if(srv.fail)throw Error('offline');
    if(!body)return json({ok:true,sessions:[{session_id:'auto-1',revision:0,status:'idle',auto_window:srv.window,model_run:srv.run,snapshot:srv.snapshot}]});
+   if(body.action==='server_trim_sync')return json({ok:true,recorded:true,receipt_id:body.check.receipt_id});
    if(body.action==='auto_window_arm'){
     if(!['running','paused'].includes(srv.window.state))srv.window={state:'armed',locked:false,run_id:body.model_run.id,stop_requested:false,context_tokens:body.auto_window.context_tokens};
     return json({ok:true,auto_window:srv.window});
@@ -67,7 +68,7 @@ const fixture=async()=>{
  chatWriteForm(cfg());chatRenderDailyDigest(cfg());
  assert(cfg().digestAutoWindow===true&&$('chat-digest-auto-window'),'the switch exists and defaults on');
  assert(chatCurrentSession()===session&&chatPlanAutoTrimForPendingBatch(cfg(),[],{force:true,trigger:'manual_trim'}).trimmed,'fixture has rounds to cut');
- const kinds=()=>requests.map(r=>r.kind).join(',');
+ const kinds=()=>requests.filter(r=>r.kind!=='server_trim_sync').map(r=>r.kind).join(',');
  const sync=options=>chatSyncNightlyDigest(cfg(),Object.assign({session,force:true},options));
 
  // A. Below 150k nothing is sent at all.
@@ -264,9 +265,28 @@ const fixture=async()=>{
  assert(!session.digestManualTrim&&!session.digestModelRun&&chatDigestSyncView(session,cfg()).status==='同步完成'&&session.digestLastSync.rounds===3,'the older unconfirmed manual intent retires into the actual server result');
  session.digestLastSync={id:'older-sync-after-local-cut',scope:chatNightlyScope(cfg()),at:1,rounds:0,status:'pending'};requests.length=0;
  assert(await chatDigestSyncNow()===true&&kinds()==='read'&&session.digestLastSync.rounds===3,'a validated current receipt also retires an older pending zero-round sync');
+ for(const restoredPrefix of [true,false]){
+  chatMessages=originalRows.slice(restoredPrefix?0:6);session.messages=chatMessages;
+  session.transportMessages=originalTransport.slice(restoredPrefix?0:6);
+  session.digestManualTrim={scope:chatNightlyScope(cfg()),keys:sourceKeys.slice(),keep:2,dropRounds:3,immediate:true,requestedAt:snapshot.server_trim.completed_at*1000-3600000};
+  session.digestModelRun={id:'manual-legacy-before-v436',purpose:'trim',label:'Sonnet'};
+  delete session.digestLastSync;
+  assert(chatNormalizeSession(session).digestModelRun.startState===undefined,'legacy persisted runs genuinely have no confirmation field');
+  assert(chatDigestSyncView(session,cfg()).status==='启动未确认','a legacy run starts with the reported unconfirmed state');
+  requests.length=0;
+  assert(await chatDigestSyncNow()===true&&kinds()==='read','a legacy manual intent reads the receipt even when local preparation looks ready');
+  assert(!session.digestManualTrim&&!session.digestModelRun&&chatDigestSyncView(session,cfg()).status==='同步完成'&&session.digestLastSync.rounds===3,'both restored and already-cut legacy histories retire the obsolete intent');
+  const observation=requests.find(r=>r.kind==='server_trim_sync');
+  assert(observation&&observation.body.check.synced===true&&observation.body.check.local_after===2&&observation.body.check.transport_after===2,'the actual click reports the completed local and protocol cut');
+  assert(!JSON.stringify(observation.body).includes('第 1 轮提问'),'sync observations contain fingerprints instead of conversation text');
+ }
  const later={scope:chatNightlyScope(cfg()),keys:sourceKeys,keep:2,dropRounds:3,requestedAt:snapshot.server_trim.completed_at*1000+1000};
  session.digestManualTrim=later;session.digestModelRun={id:'newer-manual',purpose:'trim',startState:'unconfirmed'};
  assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&session.digestManualTrim===later&&session.digestModelRun.id==='newer-manual','a newer manual request survives an older completed receipt');
+ delete session.digestModelRun.startState;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&session.digestManualTrim===later&&session.digestModelRun.id==='newer-manual','a newer legacy request also survives the old receipt');
+ session.digestManualTrim=Object.assign({},later,{requestedAt:snapshot.server_trim.completed_at*1000-1000});session.digestModelRun.startState='accepted';
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&session.digestModelRun.startState==='accepted','an accepted different run is not treated as an unconfirmed legacy intent');
  delete session.digestManualTrim;delete session.digestModelRun;
 
  // Established visible history can merge an unanswered user input with the

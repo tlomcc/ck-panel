@@ -20,6 +20,11 @@ test('explicit sync reads saved results without submitting another model run',as
   const x=setup();assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(x.reads.length,1);assert.equal(x.cuts.length,1);
   assert.equal(x.reads[0].readOnly,true);assert.equal(x.reads[0].force,true);assert.equal(x.reads[0].session,x.session);assert.equal(x.reads[0].modelRun,undefined);
 });
+test('apparently ready old manual runs still read the current server result',async()=>{
+  const x=setup();x.setReady(true);x.session.digestModelRun={id:'old-manual',purpose:'trim'};
+  assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(x.reads.length,1);
+  assert.equal(x.reads[0].readOnly,true);assert.equal(x.reads[0].force,true);
+});
 test('incomplete result cannot commit a cut',async()=>{
   const x=setup();x.ctx.chatSyncNightlyDigest=async()=>false;
   assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(x.cuts.length,0);

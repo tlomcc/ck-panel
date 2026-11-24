@@ -184,7 +184,7 @@ async function chatDigestSyncNow(options){
   var session=chatCurrentSession(),cfg=chatLoadConfig();
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast(session.digestManualTrim&&session.digestManualTrim.immediate!==false?'当前回复结束后自动完成截断':'请等当前回复结束后同步');return false;}
   var pendingSync=chatDigestPendingSync(session,cfg);
-  if(pendingSync||!chatDigestImmediateReady(session,cfg)){
+  if(pendingSync||session.digestModelRun||!chatDigestImmediateReady(session,cfg)){
     var scope=chatDigestActiveScope(cfg),config=chatDigestConfigStamp(cfg);
     var read=await chatSyncNightlyDigest(cfg,{session:session,readOnly:true,force:true});
     if(chatCurrentSession()!==session||chatDigestActiveScope(chatLoadConfig())!==scope||chatDigestConfigStamp(chatLoadConfig())!==config)return false;

@@ -263,6 +263,8 @@ function chatSyncNightlyDigest(cfg,options){
       if(typeof chatApplyWindowCleanup==='function'&&await chatApplyWindowCleanup(session,cfg,data.snapshot))return true;
       if(data.snapshot&&data.snapshot.server_trim&&typeof chatAutoDigestApplyServerTrim==='function'){
         var serverCut=chatAutoDigestApplyServerTrim(cfg,session,data.snapshot);
+        if(typeof chatAutoDigestReportServerTrim==='function')await chatAutoDigestReportServerTrim(cfg,session);
+        if(chatNightlyScope(chatLoadConfig())!==scope||chatDigestConfigStamp(chatLoadConfig())!==configStamp||chatDailyDigestFindSession(session.id)!==session)return false;
         if(serverCut==='conflict'){
           chatNightlyStatus[session.id]=Object.assign({scope:scope},data,{local_error:'服务器已完成截断，本机资料暂未对齐，原记录保留'});
           chatRenderNightlyStatus(session);return false;
