@@ -13,11 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ format('github-pages-{0}-{1}', github.run_id, github.run_attempt) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,8 +27,18 @@ jobs:
       - name: Upload static files
         uses: actions/upload-pages-artifact@v3
         with:
+          name: ${{ format('github-pages-{0}-{1}', github.run_id, github.run_attempt) }}
           path: .
 
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact_name }}
