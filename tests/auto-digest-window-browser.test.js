@@ -350,6 +350,25 @@ const fixture=async()=>{
  chatMessages=repeatedRows;session.messages=chatMessages;session.transportMessages=repeatedTransport.slice(6);delete session.digestServerTrim;
  const repeatedSnapshot=Object.assign({},snapshot,{server_trim:Object.assign({},snapshot.server_trim,{transport_messages:repeatedTransport.slice(6)})});
  assert(chatAutoDigestApplyServerTrim(cfg(),session,repeatedSnapshot)==='applied'&&same(chatMessages,repeatedRows)&&session.digestServerTrimCheck.local_drop===0,'retained repeated text is not mistaken for an old covered source');
+ // Empty original user text can leave an assistant-only display record that
+ // localTurnGroups filters out. Its complete source span still needs proof.
+ const orphanCanonical=JSON.parse(JSON.stringify(originalTransport));orphanCanonical[4].content[0].text='';
+ const orphanRows=originalRows.filter((m,i)=>i!==4),orphanVisible=chatDigestTransportRows(orphanCanonical.slice(0,6));
+ const orphanStamps=CKChatHistory.transportTurnGroups(orphanCanonical).slice(0,3).map(t=>chatDigestStamp(chatDigestTransportRows(orphanCanonical.slice(t.startIndex,t.endIndex))));
+ const orphanManifest=orphanVisible.slice(0,3).map((m,i)=>({role:m.role,stamp:chatDigestStamp(m),first:Math.floor(i/2),last:Math.floor(i/2)}));
+ orphanManifest.push({role:'assistant',first:1,last:2,stamp:chatDigestStamp({role:'assistant',text:orphanVisible[3].text+'\n\n'+orphanVisible[4].text})});
+ const orphanSnapshot=Object.assign({},snapshot,{server_trim:Object.assign({},snapshot.server_trim,{turn_stamps:orphanStamps,local_turn_stamps:orphanStamps,display_source:orphanManifest,transport_messages:orphanCanonical.slice(6)})});
+ for(const recoveredHidden of [false,true]){
+  chatMessages=orphanRows.map(m=>Object.assign({},m));session.messages=chatMessages;session.transportMessages=orphanCanonical.slice(recoveredHidden?6:0);delete session.digestServerTrim;
+  assert(CKChatHistory.localTurnGroups(chatMessages).length===4&&chatAutoDigestApplyServerTrim(cfg(),session,orphanSnapshot)==='applied','an unchanged assistant-only source is verified across the complete removed span');
+  assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2,'complete source span proof retains both canonical and visible tails');
+  chatMessages=orphanRows.map(m=>Object.assign({},m));chatMessages[4].text+=' 本机新增的修改';session.messages=chatMessages;session.transportMessages=orphanCanonical.slice(recoveredHidden?6:0);
+  const orphanEdited=chatMessages.slice(),orphanOutbox=localStorage.getItem(chatNightlyOutboxKey(session));
+  assert(chatAutoDigestApplyServerTrim(cfg(),session,orphanSnapshot)==='conflict'&&same(chatMessages,orphanEdited)&&localStorage.getItem(chatNightlyOutboxKey(session))===orphanOutbox,'a filtered assistant-only edit survives both original and recovered hidden histories');
+  chatMessages=orphanRows.map(m=>Object.assign({},m));chatMessages[4].ts=orphanSnapshot.server_trim.completed_at*1000+60000;session.messages=chatMessages;
+  const laterOrphan=chatMessages.slice();
+  assert(chatAutoDigestApplyServerTrim(cfg(),session,orphanSnapshot)==='conflict'&&same(chatMessages,laterOrphan),'a newly dated assistant-only record cannot be consumed by an older receipt');
+ }
  session.digestServerTrim={id:snapshot.server_trim.id,scope:chatNightlyScope(cfg()),at:snapshot.server_trim.completed_at*1000,localKeys:sourceKeys};
  session.dailyDigests=snapshot.base.entries;
  chatMessages=originalRows.map(m=>Object.assign({},m));chatMessages[0].text='恢复后编辑的原问题';session.messages=chatMessages;

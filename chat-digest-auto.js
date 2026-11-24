@@ -315,6 +315,23 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   var cut=localDrop?(localDrop===groups.length?rows.length:groups[localDrop].startIndex):0;
   var dropped=rows.slice(0,cut),droppedKeys=chatDigestMessageGroups(dropped).map(function(g){return g.key});
   var transportCut=before?transportGroups[drop].startIndex:0;
+  // localTurnGroups omits assistant-only and stopped records. A proven turn
+  // cannot silently authorize the surrounding records that it did not check.
+  var checkedGroups=groups.slice(0,localDrop),uncovered=false;
+  for(var removedIndex=0;removedIndex<dropped.length;removedIndex++){
+    var removed=dropped[removedIndex];
+    if(!removed||!String(removed.text||'').trim()&&!(removed.images||[]).length&&!(removed.files||[]).length)continue;
+    if(!['user','assistant'].includes(removed.role)||removed.sendFailed||removed.inFlight||removed.stopped===true)return conflict('display_source_order');
+    if(!checkedGroups.some(function(g){return removedIndex>=g.startIndex&&removedIndex<g.endIndex})){
+      if(Number(removed.ts||0)>Number(receipt.completed_at)*1000)return conflict('display_source_order');
+      uncovered=true;
+    }
+  }
+  if(uncovered){
+    var removedRows=rowStamps(localProtocol(dropped));
+    var provenRows=before?rowStamps(transport.slice(0,transportCut)):manifestStamps;
+    if(positions(provenRows,removedRows).length!==1)return conflict('display_source_order');
+  }
   var remainingProtocol=localProtocol(rows.slice(cut)),remaining=rowStamps(remainingProtocol),remainingWithoutImages=rowStamps(imageFree(remainingProtocol));
   check.local_retained_rows=remaining.length;check.retained_visible_rows=retainedRows.length;
   if(remaining.length&&!positions(retainedRows,remaining).length&&!positions(retainedWithoutImages,remainingWithoutImages).length)return conflict('display_retained_alignment');
