@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v437-server-auto-summary';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v438-server-trim-sync';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -1814,6 +1814,8 @@ function chatWorldbookId(){
 var CHAT_GATEWAY_FORBIDDEN_BODY_FIELDS=['history','messages','outboundHistory','clientHistory','conversation','conversationHistory'];
 function chatLockGatewayBody(body){
   body=body&&typeof body==='object'?body:{};
+  var receiptSession=typeof chatCurrentSession==='function'&&chatCurrentSession(),receipt=receiptSession&&receiptSession.digestServerTrim;
+  if(receipt&&body.session_id===receiptSession.id&&receipt.scope===chatNightlyScope(chatLoadConfig()))body.server_trim_id=receipt.id;
   var removed=[];
   CHAT_GATEWAY_FORBIDDEN_BODY_FIELDS.forEach(function(key){
     if(Object.prototype.hasOwnProperty.call(body,key)){
@@ -7832,6 +7834,7 @@ async function chatSyncTrimmedHistoryToGateway(cfg,result){
         execution_backend:(window.CKBackendRoute&&CKBackendRoute.current.mode==='vps')?(CKBackendRoute.current.execution||'direct_api'):'direct_api',
         trim_sync_only:true,
         digest_sync_id:result.syncId||'',
+        server_trim_id:session.digestServerTrim&&session.digestServerTrim.scope===chatNightlyScope(cfg)?session.digestServerTrim.id:'',
         strip_native_thinking:result.thinkingClean===true,
         thinking_cleanup_only:result.thinkingClean===true,
         model:cfg.model,

@@ -31,3 +31,23 @@ for(const changed of ['session','scope','config','reply'])test('a changed '+chan
 test('active reply is not interrupted by a sync click',async()=>{
   const x=setup();x.setReply(true);assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(x.reads.length,0);assert.equal(x.cuts.length,0);
 });
+test('an old pending history sync reads a completed different server run before uploading',async()=>{
+  const x=setup(),pending={id:'old-sync',rounds:0,status:'pending'};
+  x.session.digestLastSync=pending;x.session.digestManualTrim={keys:['old-source']};x.session.digestModelRun={id:'old-unconfirmed',startState:'unconfirmed'};
+  x.ctx.chatDigestPendingSync=()=>x.session.digestLastSync.status==='pending'?pending:null;
+  let uploads=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{uploads++;return true};
+  x.ctx.chatSyncNightlyDigest=async(c,o)=>{
+    x.reads.push(o);x.ctx.chatNightlyStatus[x.session.id]={snapshot:{server_trim:{id:'server-result'}}};
+    x.session.digestServerTrim={id:'server-result'};x.session.digestLastSync={id:'server-result',scope:x.cfg.scope,rounds:412,status:'synced'};
+    delete x.session.digestManualTrim;delete x.session.digestModelRun;return true;
+  };
+  assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(x.reads.length,1);
+  assert.equal(x.reads[0].readOnly,true);assert.equal(x.reads[0].force,true);
+  assert.equal(uploads,0);assert.equal(x.cuts.length,0);assert.equal(x.session.digestLastSync.rounds,412);
+});
+test('a failed receipt read cannot upload an old pending history snapshot',async()=>{
+  const x=setup();x.ctx.chatDigestPendingSync=()=>({id:'old-sync',rounds:0,status:'pending'});
+  let uploads=0;x.ctx.chatSyncTrimmedHistoryToGateway=async()=>{uploads++;return true};
+  x.ctx.chatSyncNightlyDigest=async()=>false;
+  assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(uploads,0);assert.equal(x.cuts.length,0);
+});

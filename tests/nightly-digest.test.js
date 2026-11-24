@@ -40,6 +40,19 @@ test('wake GET bypasses throttle and stages the finished result without acknowle
   await x.sync();assert(posted,'read-only refresh falsely acknowledged a local change');
 });
 
+test('a forced result read waits for the in-flight upload and then performs a fresh GET',async()=>{
+  const x=setup();let release;
+  x.ctx.fetch=async(url,init={})=>{
+    const body=init.body?JSON.parse(init.body):null;x.calls.push({url,body,init});
+    if(body)await new Promise(resolve=>release=resolve);
+    return x.response(body);
+  };
+  const upload=x.sync(),read=x.ctx.chatSyncNightlyDigest(x.cfg,{session:x.session,readOnly:true,force:true});
+  assert.equal(x.calls.length,1);assert(x.calls[0].body);release();
+  assert.deepEqual(await Promise.all([upload,read]),[true,true]);
+  assert.equal(x.calls.length,2);assert.equal(x.calls[1].body,null);assert.equal(x.calls[1].init.cache,'no-store');
+});
+
 test('an extra failed local turn does not rename already summarized transport turns',()=>{
   const x=setup(),old=x.ctx.chatDigestMessageGroups(x.session.messages)[0];
   x.session.transportMessages=x.session.messages.map(m=>({role:m.role,content:m.text}));

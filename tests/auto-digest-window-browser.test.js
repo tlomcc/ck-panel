@@ -34,7 +34,7 @@ const fixture=async()=>{
   if(url.split('&session_id=')[0]===chatNightlyEndpoint(chatLoadConfig())){
    const body=init.body?JSON.parse(init.body):null;requests.push({kind:body?(body.action||'sync'):'read',body});
    if(srv.fail)throw Error('offline');
-   if(!body)return json({ok:true,sessions:[{session_id:'auto-1',revision:0,status:'idle',auto_window:srv.window,model_run:srv.run}]});
+   if(!body)return json({ok:true,sessions:[{session_id:'auto-1',revision:0,status:'idle',auto_window:srv.window,model_run:srv.run,snapshot:srv.snapshot}]});
    if(body.action==='auto_window_arm'){
     if(!['running','paused'].includes(srv.window.state))srv.window={state:'armed',locked:false,run_id:body.model_run.id,stop_requested:false,context_tokens:body.auto_window.context_tokens};
     return json({ok:true,auto_window:srv.window});
@@ -251,6 +251,56 @@ const fixture=async()=>{
  assert(session.transportMessages[3].content[0].signature==='fixture-signature'&&session.dailyDigests[0].text==='已核对的前三轮总结。'&&requests.length===0,'server result and signed retained blocks survive with no business request');
  assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&requests.length===0,'same receipt is idempotent');
  assert(chatNormalizeSession(session).digestServerTrim.id===snapshot.server_trim.id&&chatAutoDigestContext(session)===0,'the saved receipt fences old context after reopening');
+
+ // The same marker is insufficient if a late local restore brought the old
+ // prefix back. A sync click must read and reapply the existing receipt.
+ chatMessages=originalRows.slice();session.messages=chatMessages;session.transportMessages=originalTransport.slice();
+ session.digestManualTrim={scope:chatNightlyScope(cfg()),keys:sourceKeys.slice(),keep:2,dropRounds:3,immediate:true,requestedAt:snapshot.server_trim.completed_at*1000-3600000};
+ session.digestModelRun={id:'old-unconfirmed-manual',purpose:'trim',startState:'unconfirmed'};
+ session.digestLastSync={id:'old-zero-round-sync',scope:chatNightlyScope(cfg()),at:1,rounds:0,status:'pending'};
+ srv.snapshot=snapshot;srv.run={id:snapshot.server_trim.run_id,state:'succeeded'};srv.window={state:'completed',locked:false};requests.length=0;
+ assert(await chatDigestSyncNow()===true&&kinds()==='read','explicit sync reads the completed receipt instead of uploading the old history');
+ assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2,'a restored prefix is cut despite a matching saved receipt ID');
+ assert(!session.digestManualTrim&&!session.digestModelRun&&chatDigestSyncView(session,cfg()).status==='同步完成'&&session.digestLastSync.rounds===3,'the older unconfirmed manual intent retires into the actual server result');
+ session.digestLastSync={id:'older-sync-after-local-cut',scope:chatNightlyScope(cfg()),at:1,rounds:0,status:'pending'};requests.length=0;
+ assert(await chatDigestSyncNow()===true&&kinds()==='read'&&session.digestLastSync.rounds===3,'a validated current receipt also retires an older pending zero-round sync');
+ const later={scope:chatNightlyScope(cfg()),keys:sourceKeys,keep:2,dropRounds:3,requestedAt:snapshot.server_trim.completed_at*1000+1000};
+ session.digestManualTrim=later;session.digestModelRun={id:'newer-manual',purpose:'trim',startState:'unconfirmed'};
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&session.digestManualTrim===later&&session.digestModelRun.id==='newer-manual','a newer manual request survives an older completed receipt');
+ delete session.digestManualTrim;delete session.digestModelRun;
+
+ // Established visible history can merge an unanswered user input with the
+ // next turn. Canonical source proof still accounts for all four source turns.
+ const mergedCanonical=[].concat(turn(11),turn(12),turn(13),turn(14),turn(15),turn(16)).map(toTransport);
+ mergedCanonical.splice(1,1);
+ const signedExpired={type:'thinking',thinking:'已到期的思考',signature:'expired-fixture'};
+ const oldImage={type:'image',source:{type:'base64',media_type:'image/png',data:'fixture'}};
+ mergedCanonical[7].content.push(oldImage);mergedCanonical[10].content.unshift(signedExpired);
+ const cleanedCanonical=mergedCanonical.map(m=>Object.assign({},m,{content:m.content.filter(b=>!['image','thinking'].includes(b.type))}));
+ const mergedRows=chatDigestTransportRows(cleanedCanonical).map((m,i)=>Object.assign({ts:1700000000000+i*1000},m));
+ chatMessages=mergedRows;session.messages=chatMessages;session.transportMessages=cleanedCanonical;
+ const canonicalTurns=CKChatHistory.transportTurnGroups(cleanedCanonical),prefixEnd=canonicalTurns[4].startIndex;
+ const receiptKeys=['canonical-11','canonical-12','canonical-13','canonical-14'];
+ const mergedStamps=canonicalTurns.slice(0,4).map(t=>chatDigestStamp(chatDigestTransportRows(cleanedCanonical.slice(t.startIndex,t.endIndex))));
+ const mergedSnapshot={revision:21,config:chatNightlyConfig(cfg()),base:{entries:[{id:'merged-cycle',kind:'cycle',sequence:2,active:true,dayKey:chatDailyDigestDayKey(Date.now()),text:'已核对的四轮总结。',covered:receiptKeys,brief:null,createdAt:Date.now()}],rollup:null,omitted:[]},
+   server_trim:{id:'server-'+'b'.repeat(24),run_id:'merged-server-fixture',session_id:session.id,drop_rounds:4,keep:2,before_rounds:6,after_rounds:2,
+     keys:receiptKeys,turn_stamps:mergedStamps,local_turn_stamps:mergedStamps,completed_at:Date.now()/1000,transport_messages:mergedCanonical.slice(prefixEnd)}};
+ const visibleGroups=CKChatHistory.localTurnGroups(mergedRows),visibleSource=mergedRows.slice(0,visibleGroups[3].startIndex);
+ session.digestManualTrim={scope:chatNightlyScope(cfg()),keys:chatDigestMessageGroups(visibleSource).map(g=>g.key),keep:2,dropRounds:3,immediate:true,requestedAt:mergedSnapshot.server_trim.completed_at*1000-3600000};
+ session.digestModelRun={id:'merged-old-manual',purpose:'trim',startState:'unconfirmed'};
+ assert(visibleGroups.length===5&&chatAutoDigestApplyServerTrim(cfg(),session,mergedSnapshot)==='applied','ordered canonical proof safely aligns five visible groups with six protocol rounds');
+ assert(CKChatHistory.localTurnGroups(chatMessages).length===2&&CKChatHistory.transportTurnGroups(session.transportMessages).length===2&&!session.digestManualTrim&&!session.digestModelRun,'the covered older request retires after the merged source is removed');
+ assert(session.transportMessages.every(m=>m.content.every(b=>!['image','thinking'].includes(b.type))),'receipt adoption preserves existing image and thinking expiry');
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,mergedSnapshot)==='current','a cleaned merged receipt remains idempotent');
+ session.digestServerTrim={id:snapshot.server_trim.id,scope:chatNightlyScope(cfg()),at:snapshot.server_trim.completed_at*1000,localKeys:sourceKeys};
+ session.dailyDigests=snapshot.base.entries;
+ chatMessages=originalRows.map(m=>Object.assign({},m));chatMessages[0].text='恢复后编辑的原问题';session.messages=chatMessages;
+ session.transportMessages=originalTransport.slice();
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='conflict'&&chatMessages[0].text==='恢复后编辑的原问题','a matching receipt marker cannot erase newly edited source text');
+ chatMessages=originalRows.slice(6);session.messages=chatMessages;session.transportMessages=originalTransport.slice(6);
+ const ack=chatLockGatewayBody({session_id:session.id});
+ assert(ack.server_trim_id===snapshot.server_trim.id&&!chatLockGatewayBody({session_id:'another'}).server_trim_id,'chat acknowledges only the current session and scope receipt');
+ srv.snapshot=null;srv.run=null;srv.window={state:'none',locked:false};
 
  // An offline switch remains visibly pending across local reload, then retries only the setting.
  requests.length=0;srv.fail=true;$('chat-digest-auto-window').checked=false;

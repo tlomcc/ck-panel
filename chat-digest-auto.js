@@ -165,10 +165,32 @@ async function chatAutoDigestDisarm(cfg,session,options){
 }
 // Apply a cut already committed by the server. This never uploads history or
 // starts work; unknown local material remains available for reconciliation.
+function chatAutoDigestRetainedTurnMatches(current,saved){
+  if(chatDigestStamp(chatDigestTransportRows(current))===chatDigestStamp(chatDigestTransportRows(saved)))return true;
+  function images(messages){return messages.reduce(function(n,m){return n+(Array.isArray(m.content)?m.content.filter(function(b){return b&&b.type==='image'}).length:0)},0)}
+  if(images(current)||!images(saved))return false;
+  function withoutImages(messages){return messages.map(function(m){return Object.assign({},m,{content:Array.isArray(m.content)?m.content.filter(function(b){return !b||b.type!=='image'}):m.content})})}
+  return chatDigestStamp(chatDigestTransportRows(withoutImages(current)))===chatDigestStamp(chatDigestTransportRows(withoutImages(saved)));
+}
+function chatAutoDigestRetireCoveredRequest(cfg,session,receipt,coveredKeys){
+  var run=session.digestModelRun,req=session.digestManualTrim,scope=chatNightlyScope(cfg);
+  if(run&&run.auto&&run.id===receipt.run_id){
+    delete session.digestModelRun;
+    if(req&&req.scope===scope&&Number(req.requestedAt||0)<=Number(receipt.completed_at)*1000)delete session.digestManualTrim;
+    return true;
+  }
+  var covered=new Set((receipt.keys||[]).concat(coveredKeys||[]));
+  if(run&&run.purpose==='trim'&&run.startState==='unconfirmed'&&req&&req.scope===scope&&
+      Number(req.requestedAt)<=Number(receipt.completed_at)*1000&&req.keep===receipt.keep&&
+      req.dropRounds<=receipt.drop_rounds&&Array.isArray(req.keys)&&req.keys.length&&req.keys.every(function(k){return covered.has(k)})){
+    delete session.digestModelRun;delete session.digestManualTrim;return true;
+  }
+  return false;
+}
 function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   var receipt=snapshot&&snapshot.server_trim,scope=chatNightlyScope(cfg);
   if(!receipt)return 'absent';
-  if(session.digestServerTrim&&session.digestServerTrim.scope===scope&&session.digestServerTrim.id===receipt.id)return 'current';
+  var previousReceipt=session.digestServerTrim,isCurrent=previousReceipt&&previousReceipt.scope===scope&&previousReceipt.id===receipt.id;
   if(receipt.session_id!==session.id||!/^server-[a-f0-9]{24}$/.test(receipt.id||'')||
       !Number.isInteger(receipt.drop_rounds)||receipt.drop_rounds<1||!Array.isArray(receipt.keys)||
       !Array.isArray(receipt.turn_stamps)||receipt.turn_stamps.length!==receipt.drop_rounds||
@@ -184,8 +206,10 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   function transportStamps(messages){return CKChatHistory.transportTurnGroups(messages).map(function(t){return chatDigestStamp(chatDigestTransportRows(messages.slice(t.startIndex,t.endIndex)))})}
   var stamps=transportStamps(transport),savedStamps=transportStamps(receipt.transport_messages),drop=receipt.drop_rounds;
   if(savedStamps.length!==receipt.after_rounds)return 'conflict';
-  var before=stamps.length>=drop+savedStamps.length&&receipt.turn_stamps.every(function(s,i){return stamps[i]===s})&&savedStamps.every(function(s,i){return stamps[drop+i]===s});
-  var after=savedStamps.length&&stamps.length>=savedStamps.length&&savedStamps.every(function(s,i){return stamps[i]===s});
+  var transportGroups=CKChatHistory.transportTurnGroups(transport),savedGroups=CKChatHistory.transportTurnGroups(receipt.transport_messages);
+  function retainedMatches(offset){return savedGroups.every(function(t,i){var current=transportGroups[offset+i];return current&&chatAutoDigestRetainedTurnMatches(transport.slice(current.startIndex,current.endIndex),receipt.transport_messages.slice(t.startIndex,t.endIndex))})}
+  var before=stamps.length>=drop+savedStamps.length&&receipt.turn_stamps.every(function(s,i){return stamps[i]===s})&&retainedMatches(drop);
+  var after=savedStamps.length&&stamps.length>=savedStamps.length&&retainedMatches(0);
   if(transport.length&&!before&&!after)return 'conflict';
   var groups=CKChatHistory.localTurnGroups(rows),keys=new Set(receipt.keys),localDrop=0,lastSource=-1;
   function displayStamp(messages){
@@ -203,8 +227,19 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
     var group=chatDigestMessageGroups(rows.slice(groups[localDrop].startIndex,groups[localDrop].endIndex))[0],sig=signatures[localDrop];
     var index=group?receipt.keys.indexOf(group.key):-1;
     if(index<0&&sourceCounts[sig]===1&&localCounts[sig]===1)index=receipt.local_turn_stamps.indexOf(sig);
+    var rangeMatched=false;
+    if(before&&(index<0||receipt.local_turn_stamps[index]!==sig)){
+      // The complete canonical prefix proves order even when an older display
+      // merged adjacent turns or assigned different local IDs.
+      for(var end=lastSource+1;end<drop;end++){
+        var start=transportGroups[lastSource+1],tail=transportGroups[end];
+        var joined=displayStamp(transport.slice(start.startIndex,tail.endIndex));
+        if(joined===sig){index=end;rangeMatched=true;break;}
+        if(Number(joined.split(':')[0])>Number(sig.split(':')[0]))break;
+      }
+    }
     if(index<0)break;
-    if(index<=lastSource||receipt.local_turn_stamps[index]!==sig)return 'conflict';
+    if(index<=lastSource||!rangeMatched&&receipt.local_turn_stamps[index]!==sig)return 'conflict';
     lastSource=index;localDrop++;
   }
   if(!transport.length&&!localDrop&&rows.length){
@@ -216,7 +251,7 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   if(before&&localDrop===0&&groups.length&&receipt.local_turn_stamps.includes(signatures[0]))return 'conflict';
   var cut=localDrop?(localDrop===groups.length?rows.length:groups[localDrop].startIndex):0;
   var dropped=rows.slice(0,cut),droppedKeys=chatDigestMessageGroups(dropped).map(function(g){return g.key});
-  var transportGroups=CKChatHistory.transportTurnGroups(transport),transportCut=before?transportGroups[drop].startIndex:0;
+  var transportCut=before?transportGroups[drop].startIndex:0;
   var retainedProtocol=before?transport.slice(transportCut):transport.length?transport:receipt.transport_messages;
   var retainedDisplay=CKChatHistory.transportTurnGroups(retainedProtocol).map(function(t){return displayStamp(retainedProtocol.slice(t.startIndex,t.endIndex))});
   var remaining=signatures.slice(localDrop).filter(function(s){return s!==chatDigestStamp([])});
@@ -227,6 +262,19 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   var covered=new Set();snapshot.base.entries.forEach(function(e){(e.covered||[]).forEach(function(k){covered.add(k)})});
   (snapshot.base.omitted||[]).forEach(function(e){covered.add(e.key)});
   if(receipt.keys.some(function(k){return !covered.has(k)}))return 'conflict';
+  // A receipt marker can survive a late local history restore. Only a
+  // validated retained history may acknowledge this cut without applying it.
+  if(isCurrent&&after&&!before&&!localDrop){
+    var retired=chatAutoDigestRetireCoveredRequest(cfg,session,receipt,Array.from(covered).concat(previousReceipt.localKeys||[]));
+    var lastSync=session.digestLastSync;
+    if(!lastSync||lastSync.scope!==scope||Number(lastSync.at||0)<=Number(receipt.completed_at)*1000){
+      session.digestLastSync={id:receipt.id,scope:scope,at:Number(receipt.completed_at)*1000,rounds:drop,status:'synced',
+        trigger:'server_auto_summary',modelRunId:receipt.run_id,syncedAt:Date.now()};
+      session.digestManualCompleted={rounds:drop,at:Number(receipt.completed_at)*1000,mode:'server'};retired=true;
+    }
+    if(retired)chatSaveSessions({sessionIds:[session.id]});
+    return 'current';
+  }
   var pending=chatNightlyPending(session).filter(function(g){return !keys.has(g.key)&&!droppedKeys.includes(g.key)});
   try{
     if(pending.length)localStorage.setItem(chatNightlyOutboxKey(session),JSON.stringify(pending));else localStorage.removeItem(chatNightlyOutboxKey(session));
@@ -238,9 +286,9 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
     before:receipt.before_rounds,after:receipt.after_rounds,dropped:drop,keep:receipt.keep,
     transportBefore:stamps.length,transportAfter:before?stamps.length-drop:stamps.length,
     localBefore:groups.length,localAfter:groups.length-localDrop});
-  if(!transport.length||before&&stamps.length===receipt.before_rounds)session.transportMessages=receipt.transport_messages;
+  if(!transport.length)session.transportMessages=receipt.transport_messages;
   session.transportUpdated=Math.max(Number(session.transportUpdated)||0,Number(receipt.completed_at)*1000);
-  session.digestServerTrim={id:receipt.id,scope:scope,at:Number(receipt.completed_at)*1000,runId:receipt.run_id};
+  session.digestServerTrim={id:receipt.id,scope:scope,at:Number(receipt.completed_at)*1000,runId:receipt.run_id,localKeys:droppedKeys};
   session.digestLastSync={id:receipt.id,scope:scope,at:session.digestServerTrim.at,rounds:drop,status:'synced',
     trigger:'server_auto_summary',modelRunId:receipt.run_id,syncedAt:Date.now()};
   session.digestManualCompleted={rounds:drop,at:session.digestServerTrim.at,mode:'server'};
@@ -249,7 +297,7 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   delete session.digestStaged;delete session.digestPreparingBase;delete session.digestRemoteConflict;
   if(session.digestAutoArm&&session.digestAutoArm.runId===receipt.run_id)delete session.digestAutoArm;
   if(session.digestAutoArmTry&&session.digestAutoArmTry.runId===receipt.run_id)delete session.digestAutoArmTry;
-  if(session.digestModelRun&&session.digestModelRun.auto&&session.digestModelRun.id===receipt.run_id){delete session.digestModelRun;delete session.digestManualTrim;}
+  chatAutoDigestRetireCoveredRequest(cfg,session,receipt,droppedKeys);
   chatSaveSessions({sessionIds:[session.id]});
   if(active){chatMessages=session.messages;chatRenderMessages();chatRenderDailyDigest(cfg);}
   return 'applied';

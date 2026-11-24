@@ -221,7 +221,7 @@ function chatSyncNightlyDigest(cfg,options){
   var scope=chatNightlyScope(cfg),configStamp=chatDigestConfigStamp(cfg),baseStamp=chatNightlyBaseStamp(cfg,session),base=chatNightlyBase(session);
   var syncKey=scope+':'+session.id;
   if(chatNightlySyncs.has(syncKey)){
-    if(options.modelRun||options.cancelModelRun)return chatNightlySyncs.get(syncKey).then(function(){return chatSyncNightlyDigest(cfg,options)});
+    if(options.modelRun||options.cancelModelRun||options.readOnly&&options.force)return chatNightlySyncs.get(syncKey).then(function(){return chatSyncNightlyDigest(cfg,options)});
     return chatNightlySyncs.get(syncKey);
   }
   var staged=chatDigestStage(session,cfg);
@@ -267,8 +267,13 @@ function chatSyncNightlyDigest(cfg,options){
           chatNightlyStatus[session.id]=Object.assign({scope:scope},data,{local_error:'服务器已完成截断，本机资料暂未对齐，原记录保留'});
           chatRenderNightlyStatus(session);return false;
         }
-        if(serverCut==='applied'){
+        if((serverCut==='applied'||serverCut==='current')&&data.model_run&&data.model_run.id===data.snapshot.server_trim.run_id&&data.model_run.state==='succeeded'){
           chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
+          session.digestSchedule={scope:scope,model_run:data.model_run,quota_wait:data.quota_wait,status:data.status,
+            pending_groups:data.pending_groups,last_error:data.last_error||'',last_error_code:data.last_error_code||'',
+            progress:data.progress,checkpoint_batches:data.checkpoint_batches,stage:data.stage,completed_at:data.completed_at||0,next_retry:data.next_retry||0};
+          if(typeof chatAutoDigestReconcile==='function')chatAutoDigestReconcile(cfg,session,data);
+          chatSaveSessions({sessionIds:[session.id]});
           chatNightlySynced[syncKey]={readAt:Date.now(),at:Date.now()};
           chatRenderNightlyStatus(session);return true;
         }
