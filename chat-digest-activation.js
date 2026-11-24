@@ -184,7 +184,7 @@ async function chatDigestSyncNow(options){
   var session=chatCurrentSession(),cfg=chatLoadConfig();
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction){toast(session.digestManualTrim&&session.digestManualTrim.immediate!==false?'当前回复结束后自动完成截断':'请等当前回复结束后同步');return false;}
   var pendingSync=chatDigestPendingSync(session,cfg);
-  if(pendingSync||session.digestModelRun||!chatDigestImmediateReady(session,cfg)){
+  if(pendingSync||!(options&&options.automatic)&&session.digestModelRun||!chatDigestImmediateReady(session,cfg)){
     var scope=chatDigestActiveScope(cfg),config=chatDigestConfigStamp(cfg);
     var read=await chatSyncNightlyDigest(cfg,{session:session,readOnly:true,force:true});
     if(chatCurrentSession()!==session||chatDigestActiveScope(chatLoadConfig())!==scope||chatDigestConfigStamp(chatLoadConfig())!==config)return false;
@@ -366,13 +366,13 @@ async function chatDigestFinishManualTrim(cfg,session){
     if(remote.state!=='succeeded'&&!partial)return false;
     if(local.purpose==='daily'){
       if(session!==chatCurrentSession()||chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction)return false;
-      var done=await chatDigestSyncNow({summaryOnly:true});
+      var done=await chatDigestSyncNow({summaryOnly:true,automatic:true});
       if(done){delete session.digestModelRun;chatSaveSessions();}return done;
     }
   }
   var req=session.digestManualTrim;
   if(session!==chatCurrentSession()||!req||req.immediate===false||req.scope!==chatDigestActiveScope(cfg)||
       chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction||!chatDigestImmediateReady(session,cfg,partial))return false;
-  var done=await chatDigestSyncNow();
+  var done=await chatDigestSyncNow({automatic:true});
   if(done&&cfg.digestCurrentModel===true){delete session.digestModelRun;chatSaveSessions();}return done;
 }

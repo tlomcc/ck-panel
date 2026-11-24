@@ -25,6 +25,11 @@ test('apparently ready old manual runs still read the current server result',asy
   assert.equal(await x.ctx.chatDigestSyncNow(),true);assert.equal(x.reads.length,1);
   assert.equal(x.reads[0].readOnly,true);assert.equal(x.reads[0].force,true);
 });
+test('automatic completion reuses the result just read by its caller',async()=>{
+  const x=setup();x.setReady(true);x.session.digestModelRun={id:'same-finished-run',purpose:'trim'};
+  assert.equal(await x.ctx.chatDigestSyncNow({automatic:true}),true);assert.equal(x.reads.length,0);
+  assert.equal(x.cuts.length,1);
+});
 test('incomplete result cannot commit a cut',async()=>{
   const x=setup();x.ctx.chatSyncNightlyDigest=async()=>false;
   assert.equal(await x.ctx.chatDigestSyncNow(),false);assert.equal(x.cuts.length,0);
