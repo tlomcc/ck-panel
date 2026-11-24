@@ -96,6 +96,50 @@ test('saved guard reason survives a read-only state refresh without starting a m
   assert.equal(x.session.digestSchedule.last_error_code,'subscription_quota_low');
   assert.equal(x.calls.length,1);assert.equal(x.calls[0].init.body,undefined);
 });
+for(const state of ['queued','running','succeeded','blocked'])test('manual start confirms the same server run in '+state,async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;
+  const run={id:'manual-confirmed',purpose:'trim',route:{execution:'claude_code_subscription',model:'sonnet'}};
+  x.ctx.fetch=async(url,init)=>{
+    const body=JSON.parse(init.body),reply=await x.response(body).json();
+    return {ok:true,json:async()=>({...reply,model_run:{id:run.id,state}})};
+  };
+  assert.equal(await x.ctx.chatSyncNightlyDigest(x.cfg,{force:true,modelRun:run}),true);
+  assert.equal(x.session.digestSchedule.model_run.id,run.id);
+});
+test('HTTP success with an older run cannot acknowledge a new manual start or consume its sources',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;
+  x.ctx.chatArchiveDigestSources(x.session,x.session.messages);const pending=copy(x.session.digestPending),events=[];
+  const run={id:'manual-new-confirmation',purpose:'trim',route:{execution:'claude_code_subscription',model:'sonnet'}};
+  x.session.digestModelRun={id:run.id,purpose:'trim',startState:'unconfirmed'};
+  x.ctx.chatDigestLog=(kind,data)=>events.push(data);
+  x.ctx.fetch=async(url,init)=>{
+    const body=JSON.parse(init.body),reply=await x.response(body).json();
+    return {ok:true,status:200,json:async()=>({...reply,model_run:{id:'manual-older',state:'cancelled'}})};
+  };
+  assert.equal(await x.ctx.chatSyncNightlyDigest(x.cfg,{force:true,modelRun:run}),false);
+  assert.deepEqual(copy(x.session.digestPending),pending);
+  assert.equal(events[0].error_code,'manual_start_unconfirmed');
+  assert.match(x.ctx.chatNightlyStatus[x.session.id].local_error,/尚未确认本次任务入队/);
+});
+test('reading an old run after failed submission retains an unconfirmed start without resubmitting',async()=>{
+  const x=setup();x.cfg.digestCurrentModel=true;const requests=[];
+  const run={id:'manual-unsent',purpose:'trim',route:{execution:'claude_code_subscription',model:'sonnet'}};
+  x.session.digestModelRun={id:run.id,purpose:'trim',startState:'unconfirmed'};
+  x.session.digestManualTrim={scope:x.ctx.chatDigestActiveScope(x.cfg),requestedAt:Date.now(),dropRounds:1,keys:[],immediate:true};
+  x.ctx.fetch=async(url,init={})=>{
+    requests.push(init);
+    return init.body?{ok:false,status:400,json:async()=>({ok:false,error:'invalid request'})}:
+      {ok:true,json:async()=>({ok:true,sessions:[{status:'manual_only',model_run:{id:'manual-old',state:'cancelled'}}]})};
+  };
+  assert.equal(await x.ctx.chatSyncNightlyDigest(x.cfg,{force:true,modelRun:run}),false);
+  assert.equal(await x.ctx.chatSyncNightlyDigest(x.cfg,{force:true,readOnly:true}),true);
+  const view=x.ctx.chatDigestSyncView(x.session,x.cfg);
+  assert.equal(view.status,'启动未确认');assert.match(view.note,/尚未确认本次任务入队/);
+  assert.equal(requests.filter(r=>r.body).length,1);assert.equal(requests[1].body,undefined);
+  x.ctx.fetch=async()=>({ok:true,json:async()=>({ok:true,sessions:[{status:'queued',model_run:{id:run.id,state:'queued'}}]})});
+  await x.ctx.chatSyncNightlyDigest(x.cfg,{force:true,readOnly:true});
+  assert.equal(x.ctx.chatDigestSyncView(x.session,x.cfg).status,'手动总结进行中');
+});
 test('trimming archives complete sources durably before any network work',()=>{
   const x=setup();assert.equal(x.ctx.chatArchiveDigestSources(x.session,x.session.messages),true);
   assert.equal(x.calls.length,0);assert.equal(x.session.messages.length,2);

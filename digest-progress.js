@@ -24,7 +24,8 @@
     var run=remote.model_run||{},p=remote.progress||{},req=local.digestManualTrim||{},localRun=local.digestModelRun||{};
     // A newly submitted run must never inherit an older run's result or timer.
     var awaiting=!!(localRun.id&&run.id!==localRun.id);
-    if(awaiting){run={state:'queued'};p={};}
+    var startUnconfirmed=awaiting&&(sync.status==='启动未确认'||localRun.startState==='unconfirmed');
+    if(awaiting){run={state:startUnconfirmed?'start_unconfirmed':'queued'};p={};}
     if(p.run_id&&run.id&&p.run_id!==run.id)p={};
     var state=run.state||remote.status||'',phase=p.phase||'',running=state==='running',queued=state==='queued';
     var stopped=['blocked','retry','paused','cancelled','manual_only'].includes(state)||(!awaiting&&remote.enabled===false);
@@ -39,7 +40,11 @@
     v.model=awaiting?(localRun.label||'所选整理模型'):
       [execution==='claude_code_subscription'?'Claude 订阅':execution?'当前聊天线路':'',run.route&&run.route.model].filter(Boolean).join(' · ');
     if(complete){v.stage='截断并同步完成';v.step=3;v.tone='success';v.detail=sync.note||'下一条消息使用当前总结。';v.eta='已完成';v.elapsedLabel='本次用时';}
-    else if(stopped&&!sync.ready){
+    else if(startUnconfirmed&&!sync.ready){
+      v.stage='启动未确认';v.step=0;v.tone='attention';v.running=false;
+      v.detail=sync.note||'服务器尚未确认本次任务入队，原文已保留。请先同步核实启动结果。';
+      v.eta='先确认启动结果';
+    }else if(stopped&&!sync.ready){
       v.stage=remote.enabled===false?'总结已暂停':sync.tone==='attention'?sync.status:
         state==='retry'?'等待后台重试':['cancelled','manual_only'].includes(state)?'已停止':'等待手动处理';
       v.detail=remote.last_error||sync.note||'原文与已保存的进度仍保留。';
@@ -65,7 +70,7 @@
     }else if(queued||sync.prepare||localRun.id){
       v.step=0;v.stage=awaiting?'正在提交手动任务':'等待后台开始';v.detail='后台确认开始后会显示生成和复核进度。';v.eta='开始处理后估算';v.elapsedLabel='已等待';
     }
-    var elapsedStart=stopped&&!finished?0:started||waitingAt;
+    var elapsedStart=startUnconfirmed||stopped&&!finished?0:started||waitingAt;
     if(elapsedStart){
       var end=finished||serverNow;
       v.elapsed=duration(Math.max(0,end-elapsedStart));

@@ -130,7 +130,11 @@ function chatDigestSyncView(session,cfg,remote){
   if(cfg.digestCurrentModel===true){
     var run=state.model_run||{},local=session.digestModelRun;
     if(!record&&!preparing){view.status='仅手动';view.note='点击立即截断或手动更新总结后，使用所选整理模型。';}
-    if(run.state==='blocked'&&ready&&!view.retry&&(!record||preparing)){
+    if(local&&local.auto!==true&&run.id!==local.id){
+      var submitting=typeof chatCurrentModelStarting!=='undefined'&&chatCurrentModelStarting;
+      view.status=submitting?'正在提交手动任务':'启动未确认';view.tone=submitting?'':'attention';
+      view.note=state.local_error||'服务器尚未确认本次任务入队，原文已保留。点“立刻同步”核实结果；仍未入队时可重新启动本次总结。';
+    }else if(run.state==='blocked'&&ready&&!view.retry&&(!record||preparing)){
       view.status=chatDigestReplyActive(session)?'等待当前回复':'待同步';view.tone='attention';
       view.note='本次截断总结已准备，'+(req&&req.immediate!==false?(chatDigestReplyActive(session)?'当前回复结束后自动截断并同步':'将按原请求自动截断并同步'):(chatDigestReplyActive(session)?'当前回复结束后可立刻同步':'可立刻同步'))+'；旧摘要整理仍待手动处理，已有总结会保留。';
     }else if(run.state==='blocked'&&record&&!preparing){
@@ -252,6 +256,10 @@ function chatSyncNightlyDigest(cfg,options){
       if(chatDigestConfigStamp(chatLoadConfig())!==configStamp){
         delete chatNightlySynced[syncKey];chatScheduleNightlySync(0);return false;
       }
+      if(options.modelRun&&(!data.model_run||data.model_run.id!==options.modelRun.id||!['queued','running','succeeded','blocked'].includes(data.model_run.state))){
+        var startError=new Error('服务器尚未确认本次任务入队，原文已保留；请先同步核实启动结果。');
+        startError.code='manual_start_unconfirmed';throw startError;
+      }
       if(typeof chatApplyWindowCleanup==='function'&&await chatApplyWindowCleanup(session,cfg,data.snapshot))return true;
       if(!options.readOnly)chatNightlySynced[syncKey]={signature:recovering?undefined:signature,at:Date.now()};
       else chatNightlySynced[syncKey]=Object.assign({},previous,{readAt:Date.now(),retryAt:0});
@@ -296,13 +304,14 @@ function chatSyncNightlyDigest(cfg,options){
       if(chatNightlyScope(chatLoadConfig())!==scope||chatDailyDigestFindSession(session.id)!==session)return false;
       chatNightlySynced[syncKey]=Object.assign({},previous,{retryAt:Date.now()+30000});
       if(!options.readOnly)chatNightlySynced[syncKey].readBack=!!(body||recovering);
-      var message=timedOut?(body?'上传总结资料超时，稍后先取回服务器结果；原文已保留。':'取回总结超时，已保存的总结仍在服务器，稍后继续取回。'):
+      var unconfirmed=error&&error.code==='manual_start_unconfirmed';
+      var message=unconfirmed?chatDigestSafeError(error,cfg):timedOut?(body?'上传总结资料超时，稍后先取回服务器结果；原文已保留。':'取回总结超时，已保存的总结仍在服务器，稍后继续取回。'):
         syncPhase==='apply'?'总结已取回，页面处理失败：'+chatDigestSafeError(error,cfg):
         httpStatus>=400?'总结同步接口返回 HTTP '+httpStatus+'，原文与已完成总结已保留。':
         syncPhase==='response'?'服务器返回的总结数据无法读取，原文与已完成总结已保留。':'与总结服务器连接中断，原文与已完成总结已保留，稍后继续同步。';
       chatNightlyStatus[session.id]=Object.assign({},chatNightlyStatus[session.id],{scope:scope,local_error:message});
       chatDigestLog('digest_sync',{ok:false,session_id:session.id,phase:syncPhase,http_status:httpStatus,upload:!!body,
-        error_code:timedOut?'sync_timeout':syncPhase==='apply'?'sync_apply_failed':httpStatus>=400?'sync_http_error':syncPhase==='response'?'sync_response_invalid':'sync_connection',error:chatDigestSafeError(error,cfg)});
+        error_code:unconfirmed?'manual_start_unconfirmed':timedOut?'sync_timeout':syncPhase==='apply'?'sync_apply_failed':httpStatus>=400?'sync_http_error':syncPhase==='response'?'sync_response_invalid':'sync_connection',error:chatDigestSafeError(error,cfg)});
       chatRenderNightlyStatus(session);
       chatScheduleNightlySync(30000);
       if(options.notify)toast(chatDigestSafeError(error,cfg),5000);
@@ -402,9 +411,9 @@ async function chatStartCurrentModelDigest(purpose){
   }
   chatCurrentModelStarting=true;
   try{
-    // A manual start replaces any armed automatic run.
-    if(typeof chatAutoDigestDisarm==='function')await chatAutoDigestDisarm(cfg,session,{force:true});
     // First acknowledge pending settings/baseline; no model is started by sync.
+    // Submitting the manual run lets the gateway supersede its reservation.
+    // A failed preflight must leave that reservation available.
     if(!await chatSyncNightlyDigest(cfg,{session:session,force:true}))return false;
     if(session!==chatCurrentSession()||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig()))return false;
     if(chatNightlySynced[chatNightlyScope(cfg)+':'+session.id]&&chatNightlySynced[chatNightlyScope(cfg)+':'+session.id].readBack){toast('先同步确认上次请求，再手动启动');return false;}
@@ -412,14 +421,17 @@ async function chatStartCurrentModelDigest(purpose){
     if(purpose==='trim'&&!await chatRequestManualDigestTrim({currentModel:true}))return false;
     var run={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),purpose:purpose,route:selected,
       auto_resume_quota:selected.execution==='claude_code_subscription'};
-    session.digestModelRun={id:run.id,purpose:purpose,label:route.label};
+    session.digestModelRun={id:run.id,purpose:purpose,label:route.label,startState:'submitting'};
     chatSaveSessions();
     var ok=await chatSyncNightlyDigest(cfg,{session:session,force:true,modelRun:run});
+    if(session.digestModelRun&&session.digestModelRun.id===run.id){
+      session.digestModelRun.startState=ok?'accepted':'unconfirmed';chatSaveSessions({sessionIds:[session.id]});
+    }
     chatRenderNightlyStatus(session);
     if(ok){toast('已开始：生成和复核总结，完成后截断并同步');chatScheduleNightlySync(2000);}
     else toast('启动状态尚未确认，请先同步查看；不会自动重新发起总结');
     return ok;
-  }finally{chatCurrentModelStarting=false;}
+  }finally{chatCurrentModelStarting=false;chatRenderNightlyStatus(session);}
 }
 
 function chatDigestNeedsPolling(session,cfg){

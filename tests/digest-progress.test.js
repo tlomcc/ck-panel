@@ -22,6 +22,17 @@ test('new local run rejects old success, timing and old errors',()=>{
  const f=fixture();f.remote.model_run.id='manual-old';f.remote.model_run.state='blocked';f.remote.last_error='old failure';
  const v=make(f);assert.equal(v.stage,'正在提交手动任务');assert.equal(v.elapsed,'—');assert.equal(v.batch,'');assert.doesNotMatch(v.detail,/old failure/);
 });
+test('an unconfirmed manual start stops the waiting timer and clears when its server run arrives',()=>{
+ const f=fixture();f.local.digestManualTrim={requestedAt:now-7200000};
+ f.remote.model_run={id:'manual-old',state:'cancelled'};
+ f.sync={prepare:true,status:'启动未确认',note:'服务器尚未确认本次任务入队，原文已保留。'};
+ let v=make(f);assert.equal(v.stage,'启动未确认');assert.equal(v.running,false);
+ assert.equal(v.elapsed,'—');assert.equal(v.eta,'先确认启动结果');assert.equal(v.batch,'');
+ f.sync={prepare:true};f.local.digestModelRun.startState='unconfirmed';
+ assert.equal(make(f).stage,'启动未确认');
+ f.remote.model_run={id:'manual-new',state:'running'};
+ v=make(f);assert.equal(v.running,true);assert.notEqual(v.stage,'启动未确认');
+});
 test('stale and failed refreshes freeze the snapshot and suspend ETA',()=>{
  const f=fixture();const first=make(f,{now:now+31000});const later=make(f,{now:now+90000});
  assert.equal(first.elapsed,later.elapsed);assert.match(first.stage,/上次状态/);assert.equal(first.eta,'连接恢复后重新估算');

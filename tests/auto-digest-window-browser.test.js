@@ -41,7 +41,10 @@ const fixture=async()=>{
    }
    if(body.action==='auto_window_disarm'){if(srv.window.state==='armed')srv.window={state:'none',locked:false,run_id:''};return json({ok:true});}
    if(body.action==='auto_window_stop'){srv.window=Object.assign({},srv.window,{stop_requested:true});return json({ok:true,auto_window:srv.window});}
-   if(body.model_run)srv.run={id:body.model_run.id,state:'running',purpose:body.model_run.purpose};
+   if(body.model_run){
+    srv.run={id:body.model_run.id,state:'running',purpose:body.model_run.purpose};
+    if(srv.window.state==='armed')srv.window={state:'none',locked:false,run_id:''};
+   }
    if(body.cancel_model_run)srv.run=null;
    return json({ok:true,accepted_keys:[],status:'idle',auto_window:srv.window,model_run:srv.run});
   }
@@ -120,10 +123,14 @@ const fixture=async()=>{
  assert(await sync()===true&&kinds()==='read,sync','read first, then the ordinary upload: '+kinds());
  assert(requests[1].body.manual_request===''&&!requests[1].body.model_run&&!requests[1].body.action&&session.digestAutoArm===arm,'ordinary sync is unchanged while armed');
 
- // G. A manual start withdraws the arm first and then sends the same body shape.
+ // G. Failed preparation keeps the reservation; the accepted manual run supersedes it.
+ requests.length=0;srv.fail=true;
+ assert(await chatStartCurrentModelDigest('trim')===false,'failed preparation is not a started manual run');
+ assert(requests.every(r=>r.kind!=='auto_window_disarm')&&session.digestAutoArm===arm,'failed preparation preserves the automatic reservation');
+ srv.fail=false;
  requests.length=0;
  assert(await chatStartCurrentModelDigest('trim')===true,'manual start works: '+notices.join('|'));
- assert(requests[0].kind==='auto_window_disarm'&&requests[0].body.session_id==='auto-1'&&!session.digestAutoArm,'disarm goes first: '+kinds());
+ assert(requests.every(r=>r.kind!=='auto_window_disarm')&&!session.digestAutoArm,'accepted run replaces the arm without early withdrawal: '+kinds());
  const manualBody=requests[requests.length-1].body;
  assert(manualBody.model_run&&manualBody.model_run.auto_window===undefined&&!manualBody.action,'manual run is not marked automatic');
  const strip=b=>{const c=Object.assign({},b);delete c.action;delete c.auto_window;return Object.keys(c).sort()};
@@ -198,6 +205,17 @@ const fixture=async()=>{
  assert(chatCurrentSession()===session&&chatAutoDigestLocked(session)&&requests.every(r=>r.kind!=='sync'),'the lock is shown and nothing is uploaded over the job: '+kinds());
  await sync({readOnly:true});requests.length=0;session.title='another name';await sync();
  assert(kinds()==='read','a job armed elsewhere is only read: '+kinds());
+ // A lost manual submission must remain unconfirmed after an ordinary read of the old job.
+ srv.window={state:'none',locked:false,run_id:''};srv.run={id:'old-manual',state:'cancelled'};
+ delete session.digestAutoArm;delete session.digestAutoArmTry;
+ session.digestModelRun={id:'unconfirmed-manual',purpose:'trim',label:'Sonnet',startState:'unconfirmed'};
+ session.digestManualTrim={scope:chatDigestActiveScope(cfg()),requestedAt:Date.now(),dropRounds:3,keep:2,keys:[],immediate:true};
+ await sync({readOnly:true});chatRenderNightlyStatus(session);
+ const pendingView=chatDigestSyncView(session,cfg());
+ assert(pendingView.status==='启动未确认'&&$('chat-trim-next').textContent.includes('启动未确认'),'old successful status read cannot restore the false wait');
+ const pendingProgress=CKDigestProgress.view(session,{model_run:srv.run,status:'manual_only'},pendingView);
+ assert(pendingProgress.stage==='启动未确认'&&!pendingProgress.running&&pendingProgress.elapsed==='—','unconfirmed run does not keep a waiting timer');
+ assert(chatNormalizeSession(session).digestModelRun.startState==='unconfirmed','unconfirmed intent survives saved session normalization');
  return true;
 };
 (async()=>{

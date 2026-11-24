@@ -67,9 +67,19 @@ test('a manual click starts the explicit summary workflow',async()=>{
 test('choosing the chat model for summaries is allowed without invoking memory',async()=>{
  const {c,cfg}=context();Object.assign(cfg,{digestCurrentModel:true,dailyDigestEnabled:true,
   digestModelPolicy:'sonnet55-adaptive-medium-v2',digestManualModel:'claude-opus-4-6'});
- const notices=[];c.toast=x=>notices.push(x);c.chatCurrentSession=()=>({id:'s'});c.chatDailyDigestPrune=()=>{};
+ const notices=[];c.toast=x=>notices.push(x);c.chatCurrentSession=()=>({id:'s'});c.chatDailyDigestPrune=()=>{};c.chatRenderNightlyStatus=()=>{};
  c.chatDigestMigrationPending=()=>false;c.chatDigestReplyActive=()=>false;c.chatTrimBusy=false;c.chatTrimTransaction=null;
  let syncCalls=0;c.chatNightlyStatus={};c.chatSyncNightlyDigest=async()=>{syncCalls++;return false};
  assert.equal(await c.chatStartCurrentModelDigest('trim'),false);assert.equal(syncCalls,1);assert.ok(notices.every(x=>!x.includes('另一个模型')));
  assert.equal(c.chatDigestSameModel({model:'opus'},{model:'claude-opus-4-6'}),true);
+});
+test('a failed manual preflight preserves the existing automatic reservation',async()=>{
+ const {c,cfg}=context();Object.assign(cfg,{digestCurrentModel:true,dailyDigestEnabled:true,
+  digestModelPolicy:'sonnet55-adaptive-medium-v2'});
+ const session={id:'s',digestAutoArm:{runId:'auto-existing'}};let disarms=0;
+ Object.assign(c,{toast(){},chatCurrentSession:()=>session,chatDailyDigestPrune(){},chatDigestMigrationPending:()=>false,
+  chatDigestReplyActive:()=>false,chatTrimBusy:false,chatTrimTransaction:null,chatNightlyStatus:{},
+  chatSyncNightlyDigest:async()=>false,chatRenderNightlyStatus(){},chatAutoDigestDisarm:async()=>{disarms++;delete session.digestAutoArm;}});
+ assert.equal(await c.chatStartCurrentModelDigest('trim'),false);assert.equal(disarms,0);
+ assert.equal(session.digestAutoArm.runId,'auto-existing');assert.equal(session.digestModelRun,undefined);
 });
