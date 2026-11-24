@@ -4,7 +4,7 @@ if(window.CKBackendRoute){API_BASE=CKBackendRoute.current.mcp;GRAPH_API_BASE=CKB
 var API_KEY_STORAGE='ckMemoryApiKey';
 var API=API_BASE;
 var ENTITY_FACTS_URL=GRAPH_API_BASE+'/entity-facts';
-var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v436-manual-start-confirmation';
+var CK_PANEL_VERSION=window.CK_PANEL_VERSION||'chat-v437-server-auto-summary';
 var ckPanelUpdateTarget='';
 var ckPanelUpdateMode='update';
 try{localStorage.removeItem('entityGraphUrl')}catch(e){}
@@ -4585,6 +4585,8 @@ function chatNormalizeSession(s){
     digestModelRun:s.digestModelRun||null,
     digestAutoArm:s.digestAutoArm||null,
     digestAutoArmTry:s.digestAutoArmTry||null,
+    digestAutoSetting:s.digestAutoSetting||null,
+    digestServerTrim:s.digestServerTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestLastSync:s.digestLastSync||null,
     digestRecoveryCancelled:s.digestRecoveryCancelled||null,
@@ -6960,6 +6962,8 @@ function chatSessionStorageData(maxSessions,maxVisible,maxTransport){
     digestModelRun:s.digestModelRun||null,
     digestAutoArm:s.digestAutoArm||null,
     digestAutoArmTry:s.digestAutoArmTry||null,
+    digestAutoSetting:s.digestAutoSetting||null,
+    digestServerTrim:s.digestServerTrim||null,
     digestManualCompleted:s.digestManualCompleted||null,
     digestLastSync:s.digestLastSync||null,
     digestRecoveryCancelled:s.digestRecoveryCancelled||null,

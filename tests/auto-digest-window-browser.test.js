@@ -40,6 +40,7 @@ const fixture=async()=>{
     return json({ok:true,auto_window:srv.window});
    }
    if(body.action==='auto_window_disarm'){if(srv.window.state==='armed')srv.window={state:'none',locked:false,run_id:''};return json({ok:true});}
+   if(body.action==='auto_window_config'){if(!body.enabled&&srv.window.state==='armed')srv.window={state:'none',locked:false,run_id:''};return json({ok:true,enabled:body.enabled});}
    if(body.action==='auto_window_stop'){srv.window=Object.assign({},srv.window,{stop_requested:true});return json({ok:true,auto_window:srv.window});}
    if(body.model_run){
     srv.run={id:body.model_run.id,state:'running',purpose:body.model_run.purpose};
@@ -149,12 +150,19 @@ const fixture=async()=>{
  const arm2=session.digestAutoArm;
 
  // B2. Switching the feature off withdraws the arm.
- requests.length=0;$('chat-digest-auto-window').checked=false;chatAutoDigestSaveSetting();
- assert(cfg().digestAutoWindow===false&&await chatAutoDigestEvaluate()===true&&kinds()==='auto_window_disarm'&&!session.digestAutoArm,'switch off disarms: '+kinds());
+ requests.length=0;$('chat-digest-auto-window').checked=false;await chatAutoDigestSaveSetting();
+ assert(cfg().digestAutoWindow===false&&await chatAutoDigestEvaluate()===false&&kinds()==='auto_window_config'&&!session.digestAutoArm&&!session.digestAutoSetting,'explicit switch is acknowledged by the server: '+kinds());
  assert(chatSaveConfig(true).digestAutoWindow===false,'the form save keeps the switch');
- $('chat-digest-auto-window').checked=true;chatAutoDigestSaveSetting();
+ $('chat-digest-auto-window').checked=true;await chatAutoDigestSaveSetting();
  assert(await chatAutoDigestEvaluate()===true&&session.digestAutoArm&&session.digestAutoArm.runId!==arm2.runId,'switch on arms again');
  const arm3=session.digestAutoArm;
+
+ // Missing local accounting and a temporary route selection cannot cancel a server arm.
+ requests.length=0;chatMessages[chatMessages.length-1].tkCtx=0;
+ assert(await chatAutoDigestEvaluate()===false&&requests.length===0&&session.digestAutoArm===arm3,'missing local context leaves the server task alone');
+ CKBackendRoute.current.execution='direct_api';
+ assert(await chatAutoDigestEvaluate()===false&&requests.length===0&&session.digestAutoArm===arm3,'route selection does not cancel');
+ CKBackendRoute.current.execution='claude_code_subscription';chatMessages[chatMessages.length-1].tkCtx=230000;
 
  // C2. The server started the run: the upload is withheld and the run is adopted into the manual flow.
  srv.run={id:arm3.runId,state:'running',purpose:'trim'};srv.window={state:'running',locked:true,run_id:arm3.runId,stop_requested:false};
@@ -216,6 +224,40 @@ const fixture=async()=>{
  const pendingProgress=CKDigestProgress.view(session,{model_run:srv.run,status:'manual_only'},pendingView);
  assert(pendingProgress.stage==='启动未确认'&&!pendingProgress.running&&pendingProgress.elapsed==='—','unconfirmed run does not keep a waiting timer');
  assert(chatNormalizeSession(session).digestModelRun.startState==='unconfirmed','unconfirmed intent survives saved session normalization');
+
+ // Server receipt is adopted without a cleanup upload or another model start.
+ delete session.digestManualTrim;delete session.digestModelRun;delete session.digestAutoArm;delete session.digestAutoArmTry;
+ srv.window={state:'none',locked:false,run_id:''};srv.run=null;
+ chatMessages=[].concat(turn(1),turn(2),turn(3),turn(4),turn(5,last(170000)));session.messages=chatMessages;
+ session.transportMessages=chatMessages.map(toTransport);
+ const originalRows=chatMessages.slice(),originalTransport=session.transportMessages.slice();
+ const sourceKeys=chatDigestMessageGroups(originalRows.slice(0,6)).map(g=>g.key);
+ const sourceStamps=CKChatHistory.transportTurnGroups(originalTransport).slice(0,3).map(t=>chatDigestStamp(chatDigestTransportRows(originalTransport.slice(t.startIndex,t.endIndex))));
+ const snapshot={revision:20,config:chatNightlyConfig(cfg()),base:{entries:[{id:'cycle-fixture',kind:'cycle',sequence:1,active:true,dayKey:chatDailyDigestDayKey(Date.now()),text:'已核对的前三轮总结。',covered:sourceKeys,brief:null,createdAt:Date.now()}],rollup:null,omitted:[]},
+   server_trim:{id:'server-'+'a'.repeat(24),run_id:'server-fixture',session_id:session.id,drop_rounds:3,keep:2,before_rounds:5,after_rounds:2,
+     keys:sourceKeys,turn_stamps:sourceStamps,local_turn_stamps:sourceStamps,completed_at:Date.now()/1000,transport_messages:originalTransport.slice(6)}};
+ const oldPack=chatDigestPackReady;chatDigestPackReady=()=>false;
+ const pending=[{key:sourceKeys[0],messages:[{role:'user',text:'未移除的来源',ts:1}]}];
+ session.digestPending=pending;localStorage.setItem(chatNightlyOutboxKey(session),JSON.stringify(pending));
+ const oldOutbox=localStorage.getItem(chatNightlyOutboxKey(session));requests.length=0;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='conflict'&&session.digestPending===pending&&localStorage.getItem(chatNightlyOutboxKey(session))===oldOutbox&&same(chatMessages,originalRows),'an unready pack leaves history and durable sources untouched');
+ chatDigestPackReady=oldPack;
+ chatMessages[0]=Object.assign({},chatMessages[0],{text:'本机修改了提问'});session.messages=chatMessages;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='conflict'&&chatMessages[0].text==='本机修改了提问'&&localStorage.getItem(chatNightlyOutboxKey(session))===oldOutbox,'same source key with edited text never loses the edit');
+ chatMessages=originalRows.slice();session.messages=chatMessages;
+ const signed={type:'thinking',thinking:'保留的签名块',signature:'fixture-signature'};
+ snapshot.server_trim.transport_messages[3].content.unshift(signed);
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='applied'&&CKChatHistory.localTurnGroups(chatMessages).length===2&&same(session.transportMessages,snapshot.server_trim.transport_messages),'server receipt trims exactly three local and canonical turns');
+ assert(session.transportMessages[3].content[0].signature==='fixture-signature'&&session.dailyDigests[0].text==='已核对的前三轮总结。'&&requests.length===0,'server result and signed retained blocks survive with no business request');
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,snapshot)==='current'&&requests.length===0,'same receipt is idempotent');
+ assert(chatNormalizeSession(session).digestServerTrim.id===snapshot.server_trim.id&&chatAutoDigestContext(session)===0,'the saved receipt fences old context after reopening');
+
+ // An offline switch remains visibly pending across local reload, then retries only the setting.
+ requests.length=0;srv.fail=true;$('chat-digest-auto-window').checked=false;
+ assert(await chatAutoDigestSaveSetting()===false&&session.digestAutoSetting.failed&&chatNormalizeSession(session).digestAutoSetting.id===session.digestAutoSetting.id,'offline control is durable');
+ assert(chatDigestSyncView(session,cfg()).note.includes('尚未送达服务器'),'offline setting does not claim server success');
+ srv.fail=false;session.digestAutoSetting.retryAt=0;
+ assert(await chatAutoDigestFlushSettings(cfg())===true&&!session.digestAutoSetting&&requests.every(r=>r.kind==='auto_window_config'),'reconnect acknowledges the same setting without generating a summary');
  return true;
 };
 (async()=>{

@@ -140,6 +140,7 @@ async function chatMaybeRollDigestAtDayBoundary(){
   chatDigestMaintenanceBusy=true;
   if(typeof chatFlushDigestDeletes==='function')chatFlushDigestDeletes(cfg);
   try{
+    if(typeof chatAutoDigestFlushSettings==='function')await chatAutoDigestFlushSettings(cfg);
     for(var session of chatSessions.slice()){
       if(chatTrimBusy||chatTrimTransaction||chatDigestConfigStamp(cfg)!==chatDigestConfigStamp(chatLoadConfig())){chatScheduleNightlySync(1500);break;}
       if(typeof chatDigestReleaseCompletedRun==='function'&&chatDigestReleaseCompletedRun(session,cfg))chatSaveSessions({sessionIds:[session.id]});

@@ -331,6 +331,9 @@ function chatDigestRecoveredTrimReady(session,cfg,stage){
 }
 async function chatDigestFinishManualTrim(cfg,session){
   chatRenderNightlyStatus(session);
+  var auto=typeof chatAutoDigestWindow==='function'&&chatAutoDigestWindow(session);
+  if(auto&&auto.state!=='completed'&&session.digestModelRun&&session.digestModelRun.auto&&
+      ['running','committing','failed','paused'].includes(auto.state))return false;
   if(chatDigestReleaseCompletedRun(session,cfg)){chatSaveSessions({sessionIds:[session.id]});chatScheduleNightlySync(0);return false;}
   var pendingSync=chatDigestPendingSync(session,cfg);
   if(pendingSync){

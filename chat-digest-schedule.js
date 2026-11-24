@@ -261,6 +261,18 @@ function chatSyncNightlyDigest(cfg,options){
         startError.code='manual_start_unconfirmed';throw startError;
       }
       if(typeof chatApplyWindowCleanup==='function'&&await chatApplyWindowCleanup(session,cfg,data.snapshot))return true;
+      if(data.snapshot&&data.snapshot.server_trim&&typeof chatAutoDigestApplyServerTrim==='function'){
+        var serverCut=chatAutoDigestApplyServerTrim(cfg,session,data.snapshot);
+        if(serverCut==='conflict'){
+          chatNightlyStatus[session.id]=Object.assign({scope:scope},data,{local_error:'服务器已完成截断，本机资料暂未对齐，原记录保留'});
+          chatRenderNightlyStatus(session);return false;
+        }
+        if(serverCut==='applied'){
+          chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
+          chatNightlySynced[syncKey]={readAt:Date.now(),at:Date.now()};
+          chatRenderNightlyStatus(session);return true;
+        }
+      }
       if(!options.readOnly)chatNightlySynced[syncKey]={signature:recovering?undefined:signature,at:Date.now()};
       else chatNightlySynced[syncKey]=Object.assign({},previous,{readAt:Date.now(),retryAt:0});
       chatNightlyStatus[session.id]=Object.assign({scope:scope},data);
@@ -343,6 +355,7 @@ function chatNightlySettingsPriority(cfg){
     if(cfg.digestCurrentModel===true){delete session.digestManualTrim;delete session.digestModelRun;}
   });
   chatSaveSessions();chatScheduleNightlySync(0);
+  if(typeof chatAutoDigestQueueSetting==='function'&&typeof chatAutoDigestSubscription==='function'&&chatAutoDigestSubscription())chatAutoDigestQueueSetting(cfg);
 }
 
 function chatManualModelValue(cfg,kind){
