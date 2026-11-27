@@ -241,7 +241,12 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   if(JSON.stringify(snapshot.config)!==JSON.stringify(chatNightlyConfig(cfg)))return conflict('settings_changed');
   if(chatDigestReplyActive(session)||chatTrimBusy||chatTrimTransaction)return conflict('reply_active');
   if(!chatDigestCanActivate(session,cfg))return conflict('summary_edit_pending');
-  var active=session===chatCurrentSession(),rows=active?chatMessages:session.messages||[],transport=session.transportMessages||[];
+  var active=session===chatCurrentSession(),rows=active?chatMessages:session.messages||[],transport=session.transportMessages||[],recoveredTransport=false;
+  // The display may contain extra old rows and omits signed protocol blocks.
+  // A committed server history restores the protocol without removing display edits.
+  if(!transport.length&&Array.isArray(receipt.current_transport_messages)&&receipt.current_transport_messages.length){
+    transport=receipt.current_transport_messages;recoveredTransport=true;
+  }
   function transportStamps(messages){return CKChatHistory.transportTurnGroups(messages).map(function(t){return chatDigestStamp(chatDigestTransportRows(messages.slice(t.startIndex,t.endIndex)))})}
   var stamps=transportStamps(transport),savedStamps=transportStamps(receipt.transport_messages),drop=receipt.drop_rounds;
   check.transport_rounds=stamps.length;check.transport_stamps=stamps.slice(0,700);check.retained_stamps=savedStamps.slice(0,700);
@@ -400,6 +405,11 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   // validated retained history may acknowledge this cut without applying it.
   if(isCurrent&&after&&!before&&!localDrop&&!paired.length){
     var retired=chatAutoDigestRetireCoveredRequest(cfg,session,receipt,Array.from(covered).concat(previousReceipt.localKeys||[]));
+    if(recoveredTransport){
+      session.transportMessages=transport;
+      session.transportUpdated=Math.max(Number(session.transportUpdated)||0,Number(receipt.current_transport_updated||receipt.completed_at)*1000);
+      retired=true;
+    }
     var lastSync=session.digestLastSync;
     if(!lastSync||lastSync.scope!==scope||Number(lastSync.at||0)<=Number(receipt.completed_at)*1000){
       session.digestLastSync={id:receipt.id,scope:scope,at:Number(receipt.completed_at)*1000,rounds:drop,status:'synced',
@@ -418,12 +428,13 @@ function chatAutoDigestApplyServerTrim(cfg,session,snapshot){
   session.digestPending=pending;
   chatCommitAutoTrimPlan(cfg,{session:session,trimmed:!!(dropped.length||before),droppedMessages:dropped,
     droppedTransportMessages:before?transport.slice(0,transportCut):[],canonicalTransport:true,
-    digestPrepared:prepared,cacheBoundary:true,forceCacheRebuild:true,trigger:'server_auto_summary',
+    digestPrepared:prepared,cacheBoundary:!!(dropped.length||before),forceCacheRebuild:!!(dropped.length||before),trigger:'server_auto_summary',
     before:receipt.before_rounds,after:receipt.after_rounds,dropped:drop,keep:receipt.keep,
     transportBefore:stamps.length,transportAfter:before?stamps.length-drop:stamps.length,
     localBefore:groups.length,localAfter:localAfter});
-  if(!transport.length)session.transportMessages=receipt.transport_messages;
-  session.transportUpdated=Math.max(Number(session.transportUpdated)||0,Number(receipt.completed_at)*1000);
+  if(recoveredTransport)session.transportMessages=transport;
+  else if(!transport.length)session.transportMessages=receipt.transport_messages;
+  session.transportUpdated=Math.max(Number(session.transportUpdated)||0,Number(recoveredTransport?receipt.current_transport_updated||receipt.completed_at:receipt.completed_at)*1000);
   session.digestServerTrim={id:receipt.id,scope:scope,at:Number(receipt.completed_at)*1000,runId:receipt.run_id,localKeys:droppedKeys.concat(placedKeys)};
   session.digestLastSync={id:receipt.id,scope:scope,at:session.digestServerTrim.at,rounds:drop,status:'synced',
     trigger:'server_auto_summary',modelRunId:receipt.run_id,syncedAt:Date.now()};

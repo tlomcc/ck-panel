@@ -398,6 +398,23 @@ const fixture=async()=>{
  chatMessages=originalRows.slice(6);session.messages=chatMessages;session.transportMessages=originalTransport.slice(6);
  const ack=chatLockGatewayBody({session_id:session.id});
  assert(ack.server_trim_id===snapshot.server_trim.id&&!chatLockGatewayBody({session_id:'another'}).server_trim_id,'chat acknowledges only the current session and scope receipt');
+
+ // A phone can retain one unmatched display turn while losing its protocol.
+ // Recover every completed server turn, keeping display edits and live cache blocks.
+ const extra=turn(99).map(m=>Object.assign({},m,{text:'保留的本机内容 '+m.role})),newer=turn(6);
+ const canonical=originalTransport.slice(6).concat(newer.map(toTransport));
+ canonical[canonical.length-1].content.unshift({type:'thinking',thinking:'仍有效的缓存块',signature:'fixture-current-cache'});
+ const recoverySnapshot=Object.assign({},snapshot,{server_trim:Object.assign({},snapshot.server_trim,{
+  current_transport_messages:canonical,current_transport_updated:Date.now()/1000})});
+ chatMessages=extra.concat(originalRows.slice(6),newer);session.messages=chatMessages;
+ const displayBefore=JSON.stringify(chatMessages);
+ session.transportMessages=[];session.cacheRebuildPending=false;delete session.digestServerTrim;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,recoverySnapshot)==='applied','missing protocol does not block a committed server recovery');
+ assert(JSON.stringify(chatMessages)===displayBefore&&same(session.transportMessages,canonical),'unmatched local records and newer canonical replies survive recovery');
+ assert(session.cacheRebuildPending===false&&canonical[canonical.length-1].content[0].type==='thinking','protocol recovery keeps live signed blocks without forcing cache rebuilding');
+ session.transportMessages=[];session.cacheRebuildPending=false;
+ assert(chatAutoDigestApplyServerTrim(cfg(),session,recoverySnapshot)==='current'&&same(session.transportMessages,canonical),'reopening recovers the same complete canonical history idempotently');
+ assert(JSON.stringify(chatMessages)===displayBefore&&session.cacheRebuildPending===false,'repeat recovery leaves display edits and cache state unchanged');
  srv.snapshot=null;srv.run=null;srv.window={state:'none',locked:false};
 
  // An offline switch remains visibly pending across local reload, then retries only the setting.
